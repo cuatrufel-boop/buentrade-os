@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuenTrade — Container Pricing Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547;
+    --navy-2:#0E3D8F;
+    --blue:#1E6ADB;
+    --blue-bright:#5AAAFF;
+    --blue-light:#EAF3FC;
+    --teal:#1E6ADB;
+    --teal-light:#EAF3FC;
+    --bg:#F4F7FB;
+    --card:#FFFFFF;
+    --line:#E2E9F2;
+    --ink:#0F1F33;
+    --ink-soft:#64748B;
+    --red:#C4432E;
+    --amber:#B8791A;
+    --field-h:38px;
+    --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Inter',sans-serif; font-size:14px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:0 0 24px;}
+
+  header{
+    background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
+    color:#fff; padding:12px 32px 8px; position:relative; overflow:hidden;
+  }
+  .brand-mark{display:flex; align-items:center; gap:10px;}
+  .brand-word{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; color:#fff; letter-spacing:-0.01em;
+  }
+  .brand-word span{color:var(--blue-bright);}
+
+  .quickbar{
+    display:flex; gap:0; align-items:flex-start; justify-content:center; flex-wrap:wrap;
+    background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
+    padding:10px 24px 12px; margin:0; box-shadow:0 4px 14px rgba(10,37,71,.18);
+  }
+  .qb-group{display:flex; flex-direction:column; align-items:center; gap:7px; padding:0 20px;}
+  .qb-group-label{font-size:9px; color:rgba(255,255,255,.5); font-family:'Inter',sans-serif; text-transform:uppercase; letter-spacing:.09em; font-weight:700;}
+  .qb-group-row{display:flex; gap:10px; align-items:flex-start;}
+  .qb-divider{width:1px; align-self:center; height:32px; background:rgba(255,255,255,.15); margin:0;}
+  .quickbar .qb-item{display:flex; flex-direction:column; gap:5px; align-items:stretch; width:104px; flex-shrink:0;}
+  .quickbar label{font-size:8.5px; color:rgba(255,255,255,.65); font-family:'Inter',sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.04em; text-align:center; white-space:nowrap;}
+  .quickbar .inputwrap{
+    background:rgba(255,255,255,.95); justify-content:center; width:100%;
+    border:none; border-radius:999px; height:30px; min-height:30px;
+  }
+  .quickbar .inputwrap input{text-align:center; width:100%; min-width:0; font-size:12px; font-weight:600;}
+  .quickbar .inputwrap .pfx, .quickbar .inputwrap .sfx{
+    background:transparent; border:none; font-size:10px; padding:0 4px 0 10px; color:var(--ink-soft);
+  }
+  .quickbar .inputwrap .sfx{padding:0 10px 0 2px;}
+  .qb-fx{max-width:130px;}
+  .qb-val{
+    font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:12px; color:#fff;
+    background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2); border-radius:999px;
+    text-align:center; width:100%; box-sizing:border-box;
+    height:30px; display:flex; align-items:center; justify-content:center;
+  }
+  @media (max-width:900px){
+    .qb-divider{display:none;}
+    .qb-group{padding:0 10px;}
+  }
+
+  /* ---- Quick Quote: the fast, no-scroll bidirectional solver ---- */
+  .quickquote{
+    background:linear-gradient(135deg,#0F2A52 0%,#123A6B 100%); padding:14px 18px 16px;
+    border-bottom:2px solid var(--teal);
+  }
+  .qq-top{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:4px;}
+  .qq-top h3{margin:0; font-family:'Space Grotesk',sans-serif; font-size:15px; color:#fff; font-weight:700;}
+  .qq-margin{display:flex; align-items:center; gap:8px;}
+  .qq-margin span{font-size:11px; color:#BBD4EE; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.04em;}
+  .qq-margin .inputwrap{max-width:90px; background:#fff;}
+  .qq-sub{margin:0 0 12px; font-size:11.5px; color:#9FBBDD;}
+  .qq-row{display:flex; gap:12px; flex-wrap:wrap;}
+  .qq-field{
+    flex:1 1 220px; display:flex; gap:8px; align-items:flex-start;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); border-radius:9px; padding:10px 12px;
+  }
+  .qq-flag{font-size:20px; line-height:1.4;}
+  .qq-inner{flex:1; display:flex; flex-direction:column; gap:5px;}
+  .qq-inner label{font-size:10.5px; color:#BBD4EE; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.03em;}
+  .qq-inner .inputwrap{background:#fff;}
+  .qq-inner input{font-size:15px; font-weight:600;}
+  .qq-net{font-size:11px; color:#5FD1C9; font-family:'IBM Plex Mono',monospace; font-weight:600;}
+  .qq-hint{margin-top:10px; font-size:11px; color:#9FBBDD; display:none;}
+  .qq-hint.show{display:block;}
+  #qqMxField.disabled{opacity:.35; pointer-events:none;}
+  .wa-send-btn-sm{
+    flex:0 0 auto; padding:5px 10px; border:none; border-radius:7px;
+    background:#25D366; color:#fff; font-weight:700; font-size:10.5px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:5px; white-space:nowrap;
+  }
+  .wa-send-btn-sm:hover{ background:#1EBE5A; }
+  .wa-send-btn-sm svg{ width:12px; height:12px; flex-shrink:0; }
+
+  .grid{
+    display:grid; grid-template-columns: 0.8fr 0.98fr 1.22fr; gap:12px;
+    padding:14px 18px 0; align-items:start;
+  }
+  @media (max-width:920px){ .grid{grid-template-columns:1fr;} }
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    overflow:hidden;
+  }
+  .card-head{
+    background:var(--blue-light); padding:9px 16px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .card-head h2{
+    margin:0; font-family:'Space Grotesk',sans-serif; font-size:13.5px; font-weight:700;
+    color:var(--navy); letter-spacing:-0.01em;
+  }
+  .card-body{padding:11px 14px 12px;}
+
+  .field{display:flex; align-items:center; gap:8px; margin-bottom:7px;}
+  .field label{flex:0 0 132px; color:var(--ink-soft); font-size:12px;}
+  .inputwrap{
+    width:100%; display:flex; align-items:center; border:1px solid var(--line); border-radius:var(--radius);
+    background:#fff; overflow:hidden; transition:border-color .12s,box-shadow .12s;
+    height:var(--field-h); min-height:var(--field-h); flex-shrink:0;
+  }
+  .field .inputwrap{flex:1 1 auto;}
+  .inputwrap:focus-within{border-color:var(--blue); box-shadow:0 0 0 3px rgba(30,106,219,.14);}
+  .inputwrap .pfx, .inputwrap .sfx{
+    padding:0 9px; height:100%; display:flex; align-items:center; color:var(--ink-soft); font-size:12px; background:#FAFBFD;
+    font-family:'IBM Plex Mono',monospace; flex-shrink:0;
+  }
+  .inputwrap .sfx{border-left:1px solid var(--line);}
+  .inputwrap .pfx{border-right:1px solid var(--line);}
+  input[type=text], input[type=number]{
+    border:none; outline:none; padding:0 6px; height:100%; font-size:12.5px; width:100%;
+    font-family:'IBM Plex Mono',monospace; color:var(--ink); background:transparent; text-align:center;
+  }
+  input[disabled]{color:var(--ink-soft); background:#F7F8FA;}
+
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none; margin:0;
+  }
+  input[type=number]{-moz-appearance:textfield; appearance:textfield;}
+
+  .chip{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:5px 9px; border-radius:20px;
+    border:1px solid var(--line); cursor:pointer; user-select:none; color:var(--ink-soft); background:#fff;
+    white-space:nowrap;
+  }
+  .chip.on{background:var(--teal); border-color:var(--teal); color:#fff;}
+
+  .section-label{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-soft); margin:2px 0 10px;
+  }
+  .divider{height:1px; background:var(--line); margin:12px 0;}
+
+  .prod-row{
+    border:1px solid var(--line); border-radius:9px; padding:12px 14px; margin-bottom:10px; position:relative;
+  }
+  .prod-row .prod-top{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;}
+  .prod-row .prod-top input[type=text]{flex:1 1 auto; min-width:0;}
+  .prod-row .prod-top input[type=text]{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; padding:4px 0; flex:1;
+  }
+  .prod-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .prod-grid2{display:grid; grid-template-columns:1fr; gap:8px; margin-top:8px;}
+  .prod-grid .mini, .prod-grid2 .mini{display:flex; flex-direction:column; gap:4px; align-items:stretch; text-align:center; min-width:0;}
+  .prod-grid .mini .inputwrap, .prod-grid2 .mini .inputwrap{width:100%;}
+  .prod-grid .mini span, .prod-grid2 .mini span{font-size:9.5px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.04em; line-height:1.35; min-height:2.7em; display:flex; align-items:flex-end; justify-content:center;}
+  .autocalc-link{
+    font-size:10px; color:var(--blue); cursor:pointer; font-family:'IBM Plex Mono',monospace;
+    margin-top:2px; text-transform:none; letter-spacing:0; display:inline-block;
+  }
+  .autocalc-link:hover{text-decoration:underline;}
+  .qq-linked-note{
+    font-size:10.5px; color:var(--teal); background:var(--teal-light); border-radius:6px; padding:4px 8px;
+    display:inline-block; margin-bottom:8px; font-family:'IBM Plex Mono',monospace;
+  }
+  .prod-out{
+    margin-top:9px; padding-top:9px; border-top:1px dashed var(--line);
+    display:grid; grid-template-columns:repeat(2,1fr); gap:8px 6px;
+  }
+  .prod-out .o{font-size:10.5px; color:var(--ink-soft); text-align:center;}
+  .prod-out .o b{display:block; color:var(--navy); font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; white-space:nowrap; margin-top:2px;}
+  .rm-btn{
+    position:absolute; top:10px; right:12px; border:none; background:none; color:var(--ink-soft);
+    cursor:pointer; font-size:16px; line-height:1; padding:2px 4px; border-radius:5px;
+  }
+  .rm-btn:hover{background:#FBEAE6; color:var(--red);}
+
+  .add-btn{
+    width:100%; padding:10px; border:1.5px dashed var(--blue); border-radius:8px; background:var(--blue-light);
+    color:var(--blue); font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .add-btn:hover{background:#DCEAFB;}
+  .add-btn:disabled{opacity:.4; cursor:not-allowed;}
+
+  .profit-card .card-head{background:var(--navy); flex-direction:column; align-items:stretch; gap:8px;}
+  .profit-card .card-head h2{color:#fff;}
+  .profit-cols{display:grid; grid-template-columns:minmax(0,1fr); gap:0 14px; padding:11px 14px 12px;}
+  .profit-cols.split{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);}
+  .profit-col{min-width:0;}
+  .profit-col-divider{width:1px; background:var(--line);}
+  .profit-col .section-label{margin-bottom:2px;}
+  #borderHeroKpi .k-val{font-size:24px; transition:font-size .15s;}
+  .profit-cols.split #borderHeroKpi .k-val{font-size:20px;}
+  #mxNeedsCostsWarning{
+    display:flex; align-items:center; gap:8px; margin-top:12px; padding:9px 12px;
+    background:var(--blue-pale); border:1px dashed #B9D3F0; border-radius:8px;
+    font-size:11px; color:var(--ink-soft); line-height:1.4;
+  }
+  #mxNeedsCostsWarning .mx-note-icon{font-size:16px; flex-shrink:0;}
+  @media (max-width:1100px){
+    .profit-cols.split{grid-template-columns:1fr; gap:6px;}
+    .profit-cols.split .profit-col-divider{display:none !important;}
+  }
+  .advanced-tools{margin-top:14px;}
+  .advanced-tools summary{
+    cursor:pointer; list-style:none; padding:10px 16px; background:var(--card);
+    border:1px solid var(--line); border-radius:10px; font-size:12.5px; font-weight:600;
+    color:var(--ink-soft); user-select:none;
+  }
+  .advanced-tools summary::-webkit-details-marker{display:none;}
+  .advanced-tools[open] summary{border-radius:10px 10px 0 0; margin-bottom:0;}
+
+  .scenario-toggle{display:flex; gap:6px;}
+  .scenario-toggle .chip{flex:1; text-align:center; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.25); color:#BBD4EE;}
+  .scenario-toggle .chip.on{background:var(--teal); border-color:var(--teal); color:#fff;}
+
+  .kpi{
+    display:flex; flex-direction:column; gap:1px; padding:6px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .kpi:last-child{border-bottom:none;}
+  .kpi .k-label{color:var(--ink-soft); font-size:10.5px; white-space:nowrap;}
+  .kpi .k-val{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:15px; color:var(--navy); white-space:nowrap;}
+  .kpi.hero{padding:6px 0 10px;}
+  .kpi.hero .k-val{font-size:24px;}
+  .kpi.hero .k-label{font-size:12px;}
+  .kpi.hero-sm{padding:6px 0 10px;}
+  .kpi.hero-sm .k-val{font-size:16px;}
+  .kpi.hero-sm .k-label{font-size:11px;}
+  .kpi .k-val.neg{color:var(--red);}
+  .kpi .k-val.warn{color:var(--amber);}
+
+  .totals-mini{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; margin-top:10px;}
+  .profit-cols.split .totals-mini{grid-template-columns:minmax(0,1fr); gap:4px;}
+  .profit-cols.split .totals-mini .t{display:flex; justify-content:space-between; align-items:center; padding:5px 9px;}
+  .profit-cols.split .totals-mini .t span{margin-bottom:0;}
+  .totals-mini .t{background:var(--bg); border-radius:7px; padding:6px 9px; min-width:0;}
+  .totals-mini .t span{display:block; font-size:9px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; font-family:'IBM Plex Mono',monospace;}
+  .totals-mini .t b{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--navy); word-break:break-word;}
+
+  .solver{
+    margin:18px 24px 0; background:var(--teal-light); border:1px solid #BFE8E4; border-radius:10px; padding:16px 18px;
+  }
+  .solver-top{margin-bottom:6px; display:flex; align-items:center; gap:10px;}
+  .solver-top h3{
+    margin:0; font-family:'Space Grotesk',sans-serif; font-size:14.5px; color:var(--navy); font-weight:700;
+  }
+  .solver-top .tag{font-family:'IBM Plex Mono',monospace; font-size:10px; background:var(--teal); color:#fff; padding:3px 8px; border-radius:20px;}
+  .solver-sub{font-size:12px; color:var(--ink-soft); margin:0 0 12px;}
+  .solver-row{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end;}
+  .solver-row .field{margin:0; flex:1 1 190px;}
+  .solver-row label{flex:0 0 auto; display:block; margin-bottom:5px;}
+  .radio-group{display:flex; gap:6px;}
+  .radio-group .chip{flex:1; text-align:center;}
+  .solve-btn{
+    background:var(--navy); color:#fff; border:none; padding:10px 18px; border-radius:7px;
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  .solve-btn:hover{background:var(--navy-2);}
+  .solver-result{
+    margin-top:12px; padding:11px 14px; background:#fff; border:1px solid #BFE8E4; border-radius:8px;
+    display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  .solver-result.show{display:flex;}
+  .solver-result .r-txt{font-size:12.5px; color:var(--ink-soft);}
+  .solver-result .r-txt b{color:var(--navy); font-family:'IBM Plex Mono',monospace; font-size:15px;}
+  .apply-btn{
+    background:var(--teal); color:#fff; border:none; padding:7px 14px; border-radius:6px; font-size:12px;
+    font-weight:600; cursor:pointer; font-family:'Space Grotesk',sans-serif;
+  }
+  .apply-btn:hover{background:#008E86;}
+
+  .footnote{margin:16px 24px 0; font-size:11px; color:var(--ink-soft); line-height:1.5;}
+  .footnote b{color:var(--navy);}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN GATE ============ -->
+<style>
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-tabs{display:flex;background:#F0F4F9;border-radius:10px;padding:4px;margin-bottom:20px;}
+  .auth-tabs button{flex:1;border:none;background:transparent;padding:9px;border-radius:8px;font-weight:600;font-size:13px;color:#5B6B82;cursor:pointer;}
+  .auth-tabs button.active{background:#fff;color:#0B2545;box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-field input:focus{outline:none;border-color:#1B6FC9;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-submit:disabled{opacity:.6;cursor:default;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-msg.ok{background:#E3F6F4;color:#00776F;display:block;}
+  .auth-form{display:none;}
+  .auth-form.active{display:block;}
+  .auth-setup-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Tools</div>
+    </div>
+    <div class="auth-tabs">
+      <button id="tabSignIn" class="active" onclick="switchAuthTab('signin')">Sign In</button>
+      <button id="tabSignUp" onclick="switchAuthTab('signup')">Sign Up</button>
+    </div>
+
+    <form id="formSignIn" class="auth-form active" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit" id="siBtn">Sign In</button>
+      <div style="text-align:right;margin-top:8px;"><a href="#" style="font-size:11.5px;color:#1B6FC9;text-decoration:none;" onclick="doReset(event)">Forgot password?</a></div>
+    </form>
+
+    <form id="formSignUp" class="auth-form" onsubmit="return doSignUp(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="suEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="suPass" required minlength="6" placeholder="Min 6 characters"></div>
+      <button class="auth-submit" type="submit" id="suBtn">Create Account</button>
+    </form>
+
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-setup-note" id="authSetupNote"></div>
+  </div>
+</div>
+
+<!-- Firebase Auth (free tier) — handles real per-employee accounts + email verification -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+// ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+const FIREBASE_READY = firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY";
+
+let auth;
+if (FIREBASE_READY) {
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); // stays logged in on this browser/device
+} else {
+  document.getElementById('authSetupNote').innerHTML =
+    '⚠️ Login not configured yet. Ask Claude for the 5-minute Firebase setup steps, then paste your keys at the top of this file.';
+}
+
+function switchAuthTab(tab){
+  document.getElementById('tabSignIn').classList.toggle('active', tab==='signin');
+  document.getElementById('tabSignUp').classList.toggle('active', tab==='signup');
+  document.getElementById('formSignIn').classList.toggle('active', tab==='signin');
+  document.getElementById('formSignUp').classList.toggle('active', tab==='signup');
+  document.getElementById('authMsg').style.display = 'none';
+}
+
+function showAuthMsg(text, ok){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg ' + (ok ? 'ok' : 'err');
+}
+
+function doSignIn(e){
+  e.preventDefault();
+  if(!FIREBASE_READY){ showAuthMsg('Login isn\'t set up yet — see the note below.'); return false; }
+  const email = document.getElementById('siEmail').value;
+  const pass = document.getElementById('siPass').value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(!cred.user.emailVerified){
+        showAuthMsg('Please verify your email first — check your inbox for the confirmation link.');
+        auth.signOut();
+      }
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+
+const ALLOWED_EMAILS = ["cuatrufel@gmail.com"]; // add more emails here as you add teammates
+
+function doSignUp(e){
+  e.preventDefault();
+  if(!FIREBASE_READY){ showAuthMsg('Login isn\'t set up yet — see the note below.'); return false; }
+  const email = document.getElementById('suEmail').value;
+  const pass = document.getElementById('suPass').value;
+  if(!ALLOWED_EMAILS.includes(email.toLowerCase())){
+    showAuthMsg('This email isn\'t authorized to create an account yet.');
+    return false;
+  }
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(cred => {
+      return cred.user.sendEmailVerification().then(() => {
+        auth.signOut();
+        showAuthMsg('Account created! Check ' + email + ' for a confirmation link, then sign in.', true);
+        switchAuthTab('signin');
+      });
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+
+function doReset(e){
+  e.preventDefault();
+  if(!FIREBASE_READY){ showAuthMsg('Login isn\'t set up yet — see the note below.'); return; }
+  const email = document.getElementById('siEmail').value;
+  if(!email){ showAuthMsg('Enter your email above first, then click "Forgot password?".'); return; }
+  auth.sendPasswordResetEmail(email)
+    .then(() => showAuthMsg('Password reset link sent to ' + email + '.', true))
+    .catch(err => showAuthMsg(err.message));
+}
+
+function logout(){ if(auth) auth.signOut(); }
+
+if (FIREBASE_READY) {
+  auth.onAuthStateChanged(user => {
+    const gate = document.getElementById('authGate');
+    const app = document.getElementById('appContent');
+    if (user && user.emailVerified) {
+      gate.style.display = 'none';
+      app.style.display = 'block';
+      const badge = document.getElementById('userBadge');
+      if (badge) badge.textContent = user.email;
+    } else {
+      gate.style.display = 'flex';
+      app.style.display = 'none';
+    }
+  });
+}
+</script>
+<!-- ============ END LOGIN GATE ============ -->
+
+<div id="appContent" style="display:none;">
+<div class="wrap">
+
+  <header>
+    <div class="brand-mark" style="justify-content:space-between;width:100%;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg viewBox="0 0 44 44" width="40" height="40">
+        <circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/>
+        <path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/>
+        <rect x="16" y="14" width="13" height="8" rx="1.4" fill="none" stroke="#E3F6F4" stroke-width="0.8"/>
+        <line x1="19.3" y1="14" x2="19.3" y2="22" stroke="#0B2545" stroke-width="0.7"/>
+        <line x1="22.6" y1="14" x2="22.6" y2="22" stroke="#0B2545" stroke-width="0.7"/>
+        <line x1="25.9" y1="14" x2="25.9" y2="22" stroke="#0B2545" stroke-width="0.7"/>
+      </svg>
+      <div class="brand-word">Buen<span>Trade</span> Trading Tools</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <a href="team-hub.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">← Team Hub</a>
+      <span id="userBadge" style="font-size:12px;color:#BBD4EE;font-family:'IBM Plex Mono',monospace;"></span>
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+    </div>
+    </div>
+  </header>
+
+  <div class="quickbar">
+    <div class="qb-group">
+      <div class="qb-group-label">Terms</div>
+      <div class="qb-group-row">
+        <div class="qb-item">
+          <label>Payment Days</label>
+          <div class="inputwrap"><input type="number" id="payDays" value="40" oninput="calc()"><span class="sfx">days</span></div>
+        </div>
+        <div class="qb-item">
+          <label>Finance Rate</label>
+          <div class="inputwrap"><input type="number" id="financeRate" value="0.0417" step="0.0001" oninput="calc()"><span class="sfx">%/day</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="qb-divider"></div>
+
+    <div class="qb-group">
+      <div class="qb-group-label">Transit (FX exposure)</div>
+      <div class="qb-group-row">
+        <div class="qb-item">
+          <label>To Border</label>
+          <div class="inputwrap"><input type="number" id="transitBorder" value="4" oninput="roundFxRateUp()"><span class="sfx">days</span></div>
+        </div>
+        <div class="qb-item">
+          <label>To MX Destino</label>
+          <div class="inputwrap"><input type="number" id="transitMx" value="3" oninput="roundFxRateUp()"><span class="sfx">days</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="qb-divider"></div>
+
+    <div class="qb-group">
+      <div class="qb-group-label">Exchange Rate</div>
+      <div class="qb-group-row">
+        <div class="qb-item">
+          <label style="visibility:hidden;">Exchange Rate</label>
+          <div class="inputwrap qb-fx"><span class="pfx">$</span><input type="number" id="fxRate" value="" placeholder="0" step="0.01" oninput="onFxRateInput(true)" onblur="roundFxRateUp()"><span class="sfx">MXN</span></div>
+          <span id="fxRateStatus" style="font-size:9px;color:#8FC7B8;white-space:nowrap;cursor:pointer;" onclick="fxRateManuallySet=false;fetchExchangeRate();" title="Click to retry">↻ <span id="fxRateStatusText"></span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="qb-divider"></div>
+
+    <div class="qb-group">
+      <div class="qb-group-label">Finance Cost</div>
+      <div class="qb-group-row">
+        <div class="qb-item qb-out">
+          <label>Border</label>
+          <div class="qb-val" id="financeOutTop">$0.00</div>
+        </div>
+        <div class="qb-item qb-out">
+          <label>Mexico</label>
+          <div class="qb-val" id="financeOutTopMx">$0.00 MXN</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ================= DIRECT COSTS ================= -->
+    <div class="card">
+      <div class="card-head"><h2>Direct Costs</h2></div>
+      <div class="card-body">
+
+        <div class="section-label">Shared — applies to both</div>
+        <div class="field">
+          <label>US Freight (USD)</label>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
+        </div>
+        <div class="field">
+          <label>Inspection (USD)</label>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspection" value="0" oninput="calc()"></div>
+        </div>
+        <div class="field">
+          <label>Import Cost (USD)</label>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="importCost" value="" placeholder="0" oninput="buildProductRows();calc();"></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-label">Mexico only</div>
+        <div class="field">
+          <label>Mexican Freight</label>
+          <div class="inputwrap"><span class="pfx">MX$</span><input type="number" id="freightMx" value="" placeholder="0" oninput="buildProductRows();calc();"></div>
+        </div>
+        <div id="freightMxUsdHint" style="font-size:10.5px;color:var(--ink-soft);text-align:right;margin:-4px 0 8px;"></div>
+
+      </div>
+    </div>
+
+    <!-- ================= PRODUCTS ================= -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Product(s)</h2>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
+      </div>
+      <div class="card-body" id="productsBody"></div>
+      <div class="card-body" style="padding-top:0;">
+        <button class="add-btn" id="addProdBtn" onclick="addProduct()">+ Add Product</button>
+      </div>
+    </div>
+
+    <!-- ================= PROFITABILITY ================= -->
+    <div class="card profit-card">
+      <div class="card-head"><h2>Profitability</h2></div>
+      <div class="card-body profit-cols" id="profitCols">
+        <div class="profit-col">
+          <div class="section-label">Border (USD)</div>
+          <div class="kpi hero" id="borderHeroKpi"><span class="k-label">Profit</span><span class="k-val" id="outProfit">$0</span></div>
+          <div class="kpi"><span class="k-label">Net Margin</span><span class="k-val" id="outNetMargin">0%</span></div>
+          <div class="kpi"><span class="k-label">Profit / Lb</span><span class="k-val" id="outProfitLb">$0</span></div>
+          <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMargin">0%</span></div>
+          <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkup">$0</span></div>
+          <div class="kpi"><span class="k-label">Markup %</span><span class="k-val" id="outMarkupPct">0%</span></div>
+          <div class="totals-mini">
+            <div class="t"><span>Product Cost</span><b id="outProdCost">$0</b></div>
+            <div class="t"><span>Selling Price</span><b id="outSellTotal">$0</b></div>
+            <div class="t"><span>Product Profit</span><b id="outProdProfit">$0</b></div>
+            <div class="t"><span>Total Weight</span><b id="outWeight">0 lb</b></div>
+            <div class="t"><span>Direct Costs</span><b id="outDirect">$0</b></div>
+            <div class="t"><span>Finance Cost</span><b id="outAdditional">$0</b></div>
+          </div>
+          <div id="mxNeedsCostsWarning" style="display:none;">
+            <span class="mx-note-icon">🇲🇽</span>
+            <span>Add <b>Import Cost</b> + <b>Mexican Freight</b> in Direct Costs to also see your Mexico (MXN) price here.</span>
+          </div>
+        </div>
+
+        <div class="profit-col-divider" id="profitColDivider" style="display:none;"></div>
+
+        <div class="profit-col" id="mxProfitBlock" style="display:none;">
+          <div class="section-label">Mexico (MXN)</div>
+          <div class="kpi hero-sm"><span class="k-label">Profit (USD eq.)</span><span class="k-val" id="outProfitUsd">$0</span></div>
+          <div class="kpi"><span class="k-label">Net Margin</span><span class="k-val" id="outNetMarginMx">0%</span></div>
+          <div class="kpi"><span class="k-label">Profit (MXN)</span><span class="k-val" id="outProfitMx">MX$0</span></div>
+          <div class="kpi"><span class="k-label">Profit / Kg</span><span class="k-val" id="outProfitKgMx">MX$0</span></div>
+          <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMarginMx">0%</span></div>
+          <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkupMx">MX$0</span></div>
+          <div class="kpi"><span class="k-label">Markup %</span><span class="k-val" id="outMarkupPctMx">0%</span></div>
+          <div class="totals-mini">
+            <div class="t"><span>Product Cost</span><b id="outProdCostMx">MX$0</b></div>
+            <div class="t"><span>Selling Price</span><b id="outSellTotalMx">MX$0</b></div>
+            <div class="t"><span>Product Profit</span><b id="outProdProfitMx">MX$0</b></div>
+            <div class="t"><span>Total Weight</span><b id="outWeightMx">0 kg</b></div>
+            <div class="t"><span>Direct Costs</span><b id="outDirectMx">MX$0</b></div>
+            <div class="t"><span>Finance Cost</span><b id="outAdditionalMx">MX$0</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <details class="advanced-tools">
+    <summary>🎯 Find Your Price (advanced) — click to expand</summary>
+  <div class="solver">
+    <div class="solver-top">
+      <h3>🎯 Find Your Price</h3>
+    </div>
+    <p class="solver-sub">Fix one price, set your target margin, and get the price you need for the other side.</p>
+    <div class="solver-row">
+      <div class="field">
+        <label>Scenario</label>
+        <div class="radio-group">
+          <span class="chip on" id="solveScenBorderChip" onclick="setSolveScenario('border')">Border (USD)</span>
+          <span class="chip" id="solveScenMxChip" onclick="setSolveScenario('mexico')">Mexico (MXN)</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>I want to solve for</label>
+        <div class="radio-group">
+          <span class="chip on" id="solveForPurchase" onclick="setSolveFor('purchase')">Purchase Price</span>
+          <span class="chip" id="solveForSell" onclick="setSolveFor('sell')">Selling Price</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Target Net Margin</label>
+        <div class="inputwrap"><input type="number" id="targetMargin" value="4" step="0.1"><span class="sfx">%</span></div>
+      </div>
+      <button class="solve-btn" onclick="solve()">Calculate</button>
+    </div>
+    <div class="solver-result" id="solverResult">
+      <div class="r-txt" id="solverText"></div>
+      <button class="apply-btn" onclick="applySolve()">Apply to products</button>
+    </div>
+  </div>
+
+  <div class="footnote">
+    <b>How it works:</b> Border (USD) and Mexico (MXN) are two independent, always-saved calculations sharing the same Weight, Purchase Price, US Freight, Inspection, and Payment Days.
+    Border uses your Selling Price (USD/lb) and Direct Costs = US Freight + Inspection. Mexico appears once you enter an Exchange Rate — it adds Mexican Freight (already MXN) + Import Cost (USD, converted with the Exchange Rate)
+    and uses your Selling Price Mexico (MXN/kg), converting your USD purchase cost and shared US costs to MXN. Both results show at once — nothing is ever cleared, no toggle needed.
+    Net Margin/Gross Margin formulas: Net = Profit / Sale · Gross = (Sale − Cost − Direct Costs) / Sale.
+  </div>
+  </details>
+
+</div>
+
+<script>
+let products = [
+  {name:'Product 1', weight:40000, cost:0, sellBorder:0, sellMx:0, sellMxManual:false}
+];
+const MAX_PRODUCTS = 6;
+const TARGET_WEIGHT = 40000;
+const LB_PER_KG = 2.20462;
+let state = { solveFor:'purchase', solveScenario:'border', qqLastEdited:'purchase' };
+let fxRateManuallySet = false;
+
+function fmt$(n){ if(!isFinite(n)) n=0; return (n<0?'-$':'$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtMx(n){ if(!isFinite(n)) n=0; return (n<0?'-MX$':'MX$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtPct(n){ if(!isFinite(n)) n=0; return (n*100).toFixed(2) + '%'; }
+function fmtNum(n){ if(!isFinite(n)) n=0; return n.toLocaleString('en-US',{maximumFractionDigits:2}); }
+
+function buildProductRows(){
+  const body = document.getElementById('productsBody');
+  body.innerHTML = '';
+  const fxRate = parseFloat(document.getElementById('fxRate').value)||0;
+  const importCostFilled = document.getElementById('importCost').value.trim() !== '';
+  const freightMxFilled = document.getElementById('freightMx').value.trim() !== '';
+  const showMx = fxRate>0 && importCostFilled && freightMxFilled;
+  products.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className='prod-row';
+    const weightKg = p.weight/LB_PER_KG;
+    const isPrimary = (i===0);
+    const priceDisabled = '';
+    div.innerHTML = `
+      ${products.length>1 ? `<button class="rm-btn" onclick="removeProduct(${i})">×</button>` : ''}
+      <div class="prod-top">
+        <input type="text" value="${p.name}" oninput="updateProd(${i},'name',this.value)">
+        <button class="wa-send-btn-sm" onclick="sendProductWhatsApp(${i})" title="Share Price via WhatsApp">
+          <svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>
+          Share Price
+        </button>
+      </div>
+      <div class="section-label" style="margin:0 0 6px;">🇺🇸 Border</div>
+      <div class="prod-grid">
+        <div class="mini"><span>Weight (lb)</span>
+          <div class="inputwrap"><span class="pfx" style="visibility:hidden;">#</span><input type="number" id="prodWeight${i}" value="${p.weight}" oninput="updateProd(${i},'weight',this.value)"></div>
+        </div>
+        <div class="mini"><span>Purchase $/lb (USD)</span>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="prodCost${i}" step="0.01" value="${p.cost}" ${priceDisabled} oninput="updateProd(${i},'cost',this.value)"></div>
+        </div>
+        <div class="mini"><span>Selling $/lb (USD)</span>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="prodSellBorder${i}" step="0.01" value="${p.sellBorder}" ${priceDisabled} oninput="updateProd(${i},'sellBorder',this.value)"></div>
+        </div>
+      </div>
+      ${showMx ? `
+      <div class="divider"></div>
+      <div class="section-label" style="margin:0 0 6px;">🇲🇽 Mexico</div>
+      <div class="prod-grid2" style="grid-template-columns:repeat(3,1fr);">
+        <div class="mini"><span>Weight (kg)</span>
+          <div class="inputwrap"><input type="text" value="${fmtNum(Math.round(weightKg))}" disabled style="text-align:center;"></div>
+        </div>
+        <div class="mini"><span>Selling $/lb (adj. USD)</span>
+          <div class="inputwrap"><span class="pfx">$</span><input type="text" id="prodSellAdjUsd${i}" value="0.0000" disabled></div>
+        </div>
+        <div class="mini"><span>Selling MXN/kg</span>
+          <div class="inputwrap"><span class="pfx">MX$</span><input type="number" id="prodSellMx${i}" step="0.01" value="${p.sellMx}" ${priceDisabled} oninput="updateProd(${i},'sellMx',this.value)"></div>
+          <span class="autocalc-link" onclick="autoCalcMxSell(${i})">↻ From Border price</span>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:4px;">
+        <span id="prodSellMxHint${i}" style="font-size:8.5px;color:var(--ink-soft);line-height:1.3;"></span>
+      </div>` : ''}
+      <div class="prod-out" style="grid-template-columns:${showMx ? 'repeat(2,1fr)' : 'repeat(2,1fr)'};">
+        <div class="o">Cost (Border)<b id="prodCostOut${i}">$0</b></div>
+        <div class="o">Sale (Border)<b id="prodSaleOut${i}">$0</b></div>
+        ${showMx ? `<div class="o">Sale (Mexico)<b id="prodSaleMxOut${i}">MX$0</b></div>` : ''}
+        <div class="o">Markup %<b id="prodMarkupPctOut${i}">0%</b></div>
+      </div>
+    `;
+    body.appendChild(div);
+  });
+  document.getElementById('addProdBtn').disabled = products.length>=MAX_PRODUCTS;
+}
+
+function updateProductOutputs(){
+  products.forEach((p,i)=>{
+    const cost = p.weight*p.cost, saleBorder = p.weight*p.sellBorder;
+    const weightKg = p.weight/LB_PER_KG;
+    const saleMx = weightKg*p.sellMx;
+    const markupPct = p.cost>0 ? ((p.sellBorder-p.cost)/p.cost) : 0;
+    const elCost = document.getElementById('prodCostOut'+i);
+    const elSale = document.getElementById('prodSaleOut'+i);
+    const elSaleMx = document.getElementById('prodSaleMxOut'+i);
+    const elMarkupPct = document.getElementById('prodMarkupPctOut'+i);
+    if(elCost) elCost.textContent = fmt$(cost);
+    if(elSale) elSale.textContent = fmt$(saleBorder);
+    if(elSaleMx) elSaleMx.textContent = fmtMx(saleMx);
+    if(elMarkupPct) elMarkupPct.textContent = fmtPct(markupPct);
+  });
+}
+
+function updateProd(i, field, val){
+  if(field==='name'){ products[i].name = val; calc(); return; }
+  if(field==='sellMx'){ products[i].sellMxManual = true; }
+  products[i][field] = parseFloat(val)||0;
+  calc();
+}
+
+// Selling Price Mexico (MXN/kg) = Selling Price Border (USD/lb) × 2.20462 × Exchange Rate
+// Resets to auto-tracking mode: keeps recalculating live as Border price or Exchange Rate change.
+function autoCalcMxSell(i){
+  products[i].sellMxManual = false;
+  calc();
+}
+
+function sendProductWhatsApp(i){
+  const p = products[i];
+  const inp = getInputs();
+  const showMx = inp.fxRate > 0;
+  let msg = `*${p.name}*\n`;
+  msg += `Precio Venta Frontera: $${p.sellBorder.toFixed(4)} USD/lb\n`;
+  if(showMx && p.sellMx>0){
+    msg += `Precio Venta Mexico: $${p.sellMx.toFixed(2)} MXN/kg\n`;
+  }
+  msg += `Peso: ${fmtNum(p.weight)} lb`;
+  const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+}
+function addProduct(){
+  if(products.length>=MAX_PRODUCTS) return;
+  products.push({name:'Product '+(products.length+1), weight:0, cost:0, sellBorder:0, sellMx:0, sellMxManual:false});
+  buildProductRows();
+  calc();
+}
+function removeProduct(i){
+  products.splice(i,1);
+  buildProductRows();
+  calc();
+}
+
+function setSolveFor(which){
+  state.solveFor = which;
+  document.getElementById('solveForPurchase').classList.toggle('on', which==='purchase');
+  document.getElementById('solveForSell').classList.toggle('on', which==='sell');
+  document.getElementById('solverResult').classList.remove('show');
+}
+
+function setSolveScenario(scen){
+  state.solveScenario = scen;
+  document.getElementById('solveScenBorderChip').classList.toggle('on', scen==='border');
+  document.getElementById('solveScenMxChip').classList.toggle('on', scen==='mexico');
+  document.getElementById('solverResult').classList.remove('show');
+}
+
+function onFxRateInput(manual){
+  if(manual) fxRateManuallySet = true;
+  buildProductRows();
+  calc();
+}
+
+// Cushion scales with real transit time (Border + Mexico destino), not payment terms —
+// that's the actual window the FX rate needs to hold. Based on typical USD/MXN movement
+// (~$0.03/day), with a $0.10 floor so short transits still get some protection.
+function fxCushionIncrement(){
+  const toBorder = parseFloat(document.getElementById('transitBorder').value) || 0;
+  const toMx = parseFloat(document.getElementById('transitMx').value) || 0;
+  const totalDays = toBorder + toMx;
+  const dynamic = Math.round(totalDays * 0.03 * 100) / 100;
+  return Math.max(0.10, dynamic);
+}
+
+function roundFxRateUp(){
+  const el = document.getElementById('fxRate');
+  const val = parseFloat(el.value);
+  if(val > 0){
+    const inc = fxCushionIncrement();
+    const rounded = Math.ceil(val / inc) * inc; // always round UP to the next cushion increment
+    if(Math.abs(rounded - val) > 0.001){
+      el.value = rounded.toFixed(2);
+      buildProductRows();
+      calc();
+    }
+  }
+}
+
+async function fetchExchangeRate(){
+  const statusEl = document.getElementById('fxRateStatusText');
+  if(statusEl) statusEl.textContent = 'loading…';
+
+  const sources = [
+    { url: 'https://open.er-api.com/v6/latest/USD', getRate: d => d && d.rates && d.rates.MXN },
+    { url: 'https://api.frankfurter.dev/v1/latest?from=USD&to=MXN', getRate: d => d && d.rates && d.rates.MXN },
+    { url: 'https://api.exchangerate-api.com/v4/latest/USD', getRate: d => d && d.rates && d.rates.MXN },
+  ];
+
+  const errors = [];
+  for(const src of sources){
+    try{
+      const res = await fetch(src.url);
+      if(!res.ok){ errors.push(new URL(src.url).hostname + ': HTTP ' + res.status); continue; }
+      const data = await res.json();
+      const rawRate = src.getRate(data);
+      if(rawRate){
+        if(!fxRateManuallySet){
+          const inc = fxCushionIncrement();
+          const rate = Math.ceil(rawRate / inc) * inc; // round UP to the next cushion increment (scales with Payment Days)
+          document.getElementById('fxRate').value = rate.toFixed(2);
+          if(statusEl) statusEl.textContent = 'today, rounded up ✓';
+          onFxRateInput(false);
+        } else if(statusEl){
+          statusEl.textContent = '';
+        }
+        return; // success — stop trying other sources
+      }
+      errors.push(new URL(src.url).hostname + ': no rate in response');
+    }catch(e){
+      errors.push(new URL(src.url).hostname + ': ' + e.message);
+    }
+  }
+  console.warn('Exchange rate auto-fetch failed:', errors);
+  if(statusEl) statusEl.title = errors.join(' | ');
+  if(statusEl) statusEl.textContent = 'auto-fetch blocked — tap ↻';
+}
+function getInputs(){
+  return {
+    freight: parseFloat(document.getElementById('freight').value)||0,
+    inspection: parseFloat(document.getElementById('inspection').value)||0,
+    freightMx: parseFloat(document.getElementById('freightMx').value)||0,
+    importCost: parseFloat(document.getElementById('importCost').value)||0,
+    fxRate: parseFloat(document.getElementById('fxRate').value)||0,
+    payDays: parseFloat(document.getElementById('payDays').value)||0,
+    financeRate: parseFloat(document.getElementById('financeRate').value)||0,
+    importCostFilled: document.getElementById('importCost').value.trim() !== '',
+    freightMxFilled: document.getElementById('freightMx').value.trim() !== '',
+  };
+}
+
+function calc(){
+  const inp = getInputs();
+  // Mexico price only calculates once Exchange Rate is set AND both Import Cost and
+  // Mexican Freight have been manually filled in — a Mexico-delivered price is not
+  // valid without those two costs, even if either of them happens to be $0.
+  const mxCostsReady = inp.importCostFilled && inp.freightMxFilled;
+  const showMx = inp.fxRate>0 && mxCostsReady;
+  const mxNeedsCosts = inp.fxRate>0 && !mxCostsReady;
+
+  updateProductOutputs();
+
+  const totalWeight = products.reduce((s,p)=>s+p.weight,0);
+  const totalWeightKg = totalWeight/LB_PER_KG;
+  const totalCostUSD = products.reduce((s,p)=>s+p.weight*p.cost,0);
+  const totalSaleBorder = products.reduce((s,p)=>s+p.weight*p.sellBorder,0);
+
+  // ---- Border (USD) ----
+  const directCostsBorder = inp.freight+inp.inspection+inp.importCost;
+  const financeBorder = totalSaleBorder * (inp.payDays * (inp.financeRate/100));
+  const grossBaseBorder = totalSaleBorder - totalCostUSD - directCostsBorder;
+  const profitBorder = grossBaseBorder - financeBorder;
+  const profitLbBorder = totalWeight>0 ? profitBorder/totalWeight : 0;
+  const netMarginBorder = totalSaleBorder>0 ? profitBorder/totalSaleBorder : 0;
+  const grossMarginBorder = totalSaleBorder>0 ? grossBaseBorder/totalSaleBorder : 0;
+  const markupBorder = totalSaleBorder - totalCostUSD;
+  const markupPctBorder = totalCostUSD>0 ? markupBorder/totalCostUSD : 0;
+
+  document.getElementById('financeOutTop').textContent = fmt$(financeBorder);
+  document.getElementById('outProfit').textContent = fmt$(profitBorder);
+  document.getElementById('outProfit').className = 'k-val' + (profitBorder<0?' neg':'');
+  document.getElementById('outProfitLb').textContent = fmt$(profitLbBorder);
+  document.getElementById('outNetMargin').textContent = fmtPct(netMarginBorder);
+  document.getElementById('outNetMargin').className = 'k-val' + (netMarginBorder<0?' neg':netMarginBorder<0.05?' warn':'');
+  document.getElementById('outGrossMargin').textContent = fmtPct(grossMarginBorder);
+  document.getElementById('outMarkup').textContent = fmt$(markupBorder);
+  document.getElementById('outMarkupPct').textContent = fmtPct(markupPctBorder);
+  document.getElementById('outProdCost').textContent = fmt$(totalCostUSD);
+  document.getElementById('outSellTotal').textContent = fmt$(totalSaleBorder);
+  document.getElementById('outProdProfit').textContent = fmt$(markupBorder);
+  document.getElementById('outWeight').textContent = fmtNum(totalWeight)+' lb';
+  document.getElementById('outDirect').textContent = fmt$(directCostsBorder);
+  document.getElementById('outAdditional').textContent = fmt$(financeBorder);
+
+  const diff = totalWeight - TARGET_WEIGHT;
+  const wEl = document.getElementById('weightVsTarget');
+  wEl.textContent = `${fmtNum(totalWeight)} / ${fmtNum(TARGET_WEIGHT)} lb target`;
+  wEl.style.color = Math.abs(diff)<1 ? '#00A9A0' : (diff>0 ? '#B8791A' : '#5B6B82');
+
+  // ---- Mexico (MXN) — direct unit conversion from Border price, unless manually overridden ----
+  // Sale MXN/kg = Sale USD/lb x 2.20462 x Exchange Rate  (same for Cost)
+  const mxBlock = document.getElementById('mxProfitBlock');
+  const mxDivider = document.getElementById('profitColDivider');
+  const profitCols = document.getElementById('profitCols');
+  let directCostsMx=0, financeMx=0;
+  if(showMx){
+    mxBlock.style.display = 'block';
+    if(mxDivider) mxDivider.style.display = '';
+    if(profitCols) profitCols.classList.add('split');
+    const totalCostMx = totalCostUSD * inp.fxRate;
+    directCostsMx = (inp.freight+inp.inspection+inp.importCost)*inp.fxRate + inp.freightMx;
+    const k = inp.payDays * (inp.financeRate/100);
+
+    // STEP 1: build the adjusted USD/lb price FIRST — Border price + Import Cost/lb +
+    // Mexican Freight/lb (converted to USD) — before any USD-to-MXN conversion happens.
+    // STEP 2: only then convert that adjusted USD/lb price to MXN/kg (x2.20462 x FX rate).
+    const importCostPerLb = totalWeight>0 ? inp.importCost/totalWeight : 0;
+    const freightMxInUsd = inp.fxRate>0 ? inp.freightMx/inp.fxRate : 0; // MXN -> USD FIRST
+    const freightMxPerLbUsd = totalWeight>0 ? freightMxInUsd/totalWeight : 0;
+
+    const freightMxHintEl = document.getElementById('freightMxUsdHint');
+    if(freightMxHintEl){
+      freightMxHintEl.textContent = inp.freightMx>0
+        ? `= $${freightMxInUsd.toFixed(2)} USD (at ${inp.fxRate}) → $${freightMxPerLbUsd.toFixed(4)}/lb`
+        : '';
+    }
+
+    products.forEach((p,i)=>{
+      const adjustedSellBorder = p.sellBorder + importCostPerLb + freightMxPerLbUsd; // STEP 1: USD/lb, includes Import Cost + MX Freight
+      const adjEl = document.getElementById('prodSellAdjUsd'+i);
+      if(adjEl) adjEl.value = adjustedSellBorder.toFixed(4);
+      if(!p.sellMxManual){
+        p.sellMx = adjustedSellBorder * LB_PER_KG * inp.fxRate; // STEP 2: convert to MXN/kg
+        const el = document.getElementById('prodSellMx'+i);
+        if(el && document.activeElement!==el){ el.value = p.sellMx.toFixed(2); }
+        const hint = document.getElementById('prodSellMxHint'+i);
+        if(hint) hint.textContent = `Selling $/lb (adj.) × 2.20462 × ${inp.fxRate} = MX$/kg`;
+      }
+    });
+
+    const totalSaleMx = products.reduce((s,p)=>s+(p.weight/LB_PER_KG)*p.sellMx,0);
+    financeMx = totalSaleMx * k;
+    const grossBaseMx = totalSaleMx - totalCostMx - directCostsMx;
+    const profitMx = grossBaseMx - financeMx;
+    const profitKgMx = totalWeightKg>0 ? profitMx/totalWeightKg : 0;
+    const netMarginMx = totalSaleMx>0 ? profitMx/totalSaleMx : 0;
+    const grossMarginMx = totalSaleMx>0 ? grossBaseMx/totalSaleMx : 0;
+    const markupMx = totalSaleMx - totalCostMx;
+    const markupPctMx = totalCostMx>0 ? markupMx/totalCostMx : 0;
+    const profitUsdEq = inp.fxRate>0 ? profitMx/inp.fxRate : 0;
+
+    updateProductOutputs();
+
+    document.getElementById('financeOutTopMx').textContent = fmtMx(financeMx);
+    document.getElementById('outProfitMx').textContent = fmtMx(profitMx);
+    document.getElementById('outProfitMx').className = 'k-val' + (profitMx<0?' neg':'');
+    document.getElementById('outProfitUsd').textContent = fmt$(profitUsdEq);
+    document.getElementById('outProfitUsd').className = 'k-val' + (profitUsdEq<0?' neg':'');
+    document.getElementById('outProfitKgMx').textContent = fmtMx(profitKgMx);
+    document.getElementById('outNetMarginMx').textContent = fmtPct(netMarginMx);
+    document.getElementById('outNetMarginMx').className = 'k-val' + (netMarginMx<0?' neg':netMarginMx<0.05?' warn':'');
+    document.getElementById('outGrossMarginMx').textContent = fmtPct(grossMarginMx);
+    document.getElementById('outMarkupMx').textContent = fmtMx(markupMx);
+    document.getElementById('outMarkupPctMx').textContent = fmtPct(markupPctMx);
+    document.getElementById('outProdCostMx').textContent = fmtMx(totalCostMx);
+    document.getElementById('outSellTotalMx').textContent = fmtMx(totalSaleMx);
+    document.getElementById('outProdProfitMx').textContent = fmtMx(markupMx);
+    document.getElementById('outWeightMx').textContent = fmtNum(totalWeightKg)+' kg';
+    document.getElementById('outDirectMx').textContent = fmtMx(directCostsMx);
+    document.getElementById('outAdditionalMx').textContent = fmtMx(financeMx);
+  } else {
+    mxBlock.style.display = 'none';
+    if(mxDivider) mxDivider.style.display = 'none';
+    if(profitCols) profitCols.classList.remove('split');
+    const freightMxHintEl2 = document.getElementById('freightMxUsdHint');
+    if(freightMxHintEl2) freightMxHintEl2.textContent = '';
+  }
+  const mxWarning = document.getElementById('mxNeedsCostsWarning');
+  if(mxWarning) mxWarning.style.display = mxNeedsCosts ? 'flex' : 'none';
+
+  window.__calc = {
+    totalWeight, totalWeightKg, totalCostUSD, totalSaleBorder,
+    totalSaleMx: products.reduce((s,p)=>s+(p.weight/LB_PER_KG)*p.sellMx,0),
+    directCostsBorder, directCostsMx, inp
+  };
+  document.getElementById('solverResult').classList.remove('show');
+}
+
+function solve(){
+  const c = window.__calc;
+  const target = (parseFloat(document.getElementById('targetMargin').value)||0)/100;
+  const isMx = state.solveScenario==='mexico';
+  const resultBox = document.getElementById('solverResult');
+  const txt = document.getElementById('solverText');
+  const fmtFn = isMx ? fmtMx : fmt$;
+  const unitSfx = isMx ? '/kg' : '/lb';
+  const weightForRatio = isMx ? c.totalWeightKg : c.totalWeight;
+
+  const fixedCosts = isMx ? c.directCostsMx : c.directCostsBorder;
+  const k = c.inp.payDays * (c.inp.financeRate/100);
+
+  if(state.solveFor==='purchase'){
+    const sale = isMx ? c.totalSaleMx : c.totalSaleBorder;
+    const purchaseNeeded = sale - fixedCosts - sale*k - target*sale; // in the scenario's currency
+    const purchaseNeededUSD = isMx ? (c.inp.fxRate>0 ? purchaseNeeded/c.inp.fxRate : 0) : purchaseNeeded;
+    const pricePerLbUSD = c.totalWeight>0 ? purchaseNeededUSD/c.totalWeight : 0;
+    window.__solveResult = {mode:'purchase', pricePerLbUSD};
+    txt.innerHTML = `To hit <b>${(target*100).toFixed(1)}%</b> Net Margin at the current sale (${fmtFn(sale)}),
+      Purchase Price must be <b>$${pricePerLbUSD.toFixed(4)}/lb</b> (USD — shared across both).`;
+  } else {
+    const purchase = isMx ? c.totalCostUSD*c.inp.fxRate : c.totalCostUSD;
+    const denom = (1 - k - target);
+    const saleNeeded = denom!==0 ? (purchase + fixedCosts)/denom : NaN;
+    const pricePerUnit = weightForRatio>0 ? saleNeeded/weightForRatio : 0;
+    window.__solveResult = {mode:'sell', pricePerUnit, scenario: state.solveScenario};
+    txt.innerHTML = `To hit <b>${(target*100).toFixed(1)}%</b> Net Margin at the current cost (${fmtFn(purchase)}),
+      Selling Price (${isMx?'Mexico':'Border'}) must be <b>${fmtFn(pricePerUnit)}${unitSfx}</b> (weighted average).`;
+  }
+  resultBox.classList.add('show');
+}
+
+function applySolve(){
+  const r = window.__solveResult;
+  if(!r) return;
+  if(r.mode==='purchase'){
+    const currentTotal = products.reduce((s,p)=>s+p.weight*p.cost,0);
+    const totalWeight = products.reduce((s,p)=>s+p.weight,0);
+    products.forEach(p=>{ p.cost = r.pricePerLbUSD; });
+  } else if(r.scenario==='border'){
+    products.forEach(p=>{ p.sellBorder = r.pricePerUnit; });
+  } else {
+    products.forEach(p=>{ p.sellMx = r.pricePerUnit; p.sellMxManual = true; });
+  }
+  buildProductRows();
+  calc();
+}
+
+document.addEventListener('focusin', function(e){
+  if(e.target && e.target.tagName==='INPUT' && e.target.type==='number'){
+    e.target.select();
+  }
+});
+
+buildProductRows();
+calc();
+fetchExchangeRate();
+</script>
+</div><!-- /appContent -->
+</body>
+</html>
