@@ -163,8 +163,9 @@ auth.onAuthStateChanged(user => {
   <h1>Customers</h1>
 
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:14px;">
       <strong>All customers</strong>
+      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" style="flex:1;max-width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openForm()">+ Add Customer</button>
     </div>
     <table id="customerTable">
@@ -302,8 +303,15 @@ async function loadCustomers(){
 function renderCustomers(){
   const tbody = document.getElementById('customerRows');
   tbody.innerHTML = '';
-  document.getElementById('emptyState').style.display = customers.length ? 'none' : 'block';
-  customers.forEach(c => {
+  const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
+  const filtered = term ? customers.filter(c =>
+    [c.trade_name, c.city, c.contact_name, c.email].some(v => (v || '').toLowerCase().includes(term))
+  ) : customers;
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+  document.getElementById('emptyState').textContent = customers.length && !filtered.length
+    ? 'No customers match your search.'
+    : 'No customers yet. Click "+ Add Customer" to create the first one.';
+  filtered.forEach(c => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${escapeHtml(c.trade_name || '')}</strong></td>
