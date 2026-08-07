@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuenTrade Trading OS — Customers</title>
+<title>BuenTrade Trading OS — Suppliers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -136,7 +136,7 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
-    loadCustomers();
+    loadSuppliers();
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
@@ -150,7 +150,7 @@ auth.onAuthStateChanged(user => {
   <div style="display:flex;justify-content:space-between;align-items:center;">
     <div style="display:flex;align-items:center;gap:14px;">
       <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
-      <a href="suppliers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Suppliers</a>
+      <a href="customers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Customers</a>
       <a href="trading-tool.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trading Tool →</a>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
@@ -161,91 +161,63 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Customers</h1>
+  <h1>Suppliers</h1>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:14px;">
-      <strong>All customers</strong>
-      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" style="flex:1;max-width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
-      <button class="btn" onclick="openForm()">+ Add Customer</button>
+      <strong>All suppliers</strong>
+      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderSuppliers()" style="flex:1;max-width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <button class="btn" onclick="openForm()">+ Add Supplier</button>
     </div>
-    <table id="customerTable">
+    <table id="supplierTable">
       <thead>
         <tr>
-          <th>Trade name</th>
+          <th>Name</th>
           <th>Country / City</th>
           <th>Contact</th>
-          <th>Currency</th>
-          <th>Delivery type</th>
-          <th>Payment days</th>
+          <th>Payment terms</th>
           <th></th>
         </tr>
       </thead>
-      <tbody id="customerRows"></tbody>
+      <tbody id="supplierRows"></tbody>
     </table>
-    <div id="emptyState" class="empty" style="display:none;">No customers yet. Click "+ Add Customer" to create the first one.</div>
+    <div id="emptyState" class="empty" style="display:none;">No suppliers yet. Click "+ Add Supplier" to create the first one.</div>
   </div>
 
   <div class="card" id="formCard">
-    <strong id="formTitle">New customer</strong>
-    <input type="hidden" id="custId">
+    <strong id="formTitle">New supplier</strong>
+    <input type="hidden" id="supId">
 
     <div class="section-title">Identity</div>
     <div class="grid2">
-      <div class="field"><label>Trade name *</label><input id="trade_name" required></div>
-      <div class="field"><label>Legal name</label><input id="legal_name"></div>
+      <div class="field"><label>Name *</label><input id="name" required></div>
+      <div class="field"><label>Website</label><input id="website"></div>
     </div>
     <div class="grid3">
       <div class="field"><label>Country</label><input id="country"></div>
       <div class="field"><label>State</label><input id="state"></div>
       <div class="field"><label>City</label><input id="city"></div>
     </div>
-    <div class="field"><label>Address</label><input id="address"></div>
-    <div class="grid2">
-      <div class="field"><label>Contact name</label><input id="contact_name"></div>
-      <div class="field"><label>Contact role</label><input id="contact_role"></div>
-    </div>
+
+    <div class="section-title">Contact</div>
     <div class="grid3">
+      <div class="field"><label>Contact name</label><input id="contact_name"></div>
       <div class="field"><label>Email</label><input type="email" id="email"></div>
       <div class="field"><label>Phone</label><input id="phone"></div>
-      <div class="field"><label>WhatsApp</label><input id="whatsapp"></div>
-    </div>
-    <div class="field"><label>Website</label><input id="website"></div>
-
-    <div class="section-title">Payments contact (if different from buyer)</div>
-    <div class="grid2">
-      <div class="field"><label>Payments contact name</label><input id="payments_contact_name"></div>
-      <div class="field"><label>Payments contact email</label><input type="email" id="payments_contact_email"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Payments contact phone</label><input id="payments_contact_phone"></div>
-      <div class="field"><label>Payments contact WhatsApp</label><input id="payments_contact_whatsapp"></div>
     </div>
 
     <div class="section-title">Commercial profile</div>
     <div class="grid3">
-      <div class="field"><label>Preferred currency</label>
-        <select id="preferred_currency"><option value="">—</option><option>USD</option><option>MXN</option><option>Other</option></select>
-      </div>
-      <div class="field"><label>Usual delivery type</label>
-        <select id="usual_delivery_type" onchange="suggestCurrency()"><option value="">—</option><option>Border</option><option>Delivered Mexico</option><option>Other</option></select>
-      </div>
-      <div class="field"><label>Payment days</label><input type="number" id="payment_days"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>Usual destination</label><input id="usual_destination"></div>
-      <div class="field"><label>Usual Incoterm</label><input id="usual_incoterm_text" placeholder="e.g. FOB, CIF, DAP"></div>
-      <div class="field"><label>Payment method</label><input id="payment_method"></div>
-    </div>
-    <div class="field"><label>Exchange rate preference</label>
-      <select id="preferred_exchange_rate_mode"><option value="">—</option><option value="automatic">Automatic (daily)</option><option value="manual">Manual</option></select>
+      <div class="field"><label>Avg. response time</label><input id="avg_response_time"></div>
+      <div class="field"><label>Payment terms</label><input id="payment_terms"></div>
+      <div class="field"><label>Required documentation</label><input id="required_documentation"></div>
     </div>
 
     <div class="section-title">Notes</div>
     <div class="field"><textarea id="notes" rows="3"></textarea></div>
 
     <div style="display:flex;gap:10px;margin-top:8px;">
-      <button class="btn" onclick="saveCustomer()">Save</button>
+      <button class="btn" onclick="saveSupplier()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
@@ -254,23 +226,18 @@ auth.onAuthStateChanged(user => {
 </div>
 
 <script>
-let customers = [];
-let incotermsById = {};
+let suppliers = [];
 
-function openForm(customer){
+function openForm(supplier){
   document.getElementById('formCard').style.display = 'block';
-  document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
-  const fields = ['custId','trade_name','legal_name','country','state','city','address','contact_name',
-    'contact_role','email','phone','whatsapp','website',
-    'payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp',
-    'preferred_currency','usual_delivery_type',
-    'payment_days','usual_destination','usual_incoterm_text','payment_method','preferred_exchange_rate_mode','notes'];
+  document.getElementById('formTitle').textContent = supplier ? 'Edit supplier' : 'New supplier';
+  const fields = ['supId','name','website','country','state','city','contact_name','email','phone',
+    'avg_response_time','payment_terms','required_documentation','notes'];
   fields.forEach(f => document.getElementById(f).value = '');
-  if (customer){
-    document.getElementById('custId').value = customer.id;
+  if (supplier){
+    document.getElementById('supId').value = supplier.id;
     fields.slice(1).forEach(f => {
-      if (f === 'usual_incoterm_text') return; // resolved separately below, no incoterms catalog data yet
-      if (customer[f] !== undefined && customer[f] !== null) document.getElementById(f).value = customer[f];
+      if (supplier[f] !== undefined && supplier[f] !== null) document.getElementById(f).value = supplier[f];
     });
   }
   document.getElementById('formMsg').textContent = '';
@@ -281,106 +248,84 @@ function closeForm(){
   document.getElementById('formCard').style.display = 'none';
 }
 
-// Border = USD, Delivered Mexico = MXN (BUENTRADE Trading OS rule).
-// Suggestion only — the trader can always override it.
-function suggestCurrency(){
-  const delivery = document.getElementById('usual_delivery_type').value;
-  const currencyField = document.getElementById('preferred_currency');
-  if (delivery === 'Border') currencyField.value = 'USD';
-  else if (delivery === 'Delivered Mexico') currencyField.value = 'MXN';
-}
-
-async function loadCustomers(){
-  const { data, error } = await db.from('customers').select('*').order('trade_name');
+async function loadSuppliers(){
+  const { data, error } = await db.from('suppliers').select('*').order('name');
   if (error){
     document.getElementById('emptyState').style.display = 'block';
-    document.getElementById('emptyState').textContent = 'Error loading customers: ' + error.message;
+    document.getElementById('emptyState').textContent = 'Error loading suppliers: ' + error.message;
     return;
   }
-  customers = data || [];
-  renderCustomers();
+  suppliers = data || [];
+  renderSuppliers();
 }
 
-function renderCustomers(){
-  const tbody = document.getElementById('customerRows');
+function renderSuppliers(){
+  const tbody = document.getElementById('supplierRows');
   tbody.innerHTML = '';
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
-  const filtered = term ? customers.filter(c =>
-    [c.trade_name, c.city, c.contact_name, c.email].some(v => (v || '').toLowerCase().includes(term))
-  ) : customers;
+  const filtered = term ? suppliers.filter(s =>
+    [s.name, s.city, s.contact_name, s.email].some(v => (v || '').toLowerCase().includes(term))
+  ) : suppliers;
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
-  document.getElementById('emptyState').textContent = customers.length && !filtered.length
-    ? 'No customers match your search.'
-    : 'No customers yet. Click "+ Add Customer" to create the first one.';
-  filtered.forEach(c => {
+  document.getElementById('emptyState').textContent = suppliers.length && !filtered.length
+    ? 'No suppliers match your search.'
+    : 'No suppliers yet. Click "+ Add Supplier" to create the first one.';
+  filtered.forEach(s => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${escapeHtml(c.trade_name || '')}</strong></td>
-      <td>${escapeHtml([c.city, c.country].filter(Boolean).join(', '))}</td>
-      <td>${escapeHtml(c.contact_name || '')}${c.email ? '<br><span style="color:var(--ink-soft);font-size:12px;">'+escapeHtml(c.email)+'</span>' : ''}</td>
-      <td>${escapeHtml(c.preferred_currency || '—')}</td>
-      <td>${escapeHtml(c.usual_delivery_type || '—')}</td>
-      <td>${c.payment_days ?? '—'}</td>
+      <td><strong>${escapeHtml(s.name || '')}</strong></td>
+      <td>${escapeHtml([s.city, s.country].filter(Boolean).join(', '))}</td>
+      <td>${escapeHtml(s.contact_name || '')}${s.email ? '<br><span style="color:var(--ink-soft);font-size:12px;">'+escapeHtml(s.email)+'</span>' : ''}</td>
+      <td>${escapeHtml(s.payment_terms || '—')}</td>
       <td class="row-actions">
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editCustomer('${c.id}')">Edit</button>
-        <button class="btn danger" onclick="deleteCustomer('${c.id}')">Delete</button>
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editSupplier('${s.id}')">Edit</button>
+        <button class="btn danger" onclick="deleteSupplier('${s.id}')">Delete</button>
       </td>`;
     tbody.appendChild(tr);
   });
 }
 
-function editCustomer(id){
-  const c = customers.find(x => x.id === id);
-  if (c) openForm(c);
+function editSupplier(id){
+  const s = suppliers.find(x => x.id === id);
+  if (s) openForm(s);
 }
 
-async function saveCustomer(){
-  const id = document.getElementById('custId').value;
+async function saveSupplier(){
+  const id = document.getElementById('supId').value;
   const payload = {
-    trade_name: document.getElementById('trade_name').value,
-    legal_name: document.getElementById('legal_name').value || null,
+    name: document.getElementById('name').value,
+    website: document.getElementById('website').value || null,
     country: document.getElementById('country').value || null,
     state: document.getElementById('state').value || null,
     city: document.getElementById('city').value || null,
-    address: document.getElementById('address').value || null,
     contact_name: document.getElementById('contact_name').value || null,
-    contact_role: document.getElementById('contact_role').value || null,
     email: document.getElementById('email').value || null,
     phone: document.getElementById('phone').value || null,
-    whatsapp: document.getElementById('whatsapp').value || null,
-    website: document.getElementById('website').value || null,
-    payments_contact_name: document.getElementById('payments_contact_name').value || null,
-    payments_contact_email: document.getElementById('payments_contact_email').value || null,
-    payments_contact_phone: document.getElementById('payments_contact_phone').value || null,
-    payments_contact_whatsapp: document.getElementById('payments_contact_whatsapp').value || null,
-    preferred_currency: document.getElementById('preferred_currency').value || null,
-    usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
-    payment_days: document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null,
-    usual_destination: document.getElementById('usual_destination').value || null,
-    payment_method: document.getElementById('payment_method').value || null,
-    preferred_exchange_rate_mode: document.getElementById('preferred_exchange_rate_mode').value || null,
+    avg_response_time: document.getElementById('avg_response_time').value || null,
+    payment_terms: document.getElementById('payment_terms').value || null,
+    required_documentation: document.getElementById('required_documentation').value || null,
     notes: document.getElementById('notes').value || null,
   };
-  if (!payload.trade_name){
-    document.getElementById('formMsg').textContent = 'Trade name is required.';
+  if (!payload.name){
+    document.getElementById('formMsg').textContent = 'Name is required.';
     return;
   }
   const { error } = id
-    ? await db.from('customers').update(payload).eq('id', id)
-    : await db.from('customers').insert(payload);
+    ? await db.from('suppliers').update(payload).eq('id', id)
+    : await db.from('suppliers').insert(payload);
   if (error){
     document.getElementById('formMsg').textContent = 'Error: ' + error.message;
     return;
   }
   closeForm();
-  loadCustomers();
+  loadSuppliers();
 }
 
-async function deleteCustomer(id){
-  if (!confirm('Delete this customer? This cannot be undone.')) return;
-  const { error } = await db.from('customers').delete().eq('id', id);
+async function deleteSupplier(id){
+  if (!confirm('Delete this supplier? This cannot be undone.')) return;
+  const { error } = await db.from('suppliers').delete().eq('id', id);
   if (error){ alert('Error deleting: ' + error.message); return; }
-  loadCustomers();
+  loadSuppliers();
 }
 
 function escapeHtml(str){
