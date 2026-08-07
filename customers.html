@@ -210,13 +210,23 @@ auth.onAuthStateChanged(user => {
     </div>
     <div class="field"><label>Website</label><input id="website"></div>
 
+    <div class="section-title">Payments contact (if different from buyer)</div>
+    <div class="grid2">
+      <div class="field"><label>Payments contact name</label><input id="payments_contact_name"></div>
+      <div class="field"><label>Payments contact email</label><input type="email" id="payments_contact_email"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Payments contact phone</label><input id="payments_contact_phone"></div>
+      <div class="field"><label>Payments contact WhatsApp</label><input id="payments_contact_whatsapp"></div>
+    </div>
+
     <div class="section-title">Commercial profile</div>
     <div class="grid3">
       <div class="field"><label>Preferred currency</label>
         <select id="preferred_currency"><option value="">—</option><option>USD</option><option>MXN</option><option>Other</option></select>
       </div>
       <div class="field"><label>Usual delivery type</label>
-        <select id="usual_delivery_type"><option value="">—</option><option>Border</option><option>Delivered Mexico</option><option>Other</option></select>
+        <select id="usual_delivery_type" onchange="suggestCurrency()"><option value="">—</option><option>Border</option><option>Delivered Mexico</option><option>Other</option></select>
       </div>
       <div class="field"><label>Payment days</label><input type="number" id="payment_days"></div>
     </div>
@@ -249,7 +259,9 @@ function openForm(customer){
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
   const fields = ['custId','trade_name','legal_name','country','state','city','address','contact_name',
-    'contact_role','email','phone','whatsapp','website','preferred_currency','usual_delivery_type',
+    'contact_role','email','phone','whatsapp','website',
+    'payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp',
+    'preferred_currency','usual_delivery_type',
     'payment_days','usual_destination','usual_incoterm_text','payment_method','preferred_exchange_rate_mode','notes'];
   fields.forEach(f => document.getElementById(f).value = '');
   if (customer){
@@ -265,6 +277,15 @@ function openForm(customer){
 
 function closeForm(){
   document.getElementById('formCard').style.display = 'none';
+}
+
+// Border = USD, Delivered Mexico = MXN (BUENTRADE Trading OS rule).
+// Suggestion only — the trader can always override it.
+function suggestCurrency(){
+  const delivery = document.getElementById('usual_delivery_type').value;
+  const currencyField = document.getElementById('preferred_currency');
+  if (delivery === 'Border') currencyField.value = 'USD';
+  else if (delivery === 'Delivered Mexico') currencyField.value = 'MXN';
 }
 
 async function loadCustomers(){
@@ -319,6 +340,10 @@ async function saveCustomer(){
     phone: document.getElementById('phone').value || null,
     whatsapp: document.getElementById('whatsapp').value || null,
     website: document.getElementById('website').value || null,
+    payments_contact_name: document.getElementById('payments_contact_name').value || null,
+    payments_contact_email: document.getElementById('payments_contact_email').value || null,
+    payments_contact_phone: document.getElementById('payments_contact_phone').value || null,
+    payments_contact_whatsapp: document.getElementById('payments_contact_whatsapp').value || null,
     preferred_currency: document.getElementById('preferred_currency').value || null,
     usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
     payment_days: document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null,
