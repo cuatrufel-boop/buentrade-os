@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuenTrade Trading OS — Suppliers</title>
+<title>BuenTrade Trading OS — Products</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -47,6 +47,8 @@
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   #formCard{display:none;}
+  .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
+  .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
 </style>
 </head>
 <body>
@@ -136,7 +138,7 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
-    loadSuppliers();
+    loadProducts();
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
@@ -151,7 +153,7 @@ auth.onAuthStateChanged(user => {
     <div style="display:flex;align-items:center;gap:14px;">
       <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
       <a href="customers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Customers</a>
-      <a href="products.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Products</a>
+      <a href="suppliers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Suppliers</a>
       <a href="trading-tool.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trading Tool →</a>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
@@ -162,63 +164,74 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Suppliers</h1>
+  <h1>Products</h1>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:14px;">
-      <strong>All suppliers</strong>
-      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderSuppliers()" style="flex:1;max-width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
-      <button class="btn" onclick="openForm()">+ Add Supplier</button>
+      <strong>All products</strong>
+      <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" style="flex:1;max-width:260px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <select id="categoryFilter" onchange="renderProducts()" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+        <option value="">All categories</option>
+      </select>
+      <button class="btn" onclick="openForm()">+ Add Product</button>
     </div>
-    <table id="supplierTable">
+    <table id="productTable">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Country / City</th>
-          <th>Contact</th>
-          <th>Payment terms</th>
+          <th>Photo</th>
+          <th>Category</th>
+          <th>Name (ES)</th>
+          <th>Name (EN)</th>
+          <th>Temp / Pack</th>
           <th></th>
         </tr>
       </thead>
-      <tbody id="supplierRows"></tbody>
+      <tbody id="productRows"></tbody>
     </table>
-    <div id="emptyState" class="empty" style="display:none;">No suppliers yet. Click "+ Add Supplier" to create the first one.</div>
+    <div id="emptyState" class="empty" style="display:none;">No products yet. Click "+ Add Product" to create the first one.</div>
   </div>
 
   <div class="card" id="formCard">
-    <strong id="formTitle">New supplier</strong>
-    <input type="hidden" id="supId">
+    <strong id="formTitle">New product</strong>
+    <input type="hidden" id="prodId">
+
+    <div class="section-title">Photo</div>
+    <img id="photoPreview" class="photo-preview" style="display:none;">
+    <input type="file" id="photoFile" accept="image/*">
+    <div id="photoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
 
     <div class="section-title">Identity</div>
     <div class="grid2">
-      <div class="field"><label>Name *</label><input id="name" required></div>
-      <div class="field"><label>Website</label><input id="website"></div>
+      <div class="field"><label>Name (Spanish) *</label><input id="name" required></div>
+      <div class="field"><label>Name (English)</label><input id="name_en"></div>
     </div>
     <div class="grid3">
-      <div class="field"><label>Country</label><input id="country"></div>
-      <div class="field"><label>State</label><input id="state"></div>
-      <div class="field"><label>City</label><input id="city"></div>
-    </div>
-
-    <div class="section-title">Contact</div>
-    <div class="grid3">
-      <div class="field"><label>Contact name</label><input id="contact_name"></div>
-      <div class="field"><label>Email</label><input type="email" id="email"></div>
-      <div class="field"><label>Phone</label><input id="phone"></div>
+      <div class="field"><label>Category *</label><input id="category" required></div>
+      <div class="field"><label>Subcategory</label><input id="subcategory"></div>
+      <div class="field"><label>Brand</label><input id="brand"></div>
     </div>
 
-    <div class="section-title">Commercial profile</div>
+    <div class="section-title">Attributes</div>
     <div class="grid3">
-      <div class="field"><label>Avg. response time</label><input id="avg_response_time"></div>
-      <div class="field"><label>Payment terms</label><input id="payment_terms"></div>
-      <div class="field"><label>Required documentation</label><input id="required_documentation"></div>
+      <div class="field"><label>Temperature</label>
+        <select id="temperature_id"><option value="">—</option></select>
+      </div>
+      <div class="field"><label>Packaging</label>
+        <select id="packaging_id"><option value="">—</option></select>
+      </div>
+      <div class="field"><label>Presentation detail</label><input id="presentation" placeholder="e.g. poly, encerada, al vacío"></div>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>Unit of measure</label><input id="unit_of_measure"></div>
+      <div class="field"><label>Standard weight</label><input type="number" id="standard_weight"></div>
+      <div class="field"><label>Origin</label><input id="origin"></div>
     </div>
 
     <div class="section-title">Notes</div>
-    <div class="field"><textarea id="notes" rows="3"></textarea></div>
+    <div class="field"><textarea id="commercial_notes" rows="3"></textarea></div>
 
     <div style="display:flex;gap:10px;margin-top:8px;">
-      <button class="btn" onclick="saveSupplier()">Save</button>
+      <button class="btn" onclick="saveProduct()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
@@ -227,19 +240,34 @@ auth.onAuthStateChanged(user => {
 </div>
 
 <script>
-let suppliers = [];
+let products = [];
+let temperatures = [];
+let packagings = [];
+let pendingPhotoFile = null;
 
-function openForm(supplier){
+function openForm(product){
   document.getElementById('formCard').style.display = 'block';
-  document.getElementById('formTitle').textContent = supplier ? 'Edit supplier' : 'New supplier';
-  const fields = ['supId','name','website','country','state','city','contact_name','email','phone',
-    'avg_response_time','payment_terms','required_documentation','notes'];
+  document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product';
+  const fields = ['prodId','name','name_en','category','subcategory','brand','temperature_id','packaging_id',
+    'presentation','unit_of_measure','standard_weight','origin','commercial_notes'];
   fields.forEach(f => document.getElementById(f).value = '');
-  if (supplier){
-    document.getElementById('supId').value = supplier.id;
+  pendingPhotoFile = null;
+  document.getElementById('photoFile').value = '';
+  const preview = document.getElementById('photoPreview');
+  document.getElementById('photoMsg').textContent = '';
+  if (product){
+    document.getElementById('prodId').value = product.id;
     fields.slice(1).forEach(f => {
-      if (supplier[f] !== undefined && supplier[f] !== null) document.getElementById(f).value = supplier[f];
+      if (product[f] !== undefined && product[f] !== null) document.getElementById(f).value = product[f];
     });
+    if (product.photo_url){
+      preview.src = product.photo_url;
+      preview.style.display = 'block';
+    } else {
+      preview.style.display = 'none';
+    }
+  } else {
+    preview.style.display = 'none';
   }
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
@@ -249,84 +277,131 @@ function closeForm(){
   document.getElementById('formCard').style.display = 'none';
 }
 
-async function loadSuppliers(){
-  const { data, error } = await db.from('suppliers').select('*').order('name');
-  if (error){
-    document.getElementById('emptyState').style.display = 'block';
-    document.getElementById('emptyState').textContent = 'Error loading suppliers: ' + error.message;
-    return;
-  }
-  suppliers = data || [];
-  renderSuppliers();
+document.getElementById('photoFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  pendingPhotoFile = file;
+  const preview = document.getElementById('photoPreview');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+});
+
+async function loadLookups(){
+  const [tempRes, packRes] = await Promise.all([
+    db.from('temperature').select('*').order('name'),
+    db.from('packaging').select('*').order('name'),
+  ]);
+  temperatures = tempRes.data || [];
+  packagings = packRes.data || [];
+  const tSel = document.getElementById('temperature_id');
+  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
+  const pSel = document.getElementById('packaging_id');
+  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
 }
 
-function renderSuppliers(){
-  const tbody = document.getElementById('supplierRows');
+async function loadProducts(){
+  await loadLookups();
+  const { data, error } = await db.from('products').select('*').order('name');
+  if (error){
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('emptyState').textContent = 'Error loading products: ' + error.message;
+    return;
+  }
+  products = data || [];
+  const cats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+  const catSel = document.getElementById('categoryFilter');
+  cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`);
+  renderProducts();
+}
+
+function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? t.name : null; }
+function packName(id){ const p = packagings.find(x => x.id === id); return p ? p.name : null; }
+
+function renderProducts(){
+  const tbody = document.getElementById('productRows');
   tbody.innerHTML = '';
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
-  const filtered = term ? suppliers.filter(s =>
-    [s.name, s.city, s.contact_name, s.email].some(v => (v || '').toLowerCase().includes(term))
-  ) : suppliers;
+  const cat = document.getElementById('categoryFilter').value;
+  let filtered = products;
+  if (cat) filtered = filtered.filter(p => p.category === cat);
+  if (term) filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(term) || (p.name_en || '').toLowerCase().includes(term));
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
-  document.getElementById('emptyState').textContent = suppliers.length && !filtered.length
-    ? 'No suppliers match your search.'
-    : 'No suppliers yet. Click "+ Add Supplier" to create the first one.';
-  filtered.forEach(s => {
+  document.getElementById('emptyState').textContent = products.length && !filtered.length
+    ? 'No products match your search/filter.'
+    : 'No products yet. Click "+ Add Product" to create the first one.';
+  filtered.forEach(p => {
     const tr = document.createElement('tr');
+    const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
     tr.innerHTML = `
-      <td><strong>${escapeHtml(s.name || '')}</strong></td>
-      <td>${escapeHtml([s.city, s.country].filter(Boolean).join(', '))}</td>
-      <td>${escapeHtml(s.contact_name || '')}${s.email ? '<br><span style="color:var(--ink-soft);font-size:12px;">'+escapeHtml(s.email)+'</span>' : ''}</td>
-      <td>${escapeHtml(s.payment_terms || '—')}</td>
+      <td>${p.photo_url ? `<img class="thumb" src="${p.photo_url}">` : ''}</td>
+      <td>${escapeHtml(p.category || '')}</td>
+      <td><strong>${escapeHtml(p.name || '')}</strong></td>
+      <td>${escapeHtml(p.name_en || '—')}</td>
+      <td>${escapeHtml(tp)}</td>
       <td class="row-actions">
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editSupplier('${s.id}')">Edit</button>
-        <button class="btn danger" onclick="deleteSupplier('${s.id}')">Delete</button>
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button>
+        <button class="btn danger" onclick="deleteProduct('${p.id}')">Delete</button>
       </td>`;
     tbody.appendChild(tr);
   });
 }
 
-function editSupplier(id){
-  const s = suppliers.find(x => x.id === id);
-  if (s) openForm(s);
+function editProduct(id){
+  const p = products.find(x => x.id === id);
+  if (p) openForm(p);
 }
 
-async function saveSupplier(){
-  const id = document.getElementById('supId').value;
+async function saveProduct(){
+  const id = document.getElementById('prodId').value;
   const payload = {
     name: document.getElementById('name').value,
-    website: document.getElementById('website').value || null,
-    country: document.getElementById('country').value || null,
-    state: document.getElementById('state').value || null,
-    city: document.getElementById('city').value || null,
-    contact_name: document.getElementById('contact_name').value || null,
-    email: document.getElementById('email').value || null,
-    phone: document.getElementById('phone').value || null,
-    avg_response_time: document.getElementById('avg_response_time').value || null,
-    payment_terms: document.getElementById('payment_terms').value || null,
-    required_documentation: document.getElementById('required_documentation').value || null,
-    notes: document.getElementById('notes').value || null,
+    name_en: document.getElementById('name_en').value || null,
+    category: document.getElementById('category').value,
+    subcategory: document.getElementById('subcategory').value || null,
+    brand: document.getElementById('brand').value || null,
+    temperature_id: document.getElementById('temperature_id').value || null,
+    packaging_id: document.getElementById('packaging_id').value || null,
+    presentation: document.getElementById('presentation').value || null,
+    unit_of_measure: document.getElementById('unit_of_measure').value || null,
+    standard_weight: document.getElementById('standard_weight').value ? Number(document.getElementById('standard_weight').value) : null,
+    origin: document.getElementById('origin').value || null,
+    commercial_notes: document.getElementById('commercial_notes').value || null,
   };
-  if (!payload.name){
-    document.getElementById('formMsg').textContent = 'Name is required.';
+  if (!payload.name || !payload.category){
+    document.getElementById('formMsg').textContent = 'Name and category are required.';
     return;
   }
+
+  if (pendingPhotoFile){
+    document.getElementById('photoMsg').textContent = 'Uploading photo…';
+    const ext = pendingPhotoFile.name.split('.').pop();
+    const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: upErr } = await db.storage.from('product-photos').upload(path, pendingPhotoFile);
+    if (upErr){
+      document.getElementById('photoMsg').textContent = 'Photo upload failed: ' + upErr.message;
+      return;
+    }
+    const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
+    payload.photo_url = pub.publicUrl;
+    document.getElementById('photoMsg').textContent = '';
+  }
+
   const { error } = id
-    ? await db.from('suppliers').update(payload).eq('id', id)
-    : await db.from('suppliers').insert(payload);
+    ? await db.from('products').update(payload).eq('id', id)
+    : await db.from('products').insert(payload);
   if (error){
     document.getElementById('formMsg').textContent = 'Error: ' + error.message;
     return;
   }
   closeForm();
-  loadSuppliers();
+  loadProducts();
 }
 
-async function deleteSupplier(id){
-  if (!confirm('Delete this supplier? This cannot be undone.')) return;
-  const { error } = await db.from('suppliers').delete().eq('id', id);
+async function deleteProduct(id){
+  if (!confirm('Delete this product? This cannot be undone.')) return;
+  const { error } = await db.from('products').delete().eq('id', id);
   if (error){ alert('Error deleting: ' + error.message); return; }
-  loadSuppliers();
+  loadProducts();
 }
 
 function escapeHtml(str){
