@@ -132,6 +132,7 @@ auth.onAuthStateChanged(user => {
       <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
       <a href="customers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Customers</a>
       <a href="suppliers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Suppliers</a>
+      <a href="trucking.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trucking</a>
       <a href="plants.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Plants</a>
       <a href="products.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Products</a>
       <a href="trading-tool.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trading Tool →</a>
@@ -178,7 +179,7 @@ auth.onAuthStateChanged(user => {
 
   <div class="card">
     <table>
-      <thead><tr><th>Name</th><th>Country / City</th><th>Contact</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Country / City</th><th>Contact Name</th><th>Phone</th><th></th></tr></thead>
       <tbody id="carrierRows"></tbody>
     </table>
     <div id="emptyMsg" class="empty" style="display:none;">No carriers found.</div>
@@ -213,12 +214,12 @@ function renderCarriers(){
   document.getElementById('emptyMsg').textContent = 'No carriers found.';
   filtered.forEach(c => {
     const loc = [c.city, c.country].filter(Boolean).join(', ') || '—';
-    const contact = [c.contact_name, c.email].filter(Boolean).join(' — ') || '—';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${escapeHtml(c.name || '')}</strong></td>
       <td>${escapeHtml(loc)}</td>
-      <td>${escapeHtml(contact)}</td>
+      <td>${escapeHtml(c.contact_name || '—')}</td>
+      <td>${escapeHtml(c.phone || '—')}</td>
       <td class="row-actions">
         <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editCarrier('${c.id}')">Edit</button>
         <button class="btn danger" onclick="deleteCarrier('${c.id}')">Delete</button>
