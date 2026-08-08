@@ -22,6 +22,9 @@
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
+  .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
+  .wa-btn:hover{background:#1EBE5A;}
+  .wa-btn svg{width:12px;height:12px;flex-shrink:0;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
   td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
@@ -168,7 +171,7 @@ auth.onAuthStateChanged(user => {
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Location</label><span id="pv_location">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Contact</label><span id="pv_contact">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Phone</label><span id="pv_phone">—</span></div>
-        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">WhatsApp</label><span id="pv_whatsapp">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">WhatsApp</label><span id="pv_whatsapp">—</span> <button class="wa-btn" id="waBtn" style="display:none;margin-left:6px;" onclick="openPlantWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Email</label><span id="pv_email">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Website</label><span id="pv_website">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Response Time</label><span id="pv_avg_response_time">—</span></div>
@@ -352,6 +355,10 @@ function renderProfileView(plant){
   document.getElementById('pv_contact').textContent = plant.contact_name || '—';
   document.getElementById('pv_phone').textContent = plant.phone || '—';
   document.getElementById('pv_whatsapp').textContent = plant.whatsapp || '—';
+  const waNumber = plant.whatsapp || plant.phone;
+  const waBtn = document.getElementById('waBtn');
+  if (waNumber){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = waNumber; }
+  else { waBtn.style.display = 'none'; waBtn.dataset.number = ''; }
   document.getElementById('pv_email').textContent = plant.email || '—';
   document.getElementById('pv_website').textContent = plant.website || '—';
   document.getElementById('pv_avg_response_time').textContent = plant.avg_response_time || '—';
@@ -362,6 +369,13 @@ function renderProfileView(plant){
   document.getElementById('pv_avg_freight_to_border').textContent = plant.avg_freight_to_border || '—';
   document.getElementById('pv_business_hours').textContent = plant.business_hours || '—';
   document.getElementById('pv_notes').textContent = plant.notes || '—';
+}
+
+function openPlantWhatsApp(){
+  const raw = document.getElementById('waBtn').dataset.number || '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return;
+  window.open('https://wa.me/' + digits, '_blank');
 }
 
 function toggleProfile(){
