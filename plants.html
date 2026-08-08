@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuenTrade Trading OS — Plants</title>
+<title>BuenTrade Trading OS — Processing Plants</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -133,7 +133,6 @@ auth.onAuthStateChanged(user => {
     <div style="display:flex;align-items:center;gap:14px;">
       <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
       <a href="customers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Customers</a>
-      <a href="suppliers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Suppliers</a>
       <a href="carriers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Carriers</a>
       <a href="trucking.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trucking</a>
       <a href="products.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Products</a>
@@ -147,21 +146,79 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Plants</h1>
+  <h1>Processing Plants</h1>
 
   <div class="card">
     <div class="field" style="max-width:420px;">
-      <label>Choose a plant (by supplier name)</label>
+      <label>Choose a plant / packer</label>
       <select id="plantSelect" onchange="selectPlant()">
         <option value="">— Select a plant —</option>
       </select>
     </div>
-    <button class="btn secondary" onclick="openNewPlant()">+ New plant (existing supplier without one yet)</button>
+    <button class="btn secondary" onclick="openNewPlant()">+ New Plant</button>
   </div>
 
   <div class="card" id="plantCard" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <strong id="plantTitle"></strong>
+      <strong id="plantTitle" style="font-size:16px;"></strong>
+      <button class="btn secondary" onclick="toggleProfile()" id="profileToggleBtn">Edit Profile</button>
+    </div>
+
+    <div id="profileView" style="margin-bottom:8px;">
+      <div class="grid3" style="row-gap:10px;">
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Location</label><span id="pv_location">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Contact</label><span id="pv_contact">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Phone</label><span id="pv_phone">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Email</label><span id="pv_email">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Website</label><span id="pv_website">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Response Time</label><span id="pv_avg_response_time">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Payment Terms</label><span id="pv_payment_terms">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Required Docs</label><span id="pv_required_documentation">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Loading Time</label><span id="pv_avg_loading_time">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Document Cost</label><span id="pv_document_cost">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Freight to Border</label><span id="pv_avg_freight_to_border">—</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Business Hours</label><span id="pv_business_hours">—</span></div>
+      </div>
+      <div style="margin-top:10px;"><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Notes</label><span id="pv_notes">—</span></div>
+    </div>
+
+    <div id="profileEdit" style="display:none;">
+      <div class="grid3">
+        <div class="field"><label>Country</label><input id="pe_country"></div>
+        <div class="field"><label>State</label><input id="pe_state"></div>
+        <div class="field"><label>City</label><input id="pe_city"></div>
+      </div>
+      <div class="field"><label>Address</label><input id="pe_address"></div>
+      <div class="grid3">
+        <div class="field"><label>Contact Name</label><input id="pe_contact_name"></div>
+        <div class="field"><label>Email</label><input id="pe_email" type="email"></div>
+        <div class="field"><label>Phone</label><input id="pe_phone"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Website</label><input id="pe_website"></div>
+        <div class="field"><label>Avg Response Time</label><input id="pe_avg_response_time"></div>
+        <div class="field"><label>Business Hours</label><input id="pe_business_hours"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Payment Terms</label><input id="pe_payment_terms"></div>
+        <div class="field"><label>Avg Loading Time</label><input id="pe_avg_loading_time"></div>
+        <div class="field"><label>Document Cost</label><input id="pe_document_cost"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Required Documentation</label><input id="pe_required_documentation"></div>
+        <div class="field"><label>Avg Freight to Border</label><input id="pe_avg_freight_to_border"></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="pe_notes" rows="2"></textarea></div>
+      <div class="field"><label>Internal Notes</label><textarea id="pe_internal_notes" rows="2"></textarea></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn" onclick="saveProfile()">Save Profile</button>
+        <button class="btn secondary" onclick="toggleProfile()">Cancel</button>
+      </div>
+      <div id="profileMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 14px;border-top:1px solid var(--line);padding-top:14px;">
+      <strong>Products</strong>
       <button class="btn" onclick="openProductForm()">+ Add Product to this Plant</button>
     </div>
     <table>
@@ -172,11 +229,8 @@ auth.onAuthStateChanged(user => {
   </div>
 
   <div class="card" id="newPlantCard" style="display:none;">
-    <strong>New plant</strong>
-    <div class="field" style="margin-top:12px;"><label>Supplier</label>
-      <select id="newPlantSupplier"></select>
-    </div>
-    <div class="field"><label>Plant name</label><input id="newPlantName" placeholder="e.g. Tyson — Waterloo"></div>
+    <strong>New Plant</strong>
+    <div class="field" style="margin-top:12px;"><label>Plant / Packer Name</label><input id="newPlantName" placeholder="e.g. Tyson — Waterloo"></div>
     <div style="display:flex;gap:10px;"><button class="btn" onclick="saveNewPlant()">Create Plant</button><button class="btn secondary" onclick="document.getElementById('newPlantCard').style.display='none'">Cancel</button></div>
     <div id="newPlantMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
@@ -219,7 +273,6 @@ auth.onAuthStateChanged(user => {
 
 <script>
 let plants = [];
-let suppliers = [];
 let temperatures = [];
 let packagings = [];
 let plantProducts = []; // products linked to the currently selected plant
@@ -227,14 +280,12 @@ let currentPlantId = null;
 let pendingPhotoFile = null;
 
 async function loadEverything(){
-  const [plantsRes, suppliersRes, tempRes, packRes] = await Promise.all([
+  const [plantsRes, tempRes, packRes] = await Promise.all([
     db.from('plants').select('*').order('name'),
-    db.from('suppliers').select('*').order('name'),
     db.from('temperature').select('*').order('name'),
     db.from('packaging').select('*').order('name'),
   ]);
   plants = plantsRes.data || [];
-  suppliers = suppliersRes.data || [];
   temperatures = tempRes.data || [];
   packagings = packRes.data || [];
 
@@ -245,9 +296,6 @@ async function loadEverything(){
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
   packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
-
-  const supSel = document.getElementById('newPlantSupplier');
-  suppliers.forEach(s => supSel.innerHTML += `<option value="${s.id}">${escapeHtml(s.name)}</option>`);
 }
 
 function openNewPlant(){
@@ -256,22 +304,30 @@ function openNewPlant(){
 }
 
 async function saveNewPlant(){
-  const supplierId = document.getElementById('newPlantSupplier').value;
   const name = document.getElementById('newPlantName').value;
-  if (!supplierId || !name){
-    document.getElementById('newPlantMsg').textContent = 'Pick a supplier and enter a plant name.';
+  if (!name){
+    document.getElementById('newPlantMsg').textContent = 'Enter a plant name.';
     return;
   }
-  const { data, error } = await db.from('plants').insert({ supplier_id: supplierId, name }).select();
+  // Every plant needs a linked supplier row for referential integrity; create one silently with the same name.
+  const { data: sup, error: supErr } = await db.from('suppliers').insert({ name }).select();
+  if (supErr){
+    document.getElementById('newPlantMsg').textContent = 'Error: ' + supErr.message;
+    return;
+  }
+  const { data, error } = await db.from('plants').insert({ supplier_id: sup[0].id, name }).select();
   if (error){
     document.getElementById('newPlantMsg').textContent = 'Error: ' + error.message;
     return;
   }
   document.getElementById('newPlantCard').style.display = 'none';
+  document.getElementById('newPlantName').value = '';
   await loadEverything();
   document.getElementById('plantSelect').value = data[0].id;
   selectPlant();
 }
+
+const PROFILE_FIELDS = ['country','state','city','address','contact_name','email','phone','website','avg_response_time','business_hours','payment_terms','avg_loading_time','document_cost','required_documentation','avg_freight_to_border','notes','internal_notes'];
 
 async function selectPlant(){
   currentPlantId = document.getElementById('plantSelect').value;
@@ -282,7 +338,59 @@ async function selectPlant(){
   const plant = plants.find(p => p.id === currentPlantId);
   document.getElementById('plantTitle').textContent = plant.name;
   document.getElementById('plantCard').style.display = 'block';
+  renderProfileView(plant);
+  document.getElementById('profileView').style.display = 'block';
+  document.getElementById('profileEdit').style.display = 'none';
+  document.getElementById('profileToggleBtn').textContent = 'Edit Profile';
   await loadPlantProducts();
+}
+
+function renderProfileView(plant){
+  const loc = [plant.city, plant.state, plant.country].filter(Boolean).join(', ') || '—';
+  document.getElementById('pv_location').textContent = loc;
+  document.getElementById('pv_contact').textContent = plant.contact_name || '—';
+  document.getElementById('pv_phone').textContent = plant.phone || '—';
+  document.getElementById('pv_email').textContent = plant.email || '—';
+  document.getElementById('pv_website').textContent = plant.website || '—';
+  document.getElementById('pv_avg_response_time').textContent = plant.avg_response_time || '—';
+  document.getElementById('pv_payment_terms').textContent = plant.payment_terms || '—';
+  document.getElementById('pv_required_documentation').textContent = plant.required_documentation || '—';
+  document.getElementById('pv_avg_loading_time').textContent = plant.avg_loading_time || '—';
+  document.getElementById('pv_document_cost').textContent = plant.document_cost || '—';
+  document.getElementById('pv_avg_freight_to_border').textContent = plant.avg_freight_to_border || '—';
+  document.getElementById('pv_business_hours').textContent = plant.business_hours || '—';
+  document.getElementById('pv_notes').textContent = plant.notes || '—';
+}
+
+function toggleProfile(){
+  const plant = plants.find(p => p.id === currentPlantId);
+  const editing = document.getElementById('profileEdit').style.display !== 'none';
+  if (editing){
+    document.getElementById('profileEdit').style.display = 'none';
+    document.getElementById('profileView').style.display = 'block';
+    document.getElementById('profileToggleBtn').textContent = 'Edit Profile';
+  } else {
+    PROFILE_FIELDS.forEach(f => { document.getElementById('pe_' + f).value = plant[f] || ''; });
+    document.getElementById('profileMsg').textContent = '';
+    document.getElementById('profileEdit').style.display = 'block';
+    document.getElementById('profileView').style.display = 'none';
+    document.getElementById('profileToggleBtn').textContent = 'View Profile';
+  }
+}
+
+async function saveProfile(){
+  const payload = {};
+  PROFILE_FIELDS.forEach(f => { payload[f] = document.getElementById('pe_' + f).value || null; });
+  const { error } = await db.from('plants').update(payload).eq('id', currentPlantId);
+  if (error){
+    document.getElementById('profileMsg').textContent = 'Error: ' + error.message;
+    return;
+  }
+  await loadEverything();
+  document.getElementById('plantSelect').value = currentPlantId;
+  const plant = plants.find(p => p.id === currentPlantId);
+  renderProfileView(plant);
+  toggleProfile();
 }
 
 async function loadPlantProducts(){
