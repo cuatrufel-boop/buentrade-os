@@ -44,6 +44,10 @@
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
+  .date-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:13.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;text-align:left;}
+  .date-btn:hover{border-color:var(--blue);}
+  .date-btn .cal-icon{font-size:15px;line-height:1;flex-shrink:0;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
@@ -168,7 +172,7 @@ auth.onAuthStateChanged(user => {
   <h1>Request Quote</h1>
 
   <div class="card">
-    <div class="grid2">
+    <div class="grid3">
       <div class="field">
         <label>Product</label>
         <input id="rq_product_name" list="rq_product_names" placeholder="e.g. Trompa" oninput="onRqProductInput()">
@@ -176,20 +180,20 @@ auth.onAuthStateChanged(user => {
       </div>
       <div class="field">
         <label>Needed by</label>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" onclick="document.getElementById('rq_date').showPicker ? document.getElementById('rq_date').showPicker() : document.getElementById('rq_date').focus()" style="background:var(--blue);color:#fff;border:none;border-radius:7px;width:38px;height:38px;font-size:17px;cursor:pointer;flex-shrink:0;">📅</button>
-          <span id="rq_date_label" style="font-size:13.5px;color:var(--ink-soft);">Select date</span>
-          <input type="date" id="rq_date" oninput="onRqDatePicked()" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
-        </div>
+        <button type="button" class="date-btn" onclick="document.getElementById('rq_date').showPicker ? document.getElementById('rq_date').showPicker() : document.getElementById('rq_date').focus()">
+          <span class="cal-icon">📅</span><span id="rq_date_label">Select date</span>
+        </button>
+        <input type="date" id="rq_date" oninput="onRqDatePicked()" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+      </div>
+      <div class="field">
+        <label>Add a plant</label>
+        <select id="rq_plant_add" onchange="onRqPlantAddSelect()"><option value="">— Select —</option></select>
       </div>
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 8px;">
+    <div style="margin:10px 0 8px;">
       <strong style="font-size:13px;">Plants to ask</strong>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;"><option value="">— Add a plant —</option></select>
-      </div>
     </div>
     <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
       <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
