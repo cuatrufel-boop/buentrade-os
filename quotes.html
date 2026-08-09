@@ -229,8 +229,8 @@ auth.onAuthStateChanged(user => {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
         <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
         <div style="display:flex;gap:8px;">
-          <button class="btn secondary" onclick="rqOpenAllEmails()">Open All Emails</button>
-          <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Open All WhatsApp</button>
+          <button class="btn secondary" onclick="rqOpenAllEmails()">Send Email Offers</button>
+          <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Send WhatsApp Offers</button>
         </div>
       </div>
       <div id="rq_customers_list"></div>
@@ -682,21 +682,30 @@ function sendOfferWhatsAppTo(customerId){
 
 // Opens one pre-filled draft per customer at once — still nothing gets sent until you press
 // send in each opened window/app, same as the per-customer buttons.
+// Browsers block multiple window.open() calls fired back-to-back as "popup spam", even from a
+// real click — spacing them out avoids that in most browsers. If the browser still only opens
+// the first one, click the small popup-blocked icon in the address bar and choose "Always allow
+// pop-ups from this site" — a one-time setting, after which every one opens every time.
+function rqOpenAllWithDelay(urls){
+  urls.forEach((url, i) => setTimeout(() => window.open(url, '_blank'), i * 350));
+}
+
 function rqOpenAllEmails(){
-  rqMatchedCustomers.filter(c => c.email).forEach(c => {
+  const urls = rqMatchedCustomers.filter(c => c.email).map(c => {
     const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
     const subject = `Cotización — ${rqProductSpec || ''}`;
-    window.open(`mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+    return `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
+  rqOpenAllWithDelay(urls);
 }
 
 function rqOpenAllWhatsApp(){
-  rqMatchedCustomers.filter(c => c.whatsapp || c.phone).forEach(c => {
+  const urls = rqMatchedCustomers.filter(c => c.whatsapp || c.phone).map(c => {
     const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
-    if (!phone) return;
     const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
-    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
-  });
+    return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(body) : null;
+  }).filter(Boolean);
+  rqOpenAllWithDelay(urls);
 }
 
 function fmtRqDate(){
