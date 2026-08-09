@@ -67,6 +67,9 @@
   .calc-stat b.neg{color:var(--red);}
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
+  .autocalc-link{font-size:10.5px;color:var(--blue);cursor:pointer;align-self:center;white-space:nowrap;}
+  .autocalc-link:hover{text-decoration:underline;}
+  .loc-hint{font-size:10.5px;color:var(--ink-soft);margin-top:-2px;}
 </style>
 </head>
 <body>
@@ -287,26 +290,30 @@ function rqPickTemplate(list, lastIndexVarSetter, lastIndex){
   return list[idx];
 }
 
+let rqAllLocations = [];
+
 async function fetchQuotesLookups(){
   return Promise.all([
     db.from('temperature').select('*').order('name'),
     db.from('packaging').select('*').order('name'),
     db.from('products').select('*').order('name'),
     db.from('plants').select('id,name,contact_name,email,phone,whatsapp').order('name'),
+    db.from('plant_locations').select('plant_id,location_name,freight_to_border_usd,delivered_by_plant'),
   ]);
 }
 
 async function loadQuotesPage(){
-  let [tempRes, packRes, prodRes, plantRes] = await fetchQuotesLookups();
-  if (tempRes.error || packRes.error || prodRes.error || plantRes.error){
+  let [tempRes, packRes, prodRes, plantRes, locRes] = await fetchQuotesLookups();
+  if (tempRes.error || packRes.error || prodRes.error || plantRes.error || locRes.error){
     // Firebase token can still be propagating right after sign-in — retry once.
     await new Promise(r => setTimeout(r, 800));
-    [tempRes, packRes, prodRes, plantRes] = await fetchQuotesLookups();
+    [tempRes, packRes, prodRes, plantRes, locRes] = await fetchQuotesLookups();
   }
   temperatures = tempRes.data || [];
   packagings = packRes.data || [];
   products = prodRes.data || [];
   rqAllPlants = plantRes.data || [];
+  rqAllLocations = locRes.data || [];
 
   const sel = document.getElementById('rq_plant_add');
   rqAllPlants.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`; });
@@ -433,12 +440,14 @@ function renderRqPlants(){
         </div>
       </div>
       <div class="plant-calc-row">
-        <div class="mini-field" style="width:110px;"><label>Price $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
+        <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
         <div style="display:flex;gap:4px;">
           <span class="chip ${mode==='border'?'on':''}" onclick="rqSetMode('${p.id}','border')">Delivered border</span>
           <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
         </div>
-        ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)"></div>` : ''}
+        ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
+        <div class="mini-field" style="width:110px;"><label>Selling $/lb</label><input type="number" step="0.0001" id="rq_sell_${p.id}" value="${p.rqSell ? p.rqSell.toFixed(4) : ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqSell',this.value)"></div>
+        <span class="autocalc-link" onclick="rqAutoCalcSell('${p.id}')">↻ From target margin</span>
       </div>
       <div id="rq_out_${p.id}" class="plant-calc-out">Enter a price to calculate</div>`;
     container.appendChild(row);
@@ -448,7 +457,10 @@ function renderRqPlants(){
 
 // Mirrors the Trading Tool's own Border formula exactly (see trading-tool.html calc()):
 // Direct Costs = Freight + Inspection + Import Cost (dollar totals, not baked into cost/lb).
-// Sale is solved backward from the target margin, same as the Trading Tool's "Find Your Price" solver.
+// Selling $/lb is a free input just like the real Product row — you type it (or push/pull it)
+// and Profit/Margin/etc. react live. It only gets auto-filled from the target margin the first
+// time a price comes in, or when you click "↻ From target margin" — same auto/manual pattern
+// the Trading Tool already uses for its Mexico selling price (sellMxManual).
 function rqCalcRow(p){
   const weight = parseFloat(document.getElementById('rq_weight').value) || 0;
   const inspection = parseFloat(document.getElementById('rq_inspection').value) || 0;
@@ -461,9 +473,14 @@ function rqCalcRow(p){
   const directCosts = freight + inspection + importCost;
   const totalCost = weight * price;
   const k = payDays * (financeRate / 100);
-  const denom = 1 - k - targetMargin;
-  const totalSale = denom !== 0 ? (totalCost + directCosts) / denom : 0;
-  const salePerLb = weight > 0 ? totalSale / weight : 0;
+
+  if (!p.rqSellManual){
+    const denom = 1 - k - targetMargin;
+    const solvedTotalSale = denom !== 0 ? (totalCost + directCosts) / denom : 0;
+    p.rqSell = weight > 0 ? solvedTotalSale / weight : 0;
+  }
+  const salePerLb = p.rqSell || 0;
+  const totalSale = salePerLb * weight;
   const finance = totalSale * k;
   const grossBase = totalSale - totalCost - directCosts;
   const profit = grossBase - finance;
@@ -473,6 +490,17 @@ function rqCalcRow(p){
   const markup = totalSale - totalCost;
   const markupPct = totalCost > 0 ? markup / totalCost : 0;
   return { price, salePerLb, totalCost, totalSale, directCosts, finance, profit, profitLb, netMargin, grossMargin, markup, markupPct, weight };
+}
+
+function rqFreightForPlant(plantId){
+  const locs = rqAllLocations.filter(l => l.plant_id === plantId && !l.delivered_by_plant && l.freight_to_border_usd);
+  return locs.length ? locs[0].freight_to_border_usd : null;
+}
+
+function rqFreightHint(plantId){
+  const locs = rqAllLocations.filter(l => l.plant_id === plantId && !l.delivered_by_plant && l.freight_to_border_usd);
+  if (!locs.length) return '<div class="loc-hint">No location freight on file — enter manually</div>';
+  return `<div class="loc-hint">From ${escapeHtml(locs[0].location_name || 'plant')} location${locs.length>1 ? ' (+' + (locs.length-1) + ' more)' : ''}</div>`;
 }
 
 function rqStatsHtml(c){
@@ -498,13 +526,25 @@ function rqUpdatePlantField(id, field, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   p[field] = parseFloat(val) || 0;
+  if (field === 'rqSell') p.rqSellManual = true;
   rqRecalcAll();
+}
+
+function rqAutoCalcSell(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p) return;
+  p.rqSellManual = false;
+  renderRqPlants();
 }
 
 function rqSetMode(id, mode){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   p.rqMode = mode;
+  if (mode === 'fob' && !p.rqFreight){
+    const auto = rqFreightForPlant(id);
+    if (auto !== null) p.rqFreight = auto;
+  }
   renderRqPlants();
 }
 
