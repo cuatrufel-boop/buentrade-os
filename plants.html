@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuenTrade Trading OS — Processing Plants</title>
+<title>BuenTrade Trading OS — Meat Packers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF;
@@ -14,9 +14,13 @@
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
-  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:16px 32px;margin-bottom:24px;}
-  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:#fff;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:14px 32px 12px;margin-bottom:24px;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;color:#fff;letter-spacing:.2px;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;}
+  .nav-row{display:flex;align-items:center;gap:5px;margin-top:22px;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
@@ -36,10 +40,12 @@
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
+  .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
+  .name-link:hover{text-decoration:underline;}
+  .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   #formCard{display:none;}
   .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
-  #plantSelect{width:100%;max-width:420px;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
 </style>
 </head>
 <body>
@@ -132,33 +138,24 @@ auth.onAuthStateChanged(user => {
 
 <div id="appContent" style="display:none;">
 <header>
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <div style="display:flex;align-items:center;gap:14px;">
-      <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
-      <a href="customers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Customers</a>
-      <a href="carriers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Carriers</a>
-      <a href="products.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Products</a>
-      <a href="trading-tool.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trading Tool →</a>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
-      <span id="userBadge" style="font-size:11px;color:#BBD4EE;font-family:'IBM Plex Mono',monospace;"></span>
+  <div class="top-row">
+    <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
+    <div style="position:relative;display:flex;align-items:center;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="position:absolute;top:100%;right:0;margin-top:4px;font-size:11px;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;"></span>
     </div>
   </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Customers</a>
+    <a href="carriers.html" class="nav-pill">Freight</a>
+    <a href="plants.html" class="nav-pill active">Meat Packers</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="trading-tool.html" class="nav-pill">Trading Tool</a>
+  </nav>
 </header>
 
 <div class="wrap">
-  <h1>Processing Plants</h1>
-
-  <div class="card">
-    <div class="field" style="max-width:420px;">
-      <label>Choose a plant / packer</label>
-      <select id="plantSelect" onchange="selectPlant()">
-        <option value="">— Select a plant —</option>
-      </select>
-    </div>
-    <button class="btn secondary" onclick="openNewPlant()">+ New Plant</button>
-  </div>
+  <h1>Meat Packers</h1>
 
   <div class="card" id="plantCard" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -170,8 +167,7 @@ auth.onAuthStateChanged(user => {
       <div class="grid3" style="row-gap:10px;">
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Location</label><span id="pv_location">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Contact</label><span id="pv_contact">—</span></div>
-        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Phone</label><span id="pv_phone">—</span></div>
-        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">WhatsApp</label><span id="pv_whatsapp">—</span> <button class="wa-btn" id="waBtn" style="display:none;margin-left:6px;" onclick="openPlantWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button></div>
+        <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">WhatsApp</label><button class="wa-btn" id="waBtn" style="display:none;" onclick="openPlantWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Email</label><span id="pv_email">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Website</label><span id="pv_website">—</span></div>
         <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Response Time</label><span id="pv_avg_response_time">—</span></div>
@@ -195,10 +191,10 @@ auth.onAuthStateChanged(user => {
       <div class="grid3">
         <div class="field"><label>Contact Name</label><input id="pe_contact_name"></div>
         <div class="field"><label>Email</label><input id="pe_email" type="email"></div>
-        <div class="field"><label>Phone</label><input id="pe_phone"></div>
+        <div class="field"><label>Phone</label><input id="pe_phone" placeholder="+1 7145551234"></div>
       </div>
       <div class="grid3">
-        <div class="field"><label>WhatsApp</label><input id="pe_whatsapp"></div>
+        <div class="field"><label>WhatsApp</label><input id="pe_whatsapp" placeholder="+1 7145551234"></div>
         <div class="field"><label>Website</label><input id="pe_website"></div>
         <div class="field"><label>Avg Response Time</label><input id="pe_avg_response_time"></div>
         <div class="field"><label>Business Hours</label><input id="pe_business_hours"></div>
@@ -222,14 +218,56 @@ auth.onAuthStateChanged(user => {
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 14px;border-top:1px solid var(--line);padding-top:14px;">
+      <strong>Locations</strong>
+      <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="openLocationForm()">+ Add Location</button>
+    </div>
+    <div id="locationFormCard" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div class="grid3">
+        <div class="field"><label>Location Name</label><input id="loc_name" placeholder="e.g. Fremont, Nebraska"></div>
+        <div class="field"><label>Protein</label><input id="loc_protein" placeholder="e.g. Cerdo"></div>
+        <div class="field"><label>Freight to Border (USD)</label><input id="loc_freight" type="number" step="0.01"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Contact Name</label><input id="loc_contact_name"></div>
+        <div class="field"><label>Phone</label><input id="loc_phone" placeholder="+1 7145551234"></div>
+        <div class="field"><label>Email</label><input id="loc_email" type="email"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;"><input type="checkbox" id="loc_delivered" style="width:auto;"> Plant delivers to border themselves (no freight cost)</label>
+      <div class="field"><label>Notes</label><textarea id="loc_notes" rows="2"></textarea></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn" onclick="saveLocation()">Save Location</button>
+        <button class="btn secondary" onclick="closeLocationForm()">Cancel</button>
+      </div>
+      <div id="locationFormMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+    <table>
+      <thead><tr><th>Location</th><th>Protein</th><th>Contact</th><th>Phone</th><th>Freight to Border</th><th></th></tr></thead>
+      <tbody id="plantLocationRows"></tbody>
+    </table>
+    <div id="plantLocationsEmpty" class="empty" style="display:none;">No locations added for this plant yet.</div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 14px;border-top:1px solid var(--line);padding-top:14px;">
       <strong>Products</strong>
-      <button class="btn" onclick="openProductForm()">+ Add Product to this Plant</button>
+      <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="openProductForm()">+ Add New Product</button>
     </div>
     <table>
       <thead><tr><th>Photo</th><th>Name (ES)</th><th>Name (EN)</th><th>Category</th><th>Subcategory</th><th>Temp/Pack</th><th></th></tr></thead>
       <tbody id="plantProductRows"></tbody>
     </table>
     <div id="plantEmpty" class="empty" style="display:none;">No products linked to this plant yet.</div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:14px;flex-wrap:wrap;">
+      <strong>All plants</strong>
+      <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" style="flex:1;max-width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <button class="btn secondary" onclick="openNewPlant()">+ New Plant</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Protein</th><th>Contact Name</th><th>Phone</th></tr></thead>
+      <tbody id="plantRows"></tbody>
+    </table>
+    <div id="plantEmptyMsg" class="empty" style="display:none;">No plants found.</div>
   </div>
 
   <div class="card" id="newPlantCard" style="display:none;">
@@ -283,23 +321,55 @@ let plantProducts = []; // products linked to the currently selected plant
 let currentPlantId = null;
 let pendingPhotoFile = null;
 
+let plantProteins = {};
+
 async function loadEverything(){
-  const [plantsRes, tempRes, packRes] = await Promise.all([
+  const [plantsRes, tempRes, packRes, linksRes] = await Promise.all([
     db.from('plants').select('*').order('name'),
     db.from('temperature').select('*').order('name'),
     db.from('packaging').select('*').order('name'),
+    db.from('plant_products').select('plant_id, products(category)'),
   ]);
   plants = plantsRes.data || [];
   temperatures = tempRes.data || [];
   packagings = packRes.data || [];
 
-  const sel = document.getElementById('plantSelect');
-  plants.forEach(p => sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+  plantProteins = {};
+  (linksRes.data || []).forEach(link => {
+    const cat = link.products && link.products.category;
+    if (!cat) return;
+    if (!plantProteins[link.plant_id]) plantProteins[link.plant_id] = new Set();
+    plantProteins[link.plant_id].add(cat);
+  });
 
   const tSel = document.getElementById('temperature_id');
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
   packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+
+  renderPlants();
+}
+
+function renderPlants(){
+  const term = (document.getElementById('plantSearchBox').value || '').trim().toLowerCase();
+  const filtered = term ? plants.filter(p =>
+    (p.name || '').toLowerCase().includes(term) ||
+    (p.city || '').toLowerCase().includes(term) ||
+    (p.country || '').toLowerCase().includes(term)
+  ) : plants;
+  const tbody = document.getElementById('plantRows');
+  tbody.innerHTML = '';
+  document.getElementById('plantEmptyMsg').style.display = filtered.length ? 'none' : 'block';
+  filtered.forEach(p => {
+    const proteins = plantProteins[p.id] ? [...plantProteins[p.id]].sort().join(', ') : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><a class="name-link" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a></td>
+      <td>${escapeHtml(proteins)}</td>
+      <td>${p.contact_name && p.email ? `<a href="mailto:${escapeHtml(p.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.contact_name)}</a>` : escapeHtml(p.contact_name || '—')}</td>
+      <td>${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : '—'}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
 function openNewPlant(){
@@ -326,40 +396,46 @@ async function saveNewPlant(){
   }
   document.getElementById('newPlantCard').style.display = 'none';
   document.getElementById('newPlantName').value = '';
+  document.getElementById('plantSearchBox').value = '';
   await loadEverything();
-  document.getElementById('plantSelect').value = data[0].id;
-  selectPlant();
+  selectPlant(data[0].id);
 }
 
 const PROFILE_FIELDS = ['country','state','city','address','contact_name','email','phone','whatsapp','website','avg_response_time','business_hours','payment_terms','avg_loading_time','document_cost','required_documentation','avg_freight_to_border','notes','internal_notes'];
 
-async function selectPlant(){
-  currentPlantId = document.getElementById('plantSelect').value;
+async function selectPlant(id){
+  const plantCard = document.getElementById('plantCard');
+  if (currentPlantId === id && plantCard.style.display === 'block'){
+    plantCard.style.display = 'none';
+    currentPlantId = null;
+    return;
+  }
+  currentPlantId = id;
   if (!currentPlantId){
-    document.getElementById('plantCard').style.display = 'none';
+    plantCard.style.display = 'none';
     return;
   }
   const plant = plants.find(p => p.id === currentPlantId);
   document.getElementById('plantTitle').textContent = plant.name;
-  document.getElementById('plantCard').style.display = 'block';
+  plantCard.style.display = 'block';
   renderProfileView(plant);
   document.getElementById('profileView').style.display = 'block';
   document.getElementById('profileEdit').style.display = 'none';
   document.getElementById('profileToggleBtn').textContent = 'Edit Profile';
+  await loadPlantLocations();
   await loadPlantProducts();
+  document.getElementById('plantCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function renderProfileView(plant){
   const loc = [plant.city, plant.state, plant.country].filter(Boolean).join(', ') || '—';
   document.getElementById('pv_location').textContent = loc;
-  document.getElementById('pv_contact').textContent = plant.contact_name || '—';
-  document.getElementById('pv_phone').textContent = plant.phone || '—';
-  document.getElementById('pv_whatsapp').textContent = plant.whatsapp || '—';
+  document.getElementById('pv_contact').innerHTML = (plant.contact_name && plant.email) ? `<a href="mailto:${escapeHtml(plant.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(plant.contact_name)}</a>` : escapeHtml(plant.contact_name || '—');
   const waNumber = plant.whatsapp || plant.phone;
   const waBtn = document.getElementById('waBtn');
   if (waNumber){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = waNumber; }
   else { waBtn.style.display = 'none'; waBtn.dataset.number = ''; }
-  document.getElementById('pv_email').textContent = plant.email || '—';
+  document.getElementById('pv_email').innerHTML = plant.email ? `<a href="mailto:${escapeHtml(plant.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(plant.email)}</a>` : '—';
   document.getElementById('pv_website').textContent = plant.website || '—';
   document.getElementById('pv_avg_response_time').textContent = plant.avg_response_time || '—';
   document.getElementById('pv_payment_terms').textContent = plant.payment_terms || '—';
@@ -397,13 +473,20 @@ function toggleProfile(){
 async function saveProfile(){
   const payload = {};
   PROFILE_FIELDS.forEach(f => { payload[f] = document.getElementById('pe_' + f).value || null; });
+  if (payload.phone && !payload.phone.trim().startsWith('+')){
+    document.getElementById('profileMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
+    return;
+  }
+  if (payload.whatsapp && !payload.whatsapp.trim().startsWith('+')){
+    document.getElementById('profileMsg').textContent = 'WhatsApp must include the country code, e.g. +52 6621234567.';
+    return;
+  }
   const { error } = await db.from('plants').update(payload).eq('id', currentPlantId);
   if (error){
     document.getElementById('profileMsg').textContent = 'Error: ' + error.message;
     return;
   }
   await loadEverything();
-  document.getElementById('plantSelect').value = currentPlantId;
   const plant = plants.find(p => p.id === currentPlantId);
   renderProfileView(plant);
   toggleProfile();
@@ -421,6 +504,110 @@ async function loadPlantProducts(){
   }
   plantProducts = (data || []).map(r => r.products).filter(Boolean);
   renderPlantProducts();
+}
+
+let plantLocations = [];
+
+async function loadPlantLocations(){
+  const { data, error } = await db
+    .from('plant_locations')
+    .select('*')
+    .eq('plant_id', currentPlantId)
+    .order('location_name');
+  plantLocations = data || [];
+  const tbody = document.getElementById('plantLocationRows');
+  tbody.innerHTML = '';
+  if (error || !plantLocations.length){
+    document.getElementById('plantLocationsEmpty').style.display = 'block';
+    return;
+  }
+  document.getElementById('plantLocationsEmpty').style.display = 'none';
+  plantLocations.forEach(loc => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(loc.location_name || '')}</strong></td>
+      <td>${escapeHtml(loc.protein || '—')}</td>
+      <td>${(loc.contact_name && loc.email) ? `<a href="mailto:${escapeHtml(loc.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(loc.contact_name)}</a>` : escapeHtml(loc.contact_name || '—')}</td>
+      <td>${loc.phone ? `<a class="wa-btn" href="https://wa.me/${escapeHtml(loc.phone.replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(loc.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : '—'}</td>
+      <td>${loc.delivered_by_plant ? 'Included (plant delivers)' : (loc.freight_to_border_usd != null ? '$' + loc.freight_to_border_usd : '—')}</td>
+      <td class="row-actions">
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editLocation('${loc.id}')">Edit</button>
+        <button class="btn danger" onclick="deleteLocation('${loc.id}')">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openLocationForm(loc){
+  document.getElementById('locationFormCard').style.display = 'block';
+  ['loc_id','loc_name','loc_protein','loc_freight','loc_contact_name','loc_phone','loc_email','loc_notes'].forEach(f => {
+    const el = document.getElementById(f);
+    if (el) el.value = '';
+  });
+  document.getElementById('loc_delivered').checked = false;
+  if (loc){
+    document.getElementById('loc_name').dataset.id = loc.id;
+    document.getElementById('loc_name').value = loc.location_name || '';
+    document.getElementById('loc_protein').value = loc.protein || '';
+    document.getElementById('loc_freight').value = loc.freight_to_border_usd ?? '';
+    document.getElementById('loc_contact_name').value = loc.contact_name || '';
+    document.getElementById('loc_phone').value = loc.phone || '';
+    document.getElementById('loc_email').value = loc.email || '';
+    document.getElementById('loc_notes').value = loc.notes || '';
+    document.getElementById('loc_delivered').checked = !!loc.delivered_by_plant;
+  } else {
+    delete document.getElementById('loc_name').dataset.id;
+  }
+  document.getElementById('locationFormMsg').textContent = '';
+  document.getElementById('locationFormCard').scrollIntoView({behavior:'smooth'});
+}
+
+function closeLocationForm(){
+  document.getElementById('locationFormCard').style.display = 'none';
+}
+
+function editLocation(id){
+  const loc = plantLocations.find(l => l.id === id);
+  if (loc) openLocationForm(loc);
+}
+
+async function saveLocation(){
+  const id = document.getElementById('loc_name').dataset.id;
+  const payload = {
+    plant_id: currentPlantId,
+    location_name: document.getElementById('loc_name').value,
+    protein: document.getElementById('loc_protein').value || null,
+    freight_to_border_usd: document.getElementById('loc_freight').value ? parseFloat(document.getElementById('loc_freight').value) : null,
+    contact_name: document.getElementById('loc_contact_name').value || null,
+    phone: document.getElementById('loc_phone').value || null,
+    email: document.getElementById('loc_email').value || null,
+    delivered_by_plant: document.getElementById('loc_delivered').checked,
+    notes: document.getElementById('loc_notes').value || null,
+  };
+  if (!payload.location_name){
+    document.getElementById('locationFormMsg').textContent = 'Location name is required.';
+    return;
+  }
+  if (payload.phone && !payload.phone.trim().startsWith('+')){
+    document.getElementById('locationFormMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
+    return;
+  }
+  const { error } = id
+    ? await db.from('plant_locations').update(payload).eq('id', id)
+    : await db.from('plant_locations').insert(payload);
+  if (error){
+    document.getElementById('locationFormMsg').textContent = 'Error: ' + error.message;
+    return;
+  }
+  closeLocationForm();
+  await loadPlantLocations();
+}
+
+async function deleteLocation(id){
+  if (!confirm('Delete this location?')) return;
+  const { error } = await db.from('plant_locations').delete().eq('id', id);
+  if (error){ alert('Error: ' + error.message); return; }
+  await loadPlantLocations();
 }
 
 function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? t.name : null; }

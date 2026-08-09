@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuenTrade Trading OS — Carriers</title>
+<title>BuenTrade Trading OS — Freight</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -14,14 +14,21 @@
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
-  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:16px 32px;margin-bottom:24px;}
-  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:#fff;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:14px 32px 12px;margin-bottom:24px;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;}
+  .nav-row{display:flex;align-items:center;gap:5px;margin-top:22px;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
+  .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
+  .wa-btn:hover{background:#1EBE5A;}
+  .wa-btn svg{width:12px;height:12px;flex-shrink:0;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
   td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
@@ -35,6 +42,9 @@
   .row-actions{display:flex;gap:6px;}
   #formCard{display:none;}
   #searchBox{width:100%;max-width:420px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
+  .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
+  .name-link:hover{text-decoration:underline;}
+  .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
 </style>
 </head>
 <body>
@@ -127,23 +137,24 @@ auth.onAuthStateChanged(user => {
 
 <div id="appContent" style="display:none;">
 <header>
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <div style="display:flex;align-items:center;gap:14px;">
-      <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
-      <a href="customers.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Customers</a>
-      <a href="plants.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Processing Plants</a>
-      <a href="products.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Products</a>
-      <a href="trading-tool.html" style="font-size:12px;color:#BBD4EE;text-decoration:none;">Trading Tool →</a>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
-      <span id="userBadge" style="font-size:11px;color:#BBD4EE;font-family:'IBM Plex Mono',monospace;"></span>
+  <div class="top-row">
+    <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
+    <div style="position:relative;display:flex;align-items:center;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="position:absolute;top:100%;right:0;margin-top:4px;font-size:11px;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;"></span>
     </div>
   </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Customers</a>
+    <a href="carriers.html" class="nav-pill active">Freight</a>
+    <a href="plants.html" class="nav-pill">Meat Packers</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="trading-tool.html" class="nav-pill">Trading Tool</a>
+  </nav>
 </header>
 
 <div class="wrap">
-  <h1>Carriers</h1>
+  <h1>Freight</h1>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -161,7 +172,7 @@ auth.onAuthStateChanged(user => {
     </div>
     <div class="grid2">
       <div class="field"><label>City</label><input id="city"></div>
-      <div class="field"><label>Phone</label><input id="phone"></div>
+      <div class="field"><label>Phone</label><input id="phone" placeholder="+52 6621234567"></div>
     </div>
     <div class="grid2">
       <div class="field"><label>Contact Name</label><input id="contact_name"></div>
@@ -175,9 +186,26 @@ auth.onAuthStateChanged(user => {
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
+  <div class="card" id="viewCard" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <strong id="viewTitle" style="font-size:16px;"></strong>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" onclick="editFromView()">Edit</button>
+        <button class="btn danger" onclick="deleteFromView()">Delete</button>
+      </div>
+    </div>
+    <div class="grid3" style="row-gap:10px;">
+      <div><label class="view-label">Location</label><span id="v_location">—</span></div>
+      <div><label class="view-label">Contact Name</label><span id="v_contact_name">—</span></div>
+      <div><label class="view-label">Email</label><span id="v_email">—</span></div>
+      <div><label class="view-label">Phone</label><button class="wa-btn" id="v_waBtn" style="display:none;" onclick="openViewWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button></div>
+    </div>
+    <div style="margin-top:10px;"><label class="view-label">Notes</label><span id="v_notes">—</span></div>
+  </div>
+
   <div class="card">
     <table>
-      <thead><tr><th>Name</th><th>Country / City</th><th>Contact Name</th><th>Phone</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>City</th><th>Contact Name</th><th>Phone</th></tr></thead>
       <tbody id="carrierRows"></tbody>
     </table>
     <div id="emptyMsg" class="empty" style="display:none;">No carriers found.</div>
@@ -211,22 +239,18 @@ function renderCarriers(){
   document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyMsg').textContent = 'No carriers found.';
   filtered.forEach(c => {
-    const loc = [c.city, c.country].filter(Boolean).join(', ') || '—';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${escapeHtml(c.name || '')}</strong></td>
-      <td>${escapeHtml(loc)}</td>
-      <td>${escapeHtml(c.contact_name || '—')}</td>
-      <td>${escapeHtml(c.phone || '—')}</td>
-      <td class="row-actions">
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editCarrier('${c.id}')">Edit</button>
-        <button class="btn danger" onclick="deleteCarrier('${c.id}')">Delete</button>
-      </td>`;
+      <td><a class="name-link" onclick="viewCarrier('${c.id}')">${escapeHtml(c.name || '')}</a></td>
+      <td>${escapeHtml(c.city || '—')}</td>
+      <td>${c.contact_name && c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</td>
+      <td>${c.phone ? `<a class="wa-btn" href="https://wa.me/${escapeHtml(c.phone.replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : '—'}</td>`;
     tbody.appendChild(tr);
   });
 }
 
 function openForm(){
+  document.getElementById('viewCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = 'New carrier';
   ['carrierId','name','country','city','phone','contact_name','email','notes'].forEach(f => document.getElementById(f).value = '');
@@ -237,6 +261,7 @@ function openForm(){
 function editCarrier(id){
   const c = carriers.find(x => x.id === id);
   if (!c) return;
+  document.getElementById('viewCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = 'Edit carrier';
   document.getElementById('carrierId').value = c.id;
@@ -248,6 +273,46 @@ function editCarrier(id){
 }
 
 function closeForm(){ document.getElementById('formCard').style.display = 'none'; }
+
+let viewingCarrierId = null;
+
+function viewCarrier(id){
+  const viewCard = document.getElementById('viewCard');
+  if (viewingCarrierId === id && viewCard.style.display === 'block'){
+    viewCard.style.display = 'none';
+    viewingCarrierId = null;
+    return;
+  }
+  const c = carriers.find(x => x.id === id);
+  if (!c) return;
+  viewingCarrierId = id;
+  document.getElementById('formCard').style.display = 'none';
+  viewCard.style.display = 'block';
+  document.getElementById('viewTitle').textContent = c.name || '';
+  document.getElementById('v_location').textContent = [c.city, c.country].filter(Boolean).join(', ') || '—';
+  document.getElementById('v_contact_name').innerHTML = (c.contact_name && c.email) ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—');
+  document.getElementById('v_email').innerHTML = c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.email)}</a>` : '—';
+  document.getElementById('v_notes').textContent = c.notes || '—';
+  const waBtn = document.getElementById('v_waBtn');
+  if (c.phone){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = c.phone; }
+  else { waBtn.style.display = 'none'; waBtn.dataset.number = ''; }
+  document.getElementById('viewCard').scrollIntoView({behavior:'smooth'});
+}
+
+function editFromView(){
+  editCarrier(viewingCarrierId);
+}
+
+function deleteFromView(){
+  if (viewingCarrierId) deleteCarrier(viewingCarrierId);
+}
+
+function openViewWhatsApp(){
+  const raw = document.getElementById('v_waBtn').dataset.number || '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return;
+  window.open('https://wa.me/' + digits, '_blank');
+}
 
 async function saveCarrier(){
   const id = document.getElementById('carrierId').value;
@@ -262,6 +327,10 @@ async function saveCarrier(){
   };
   if (!payload.name){
     document.getElementById('formMsg').textContent = 'Name is required.';
+    return;
+  }
+  if (payload.phone && !payload.phone.trim().startsWith('+')){
+    document.getElementById('formMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
     return;
   }
   const { error } = id
@@ -279,6 +348,7 @@ async function deleteCarrier(id){
   if (!confirm('Delete this carrier?')) return;
   const { error } = await db.from('freight_carriers').delete().eq('id', id);
   if (error){ alert('Error: ' + error.message); return; }
+  document.getElementById('viewCard').style.display = 'none';
   await loadCarriers();
 }
 
