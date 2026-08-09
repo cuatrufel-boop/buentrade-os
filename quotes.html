@@ -186,7 +186,7 @@ auth.onAuthStateChanged(user => {
     <div class="grid2">
       <div class="field">
         <label>Product</label>
-        <input id="rq_product_name" list="rq_product_names" placeholder="e.g. Trompa" oninput="onRqProductInput()">
+        <input id="rq_product_name" list="rq_product_names" placeholder="Type a product name…" oninput="onRqProductInput()">
         <datalist id="rq_product_names"></datalist>
       </div>
       <div class="field">
@@ -433,6 +433,13 @@ function renderRqPlants(){
           <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
         </div>
         ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
+        <div class="mini-field" style="width:120px;">
+          <label>Pickup day</label>
+          <button type="button" class="date-btn" style="padding:6px 8px;font-size:12.5px;" onclick="document.getElementById('rq_pickup_${p.id}').showPicker ? document.getElementById('rq_pickup_${p.id}').showPicker() : document.getElementById('rq_pickup_${p.id}').focus()">
+            <span class="cal-icon" style="font-size:13px;">📅</span><span id="rq_pickup_label_${p.id}">${p.rqPickupDate ? rqFmtDate(p.rqPickupDate) : 'Set date'}</span>
+          </button>
+          <input type="date" id="rq_pickup_${p.id}" value="${p.rqPickupDate || ''}" oninput="rqSetPickupDate('${p.id}', this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+        </div>
       </div>
       <div id="rq_iframe_wrap_${p.id}" style="display:none;">
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
@@ -584,11 +591,12 @@ function rqRenderFinalList(){
   wrap.style.display = 'block';
   container.innerHTML = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
+    const pickup = plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : null;
     return `<div class="offer-item">
       ${photo ? `<img class="offer-thumb" src="${photo}">` : `<div class="offer-thumb"></div>`}
       <div style="flex:1;text-align:center;">
         <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${pickup ? ' — Pickup ' + pickup : ''}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
@@ -603,7 +611,8 @@ function buildCustomerOfferText(customerFirstName){
   const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
   const lines = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
-    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${photo ? '\nFoto: ' + photo : ''}`;
+    const pickup = plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : null;
+    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${pickup ? ' — Pickup ' + pickup : ''}${photo ? '\nFoto: ' + photo : ''}`;
   }).join('\n\n');
   return greeting + lines;
 }
@@ -661,12 +670,27 @@ function sendOfferWhatsAppTo(customerId){
 function fmtRqDate(){
   const val = document.getElementById('rq_date').value;
   if (!val) return 'next week';
+  return rqFmtDate(val);
+}
+
+function rqFmtDate(val){
+  if (!val) return 'Set date';
   const d = new Date(val + 'T00:00:00');
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
 }
 
 function onRqDatePicked(){
   document.getElementById('rq_date_label').textContent = fmtRqDate();
+}
+
+// Each plant can quote a different pickup day — this is what actually goes in the offer,
+// not the top "Needed by" (that's only the date used when asking plants for a price).
+function rqSetPickupDate(id, val){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p) return;
+  p.rqPickupDate = val;
+  const label = document.getElementById('rq_pickup_label_' + id);
+  if (label) label.textContent = rqFmtDate(val);
 }
 
 function sendRqEmail(plantId){
