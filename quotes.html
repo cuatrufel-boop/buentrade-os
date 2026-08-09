@@ -180,22 +180,13 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Request Quote</h1>
+  <h1 id="rq_page_title">Request Quote</h1>
 
   <div class="card">
-    <div class="grid2">
-      <div class="field">
-        <label>Product</label>
-        <input id="rq_product_name" list="rq_product_names" placeholder="Type a product name…" oninput="onRqProductInput()">
-        <datalist id="rq_product_names"></datalist>
-      </div>
-      <div class="field">
-        <label>Needed by</label>
-        <button type="button" class="date-btn" onclick="document.getElementById('rq_date').showPicker ? document.getElementById('rq_date').showPicker() : document.getElementById('rq_date').focus()">
-          <span class="cal-icon">📅</span><span id="rq_date_label">Select date</span>
-        </button>
-        <input type="date" id="rq_date" oninput="onRqDatePicked()" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
-      </div>
+    <div class="field">
+      <label>Product</label>
+      <input id="rq_product_name" list="rq_product_names" placeholder="Type a product name…" oninput="onRqProductInput()">
+      <datalist id="rq_product_names"></datalist>
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
 
@@ -548,6 +539,7 @@ function rqUpdateActionButtons(){
   const anyOpen = rqSelectedPlants.some(p => p.rqCalculatorOpen);
   document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
   document.getElementById('rq_open_all_btn').style.display = (anyPriced && !anyOpen) ? 'inline-block' : 'none';
+  document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Request Quote';
 }
 
 function rqUpdatePlantField(id, field, val){
@@ -708,10 +700,10 @@ function rqOpenAllWhatsApp(){
   rqOpenAllWithDelay(urls);
 }
 
+// Asking a plant for a price doesn't need a specific date — "next week" reads naturally in
+// the ask templates and keeps things simple/generic across every plant.
 function fmtRqDate(){
-  const val = document.getElementById('rq_date').value;
-  if (!val) return 'next week';
-  return rqFmtDate(val);
+  return 'next week';
 }
 
 function rqFmtDate(val){
@@ -720,12 +712,7 @@ function rqFmtDate(val){
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
 }
 
-function onRqDatePicked(){
-  document.getElementById('rq_date_label').textContent = fmtRqDate();
-}
-
-// Each plant can quote a different pickup day — this is what actually goes in the offer,
-// not the top "Needed by" (that's only the date used when asking plants for a price).
+// Each plant can quote a different pickup day — this is what actually goes in the offer.
 function rqSetPickupDate(id, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
