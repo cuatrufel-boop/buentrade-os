@@ -218,11 +218,15 @@ auth.onAuthStateChanged(user => {
     <div id="rq_plant_rows"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
+    <div id="rq_open_all_wrap" style="display:none;margin-top:14px;">
+      <button class="btn secondary" onclick="rqOpenAllCalculators()">🧮 Open Trading Tool (all priced plants) →</button>
+    </div>
+
     <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
       <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
       <div id="rq_final_list"></div>
       <div style="margin-top:12px;">
-        <button class="btn" onclick="rqFindCustomers()">✓ Ready — Find Customers</button>
+        <button class="btn" onclick="rqFindCustomers()">✓ Send Offer — Find Customers</button>
       </div>
     </div>
 
@@ -410,6 +414,7 @@ function renderRqPlants(){
   document.getElementById('rq_empty').style.display = rqSelectedPlants.length ? 'none' : 'block';
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
   document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
+  document.getElementById('rq_open_all_wrap').style.display = anyPriced ? 'block' : 'none';
   rqSelectedPlants.forEach(p => {
     const mode = p.rqMode || 'border';
     const row = document.createElement('div');
@@ -432,10 +437,9 @@ function renderRqPlants(){
           <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
         </div>
         ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
-        <button class="btn secondary" onclick="rqOpenCalculator('${p.id}')">${p.rqCalculatorOpen ? '↻ Reload' : 'Open'} Trading Tool →</button>
       </div>
       <div id="rq_iframe_wrap_${p.id}" style="display:none;">
-        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank"></iframe>
+        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
       </div>`;
     container.appendChild(row);
     if (p.rqCalculatorOpen){
@@ -484,13 +488,31 @@ function rqOpenCalculator(id){
   rqStartPolling();
 }
 
+// One button opens every priced plant's Trading Tool at once — no need to click "Open" per plant.
+function rqOpenAllCalculators(){
+  rqSelectedPlants.filter(p => p.rqPrice > 0).forEach(p => rqOpenCalculator(p.id));
+}
+
 let rqPollTimer = null;
 function rqStartPolling(){
   if (rqPollTimer) return;
-  rqPollTimer = setInterval(rqRenderFinalList, 1000);
+  rqPollTimer = setInterval(() => { rqRenderFinalList(); rqResizeIframes(); }, 1000);
 }
 function rqStopPolling(){
   if (rqPollTimer){ clearInterval(rqPollTimer); rqPollTimer = null; }
+}
+
+// The embedded Trading Tool's height changes (e.g. the Mexico block appears once an Exchange
+// Rate + Import Cost + Mexican Freight are filled in), so this keeps resizing the iframe to fit
+// its content — no nested scrollbar, no cut-off Profitability card hiding the real numbers.
+function rqResizeIframes(){
+  rqSelectedPlants.forEach(p => {
+    if (!p.rqCalculatorOpen) return;
+    const iframe = document.getElementById('rq_iframe_' + p.id);
+    if (!iframe || !iframe.contentDocument) return;
+    const h = iframe.contentDocument.documentElement.scrollHeight;
+    if (h > 0 && Math.abs(h - iframe.offsetHeight) > 4) iframe.style.height = (h + 20) + 'px';
+  });
 }
 
 // Reads live totals straight from that plant's embedded Trading Tool — pure read, no math
@@ -519,6 +541,7 @@ function rqUpdatePlantField(id, field, val){
   // this row should disappear now that a price has come in.
   const anyPriced = rqSelectedPlants.some(x => x.rqPrice > 0);
   document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
+  document.getElementById('rq_open_all_wrap').style.display = anyPriced ? 'block' : 'none';
   const askButtons = document.getElementById('rq_ask_btns_' + id);
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
 }
