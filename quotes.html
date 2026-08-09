@@ -51,25 +51,16 @@
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
-  .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
-  @media (max-width:900px){.grid6{grid-template-columns:repeat(3,1fr);}}
   .mini-field{display:flex;flex-direction:column;gap:3px;}
   .mini-field label{font-size:10.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
   .mini-field input{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;}
   .chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;}
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
-  .plant-calc-out{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);background:var(--bg);border-radius:6px;padding:7px 10px;margin-top:8px;}
-  .calc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 8px;margin-top:8px;background:var(--bg);border-radius:8px;padding:10px;}
-  @media (max-width:820px){.calc-stats{grid-template-columns:repeat(2,1fr);}}
-  .calc-stat span{display:block;font-size:9px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-  .calc-stat b{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink);white-space:nowrap;}
-  .calc-stat b.neg{color:var(--red);}
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
-  .autocalc-link{font-size:10.5px;color:var(--blue);cursor:pointer;align-self:center;white-space:nowrap;}
-  .autocalc-link:hover{text-decoration:underline;}
   .loc-hint{font-size:10.5px;color:var(--ink-soft);margin-top:-2px;}
+  .tt-frame{width:100%;height:840px;border:1px solid var(--line);border-radius:10px;margin-top:10px;}
 </style>
 </head>
 <body>
@@ -191,7 +182,7 @@ auth.onAuthStateChanged(user => {
   <h1>Request Quote</h1>
 
   <div class="card">
-    <div class="grid3">
+    <div class="grid2">
       <div class="field">
         <label>Product</label>
         <input id="rq_product_name" list="rq_product_names" placeholder="e.g. Trompa" oninput="onRqProductInput()">
@@ -204,27 +195,14 @@ auth.onAuthStateChanged(user => {
         </button>
         <input type="date" id="rq_date" oninput="onRqDatePicked()" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
       </div>
-      <div class="field">
-        <label>Add a plant</label>
-        <select id="rq_plant_add" onchange="onRqPlantAddSelect()"><option value="">— Select —</option></select>
-      </div>
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
 
-    <div id="rq_assumptions" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:16px;">
-      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Deal assumptions — shared across all plants for this product</div>
-      <div class="grid6">
-        <div class="mini-field"><label>Weight (lb)</label><input type="number" id="rq_weight" value="40000" oninput="rqRecalcAll()"></div>
-        <div class="mini-field"><label>Inspection ($)</label><input type="number" id="rq_inspection" value="0" oninput="rqRecalcAll()"></div>
-        <div class="mini-field"><label>Import Cost ($)</label><input type="number" id="rq_importcost" value="0" oninput="rqRecalcAll()"></div>
-        <div class="mini-field"><label>Payment Days</label><input type="number" id="rq_paydays" value="40" oninput="rqRecalcAll()"></div>
-        <div class="mini-field"><label>Finance %/day</label><input type="number" id="rq_financerate" value="0.0417" step="0.0001" oninput="rqRecalcAll()"></div>
-        <div class="mini-field"><label>Target Margin (%)</label><input type="number" id="rq_targetmargin" value="5" step="0.1" oninput="rqRecalcAll()"></div>
-      </div>
-    </div>
-
-    <div style="margin:10px 0 8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 8px;gap:14px;">
       <strong style="font-size:13px;">Plants to ask</strong>
+      <div id="rq_add_plant_wrap" class="field" style="margin-bottom:0;max-width:260px;flex:1;">
+        <select id="rq_plant_add" onchange="onRqPlantAddSelect()"><option value="">— Add a plant to ask —</option></select>
+      </div>
     </div>
     <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
       <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
@@ -330,9 +308,9 @@ async function onRqProductInput(){
   const name = document.getElementById('rq_product_name').value.trim();
   const match = products.find(p => (p.name || '').toLowerCase() === name.toLowerCase());
   const specLine = document.getElementById('rq_spec_line');
-  const assumptions = document.getElementById('rq_assumptions');
   document.getElementById('rq_customers_wrap').style.display = 'none';
   rqMatchedCustomers = [];
+  rqStopPolling();
   if (match){
     const nameEn = match.name_en || match.name;
     const tempEn = temperatures.find(t => t.id === match.temperature_id);
@@ -340,12 +318,10 @@ async function onRqProductInput(){
     const parts = [nameEn, tempEn ? tempEn.name_en : null, packEn ? packEn.name_en : null].filter(Boolean);
     rqProductSpec = parts.join(', ');
     specLine.textContent = rqProductSpec;
-    assumptions.style.display = 'block';
     await autoPopulateRqPlants(name);
   } else {
     rqProductSpec = name || null;
     specLine.textContent = rqProductSpec ? rqProductSpec + ' (not in catalog — will send as typed)' : '';
-    assumptions.style.display = name ? 'block' : 'none';
     rqSelectedPlants = [];
     renderRqPlants();
   }
@@ -432,6 +408,8 @@ function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
   container.innerHTML = '';
   document.getElementById('rq_empty').style.display = rqSelectedPlants.length ? 'none' : 'block';
+  const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
+  document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
   rqSelectedPlants.forEach(p => {
     const mode = p.rqMode || 'border';
     const row = document.createElement('div');
@@ -452,50 +430,18 @@ function renderRqPlants(){
           <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
         </div>
         ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
-        <div class="mini-field" style="width:110px;"><label>Selling $/lb</label><input type="number" step="0.0001" id="rq_sell_${p.id}" value="${p.rqSell ? p.rqSell.toFixed(4) : ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqSell',this.value)"></div>
-        <span class="autocalc-link" onclick="rqAutoCalcSell('${p.id}')">↻ From target margin</span>
+        <button class="btn secondary" onclick="rqOpenCalculator('${p.id}')">${p.rqCalculatorOpen ? '↻ Reload' : 'Open'} Trading Tool →</button>
       </div>
-      <div id="rq_out_${p.id}" class="plant-calc-out">Enter a price to calculate</div>`;
+      <div id="rq_iframe_wrap_${p.id}" style="display:none;">
+        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank"></iframe>
+      </div>`;
     container.appendChild(row);
+    if (p.rqCalculatorOpen){
+      document.getElementById('rq_iframe_wrap_' + p.id).style.display = 'block';
+      document.getElementById('rq_iframe_' + p.id).src = rqBuildToolUrl(p);
+    }
   });
-  rqRecalcAll();
-}
-
-// Mirrors the Trading Tool's own Border formula exactly (see trading-tool.html calc()):
-// Direct Costs = Freight + Inspection + Import Cost (dollar totals, not baked into cost/lb).
-// Selling $/lb is a free input just like the real Product row — you type it (or push/pull it)
-// and Profit/Margin/etc. react live. It only gets auto-filled from the target margin the first
-// time a price comes in, or when you click "↻ From target margin" — same auto/manual pattern
-// the Trading Tool already uses for its Mexico selling price (sellMxManual).
-function rqCalcRow(p){
-  const weight = parseFloat(document.getElementById('rq_weight').value) || 0;
-  const inspection = parseFloat(document.getElementById('rq_inspection').value) || 0;
-  const importCost = parseFloat(document.getElementById('rq_importcost').value) || 0;
-  const payDays = parseFloat(document.getElementById('rq_paydays').value) || 0;
-  const financeRate = parseFloat(document.getElementById('rq_financerate').value) || 0;
-  const targetMargin = (parseFloat(document.getElementById('rq_targetmargin').value) || 0) / 100;
-  const price = p.rqPrice || 0;
-  const freight = (p.rqMode === 'fob') ? (p.rqFreight || 0) : 0;
-  const directCosts = freight + inspection + importCost;
-  const totalCost = weight * price;
-  const k = payDays * (financeRate / 100);
-
-  if (!p.rqSellManual){
-    const denom = 1 - k - targetMargin;
-    const solvedTotalSale = denom !== 0 ? (totalCost + directCosts) / denom : 0;
-    p.rqSell = weight > 0 ? solvedTotalSale / weight : 0;
-  }
-  const salePerLb = p.rqSell || 0;
-  const totalSale = salePerLb * weight;
-  const finance = totalSale * k;
-  const grossBase = totalSale - totalCost - directCosts;
-  const profit = grossBase - finance;
-  const profitLb = weight > 0 ? profit / weight : 0;
-  const netMargin = totalSale > 0 ? profit / totalSale : 0;
-  const grossMargin = totalSale > 0 ? grossBase / totalSale : 0;
-  const markup = totalSale - totalCost;
-  const markupPct = totalCost > 0 ? markup / totalCost : 0;
-  return { price, salePerLb, totalCost, totalSale, directCosts, finance, profit, profitLb, netMargin, grossMargin, markup, markupPct, weight };
+  rqRenderFinalList();
 }
 
 function rqFreightForPlant(plantId){
@@ -509,37 +455,62 @@ function rqFreightHint(plantId){
   return `<div class="loc-hint">From ${escapeHtml(locs[0].location_name || 'plant')} location${locs.length>1 ? ' (+' + (locs.length-1) + ' more)' : ''}</div>`;
 }
 
-function rqStatsHtml(c){
-  const fmt$ = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  const fmtPct = n => (n*100).toFixed(2) + '%';
-  return `
-    <div class="calc-stat"><span>Cost</span><b>${fmt$(c.totalCost)}</b></div>
-    <div class="calc-stat"><span>Sale</span><b>${fmt$(c.totalSale)}</b></div>
-    <div class="calc-stat"><span>Sale $/lb</span><b>$${c.salePerLb.toFixed(4)}</b></div>
-    <div class="calc-stat"><span>Direct Costs</span><b>${fmt$(c.directCosts)}</b></div>
-    <div class="calc-stat"><span>Profit</span><b class="${c.profit<0?'neg':''}">${fmt$(c.profit)}</b></div>
-    <div class="calc-stat"><span>Net Margin</span><b class="${c.netMargin<0?'neg':''}">${fmtPct(c.netMargin)}</b></div>
-    <div class="calc-stat"><span>Profit / Lb</span><b>${fmt$(c.profitLb)}</b></div>
-    <div class="calc-stat"><span>Gross Margin</span><b>${fmtPct(c.grossMargin)}</b></div>
-    <div class="calc-stat"><span>Markup</span><b>${fmt$(c.markup)}</b></div>
-    <div class="calc-stat"><span>Markup %</span><b>${fmtPct(c.markupPct)}</b></div>
-    <div class="calc-stat"><span>Finance Cost</span><b>${fmt$(c.finance)}</b></div>
-    <div class="calc-stat"><span>Weight</span><b>${c.weight.toLocaleString('en-US')} lb</b></div>
-  `;
+// Opens the REAL trading-tool.html — same file, same calc(), nothing re-implemented here —
+// embedded per plant so it's fully independent (own Weight/Freight/Inspection/Import Cost/
+// Selling price). Quotes only ever READS its live totals via window.__calc, never recomputes.
+function rqBuildToolUrl(p){
+  const freight = (p.rqMode === 'fob') ? (p.rqFreight || 0) : 0;
+  const params = new URLSearchParams({
+    embed: '1',
+    weight: '40000',
+    cost: String(p.rqPrice || 0),
+    freight: String(freight),
+    label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
+  });
+  return 'trading-tool.html?' + params.toString();
+}
+
+function rqOpenCalculator(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p) return;
+  if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
+  p.rqCalculatorOpen = true;
+  const wrap = document.getElementById('rq_iframe_wrap_' + id);
+  const iframe = document.getElementById('rq_iframe_' + id);
+  wrap.style.display = 'block';
+  iframe.src = rqBuildToolUrl(p);
+  rqStartPolling();
+}
+
+let rqPollTimer = null;
+function rqStartPolling(){
+  if (rqPollTimer) return;
+  rqPollTimer = setInterval(rqRenderFinalList, 1000);
+}
+function rqStopPolling(){
+  if (rqPollTimer){ clearInterval(rqPollTimer); rqPollTimer = null; }
+}
+
+// Reads live totals straight from that plant's embedded Trading Tool — pure read, no math
+// duplicated here beyond dividing by weight to get a per-lb figure.
+function rqCalcRow(p){
+  const iframe = document.getElementById('rq_iframe_' + p.id);
+  const win = iframe && iframe.contentWindow;
+  const calc = win && win.__calc;
+  if (!calc || !calc.totalWeight) return null;
+  return {
+    costPerLb: calc.totalCostUSD / calc.totalWeight,
+    salePerLb: calc.totalSaleBorder / calc.totalWeight,
+    totalCost: calc.totalCostUSD,
+    totalSale: calc.totalSaleBorder,
+    weight: calc.totalWeight,
+  };
 }
 
 function rqUpdatePlantField(id, field, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   p[field] = parseFloat(val) || 0;
-  if (field === 'rqSell') p.rqSellManual = true;
-  rqRecalcAll();
-}
-
-function rqAutoCalcSell(id){
-  const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p) return;
-  p.rqSellManual = false;
   renderRqPlants();
 }
 
@@ -554,22 +525,6 @@ function rqSetMode(id, mode){
   renderRqPlants();
 }
 
-function rqRecalcAll(){
-  rqSelectedPlants.forEach(p => {
-    const out = document.getElementById('rq_out_' + p.id);
-    if (!out) return;
-    if (!p.rqPrice){
-      out.className = 'plant-calc-out';
-      out.textContent = 'Enter a price to calculate';
-      return;
-    }
-    const c = rqCalcRow(p);
-    out.className = 'calc-stats';
-    out.innerHTML = rqStatsHtml(c);
-  });
-  rqRenderFinalList();
-}
-
 function rqFindPhotoFor(plant){
   const name = document.getElementById('rq_product_name').value.trim().toLowerCase();
   return (products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url)
@@ -577,8 +532,9 @@ function rqFindPhotoFor(plant){
 }
 
 function rqPricedPlantsSorted(){
-  const priced = rqSelectedPlants.filter(p => p.rqPrice > 0);
-  const withCalc = priced.map(p => ({ plant: p, calc: rqCalcRow(p) }));
+  const withCalc = rqSelectedPlants
+    .map(p => ({ plant: p, calc: rqCalcRow(p) }))
+    .filter(({ calc }) => calc && calc.salePerLb > 0); // only plants where a Selling price was actually set in their calculator
   withCalc.sort((a, b) => b.calc.salePerLb - a.calc.salePerLb);
   return withCalc;
 }
@@ -595,11 +551,11 @@ function rqRenderFinalList(){
       ${photo ? `<img class="offer-thumb" src="${photo}">` : `<div class="offer-thumb"></div>`}
       <div style="flex:1;">
         <div style="font-size:13.5px;font-weight:600;">${escapeHtml(rqProductSpec || '')}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(plant.name)} — Cost $${calc.price.toFixed(4)}/lb — Net Margin ${(calc.netMargin*100).toFixed(2)}%</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(plant.name)} — Cost $${calc.costPerLb.toFixed(4)}/lb</div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
-        <div style="font-size:11px;color:var(--ink-soft);">Profit $${calc.profit.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        <div style="font-size:11px;color:var(--ink-soft);">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
       </div>
     </div>`;
   }).join('');

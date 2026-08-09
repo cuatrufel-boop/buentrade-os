@@ -303,6 +303,12 @@
 
   .footnote{margin:16px 24px 0; font-size:11px; color:var(--ink-soft); line-height:1.5;}
   .footnote b{color:var(--navy);}
+
+  /* Embed mode: same page, same calc() — just hides the header/nav chrome that's redundant
+     when this page is loaded inside an <iframe> from another BuenTrade OS page (e.g. Quotes,
+     one instance per plant). Nothing here touches the calculator itself. */
+  html.embed-mode header{display:none;}
+  html.embed-mode .wrap{padding-top:14px;}
 </style>
 </head>
 <body>
@@ -685,8 +691,18 @@ if (FIREBASE_READY) {
 </div>
 
 <script>
+// Optional pre-fill from URL query params (?embed=1&weight=&cost=&freight=&label=) — used when
+// this page is embedded from Quotes, one instance per plant. Only sets initial values, same as
+// if the user had typed them in themselves; never touches the calc() formula below.
+const __qp = new URLSearchParams(location.search);
+if (__qp.get('embed') === '1') document.documentElement.classList.add('embed-mode');
 let products = [
-  {name:'Product 1', weight:40000, cost:0, sellBorder:0, sellMx:0, sellMxManual:false}
+  {
+    name: __qp.get('label') || 'Product 1',
+    weight: __qp.has('weight') ? Number(__qp.get('weight')) || 40000 : 40000,
+    cost: __qp.has('cost') ? Number(__qp.get('cost')) || 0 : 0,
+    sellBorder: 0, sellMx: 0, sellMxManual: false
+  }
 ];
 const MAX_PRODUCTS = 6;
 const TARGET_WEIGHT = 40000;
@@ -1108,6 +1124,7 @@ document.addEventListener('focusin', function(e){
   }
 });
 
+if (__qp.has('freight')) document.getElementById('freight').value = Number(__qp.get('freight')) || 0;
 buildProductRows();
 calc();
 fetchExchangeRate();
