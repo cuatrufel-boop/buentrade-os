@@ -203,6 +203,7 @@ auth.onAuthStateChanged(user => {
       <div id="rq_add_plant_wrap" class="field" style="margin-bottom:0;max-width:260px;flex:1;">
         <select id="rq_plant_add" onchange="onRqPlantAddSelect()"><option value="">— Add a plant to ask —</option></select>
       </div>
+      <button id="rq_open_all_btn" class="btn" style="display:none;" onclick="rqOpenAllCalculators()">Go 2 Trading Tool</button>
     </div>
     <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
       <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
@@ -218,16 +219,12 @@ auth.onAuthStateChanged(user => {
     <div id="rq_plant_rows"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
-    <div id="rq_open_all_wrap" style="display:none;margin-top:14px;">
-      <button class="btn" onclick="rqOpenAllCalculators()">Go 2 Trading Tool</button>
-    </div>
-
     <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
-      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
-      <div id="rq_final_list"></div>
-      <div style="margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;">
+        <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Offer list — highest to lowest</div>
         <button class="btn" onclick="rqFindCustomers()">Send Offer</button>
       </div>
+      <div id="rq_final_list"></div>
     </div>
 
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
@@ -412,9 +409,7 @@ function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
   container.innerHTML = '';
   document.getElementById('rq_empty').style.display = rqSelectedPlants.length ? 'none' : 'block';
-  const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
-  document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
-  document.getElementById('rq_open_all_wrap').style.display = anyPriced ? 'block' : 'none';
+  rqUpdateActionButtons();
   rqSelectedPlants.forEach(p => {
     const mode = p.rqMode || 'border';
     const row = document.createElement('div');
@@ -491,6 +486,7 @@ function rqOpenCalculator(id){
 // One button opens every priced plant's Trading Tool at once — no need to click "Open" per plant.
 function rqOpenAllCalculators(){
   rqSelectedPlants.filter(p => p.rqPrice > 0).forEach(p => rqOpenCalculator(p.id));
+  rqUpdateActionButtons();
 }
 
 let rqPollTimer = null;
@@ -531,17 +527,24 @@ function rqCalcRow(p){
   };
 }
 
+// "Add a plant" only makes sense while still asking; "Go 2 Trading Tool" only makes sense once
+// there's a price to open but before you've already opened it — it disappears the moment any
+// calculator is open, since you're not going back to that step.
+function rqUpdateActionButtons(){
+  const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
+  const anyOpen = rqSelectedPlants.some(p => p.rqCalculatorOpen);
+  document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
+  document.getElementById('rq_open_all_btn').style.display = (anyPriced && !anyOpen) ? 'inline-block' : 'none';
+}
+
 function rqUpdatePlantField(id, field, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   p[field] = parseFloat(val) || 0;
   // Deliberately not a full renderRqPlants() here — that would rebuild the input the user is
   // actively typing into and steal focus after every keystroke. Just update the bits that need
-  // to react live: whether "Add a plant" should still show, and whether the ask buttons for
-  // this row should disappear now that a price has come in.
-  const anyPriced = rqSelectedPlants.some(x => x.rqPrice > 0);
-  document.getElementById('rq_add_plant_wrap').style.display = anyPriced ? 'none' : 'block';
-  document.getElementById('rq_open_all_wrap').style.display = anyPriced ? 'block' : 'none';
+  // to react live.
+  rqUpdateActionButtons();
   const askButtons = document.getElementById('rq_ask_btns_' + id);
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
 }
