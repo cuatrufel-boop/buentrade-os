@@ -241,12 +241,16 @@ auth.onAuthStateChanged(user => {
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
     <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
-      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest, ready to send to customer</div>
+      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
       <div id="rq_final_list"></div>
-      <div style="display:flex;gap:8px;margin-top:12px;">
-        <button class="btn secondary" onclick="sendOfferEmail()">Send via Email</button>
-        <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="sendOfferWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff" style="width:14px;height:14px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Send via WhatsApp</button>
+      <div style="margin-top:12px;">
+        <button class="btn" onclick="rqFindCustomers()">✓ Ready — Find Customers</button>
       </div>
+    </div>
+
+    <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
+      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Customers who buy this — send the offer</div>
+      <div id="rq_customers_list"></div>
     </div>
   </div>
 </div>
@@ -327,6 +331,8 @@ async function onRqProductInput(){
   const match = products.find(p => (p.name || '').toLowerCase() === name.toLowerCase());
   const specLine = document.getElementById('rq_spec_line');
   const assumptions = document.getElementById('rq_assumptions');
+  document.getElementById('rq_customers_wrap').style.display = 'none';
+  rqMatchedCustomers = [];
   if (match){
     const nameEn = match.name_en || match.name;
     const tempEn = temperatures.find(t => t.id === match.temperature_id);
@@ -599,24 +605,64 @@ function rqRenderFinalList(){
   }).join('');
 }
 
-function buildCustomerOfferText(){
+function buildCustomerOfferText(customerFirstName){
   const withCalc = rqPricedPlantsSorted();
-  return withCalc.map(({ plant, calc }) => {
+  const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
+  const lines = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
     return `${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${photo ? '\nFoto: ' + photo : ''}`;
   }).join('\n\n');
+  return greeting + lines;
 }
 
-function sendOfferEmail(){
-  const body = buildCustomerOfferText();
-  if (!body) return;
-  window.location.href = `mailto:?subject=${encodeURIComponent('Cotización — ' + (rqProductSpec || ''))}&body=${encodeURIComponent(body)}`;
+let rqMatchedCustomers = [];
+
+async function rqFindCustomers(){
+  const wrap = document.getElementById('rq_customers_wrap');
+  const container = document.getElementById('rq_customers_list');
+  wrap.style.display = 'block';
+  container.innerHTML = '<div class="empty">Searching…</div>';
+
+  const productName = document.getElementById('rq_product_name').value.trim();
+  const matchingProductIds = products.filter(p => (p.name || '').toLowerCase() === productName.toLowerCase()).map(p => p.id);
+  if (!matchingProductIds.length){
+    container.innerHTML = '<div class="empty">Product not in catalog yet.</div>';
+    return;
+  }
+  const { data: links } = await db.from('customer_products').select('customer_id').in('product_id', matchingProductIds);
+  const customerIds = [...new Set((links || []).map(l => l.customer_id))];
+  if (!customerIds.length){
+    container.innerHTML = '<div class="empty">No customers linked to this product yet.</div>';
+    rqMatchedCustomers = [];
+    return;
+  }
+  const { data: customers } = await db.from('customers').select('id,trade_name,contact_name,email,phone,whatsapp').in('id', customerIds).order('trade_name');
+  rqMatchedCustomers = customers || [];
+  container.innerHTML = rqMatchedCustomers.map(c => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+      <span style="font-size:13.5px;">${escapeHtml(c.trade_name)}</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="sendOfferEmailTo('${c.id}')" ${c.email ? '' : 'disabled title="No email on file"'}>Email</button>
+        <button class="wa-btn" onclick="sendOfferWhatsAppTo('${c.id}')" ${(c.whatsapp || c.phone) ? '' : 'disabled title="No phone on file"'}><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
+      </div>
+    </div>`).join('');
 }
 
-function sendOfferWhatsApp(){
-  const body = buildCustomerOfferText();
-  if (!body) return;
-  window.open('https://wa.me/?text=' + encodeURIComponent(body), '_blank');
+function sendOfferEmailTo(customerId){
+  const c = rqMatchedCustomers.find(x => x.id === customerId);
+  if (!c || !c.email) return;
+  const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
+  const subject = `Cotización — ${rqProductSpec || ''}`;
+  window.location.href = `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function sendOfferWhatsAppTo(customerId){
+  const c = rqMatchedCustomers.find(x => x.id === customerId);
+  if (!c) return;
+  const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
+  if (!phone) return;
+  const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
 }
 
 function fmtRqDate(){
