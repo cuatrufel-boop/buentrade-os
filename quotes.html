@@ -422,18 +422,20 @@ function renderRqPlants(){
         </div>
       </div>
       <div class="plant-calc-row">
-        <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
-        <div style="display:flex;gap:4px;">
-          <span class="chip ${mode==='border'?'on':''}" onclick="rqSetMode('${p.id}','border')">Delivered border</span>
-          <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
-        </div>
-        ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
         <div class="mini-field" style="width:120px;">
           <label>Pickup day</label>
           <button type="button" class="date-btn" style="padding:6px 8px;font-size:12.5px;" onclick="document.getElementById('rq_pickup_${p.id}').showPicker ? document.getElementById('rq_pickup_${p.id}').showPicker() : document.getElementById('rq_pickup_${p.id}').focus()">
             <span class="cal-icon" style="font-size:13px;">📅</span><span id="rq_pickup_label_${p.id}">${p.rqPickupDate ? rqFmtDate(p.rqPickupDate) : 'Set date'}</span>
           </button>
           <input type="date" id="rq_pickup_${p.id}" value="${p.rqPickupDate || ''}" oninput="rqSetPickupDate('${p.id}', this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+        </div>
+        <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
+        <div id="rq_mode_wrap_${p.id}" style="display:${p.rqPrice ? 'flex' : 'none'};gap:8px;align-items:flex-end;">
+          <div style="display:flex;gap:4px;">
+            <span class="chip ${mode==='border'?'on':''}" onclick="rqSetMode('${p.id}','border')">Delivered border</span>
+            <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
+          </div>
+          ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
         </div>
       </div>
       <div id="rq_iframe_wrap_${p.id}" style="display:none;">
@@ -553,6 +555,8 @@ function rqUpdatePlantField(id, field, val){
   rqUpdateActionButtons();
   const askButtons = document.getElementById('rq_ask_btns_' + id);
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
+  const modeWrap = document.getElementById('rq_mode_wrap_' + id);
+  if (modeWrap) modeWrap.style.display = p.rqPrice ? 'flex' : 'none';
 }
 
 function rqSetMode(id, mode){
