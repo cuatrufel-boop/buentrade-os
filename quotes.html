@@ -59,7 +59,12 @@
   .chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;}
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
-  .plant-calc-out{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink);background:var(--bg);border-radius:6px;padding:7px 10px;}
+  .plant-calc-out{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);background:var(--bg);border-radius:6px;padding:7px 10px;margin-top:8px;}
+  .calc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 8px;margin-top:8px;background:var(--bg);border-radius:8px;padding:10px;}
+  @media (max-width:820px){.calc-stats{grid-template-columns:repeat(2,1fr);}}
+  .calc-stat span{display:block;font-size:9px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  .calc-stat b{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .calc-stat b.neg{color:var(--red);}
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
 </style>
@@ -434,13 +439,16 @@ function renderRqPlants(){
           <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
         </div>
         ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)"></div>` : ''}
-        <div class="plant-calc-out" id="rq_out_${p.id}">Enter a price to calculate</div>
-      </div>`;
+      </div>
+      <div id="rq_out_${p.id}" class="plant-calc-out">Enter a price to calculate</div>`;
     container.appendChild(row);
   });
   rqRecalcAll();
 }
 
+// Mirrors the Trading Tool's own Border formula exactly (see trading-tool.html calc()):
+// Direct Costs = Freight + Inspection + Import Cost (dollar totals, not baked into cost/lb).
+// Sale is solved backward from the target margin, same as the Trading Tool's "Find Your Price" solver.
 function rqCalcRow(p){
   const weight = parseFloat(document.getElementById('rq_weight').value) || 0;
   const inspection = parseFloat(document.getElementById('rq_inspection').value) || 0;
@@ -449,13 +457,41 @@ function rqCalcRow(p){
   const financeRate = parseFloat(document.getElementById('rq_financerate').value) || 0;
   const targetMargin = (parseFloat(document.getElementById('rq_targetmargin').value) || 0) / 100;
   const price = p.rqPrice || 0;
-  const freight = p.rqFreight || 0;
-  const costPerLb = (p.rqMode === 'fob') ? price + (weight > 0 ? freight / weight : 0) : price;
-  const directCostsPerLb = weight > 0 ? (inspection + importCost) / weight : 0;
+  const freight = (p.rqMode === 'fob') ? (p.rqFreight || 0) : 0;
+  const directCosts = freight + inspection + importCost;
+  const totalCost = weight * price;
   const k = payDays * (financeRate / 100);
   const denom = 1 - k - targetMargin;
-  const salePerLb = denom !== 0 ? (costPerLb + directCostsPerLb) / denom : 0;
-  return { costPerLb, salePerLb, totalSale: salePerLb * weight, weight };
+  const totalSale = denom !== 0 ? (totalCost + directCosts) / denom : 0;
+  const salePerLb = weight > 0 ? totalSale / weight : 0;
+  const finance = totalSale * k;
+  const grossBase = totalSale - totalCost - directCosts;
+  const profit = grossBase - finance;
+  const profitLb = weight > 0 ? profit / weight : 0;
+  const netMargin = totalSale > 0 ? profit / totalSale : 0;
+  const grossMargin = totalSale > 0 ? grossBase / totalSale : 0;
+  const markup = totalSale - totalCost;
+  const markupPct = totalCost > 0 ? markup / totalCost : 0;
+  return { price, salePerLb, totalCost, totalSale, directCosts, finance, profit, profitLb, netMargin, grossMargin, markup, markupPct, weight };
+}
+
+function rqStatsHtml(c){
+  const fmt$ = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmtPct = n => (n*100).toFixed(2) + '%';
+  return `
+    <div class="calc-stat"><span>Cost</span><b>${fmt$(c.totalCost)}</b></div>
+    <div class="calc-stat"><span>Sale</span><b>${fmt$(c.totalSale)}</b></div>
+    <div class="calc-stat"><span>Sale $/lb</span><b>$${c.salePerLb.toFixed(4)}</b></div>
+    <div class="calc-stat"><span>Direct Costs</span><b>${fmt$(c.directCosts)}</b></div>
+    <div class="calc-stat"><span>Profit</span><b class="${c.profit<0?'neg':''}">${fmt$(c.profit)}</b></div>
+    <div class="calc-stat"><span>Net Margin</span><b class="${c.netMargin<0?'neg':''}">${fmtPct(c.netMargin)}</b></div>
+    <div class="calc-stat"><span>Profit / Lb</span><b>${fmt$(c.profitLb)}</b></div>
+    <div class="calc-stat"><span>Gross Margin</span><b>${fmtPct(c.grossMargin)}</b></div>
+    <div class="calc-stat"><span>Markup</span><b>${fmt$(c.markup)}</b></div>
+    <div class="calc-stat"><span>Markup %</span><b>${fmtPct(c.markupPct)}</b></div>
+    <div class="calc-stat"><span>Finance Cost</span><b>${fmt$(c.finance)}</b></div>
+    <div class="calc-stat"><span>Weight</span><b>${c.weight.toLocaleString('en-US')} lb</b></div>
+  `;
 }
 
 function rqUpdatePlantField(id, field, val){
@@ -476,9 +512,14 @@ function rqRecalcAll(){
   rqSelectedPlants.forEach(p => {
     const out = document.getElementById('rq_out_' + p.id);
     if (!out) return;
-    if (!p.rqPrice){ out.textContent = 'Enter a price to calculate'; return; }
+    if (!p.rqPrice){
+      out.className = 'plant-calc-out';
+      out.textContent = 'Enter a price to calculate';
+      return;
+    }
     const c = rqCalcRow(p);
-    out.textContent = `Cost $${c.costPerLb.toFixed(4)}/lb → Sale $${c.salePerLb.toFixed(4)}/lb (Total $${c.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})})`;
+    out.className = 'calc-stats';
+    out.innerHTML = rqStatsHtml(c);
   });
   rqRenderFinalList();
 }
@@ -508,11 +549,11 @@ function rqRenderFinalList(){
       ${photo ? `<img class="offer-thumb" src="${photo}">` : `<div class="offer-thumb"></div>`}
       <div style="flex:1;">
         <div style="font-size:13.5px;font-weight:600;">${escapeHtml(rqProductSpec || '')}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(plant.name)} — Cost $${calc.costPerLb.toFixed(4)}/lb</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(plant.name)} — Cost $${calc.price.toFixed(4)}/lb — Net Margin ${(calc.netMargin*100).toFixed(2)}%</div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
-        <div style="font-size:11px;color:var(--ink-soft);">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        <div style="font-size:11px;color:var(--ink-soft);">Profit $${calc.profit.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
       </div>
     </div>`;
   }).join('');
