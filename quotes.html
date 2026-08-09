@@ -221,15 +221,18 @@ auth.onAuthStateChanged(user => {
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
     <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;">
-        <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Offer list — highest to lowest</div>
-        <button class="btn" onclick="rqFindCustomers()">Send Offer</button>
-      </div>
+      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
       <div id="rq_final_list"></div>
     </div>
 
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
-      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Customers who buy this — send the offer</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
+        <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn secondary" onclick="rqOpenAllEmails()">Open All Emails</button>
+          <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Open All WhatsApp</button>
+        </div>
+      </div>
       <div id="rq_customers_list"></div>
     </div>
   </div>
@@ -312,6 +315,7 @@ async function onRqProductInput(){
   const specLine = document.getElementById('rq_spec_line');
   document.getElementById('rq_customers_wrap').style.display = 'none';
   rqMatchedCustomers = [];
+  rqCustomersFetchedFor = null;
   rqStopPolling();
   if (match){
     const nameEn = match.name_en || match.name;
@@ -589,6 +593,14 @@ function rqRenderFinalList(){
   const withCalc = rqPricedPlantsSorted();
   if (!withCalc.length){ wrap.style.display = 'none'; container.innerHTML = ''; return; }
   wrap.style.display = 'block';
+  // The moment there's at least one real offer, show who it can go to — no extra click needed,
+  // this is just information (nothing gets sent until Open All Emails/WhatsApp or a per-customer
+  // button is pressed). Only fetched once per product to avoid re-querying every poll tick.
+  const productName = document.getElementById('rq_product_name').value.trim();
+  if (rqCustomersFetchedFor !== productName){
+    rqCustomersFetchedFor = productName;
+    rqFindCustomers();
+  }
   container.innerHTML = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
     const pickup = plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : null;
@@ -618,6 +630,7 @@ function buildCustomerOfferText(customerFirstName){
 }
 
 let rqMatchedCustomers = [];
+let rqCustomersFetchedFor = null;
 
 async function rqFindCustomers(){
   const wrap = document.getElementById('rq_customers_wrap');
@@ -665,6 +678,25 @@ function sendOfferWhatsAppTo(customerId){
   if (!phone) return;
   const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
+}
+
+// Opens one pre-filled draft per customer at once — still nothing gets sent until you press
+// send in each opened window/app, same as the per-customer buttons.
+function rqOpenAllEmails(){
+  rqMatchedCustomers.filter(c => c.email).forEach(c => {
+    const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
+    const subject = `Cotización — ${rqProductSpec || ''}`;
+    window.open(`mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+  });
+}
+
+function rqOpenAllWhatsApp(){
+  rqMatchedCustomers.filter(c => c.whatsapp || c.phone).forEach(c => {
+    const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
+    if (!phone) return;
+    const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
+  });
 }
 
 function fmtRqDate(){
