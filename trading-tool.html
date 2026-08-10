@@ -131,6 +131,10 @@
     color:var(--navy); letter-spacing:-0.01em;
   }
   .card-body{padding:11px 14px 12px;}
+  .card-head.collapsible{cursor:pointer; user-select:none;}
+  .card-chevron{font-size:12px; color:var(--blue); transition:transform .2s ease; display:inline-block; flex-shrink:0;}
+  .card-chevron.open{transform:rotate(180deg);}
+  .card.collapsed .card-body{display:none;}
 
   .field{display:flex; align-items:center; gap:8px; margin-bottom:7px;}
   .field label{flex:0 0 132px; color:var(--ink-soft); font-size:12px;}
@@ -563,8 +567,8 @@ if (FIREBASE_READY) {
   <div class="grid">
 
     <!-- ================= DIRECT COSTS ================= -->
-    <div class="card">
-      <div class="card-head"><h2>Direct Costs</h2></div>
+    <div class="card" id="directCostsCard">
+      <div class="card-head collapsible" onclick="toggleCard(this)"><h2>Direct Costs</h2><span class="card-chevron open">▾</span></div>
       <div class="card-body">
 
         <div class="section-label">Shared — applies to both</div>
@@ -593,10 +597,13 @@ if (FIREBASE_READY) {
     </div>
 
     <!-- ================= PRODUCTS ================= -->
-    <div class="card">
-      <div class="card-head">
-        <h2>Product(s)</h2>
-        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
+    <div class="card" id="productsCard">
+      <div class="card-head collapsible" onclick="toggleCard(this)">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h2>Product(s)</h2>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
+        </div>
+        <span class="card-chevron open">▾</span>
       </div>
       <div class="card-body" id="productsBody"></div>
       <div class="card-body" style="padding-top:0;">
@@ -605,8 +612,8 @@ if (FIREBASE_READY) {
     </div>
 
     <!-- ================= PROFITABILITY ================= -->
-    <div class="card profit-card">
-      <div class="card-head"><h2>Profitability</h2></div>
+    <div class="card profit-card" id="profitCard">
+      <div class="card-head collapsible" onclick="toggleCard(this)"><h2>Profitability</h2><span class="card-chevron open">▾</span></div>
       <div class="card-body profit-cols" id="profitCols">
         <div class="profit-col">
           <div class="section-label">Border (USD)</div>
@@ -727,6 +734,16 @@ const TARGET_WEIGHT = 40000;
 const LB_PER_KG = 2.20462;
 let state = { solveFor:'purchase', solveScenario:'border', qqLastEdited:'purchase' };
 let fxRateManuallySet = false;
+
+// Collapse/expand one of the three grid cards (Direct Costs, Products, Profitability) by
+// clicking its header — lets the trader shrink whichever card they're not using so all three
+// sit roughly parallel in height instead of one towering over the others.
+function toggleCard(headEl){
+  const card = headEl.closest('.card');
+  card.classList.toggle('collapsed');
+  const chevron = headEl.querySelector('.card-chevron');
+  if (chevron) chevron.classList.toggle('open', !card.classList.contains('collapsed'));
+}
 
 function fmt$(n){ if(!isFinite(n)) n=0; return (n<0?'-$':'$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtMx(n){ if(!isFinite(n)) n=0; return (n<0?'-MX$':'MX$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
