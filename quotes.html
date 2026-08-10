@@ -60,6 +60,10 @@
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
   .loc-hint{font-size:10.5px;color:var(--ink-soft);margin-top:-2px;}
+  .rq-suggest{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--line);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;z-index:20;display:none;box-shadow:0 10px 24px rgba(15,31,51,.1);}
+  .rq-suggest.show{display:block;}
+  .rq-suggest-item{padding:9px 14px;font-size:13.5px;cursor:pointer;}
+  .rq-suggest-item:hover{background:var(--blue-light);}
   .tt-frame{width:100%;height:840px;border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;}
   .tt-brand-header{text-align:center;font-size:22px;font-weight:800;color:var(--navy);background:var(--blue-light);border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;padding:14px 10px 10px;margin-top:16px;}
 </style>
@@ -183,10 +187,10 @@ auth.onAuthStateChanged(user => {
   <h1 id="rq_page_title">Request Quote</h1>
 
   <div class="card">
-    <div class="field">
+    <div class="field" style="position:relative;">
       <label>Product</label>
-      <input id="rq_product_name" list="rq_product_names" placeholder="Type a product name…" oninput="onRqProductInput()">
-      <datalist id="rq_product_names"></datalist>
+      <input id="rq_product_name" placeholder="Type a product name…" autocomplete="off" oninput="onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)">
+      <div id="rq_product_suggestions" class="rq-suggest"></div>
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
 
@@ -235,24 +239,25 @@ let products = [];
 let temperatures = [];
 let packagings = [];
 let rqAllPlants = [];
+let rqProductNames = [];
 let rqSelectedPlants = [];
 let rqProductSpec = null; // {name_en, temp_en, pack_en}
 
 const RQ_EMAIL_TEMPLATES = [
-  (spec, date) => `Hey {name}, need a price on ${spec} for ${date}, delivered to the border (McAllen/Laredo). Docs included or not?`,
-  (spec, date) => `Hi {name}, hope things are good. Trying to line up ${spec} for ${date} — could you send your price delivered to McAllen/Laredo, and let me know if docs are included?`,
-  (spec, date) => `{name} — quick ask: any ${spec} available for ${date}? Need it delivered to the border (McAllen/Laredo), with or without docs?`,
-  (spec, date) => `Morning {name}, looking to place an order on ${spec} for ${date}. Price delivered to McAllen/Laredo, and are docs included?`,
-  (spec, date) => `Hi {name}, do you guys have ${spec} for ${date}? Need delivered price to the border (McAllen/Laredo) — docs in or out?`,
-  (spec, date) => `{name}, need pricing on ${spec} — target date ${date}. Delivered to McAllen/Laredo please, and let me know on docs.`,
+  (spec, date) => `Hi {name}, I'm looking for ${spec} delivered to the border (McAllen/Laredo) on ${date}. Let me know your availability and if docs are included.`,
+  (spec, date) => `Hey {name}, need ${spec} delivered to McAllen/Laredo on ${date} — let me know if you have availability, and whether docs are included.`,
+  (spec, date) => `{name} — looking for ${spec}, delivered to the border (McAllen/Laredo) on ${date}. Let me know your availability and docs status.`,
+  (spec, date) => `Hi {name}, hope things are good. Trying to line up ${spec} for ${date}, delivered to McAllen/Laredo — what's your availability, and are docs included?`,
+  (spec, date) => `Morning {name}, I'm looking for ${spec} delivered to the border on ${date} (McAllen/Laredo). Let me know your availability, docs included or not.`,
+  (spec, date) => `{name}, need ${spec} delivered to McAllen/Laredo by ${date}. Let me know your availability and if docs are included.`,
 ];
 const RQ_WHATSAPP_TEMPLATES = [
-  (spec) => `Hey {name}, sent you an email on ${spec} — check when you can 🙏`,
-  (spec) => `Hi {name}, emailed you about ${spec} pricing`,
-  (spec) => `{name}, sent an email your way re ${spec}`,
-  (spec) => `Hey {name} — email sent about ${spec}, let me know`,
-  (spec) => `Hi {name}, following up by email on ${spec}`,
-  (spec) => `{name}, just emailed re ${spec} pricing — thanks`,
+  (spec, date) => `Hi {name}, I'm looking for ${spec} delivered to the border (McAllen/Laredo) on ${date}. Let me know your availability.`,
+  (spec, date) => `Hey {name}, need ${spec} delivered to McAllen/Laredo on ${date} — what's your availability?`,
+  (spec, date) => `{name} — looking for ${spec}, delivered to the border on ${date} (McAllen/Laredo). Let me know your availability.`,
+  (spec, date) => `Hi {name}, trying to line up ${spec} for ${date}, delivered to McAllen/Laredo. Any availability?`,
+  (spec, date) => `Morning {name}, I'm looking for ${spec} delivered to the border on ${date}. Let me know if you have it.`,
+  (spec, date) => `{name}, need ${spec} delivered to McAllen/Laredo by ${date}. Let me know your availability.`,
 ];
 
 function rqFirstName(fullName){
@@ -295,12 +300,34 @@ async function loadQuotesPage(){
 
   const sel = document.getElementById('rq_plant_add');
   rqAllPlants.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`; });
-  const namesList = document.getElementById('rq_product_names');
-  const uniqueNames = [...new Set(products.map(p => p.name).filter(Boolean))].sort();
-  namesList.innerHTML = uniqueNames.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+  rqProductNames = [...new Set(products.map(p => p.name).filter(Boolean))].sort();
+}
+
+// Custom suggestion list instead of a native <input list><datalist> — Safari renders that combo
+// inconsistently (barely visible, oddly styled). This one looks and behaves the same everywhere.
+function rqRenderSuggestions(){
+  const box = document.getElementById('rq_product_suggestions');
+  const term = document.getElementById('rq_product_name').value.trim().toLowerCase();
+  // Once the text is already an exact match, the pick is done — no need to keep suggesting.
+  if (term && rqProductNames.some(n => n.toLowerCase() === term)){ box.classList.remove('show'); box.innerHTML = ''; return; }
+  const matches = (term ? rqProductNames.filter(n => n.toLowerCase().includes(term)) : rqProductNames).slice(0, 8);
+  if (!matches.length){ box.classList.remove('show'); box.innerHTML = ''; return; }
+  box.innerHTML = matches.map(n => `<div class="rq-suggest-item" onmousedown="rqSelectSuggestion('${n.replace(/'/g,"\\'")}')">${escapeHtml(n)}</div>`).join('');
+  box.classList.add('show');
+}
+
+function rqHideSuggestions(){
+  document.getElementById('rq_product_suggestions').classList.remove('show');
+}
+
+function rqSelectSuggestion(name){
+  document.getElementById('rq_product_name').value = name;
+  rqHideSuggestions();
+  onRqProductInput();
 }
 
 async function onRqProductInput(){
+  rqRenderSuggestions();
   const name = document.getElementById('rq_product_name').value.trim();
   const match = products.find(p => (p.name || '').toLowerCase() === name.toLowerCase());
   const specLine = document.getElementById('rq_spec_line');
@@ -418,7 +445,7 @@ function renderRqPlants(){
       </div>
       <div class="plant-calc-row">
         <div class="mini-field" style="width:130px;">
-          <label>Pickup day</label>
+          <label>Delivery day</label>
           <button type="button" class="date-btn" style="padding:6px 8px;font-size:12.5px;" onclick="document.getElementById('rq_pickup_${p.id}').showPicker ? document.getElementById('rq_pickup_${p.id}').showPicker() : document.getElementById('rq_pickup_${p.id}').focus()">
             <span class="cal-icon" style="font-size:13px;">📅</span><span id="rq_pickup_label_${p.id}">${p.rqPickupDate ? rqFmtDate(p.rqPickupDate) : 'Set date'}</span>
           </button>
@@ -618,7 +645,7 @@ function rqRenderFinalList(){
       ${photo ? `<img class="offer-thumb" src="${photo}">` : `<div class="offer-thumb"></div>`}
       <div style="flex:1;text-align:center;">
         <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${pickup ? ' — Pickup ' + pickup : ''}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${pickup ? ' — Delivery ' + pickup : ''}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
@@ -634,7 +661,7 @@ function buildCustomerOfferText(customerFirstName){
   const lines = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
     const pickup = plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : null;
-    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${pickup ? ' — Pickup ' + pickup : ''}${photo ? '\nFoto: ' + photo : ''}`;
+    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${pickup ? ' — Delivery ' + pickup : ''}${photo ? '\nFoto: ' + photo : ''}`;
   }).join('\n\n');
   return greeting + lines;
 }
@@ -718,19 +745,19 @@ function rqOpenAllWhatsApp(){
   rqOpenAllWithDelay(urls);
 }
 
-// Asking a plant for a price doesn't need a specific date — "next week" reads naturally in
-// the ask templates and keeps things simple/generic across every plant.
-function fmtRqDate(){
-  return 'next week';
-}
-
 function rqFmtDate(val){
   if (!val) return 'Set date';
   const d = new Date(val + 'T00:00:00');
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
 }
 
-// Each plant can quote a different pickup day — this is what actually goes in the offer.
+// The date that actually goes in the ask message is this specific plant's Delivery day — falls
+// back to "next week" only if it hasn't been set yet.
+function rqAskDate(plant){
+  return plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : 'next week';
+}
+
+// Each plant can quote a different delivery day — this is what actually goes in the offer.
 function rqSetPickupDate(id, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
@@ -743,7 +770,7 @@ function sendRqEmail(plantId){
   const plant = rqSelectedPlants.find(p => p.id === plantId);
   if (!plant || !plant.email || !rqProductSpec) return;
   const template = rqPickTemplate(RQ_EMAIL_TEMPLATES, i => rqLastEmailTemplate = i, rqLastEmailTemplate);
-  const body = template(rqProductSpec, fmtRqDate()).replace('{name}', rqFirstName(plant.contact_name || plant.name));
+  const body = template(rqProductSpec, rqAskDate(plant)).replace('{name}', rqFirstName(plant.contact_name || plant.name));
   const subject = `${rqProductSpec} — quote request`;
   window.location.href = `mailto:${plant.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
@@ -754,7 +781,7 @@ function sendRqWhatsApp(plantId){
   const phone = (plant.whatsapp || plant.phone || '').replace(/\D/g,'');
   if (!phone) return;
   const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
-  const msg = template(rqProductSpec).replace('{name}', rqFirstName(plant.contact_name || plant.name));
+  const msg = template(rqProductSpec, rqAskDate(plant)).replace('{name}', rqFirstName(plant.contact_name || plant.name));
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
