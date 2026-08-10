@@ -66,12 +66,7 @@
   .rq-suggest-item:hover{background:var(--blue-light);}
   .tt-card{border-radius:16px;overflow:hidden;margin-top:16px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
   .tt-frame{width:100%;border:none;display:block;}
-  .tt-brand-header{display:flex;align-items:center;gap:8px;text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;user-select:none;transition:background .15s;}
-  .tt-brand-header:hover{background:#DCEAFB;}
-  .tt-chevron{font-size:13px;color:var(--blue);transition:transform .2s ease;display:inline-block;}
-  .tt-chevron.open{transform:rotate(180deg);}
-  .tt-close-btn{background:none;border:none;color:var(--blue);font-size:15px;line-height:1;cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .15s,color .15s;}
-  .tt-close-btn:hover{background:#DCEAFB;color:var(--navy);}
+  .tt-brand-header{text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;}
 </style>
 </head>
 <body>
@@ -216,7 +211,6 @@ auth.onAuthStateChanged(user => {
       <div id="rq_add_plant_wrap" class="field" style="display:none;margin-bottom:0;max-width:260px;flex:1;">
         <select id="rq_plant_add" onchange="onRqPlantAddSelect()"><option value="">— Add a plant to ask —</option></select>
       </div>
-      <button id="rq_open_all_btn" class="btn" style="display:none;" onclick="rqOpenAllCalculators()">Go 2 Trading Tool</button>
     </div>
     <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
       <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
@@ -482,16 +476,11 @@ function renderRqPlants(){
       ${!showPriceRow ? `<div id="rq_reveal_price_${p.id}" style="margin-top:8px;"><span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span></div>` : ''}
       <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:8px;align-items:flex-end;">
         <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
-        <button class="btn secondary" id="rq_open_tt_${p.id}" style="display:${p.rqCalculatorOpen ? 'none' : 'inline-flex'};" onclick="rqOpenCalculator('${p.id}')">Open Trading Tool</button>
+        <button class="btn secondary" id="rq_tt_btn_${p.id}" onclick="rqToggleCalculator('${p.id}')">${p.rqCalculatorOpen ? 'Close Trading Tool' : 'Open Trading Tool'}</button>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
-        <div class="tt-brand-header">
-          <span style="flex:1;cursor:pointer;" onclick="rqToggleCalcCollapse('${p.id}')">${escapeHtml(p.name)} <span class="tt-chevron${p.rqCalcCollapsed ? '' : ' open'}" id="rq_chevron_${p.id}">▾</span></span>
-          <button class="tt-close-btn" title="Close Trading Tool" onclick="rqCloseCalculator('${p.id}')">✕</button>
-        </div>
-        <div id="rq_iframe_body_${p.id}" style="display:${p.rqCalcCollapsed ? 'none' : 'block'};">
-          <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
-        </div>
+        <div class="tt-brand-header">${escapeHtml(p.name)}</div>
+        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
       </div>`;
     container.appendChild(row);
     if (p.rqCalculatorOpen){
@@ -525,36 +514,27 @@ function rqBuildToolUrl(p){
   return 'trading-tool.html?' + params.toString();
 }
 
-function rqOpenCalculator(id){
+// Single button per plant, toggling between opening its Trading Tool (loads the iframe) and
+// fully closing it (drops the iframe so it stops running) — one control, not a separate
+// open button plus a separate close button.
+function rqToggleCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
-  if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
-  p.rqCalculatorOpen = true;
-  document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
-  document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
-  const openBtn = document.getElementById('rq_open_tt_' + id);
-  if (openBtn) openBtn.style.display = 'none';
-  rqStartPolling();
-}
-
-// Fully closes one plant's Trading Tool (unlike collapse, this drops the iframe so it stops
-// running) — brings back its "Open Trading Tool" button so it can be reopened any time.
-function rqCloseCalculator(id){
-  const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p) return;
-  p.rqCalculatorOpen = false;
-  document.getElementById('rq_iframe_wrap_' + id).style.display = 'none';
-  document.getElementById('rq_iframe_' + id).src = 'about:blank';
-  const openBtn = document.getElementById('rq_open_tt_' + id);
-  if (openBtn) openBtn.style.display = 'inline-flex';
-  if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
+  if (p.rqCalculatorOpen){
+    p.rqCalculatorOpen = false;
+    document.getElementById('rq_iframe_wrap_' + id).style.display = 'none';
+    document.getElementById('rq_iframe_' + id).src = 'about:blank';
+    if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
+  } else {
+    if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
+    p.rqCalculatorOpen = true;
+    document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
+    document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
+    rqStartPolling();
+  }
+  const btn = document.getElementById('rq_tt_btn_' + id);
+  if (btn) btn.textContent = p.rqCalculatorOpen ? 'Close Trading Tool' : 'Open Trading Tool';
   rqRenderFinalList();
-}
-
-// One button opens every priced plant's Trading Tool at once — no need to click "Open" per plant.
-function rqOpenAllCalculators(){
-  rqSelectedPlants.filter(p => p.rqPrice > 0).forEach(p => rqOpenCalculator(p.id));
-  rqUpdateActionButtons();
 }
 
 let rqPollTimer = null;
@@ -569,28 +549,14 @@ function rqStopPolling(){
 // The embedded Trading Tool's height changes (e.g. the Mexico block appears once an Exchange
 // Rate + Import Cost + Mexican Freight are filled in), so this keeps resizing the iframe to fit
 // its content — no nested scrollbar, no cut-off Profitability card hiding the real numbers.
-// Skips collapsed ones — a hidden iframe reports 0 height and would get squashed.
 function rqResizeIframes(){
   rqSelectedPlants.forEach(p => {
-    if (!p.rqCalculatorOpen || p.rqCalcCollapsed) return;
+    if (!p.rqCalculatorOpen) return;
     const iframe = document.getElementById('rq_iframe_' + p.id);
     if (!iframe || !iframe.contentDocument) return;
     const h = iframe.contentDocument.documentElement.scrollHeight;
     if (h > 0 && Math.abs(h - iframe.offsetHeight) > 4) iframe.style.height = (h + 20) + 'px';
   });
-}
-
-// Click the plant's name bar to collapse/expand its Trading Tool — handy once you've got 3
-// long calculators stacked and just want to glance between them.
-function rqToggleCalcCollapse(id){
-  const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p) return;
-  p.rqCalcCollapsed = !p.rqCalcCollapsed;
-  const body = document.getElementById('rq_iframe_body_' + id);
-  const chevron = document.getElementById('rq_chevron_' + id);
-  if (body) body.style.display = p.rqCalcCollapsed ? 'none' : 'block';
-  if (chevron) chevron.classList.toggle('open', !p.rqCalcCollapsed);
-  if (!p.rqCalcCollapsed) rqResizeIframes();
 }
 
 // Reads live totals straight from that plant's embedded Trading Tool — pure read, no math
@@ -609,17 +575,13 @@ function rqCalcRow(p){
   };
 }
 
-// "Add a plant" only makes sense while still asking; "Go 2 Trading Tool" only makes sense once
-// there's a price to open but before you've already opened it — it disappears the moment any
-// calculator is open, since you're not going back to that step.
+// "Add a plant" only makes sense while still asking.
 function rqUpdateActionButtons(){
   const hasProduct = !!document.getElementById('rq_product_name').value.trim();
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
-  const anyOpen = rqSelectedPlants.some(p => p.rqCalculatorOpen);
   document.getElementById('rq_dates_wrap').style.display = hasProduct ? 'block' : 'none';
   document.getElementById('rq_plants_header').style.display = hasProduct ? 'flex' : 'none';
   document.getElementById('rq_add_plant_wrap').style.display = (hasProduct && !anyPriced) ? 'block' : 'none';
-  document.getElementById('rq_open_all_btn').style.display = (anyPriced && !anyOpen) ? 'inline-block' : 'none';
   document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Request Quote';
   rqRenderDateChips();
 }
