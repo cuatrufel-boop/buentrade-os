@@ -194,7 +194,7 @@ auth.onAuthStateChanged(user => {
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 8px;gap:14px;">
+    <div id="rq_plants_header" style="display:none;justify-content:space-between;align-items:center;margin:10px 0 8px;gap:14px;">
       <strong style="font-size:13px;">Plants to ask</strong>
       <div id="rq_add_plant_wrap" class="field" style="display:none;margin-bottom:0;max-width:260px;flex:1;">
         <select id="rq_plant_add" onchange="onRqPlantAddSelect()"><option value="">— Add a plant to ask —</option></select>
@@ -431,7 +431,8 @@ function removeRqPlant(plantId){
 function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
   container.innerHTML = '';
-  document.getElementById('rq_empty').style.display = rqSelectedPlants.length ? 'none' : 'block';
+  const hasProduct = !!document.getElementById('rq_product_name').value.trim();
+  document.getElementById('rq_empty').style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
   rqUpdateActionButtons();
   rqSelectedPlants.forEach(p => {
     const mode = p.rqMode || 'border';
@@ -569,6 +570,7 @@ function rqUpdateActionButtons(){
   const hasProduct = !!document.getElementById('rq_product_name').value.trim();
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
   const anyOpen = rqSelectedPlants.some(p => p.rqCalculatorOpen);
+  document.getElementById('rq_plants_header').style.display = hasProduct ? 'flex' : 'none';
   document.getElementById('rq_add_plant_wrap').style.display = (hasProduct && !anyPriced) ? 'block' : 'none';
   document.getElementById('rq_open_all_btn').style.display = (anyPriced && !anyOpen) ? 'inline-block' : 'none';
   document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Request Quote';
