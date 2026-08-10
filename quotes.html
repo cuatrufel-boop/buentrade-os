@@ -243,21 +243,23 @@ let rqProductNames = [];
 let rqSelectedPlants = [];
 let rqProductSpec = null; // {name_en, temp_en, pack_en}
 
+// loadsPhrase already reads e.g. "need 3 loads delivered to the border (McAllen/Laredo) on
+// Aug 22, 26 and 31" — one consolidated ask per plant, never split across separate messages.
 const RQ_EMAIL_TEMPLATES = [
-  (spec, date) => `Hi {name}, I'm looking for ${spec} delivered to the border (McAllen/Laredo) on ${date}. Let me know your availability and if docs are included.`,
-  (spec, date) => `Hey {name}, need ${spec} delivered to McAllen/Laredo on ${date} — let me know if you have availability, and whether docs are included.`,
-  (spec, date) => `{name} — looking for ${spec}, delivered to the border (McAllen/Laredo) on ${date}. Let me know your availability and docs status.`,
-  (spec, date) => `Hi {name}, hope things are good. Trying to line up ${spec} for ${date}, delivered to McAllen/Laredo — what's your availability, and are docs included?`,
-  (spec, date) => `Morning {name}, I'm looking for ${spec} delivered to the border on ${date} (McAllen/Laredo). Let me know your availability, docs included or not.`,
-  (spec, date) => `{name}, need ${spec} delivered to McAllen/Laredo by ${date}. Let me know your availability and if docs are included.`,
+  (spec, loadsPhrase) => `Hi {name}, I'm looking for ${spec} — ${loadsPhrase}. Let me know your availability and if docs are included.`,
+  (spec, loadsPhrase) => `Hey {name}, I ${loadsPhrase} for ${spec} — let me know your availability, and whether docs are included.`,
+  (spec, loadsPhrase) => `{name} — looking for ${spec}. I ${loadsPhrase}. Let me know your availability and docs status.`,
+  (spec, loadsPhrase) => `Hi {name}, hope things are good. I ${loadsPhrase} for ${spec} — what's your availability, and are docs included?`,
+  (spec, loadsPhrase) => `Morning {name}, I'm looking for ${spec}. I ${loadsPhrase}. Let me know your availability, docs included or not.`,
+  (spec, loadsPhrase) => `{name}, I ${loadsPhrase} for ${spec}. Let me know your availability and if docs are included.`,
 ];
 const RQ_WHATSAPP_TEMPLATES = [
-  (spec, date) => `Hi {name}, I'm looking for ${spec} delivered to the border (McAllen/Laredo) on ${date}. Let me know your availability.`,
-  (spec, date) => `Hey {name}, need ${spec} delivered to McAllen/Laredo on ${date} — what's your availability?`,
-  (spec, date) => `{name} — looking for ${spec}, delivered to the border on ${date} (McAllen/Laredo). Let me know your availability.`,
-  (spec, date) => `Hi {name}, trying to line up ${spec} for ${date}, delivered to McAllen/Laredo. Any availability?`,
-  (spec, date) => `Morning {name}, I'm looking for ${spec} delivered to the border on ${date}. Let me know if you have it.`,
-  (spec, date) => `{name}, need ${spec} delivered to McAllen/Laredo by ${date}. Let me know your availability.`,
+  (spec, loadsPhrase) => `Hi {name}, I'm looking for ${spec} — ${loadsPhrase}. Let me know your availability.`,
+  (spec, loadsPhrase) => `Hey {name}, I ${loadsPhrase} for ${spec} — what's your availability?`,
+  (spec, loadsPhrase) => `{name} — looking for ${spec}. I ${loadsPhrase}. Let me know your availability.`,
+  (spec, loadsPhrase) => `Hi {name}, I ${loadsPhrase} for ${spec}. Any availability?`,
+  (spec, loadsPhrase) => `Morning {name}, I'm looking for ${spec}. I ${loadsPhrase}. Let me know if you have it.`,
+  (spec, loadsPhrase) => `{name}, I ${loadsPhrase} for ${spec}. Let me know your availability.`,
 ];
 
 function rqFirstName(fullName){
@@ -445,12 +447,15 @@ function renderRqPlants(){
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
       <div class="plant-calc-row">
-        <div class="mini-field" style="width:130px;">
-          <label>Delivery day</label>
-          <button type="button" class="date-btn" style="padding:6px 8px;font-size:12.5px;" onclick="document.getElementById('rq_pickup_${p.id}').showPicker ? document.getElementById('rq_pickup_${p.id}').showPicker() : document.getElementById('rq_pickup_${p.id}').focus()">
-            <span class="cal-icon" style="font-size:13px;">📅</span><span id="rq_pickup_label_${p.id}">${p.rqPickupDate ? rqFmtDate(p.rqPickupDate) : 'Set date'}</span>
-          </button>
-          <input type="date" id="rq_pickup_${p.id}" value="${p.rqPickupDate || ''}" oninput="rqSetPickupDate('${p.id}', this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+        <div class="mini-field" style="min-width:180px;flex:1;">
+          <label>Delivery day(s) — one ask, all dates</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            ${(p.rqDeliveryDates || []).map((d, i) => `<span class="chip on">${rqFmtDate(d)} <span style="cursor:pointer;margin-left:3px;" onclick="rqRemoveDeliveryDate('${p.id}',${i})">×</span></span>`).join('')}
+            <button type="button" class="date-btn" style="width:auto;padding:6px 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate_${p.id}').showPicker ? document.getElementById('rq_newdate_${p.id}').showPicker() : document.getElementById('rq_newdate_${p.id}').focus()">
+              <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
+            </button>
+            <input type="date" id="rq_newdate_${p.id}" oninput="rqAddDeliveryDate('${p.id}', this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+          </div>
         </div>
         <div id="rq_ask_btns_${p.id}" style="display:${p.rqPrice ? 'none' : 'flex'};gap:8px;align-self:flex-end;">
           <button class="btn secondary" onclick="sendRqEmail('${p.id}')" ${p.email ? '' : 'disabled title="No email on file"'}>Email</button>
@@ -642,12 +647,12 @@ function rqRenderFinalList(){
   }
   container.innerHTML = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
-    const pickup = plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : null;
+    const delivery = rqDeliveryDatesText(plant);
     return `<div class="offer-item">
       ${photo ? `<img class="offer-thumb" src="${photo}">` : `<div class="offer-thumb"></div>`}
       <div style="flex:1;text-align:center;">
         <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${pickup ? ' — Delivery ' + pickup : ''}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
@@ -662,8 +667,8 @@ function buildCustomerOfferText(customerFirstName){
   const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
   const lines = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
-    const pickup = plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : null;
-    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${pickup ? ' — Delivery ' + pickup : ''}${photo ? '\nFoto: ' + photo : ''}`;
+    const delivery = rqDeliveryDatesText(plant);
+    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Delivery ' + delivery : ''}${photo ? '\nFoto: ' + photo : ''}`;
   }).join('\n\n');
   return greeting + lines;
 }
@@ -753,26 +758,50 @@ function rqFmtDate(val){
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
 }
 
-// The date that actually goes in the ask message is this specific plant's Delivery day — falls
-// back to "next week" only if it hasn't been set yet.
-function rqAskDate(plant){
-  return plant.rqPickupDate ? rqFmtDate(plant.rqPickupDate) : 'next week';
-}
-
-// Each plant can quote a different delivery day — this is what actually goes in the offer.
-function rqSetPickupDate(id, val){
+// A plant can be asked for several loads on several different dates at once — one ask, not
+// one email per date (nobody wants 3 separate emails for the same product).
+function rqAddDeliveryDate(id, val){
+  if (!val) return;
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
-  p.rqPickupDate = val;
-  const label = document.getElementById('rq_pickup_label_' + id);
-  if (label) label.textContent = rqFmtDate(val);
+  p.rqDeliveryDates = p.rqDeliveryDates || [];
+  if (!p.rqDeliveryDates.includes(val)){
+    p.rqDeliveryDates.push(val);
+    p.rqDeliveryDates.sort();
+  }
+  renderRqPlants();
+}
+
+function rqRemoveDeliveryDate(id, idx){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p || !p.rqDeliveryDates) return;
+  p.rqDeliveryDates.splice(idx, 1);
+  renderRqPlants();
+}
+
+// Plain "Aug 22, 26 and 31" — used to show the dates on the offer list/customer message.
+function rqDeliveryDatesText(plant){
+  const dates = plant.rqDeliveryDates || [];
+  if (!dates.length) return null;
+  const formatted = dates.map(rqFmtDate);
+  return formatted.length === 1 ? formatted[0] : formatted.slice(0, -1).join(', ') + ' and ' + formatted[formatted.length - 1];
+}
+
+// The full ask phrase that goes in the message — "need 3 loads delivered to the border
+// (McAllen/Laredo) on Aug 22, 26 and 31", falling back to a generic ask if no date was set yet.
+function rqLoadsPhrase(plant){
+  const dates = plant.rqDeliveryDates || [];
+  if (!dates.length) return 'need it delivered to the border (McAllen/Laredo) next week';
+  const dateStr = rqDeliveryDatesText(plant);
+  const loadWord = dates.length === 1 ? 'load' : 'loads';
+  return `need ${dates.length} ${loadWord} delivered to the border (McAllen/Laredo) on ${dateStr}`;
 }
 
 function sendRqEmail(plantId){
   const plant = rqSelectedPlants.find(p => p.id === plantId);
   if (!plant || !plant.email || !rqProductSpec) return;
   const template = rqPickTemplate(RQ_EMAIL_TEMPLATES, i => rqLastEmailTemplate = i, rqLastEmailTemplate);
-  const body = template(rqProductSpec, rqAskDate(plant)).replace('{name}', rqFirstName(plant.contact_name || plant.name));
+  const body = template(rqProductSpec, rqLoadsPhrase(plant)).replace('{name}', rqFirstName(plant.contact_name || plant.name));
   const subject = `${rqProductSpec} — quote request`;
   window.location.href = `mailto:${plant.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
@@ -783,7 +812,7 @@ function sendRqWhatsApp(plantId){
   const phone = (plant.whatsapp || plant.phone || '').replace(/\D/g,'');
   if (!phone) return;
   const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
-  const msg = template(rqProductSpec, rqAskDate(plant)).replace('{name}', rqFirstName(plant.contact_name || plant.name));
+  const msg = template(rqProductSpec, rqLoadsPhrase(plant)).replace('{name}', rqFirstName(plant.contact_name || plant.name));
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
