@@ -437,7 +437,6 @@ function renderRqPlants(){
   document.getElementById('rq_empty').style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
   rqUpdateActionButtons();
   rqSelectedPlants.forEach(p => {
-    const mode = p.rqMode || 'border';
     const row = document.createElement('div');
     row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
     const showPriceRow = !!(p.rqPrice || p.rqPriceRevealed);
@@ -465,12 +464,6 @@ function renderRqPlants(){
       ${!showPriceRow ? `<div id="rq_reveal_price_${p.id}" style="margin-top:8px;"><span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span></div>` : ''}
       <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;">
         <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
-        <div id="rq_mode_wrap_${p.id}" style="display:${p.rqPrice ? 'flex' : 'none'};gap:8px;align-items:flex-end;">
-          <div style="display:flex;gap:4px;">
-            <span class="chip ${mode==='border'?'on':''}" onclick="rqSetMode('${p.id}','border')">Delivered border</span>
-            <span class="chip ${mode==='fob'?'on':''}" onclick="rqSetMode('${p.id}','fob')">FOB</span>
-          </div>
-          ${mode==='fob' ? `<div class="mini-field" style="width:130px;"><label>Freight to border ($)</label><input type="number" id="rq_freight_${p.id}" value="${p.rqFreight || ''}" placeholder="0" oninput="rqUpdatePlantField('${p.id}','rqFreight',this.value)">${rqFreightHint(p.id)}</div>` : ''}
         </div>
       </div>
       <div id="rq_iframe_wrap_${p.id}" style="display:none;">
@@ -491,17 +484,14 @@ function rqFreightForPlant(plantId){
   return locs.length ? locs[0].freight_to_border_usd : null;
 }
 
-function rqFreightHint(plantId){
-  const locs = rqAllLocations.filter(l => l.plant_id === plantId && !l.delivered_by_plant && l.freight_to_border_usd);
-  if (!locs.length) return '<div class="loc-hint">No location freight on file — enter manually</div>';
-  return `<div class="loc-hint">From ${escapeHtml(locs[0].location_name || 'plant')} location${locs.length>1 ? ' (+' + (locs.length-1) + ' more)' : ''}</div>`;
-}
-
 // Opens the REAL trading-tool.html — same file, same calc(), nothing re-implemented here —
 // embedded per plant so it's fully independent (own Weight/Freight/Inspection/Import Cost/
 // Selling price). Quotes only ever READS its live totals via window.__calc, never recomputes.
+// US Freight is pre-filled from that plant's saved location rate (or $0 if none on file) as a
+// starting suggestion — the trader can freely change it inside the Trading Tool itself, same
+// as any other Direct Costs field, instead of deciding Delivered-border/FOB here first.
 function rqBuildToolUrl(p){
-  const freight = (p.rqMode === 'fob') ? (p.rqFreight || 0) : 0;
+  const freight = rqFreightForPlant(p.id) || 0;
   const params = new URLSearchParams({
     embed: '1',
     weight: '40000',
@@ -591,8 +581,6 @@ function rqUpdatePlantField(id, field, val){
   rqUpdateActionButtons();
   const askButtons = document.getElementById('rq_ask_btns_' + id);
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
-  const modeWrap = document.getElementById('rq_mode_wrap_' + id);
-  if (modeWrap) modeWrap.style.display = p.rqPrice ? 'flex' : 'none';
 }
 
 // While you're still just asking, there's nothing to enter — Purchase $/lb only shows up once
@@ -604,17 +592,6 @@ function rqRevealPrice(id){
   renderRqPlants();
   const input = document.getElementById('rq_price_' + id);
   if (input) input.focus();
-}
-
-function rqSetMode(id, mode){
-  const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p) return;
-  p.rqMode = mode;
-  if (mode === 'fob' && !p.rqFreight){
-    const auto = rqFreightForPlant(id);
-    if (auto !== null) p.rqFreight = auto;
-  }
-  renderRqPlants();
 }
 
 function rqFindPhotoFor(plant){
