@@ -66,10 +66,12 @@
   .rq-suggest-item:hover{background:var(--blue-light);}
   .tt-card{border-radius:16px;overflow:hidden;margin-top:16px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
   .tt-frame{width:100%;border:none;display:block;}
-  .tt-brand-header{display:flex;align-items:center;justify-content:center;gap:8px;text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;cursor:pointer;user-select:none;transition:background .15s;}
+  .tt-brand-header{display:flex;align-items:center;gap:8px;text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;user-select:none;transition:background .15s;}
   .tt-brand-header:hover{background:#DCEAFB;}
   .tt-chevron{font-size:13px;color:var(--blue);transition:transform .2s ease;display:inline-block;}
   .tt-chevron.open{transform:rotate(180deg);}
+  .tt-close-btn{background:none;border:none;color:var(--blue);font-size:15px;line-height:1;cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .15s,color .15s;}
+  .tt-close-btn:hover{background:#DCEAFB;color:var(--navy);}
 </style>
 </head>
 <body>
@@ -318,6 +320,16 @@ async function loadQuotesPage(){
   const sel = document.getElementById('rq_plant_add');
   rqAllPlants.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`; });
   rqProductNames = [...new Set(products.map(p => p.name).filter(Boolean))].sort();
+
+  document.getElementById('rq_newdate').min = rqTodayStr();
+}
+
+// Local YYYY-MM-DD for "today" — used as the floor for delivery dates so a trader can't
+// accidentally ask a plant to deliver in the past.
+function rqTodayStr(){
+  const d = new Date();
+  const tz = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return tz.toISOString().slice(0, 10);
 }
 
 // Custom suggestion list instead of a native <input list><datalist> — Safari renders that combo
@@ -468,13 +480,14 @@ function renderRqPlants(){
         </div>
       </div>
       ${!showPriceRow ? `<div id="rq_reveal_price_${p.id}" style="margin-top:8px;"><span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span></div>` : ''}
-      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;">
+      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:8px;align-items:flex-end;">
         <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
-        </div>
+        <button class="btn secondary" id="rq_open_tt_${p.id}" style="display:${p.rqCalculatorOpen ? 'none' : 'inline-flex'};" onclick="rqOpenCalculator('${p.id}')">Open Trading Tool</button>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
-        <div class="tt-brand-header" onclick="rqToggleCalcCollapse('${p.id}')">
-          ${escapeHtml(p.name)} <span class="tt-chevron${p.rqCalcCollapsed ? '' : ' open'}" id="rq_chevron_${p.id}">▾</span>
+        <div class="tt-brand-header">
+          <span style="flex:1;cursor:pointer;" onclick="rqToggleCalcCollapse('${p.id}')">${escapeHtml(p.name)} <span class="tt-chevron${p.rqCalcCollapsed ? '' : ' open'}" id="rq_chevron_${p.id}">▾</span></span>
+          <button class="tt-close-btn" title="Close Trading Tool" onclick="rqCloseCalculator('${p.id}')">✕</button>
         </div>
         <div id="rq_iframe_body_${p.id}" style="display:${p.rqCalcCollapsed ? 'none' : 'block'};">
           <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
@@ -517,11 +530,25 @@ function rqOpenCalculator(id){
   if (!p) return;
   if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
   p.rqCalculatorOpen = true;
-  const wrap = document.getElementById('rq_iframe_wrap_' + id);
-  const iframe = document.getElementById('rq_iframe_' + id);
-  wrap.style.display = 'block';
-  iframe.src = rqBuildToolUrl(p);
+  document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
+  document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
+  const openBtn = document.getElementById('rq_open_tt_' + id);
+  if (openBtn) openBtn.style.display = 'none';
   rqStartPolling();
+}
+
+// Fully closes one plant's Trading Tool (unlike collapse, this drops the iframe so it stops
+// running) — brings back its "Open Trading Tool" button so it can be reopened any time.
+function rqCloseCalculator(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p) return;
+  p.rqCalculatorOpen = false;
+  document.getElementById('rq_iframe_wrap_' + id).style.display = 'none';
+  document.getElementById('rq_iframe_' + id).src = 'about:blank';
+  const openBtn = document.getElementById('rq_open_tt_' + id);
+  if (openBtn) openBtn.style.display = 'inline-flex';
+  if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
+  rqRenderFinalList();
 }
 
 // One button opens every priced plant's Trading Tool at once — no need to click "Open" per plant.
@@ -767,6 +794,7 @@ let rqDeliveryDates = [];
 
 function rqAddDeliveryDate(val){
   if (!val) return;
+  if (val < rqTodayStr()){ alert('Pick a date today or later.'); document.getElementById('rq_newdate').value = ''; return; }
   if (!rqDeliveryDates.includes(val)){
     rqDeliveryDates.push(val);
     rqDeliveryDates.sort();
