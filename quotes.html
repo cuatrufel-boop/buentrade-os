@@ -64,8 +64,12 @@
   .rq-suggest.show{display:block;}
   .rq-suggest-item{padding:9px 14px;font-size:13.5px;cursor:pointer;}
   .rq-suggest-item:hover{background:var(--blue-light);}
-  .tt-frame{width:100%;height:840px;border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;}
-  .tt-brand-header{text-align:center;font-size:22px;font-weight:800;color:var(--navy);background:var(--blue-light);border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;padding:14px 10px 10px;margin-top:16px;}
+  .tt-card{border-radius:16px;overflow:hidden;margin-top:16px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
+  .tt-frame{width:100%;border:none;display:block;}
+  .tt-brand-header{display:flex;align-items:center;justify-content:center;gap:10px;text-align:center;font-size:19px;font-weight:800;color:var(--navy);background:var(--blue-light);padding:14px 16px;cursor:pointer;user-select:none;transition:background .15s;}
+  .tt-brand-header:hover{background:#DCEAFB;}
+  .tt-chevron{font-size:13px;color:var(--blue);transition:transform .2s ease;display:inline-block;}
+  .tt-chevron.open{transform:rotate(180deg);}
 </style>
 </head>
 <body>
@@ -468,9 +472,13 @@ function renderRqPlants(){
         <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
         </div>
       </div>
-      <div id="rq_iframe_wrap_${p.id}" style="display:none;">
-        <div class="tt-brand-header">${escapeHtml(p.name)}</div>
-        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
+      <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
+        <div class="tt-brand-header" onclick="rqToggleCalcCollapse('${p.id}')">
+          ${escapeHtml(p.name)} <span class="tt-chevron${p.rqCalcCollapsed ? '' : ' open'}" id="rq_chevron_${p.id}">▾</span>
+        </div>
+        <div id="rq_iframe_body_${p.id}" style="display:${p.rqCalcCollapsed ? 'none' : 'block'};">
+          <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
+        </div>
       </div>`;
     container.appendChild(row);
     if (p.rqCalculatorOpen){
@@ -534,14 +542,28 @@ function rqStopPolling(){
 // The embedded Trading Tool's height changes (e.g. the Mexico block appears once an Exchange
 // Rate + Import Cost + Mexican Freight are filled in), so this keeps resizing the iframe to fit
 // its content — no nested scrollbar, no cut-off Profitability card hiding the real numbers.
+// Skips collapsed ones — a hidden iframe reports 0 height and would get squashed.
 function rqResizeIframes(){
   rqSelectedPlants.forEach(p => {
-    if (!p.rqCalculatorOpen) return;
+    if (!p.rqCalculatorOpen || p.rqCalcCollapsed) return;
     const iframe = document.getElementById('rq_iframe_' + p.id);
     if (!iframe || !iframe.contentDocument) return;
     const h = iframe.contentDocument.documentElement.scrollHeight;
     if (h > 0 && Math.abs(h - iframe.offsetHeight) > 4) iframe.style.height = (h + 20) + 'px';
   });
+}
+
+// Click the plant's name bar to collapse/expand its Trading Tool — handy once you've got 3
+// long calculators stacked and just want to glance between them.
+function rqToggleCalcCollapse(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p) return;
+  p.rqCalcCollapsed = !p.rqCalcCollapsed;
+  const body = document.getElementById('rq_iframe_body_' + id);
+  const chevron = document.getElementById('rq_chevron_' + id);
+  if (body) body.style.display = p.rqCalcCollapsed ? 'none' : 'block';
+  if (chevron) chevron.classList.toggle('open', !p.rqCalcCollapsed);
+  if (!p.rqCalcCollapsed) rqResizeIframes();
 }
 
 // Reads live totals straight from that plant's embedded Trading Tool — pure read, no math
