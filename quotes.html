@@ -195,13 +195,25 @@ auth.onAuthStateChanged(user => {
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
 
-    <div id="rq_plants_header" style="display:none;justify-content:space-between;align-items:flex-start;margin:0 0 8px;gap:14px;">
-      <strong style="font-size:13px;line-height:1;padding-top:2px;">Plants to ask</strong>
-      <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:auto;max-width:200px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
+    <div id="rq_plants_header" style="display:none;margin:0 0 8px;">
+      <strong style="font-size:13px;display:block;margin-bottom:6px;">Plants to ask</strong>
+      <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:150px;padding:6px 10px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
         <option value="">+ Add a plant</option>
       </select>
     </div>
-    <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+
+    <div id="rq_dates_wrap" class="field" style="display:none;margin-top:10px;">
+      <label>Delivery day(s) — one ask, all dates, every plant</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+        <div id="rq_date_chips" style="display:contents;"></div>
+        <button type="button" class="date-btn" style="width:auto;padding:6px 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
+          <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
+        </button>
+        <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+      </div>
+    </div>
+
+    <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:14px 0 10px;">
       <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
       <div class="grid2" style="margin-bottom:8px;">
         <div class="field" style="margin-bottom:0;"><label>Temperature</label><select id="rq_new_temp"></select></div>
@@ -212,19 +224,8 @@ auth.onAuthStateChanged(user => {
         <button class="btn danger" onclick="cancelAddRqPlant()">Cancel</button>
       </div>
     </div>
-    <div id="rq_plant_rows"></div>
+    <div id="rq_plant_rows" style="margin-top:14px;"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
-
-    <div id="rq_dates_wrap" class="field" style="display:none;margin-top:14px;">
-      <label>Delivery day(s) — one ask, all dates, every plant</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-        <div id="rq_date_chips" style="display:contents;"></div>
-        <button type="button" class="date-btn" style="width:auto;padding:6px 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
-          <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
-        </button>
-        <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
-      </div>
-    </div>
 
     <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
       <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
@@ -678,7 +679,7 @@ function rqUpdateActionButtons(){
   const hasProduct = !!document.getElementById('rq_product_name').value.trim();
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
   document.getElementById('rq_dates_wrap').style.display = hasProduct ? 'block' : 'none';
-  document.getElementById('rq_plants_header').style.display = hasProduct ? 'flex' : 'none';
+  document.getElementById('rq_plants_header').style.display = hasProduct ? 'block' : 'none';
   document.getElementById('rq_plant_add').style.display = (hasProduct && !anyPriced) ? 'inline-block' : 'none';
   document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Request Quote';
   rqRenderDateChips();
