@@ -295,7 +295,7 @@ async function fetchQuotesLookups(){
     db.from('packaging').select('*').order('name'),
     db.from('products').select('*').order('name'),
     db.from('plants').select('id,name,contact_name,email,phone,whatsapp').order('name'),
-    db.from('plant_locations').select('plant_id,location_name,freight_to_border_usd,delivered_by_plant'),
+    db.from('plant_locations').select('id,plant_id,location_name,freight_to_border_usd,delivered_by_plant'),
   ]);
 }
 
@@ -487,6 +487,21 @@ function renderRqPlants(){
             <span class="chip${p.rqDocsStatus === 'sin' ? ' on' : ''}" onclick="rqSetDocsStatus('${p.id}','sin')">No Docs</span>
           </div>
         </div>`}
+        <div class="mini-field" style="width:auto;">
+          <label>Freight</label>
+          <div style="display:flex;gap:6px;">
+            <span class="chip${p.rqDeliveryMode !== 'fob' ? ' on' : ''}" onclick="rqSetDeliveryMode('${p.id}','delivered')">Delivered</span>
+            <span class="chip${p.rqDeliveryMode === 'fob' ? ' on' : ''}" onclick="rqSetDeliveryMode('${p.id}','fob')">FOB</span>
+          </div>
+        </div>
+        ${(p.rqDeliveryMode === 'fob' && rqLocationsForPlant(p.id).length > 1) ? `
+        <div class="mini-field" style="width:170px;">
+          <label>Pickup lane</label>
+          <select onchange="rqSetFreightLocation('${p.id}', this.value)">
+            <option value="">— choose —</option>
+            ${rqLocationsForPlant(p.id).map(l => `<option value="${l.id}" ${p.rqFreightLocationId === l.id ? 'selected' : ''}>${escapeHtml(l.location_name || 'Lane')} — $${l.freight_to_border_usd}</option>`).join('')}
+          </select>
+        </div>` : ''}
         <button class="btn secondary" id="rq_tt_btn_${p.id}" onclick="rqToggleCalculator('${p.id}')">${p.rqCalculatorOpen ? 'Close Trading Tool' : 'Open Trading Tool'}</button>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
@@ -502,9 +517,39 @@ function renderRqPlants(){
   rqRenderFinalList();
 }
 
-function rqFreightForPlant(plantId){
-  const locs = rqAllLocations.filter(l => l.plant_id === plantId && !l.delivered_by_plant && l.freight_to_border_usd);
-  return locs.length ? locs[0].freight_to_border_usd : null;
+// Our standard ask is always "price delivered to the border" — so Delivered is the default and
+// there's nothing to hide/show until the plant actually responds otherwise. This can never be
+// predetermined from a saved location flag; it depends on how THIS quote came back.
+function rqLocationsForPlant(plantId){
+  return rqAllLocations.filter(l => l.plant_id === plantId && l.freight_to_border_usd != null);
+}
+
+function rqSetDeliveryMode(plantId, mode){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  p.rqDeliveryMode = mode;
+  if (mode === 'fob' && !p.rqFreightLocationId){
+    // Only one lane on file for this plant (e.g. a single Fremont rate) — no need to make the
+    // trader pick it themselves.
+    const locs = rqLocationsForPlant(plantId);
+    if (locs.length === 1) p.rqFreightLocationId = locs[0].id;
+  }
+  renderRqPlants();
+}
+
+function rqSetFreightLocation(plantId, locId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  p.rqFreightLocationId = locId || null;
+  renderRqPlants();
+}
+
+// FOB + a chosen pickup lane (e.g. Wholestone's Fremont-Laredo vs Fremont-McAllen carry
+// different rates) is what determines the US Freight $ — never a static per-plant default.
+function rqFreightForPlant(p){
+  if (p.rqDeliveryMode !== 'fob') return null;
+  const loc = rqAllLocations.find(l => l.id === p.rqFreightLocationId);
+  return loc ? loc.freight_to_border_usd : null;
 }
 
 // Seaboard always ships with docs already handled on their side — this inspection cost never
@@ -535,16 +580,18 @@ function rqInspectionForPlant(p){
 // US Freight and Inspection are pre-filled as starting suggestions — the trader can freely
 // change them inside the Trading Tool itself, same as any other Direct Costs field.
 function rqBuildToolUrl(p){
-  // null means the plant delivers to the border itself (or has no freight rate on file) —
-  // there's no US Freight to pass on, so the field gets hidden entirely rather than shown at $0.
-  const freight = rqFreightForPlant(p.id);
+  // Delivered (our default ask) hides US Freight entirely — it's baked into the one Purchase
+  // Price number. FOB shows it, pre-filled from whichever pickup lane was picked (or $0 to fill
+  // in by hand if none is on file yet).
+  const showFreight = p.rqDeliveryMode === 'fob';
+  const freight = showFreight ? (rqFreightForPlant(p) || 0) : 0;
   const inspection = rqInspectionForPlant(p);
   const params = new URLSearchParams({
     embed: '1',
     weight: '40000',
     cost: String(p.rqPrice || 0),
-    freight: String(freight || 0),
-    hideFreight: freight ? '0' : '1',
+    freight: String(freight),
+    hideFreight: showFreight ? '0' : '1',
     inspection: String(inspection),
     hideInspection: inspection > 0 ? '0' : '1',
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
