@@ -583,7 +583,7 @@ if (FIREBASE_READY) {
           <label>Inspection (USD)</label>
           <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspection" value="0" oninput="calc()"></div>
         </div>
-        <div class="field">
+        <div class="field" id="importCostField">
           <label>Import Cost (USD)</label>
           <div class="inputwrap"><span class="pfx">$</span><input type="number" id="importCost" value="" placeholder="0" oninput="buildProductRows();calc();"></div>
         </div>
@@ -1171,6 +1171,10 @@ if (__qp.has('inspection')) document.getElementById('inspection').value = Number
 // inspection cost to account for, so nothing to show or edit. Purely a visibility toggle;
 // calc() still just reads whatever value is in the (possibly hidden) input, untouched.
 if (__qp.get('hideInspection') === '1') document.getElementById('inspectionField').style.display = 'none';
+// Import Cost's emptiness (not "0") is what gates whether Mexico pricing shows at all
+// (importCostFilled below), so only set a value when there actually is one — never force "0".
+if (__qp.has('importCost') && Number(__qp.get('importCost')) > 0) document.getElementById('importCost').value = Number(__qp.get('importCost'));
+if (__qp.get('hideImportCost') === '1') document.getElementById('importCostField').style.display = 'none';
 buildProductRows();
 calc();
 fetchExchangeRate();
