@@ -579,7 +579,7 @@ if (FIREBASE_READY) {
           <label>US Freight (USD)</label>
           <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
         </div>
-        <div class="field">
+        <div class="field" id="inspectionField">
           <label>Inspection (USD)</label>
           <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspection" value="0" oninput="calc()"></div>
         </div>
@@ -1164,6 +1164,10 @@ document.addEventListener('focusin', function(e){
 
 if (__qp.has('freight')) document.getElementById('freight').value = Number(__qp.get('freight')) || 0;
 if (__qp.has('inspection')) document.getElementById('inspection').value = Number(__qp.get('inspection')) || 0;
+// Quotes hides this field entirely when the plant's price was quoted "with docs" — there's no
+// inspection cost to account for, so nothing to show or edit. Purely a visibility toggle;
+// calc() still just reads whatever value is in the (possibly hidden) input, untouched.
+if (__qp.get('hideInspection') === '1') document.getElementById('inspectionField').style.display = 'none';
 buildProductRows();
 calc();
 fetchExchangeRate();
