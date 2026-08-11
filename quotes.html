@@ -555,7 +555,16 @@ function rqResizeIframes(){
     if (!p.rqCalculatorOpen) return;
     const iframe = document.getElementById('rq_iframe_' + p.id);
     if (!iframe || !iframe.contentDocument) return;
-    const h = iframe.contentDocument.documentElement.scrollHeight;
+    const doc = iframe.contentDocument;
+    // documentElement.scrollHeight can stay inflated after collapsing cards inside the embedded
+    // Trading Tool (closed <details> content can still contribute to it in some browsers), which
+    // left a tall blank gap below the real content. Measuring the actual bottom of the visible
+    // grid + the "Find Your Price" bar is reliable regardless of that.
+    const grid = doc.querySelector('.grid');
+    const advSummary = doc.querySelector('.advanced-tools summary');
+    const gridBottom = grid ? grid.getBoundingClientRect().bottom : 0;
+    const advBottom = advSummary ? advSummary.getBoundingClientRect().bottom : 0;
+    const h = Math.max(gridBottom, advBottom) + 24;
     if (h > 0 && Math.abs(h - iframe.offsetHeight) > 4) iframe.style.height = (h + 20) + 'px';
   });
 }
