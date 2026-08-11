@@ -535,14 +535,18 @@ function rqInspectionForPlant(p){
 // US Freight and Inspection are pre-filled as starting suggestions — the trader can freely
 // change them inside the Trading Tool itself, same as any other Direct Costs field.
 function rqBuildToolUrl(p){
-  const freight = rqFreightForPlant(p.id) || 0;
+  // null means the plant delivers to the border itself (or has no freight rate on file) —
+  // there's no US Freight to pass on, so the field gets hidden entirely rather than shown at $0.
+  const freight = rqFreightForPlant(p.id);
+  const inspection = rqInspectionForPlant(p);
   const params = new URLSearchParams({
     embed: '1',
     weight: '40000',
     cost: String(p.rqPrice || 0),
-    freight: String(freight),
-    inspection: String(rqInspectionForPlant(p)),
-    hideInspection: rqInspectionForPlant(p) > 0 ? '0' : '1',
+    freight: String(freight || 0),
+    hideFreight: freight ? '0' : '1',
+    inspection: String(inspection),
+    hideInspection: inspection > 0 ? '0' : '1',
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
     v: String(Date.now()), // cache-bust so the embedded Trading Tool always loads the latest file
   });
