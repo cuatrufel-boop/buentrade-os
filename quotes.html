@@ -253,6 +253,7 @@ let rqAllPlants = [];
 let rqProductNames = [];
 let rqSelectedPlants = [];
 let rqProductSpec = null; // {name_en, temp_en, pack_en}
+let rqProductIsCombo = false; // packaging of the current product — drives the sin-docs inspection $
 
 // loadsPhrase already reads e.g. "need 3 loads delivered to the border (McAllen/Laredo) on
 // Aug 22, 26 and 31" — one consolidated ask per plant, never split across separate messages.
@@ -365,9 +366,11 @@ async function onRqProductInput(){
     const parts = [nameEn, tempEn ? tempEn.name_en : null, packEn ? packEn.name_en : null].filter(Boolean);
     rqProductSpec = parts.join(', ');
     specLine.textContent = rqProductSpec;
+    rqProductIsCombo = /combo/i.test((packEn && (packEn.name_en || packEn.name)) || '');
     await autoPopulateRqPlants(name);
   } else {
     rqProductSpec = name || null;
+    rqProductIsCombo = false;
     specLine.textContent = rqProductSpec ? rqProductSpec + ' (not in catalog — will send as typed)' : '';
     rqSelectedPlants = [];
     if (!name) rqDeliveryDates = [];
@@ -474,8 +477,16 @@ function renderRqPlants(){
         </div>
       </div>
       ${!showPriceRow ? `<div id="rq_reveal_price_${p.id}" style="margin-top:8px;"><span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span></div>` : ''}
-      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:8px;align-items:flex-end;">
+      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:8px;align-items:flex-end;flex-wrap:wrap;">
         <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
+        ${rqIsSeaboard(p) ? '' : `
+        <div class="mini-field" style="width:auto;">
+          <label>Docs</label>
+          <div style="display:flex;gap:6px;">
+            <span class="chip${p.rqDocsStatus !== 'sin' ? ' on' : ''}" onclick="rqSetDocsStatus('${p.id}','con')">Docs</span>
+            <span class="chip${p.rqDocsStatus === 'sin' ? ' on' : ''}" onclick="rqSetDocsStatus('${p.id}','sin')">No Docs</span>
+          </div>
+        </div>`}
         <button class="btn secondary" id="rq_tt_btn_${p.id}" onclick="rqToggleCalculator('${p.id}')">${p.rqCalculatorOpen ? 'Close Trading Tool' : 'Open Trading Tool'}</button>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
@@ -496,12 +507,33 @@ function rqFreightForPlant(plantId){
   return locs.length ? locs[0].freight_to_border_usd : null;
 }
 
+// Seaboard always ships with docs already handled on their side — this inspection cost never
+// applies to them, so they don't even get the Docs/No Docs toggle.
+function rqIsSeaboard(p){
+  return /seaboard/i.test(p.name || '');
+}
+
+function rqSetDocsStatus(plantId, status){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  p.rqDocsStatus = status;
+  renderRqPlants();
+}
+
+// $200/$350 inspection cost only applies when the plant quoted "sin docs" — Seaboard is always
+// "con docs" so it's $0 for them regardless. The $ depends on packaging (Combo vs Caja/Box),
+// which is already known from the product's catalog record, no extra question needed.
+function rqInspectionForPlant(p){
+  if (rqIsSeaboard(p)) return 0;
+  if (p.rqDocsStatus !== 'sin') return 0;
+  return rqProductIsCombo ? 200 : 350;
+}
+
 // Opens the REAL trading-tool.html — same file, same calc(), nothing re-implemented here —
 // embedded per plant so it's fully independent (own Weight/Freight/Inspection/Import Cost/
 // Selling price). Quotes only ever READS its live totals via window.__calc, never recomputes.
-// US Freight is pre-filled from that plant's saved location rate (or $0 if none on file) as a
-// starting suggestion — the trader can freely change it inside the Trading Tool itself, same
-// as any other Direct Costs field, instead of deciding Delivered-border/FOB here first.
+// US Freight and Inspection are pre-filled as starting suggestions — the trader can freely
+// change them inside the Trading Tool itself, same as any other Direct Costs field.
 function rqBuildToolUrl(p){
   const freight = rqFreightForPlant(p.id) || 0;
   const params = new URLSearchParams({
@@ -509,6 +541,7 @@ function rqBuildToolUrl(p){
     weight: '40000',
     cost: String(p.rqPrice || 0),
     freight: String(freight),
+    inspection: String(rqInspectionForPlant(p)),
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
     v: String(Date.now()), // cache-bust so the embedded Trading Tool always loads the latest file
   });
