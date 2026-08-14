@@ -207,7 +207,7 @@ auth.onAuthStateChanged(user => {
         <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Send WhatsApp Offers</button>
       </div>
     </div>
-    <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;"></div>
+    <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 14px;"></div>
 
     <div id="rq_plants_header" style="display:none;margin:0 0 8px;">
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;">Plants to ask</label>
@@ -509,7 +509,7 @@ function renderRqPlants(){
       </div>
       ${!showPriceRow ? `<div id="rq_reveal_price_${p.id}" style="margin-top:8px;"><span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span></div>` : ''}
       <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
+        <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')"></div>
         <div class="mini-field" style="width:170px;">
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
@@ -738,6 +738,10 @@ function rqBuildToolUrl(p){
     inspection: String(inspection),
     hideInspection: inspection > 0 ? '0' : '1',
     hideImportCost: '1', // generic Import Cost field stays out of the Quotes flow entirely
+    // Lumper fee, INBOND Release, and every Cold storage & USDA field have no control in Quotes
+    // at all — keep them out of view so the embedded panel only shows costs that actually apply
+    // to what's being asked (Docs, US/Mexican Freight, Customs Processing, Warehouse Handling).
+    hideExtras: '1',
     tramiteAduanal: String(tramiteAduanal),
     bodegaAmericana: String(bodegaAmericana),
     hideCustomsBrokerage: imported ? '0' : '1',
@@ -866,6 +870,16 @@ function rqUpdatePlantField(id, field, val){
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
   const ttBtn = document.getElementById('rq_tt_btn_' + id);
   if (ttBtn) ttBtn.disabled = !p.rqPrice;
+}
+
+// Leaving the Purchase $/lb field with a real number typed in opens that plant's Trading Tool
+// automatically — no separate click needed. Defaults (No Docs, Delivered) already mean $0 in
+// extra costs, so this just shows the trader the resulting margin right away; the toggles are
+// still right there to flip if this plant's terms are actually different.
+function rqAutoOpenCalculator(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p || !p.rqPrice || p.rqCalculatorOpen) return;
+  rqToggleCalculator(id);
 }
 
 // While you're still just asking, there's nothing to enter — Purchase $/lb only shows up once
