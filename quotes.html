@@ -1014,6 +1014,50 @@ function rqRequireDeliveryDay(){
   return false;
 }
 
+// Every offer that actually goes out gets logged as a frozen snapshot — one row per (plant,
+// customer) pair actually sent to. Fire-and-forget on purpose: it must never delay or block the
+// real send (window.open/mailto), which still has to fire perfectly synchronously with the click
+// for the browser to allow it as a popup.
+async function rqLogSentOffers(customers, channel){
+  const withCalc = rqPricedPlantsSorted();
+  const rows = [];
+  withCalc.forEach(({ plant, calc }) => {
+    const agencyId = plant.rqMexicanDestRateId ? rqCustomsAgencyForPlant(plant) : null;
+    customers.forEach(c => {
+      rows.push({
+        sent_by: (auth.currentUser && auth.currentUser.email) || null,
+        channel,
+        product_name: document.getElementById('rq_product_name').value.trim(),
+        product_spec: rqProductSpec,
+        plant_id: plant.id,
+        plant_name: plant.name,
+        customer_id: c.id,
+        customer_name: c.trade_name,
+        purchase_price: plant.rqPrice || null,
+        us_freight_rate_id: plant.rqUsFreightRateId || null,
+        us_freight_amount: rqFreightForPlant(plant) || 0,
+        docs_on: plant.rqDocsOn === true,
+        inspection_amount: rqInspectionForPlant(plant),
+        mexican_dest_rate_id: plant.rqMexicanDestRateId || null,
+        mexican_freight_mxn: plant.rqMexicanDestRateId ? rqMexicanFreightMxnForPlant(plant) : null,
+        customs_agency_provider_id: agencyId,
+        tramite_aduanal_amount: plant.rqMexicanDestRateId ? rqCustomsRate('tramite_aduanal', agencyId) : 0,
+        bodega_americana_amount: plant.rqMexicanDestRateId ? rqCustomsRate('bodega_americana', agencyId) : 0,
+        extra_fields: plant.rqExtraFields || [],
+        weight: calc.weight,
+        cost_per_lb: calc.costPerLb,
+        sale_per_lb: calc.salePerLb,
+        total_cost: calc.totalCost,
+        total_sale: calc.totalSale,
+        delivery_dates: [...rqDeliveryDates],
+      });
+    });
+  });
+  if (!rows.length) return;
+  const { error } = await db.from('sent_offers').insert(rows);
+  if (error) console.error('Failed to log sent offer(s):', error.message);
+}
+
 function sendOfferEmailTo(customerId){
   if (!rqRequireDeliveryDay()) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
@@ -1021,6 +1065,7 @@ function sendOfferEmailTo(customerId){
   const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
   const subject = `Cotización — ${rqProductSpec || ''}`;
   window.location.href = `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  rqLogSentOffers([c], 'email');
 }
 
 function sendOfferWhatsAppTo(customerId){
@@ -1031,6 +1076,7 @@ function sendOfferWhatsAppTo(customerId){
   if (!phone) return;
   const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
+  rqLogSentOffers([c], 'whatsapp');
 }
 
 // Opens one pre-filled draft per customer/plant at once — still nothing gets sent until you
@@ -1046,22 +1092,26 @@ function rqOpenAllSync(urls){
 
 function rqOpenAllEmails(){
   if (!rqRequireDeliveryDay()) return;
-  const urls = rqMatchedCustomers.filter(c => c.email).map(c => {
+  const targets = rqMatchedCustomers.filter(c => c.email);
+  const urls = targets.map(c => {
     const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
     const subject = `Cotización — ${rqProductSpec || ''}`;
     return `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
   rqOpenAllSync(urls);
+  rqLogSentOffers(targets, 'email');
 }
 
 function rqOpenAllWhatsApp(){
   if (!rqRequireDeliveryDay()) return;
-  const urls = rqMatchedCustomers.filter(c => c.whatsapp || c.phone).map(c => {
+  const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
+  const urls = targets.map(c => {
     const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
     const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
     return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(body) : null;
   }).filter(Boolean);
   rqOpenAllSync(urls);
+  rqLogSentOffers(targets, 'whatsapp');
 }
 
 function rqFmtDate(val){
