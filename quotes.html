@@ -56,6 +56,13 @@
   .mini-field input{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;}
   .chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;}
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .rq-toggle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
+  .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .rq-tt-pill{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;background:#fff;color:var(--ink-soft);white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
+  .rq-tt-pill.open{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
+  .rq-tt-pill:disabled{opacity:.45;cursor:not-allowed;}
+  .rq-tt-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--ink-soft);display:inline-block;flex-shrink:0;}
+  .rq-tt-pill.open .dot{background:var(--blue);}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
@@ -466,9 +473,17 @@ function renderRqPlants(){
     const row = document.createElement('div');
     row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
     const showPriceRow = !!(p.rqPrice || p.rqPriceRevealed);
+    const docsOn = p.rqDocsStatus === 'sin';
+    const fobOn = p.rqDeliveryMode === 'fob';
+    const importedOn = p.rqImported === true;
     row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:13.5px;font-weight:600;">${escapeHtml(p.name)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <span style="font-size:13.5px;font-weight:600;">${escapeHtml(p.name)}</span>
+          <button type="button" class="rq-tt-pill${p.rqCalculatorOpen ? ' open' : ''}" id="rq_tt_btn_${p.id}" onclick="rqToggleCalculator('${p.id}')" style="display:${showPriceRow ? 'inline-flex' : 'none'};" ${p.rqPrice ? '' : 'disabled title="Enter a Purchase $/lb first"'}>
+            <span class="dot"></span>${p.rqCalculatorOpen ? 'Trading Tool open' : 'Trading Tool'}
+          </button>
+        </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
       <div class="plant-calc-row">
@@ -478,24 +493,18 @@ function renderRqPlants(){
         </div>
       </div>
       ${!showPriceRow ? `<div id="rq_reveal_price_${p.id}" style="margin-top:8px;"><span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span></div>` : ''}
-      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:10px;align-items:flex-end;flex-wrap:wrap;">
         <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)"></div>
         ${rqIsSeaboard(p) ? '' : `
         <div class="mini-field" style="width:auto;">
-          <label>Docs</label>
-          <div style="display:flex;gap:6px;">
-            <span class="chip${p.rqDocsStatus !== 'sin' ? ' on' : ''}" onclick="rqSetDocsStatus('${p.id}','con')">Docs</span>
-            <span class="chip${p.rqDocsStatus === 'sin' ? ' on' : ''}" onclick="rqSetDocsStatus('${p.id}','sin')">No Docs</span>
-          </div>
+          <label>Documents</label>
+          <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'No Docs' : 'Docs Included'}</button>
         </div>`}
         <div class="mini-field" style="width:auto;">
           <label>Freight</label>
-          <div style="display:flex;gap:6px;">
-            <span class="chip${p.rqDeliveryMode !== 'fob' ? ' on' : ''}" onclick="rqSetDeliveryMode('${p.id}','delivered')">Delivered</span>
-            <span class="chip${p.rqDeliveryMode === 'fob' ? ' on' : ''}" onclick="rqSetDeliveryMode('${p.id}','fob')">FOB</span>
-          </div>
+          <button type="button" class="rq-toggle${fobOn ? ' on' : ''}" onclick="rqToggleFreightMode('${p.id}')">${fobOn ? 'FOB' : 'Delivered'}</button>
         </div>
-        ${(p.rqDeliveryMode === 'fob' && rqLocationsForPlant(p.id).length > 1) ? `
+        ${(fobOn && rqLocationsForPlant(p.id).length > 1) ? `
         <div class="mini-field" style="width:170px;">
           <label>Pickup lane</label>
           <select onchange="rqSetFreightLocation('${p.id}', this.value)">
@@ -505,12 +514,8 @@ function renderRqPlants(){
         </div>` : ''}
         <div class="mini-field" style="width:auto;">
           <label>Imported load</label>
-          <div style="display:flex;gap:6px;">
-            <span class="chip${p.rqImported !== true ? ' on' : ''}" onclick="rqSetImported('${p.id}',false)">No</span>
-            <span class="chip${p.rqImported === true ? ' on' : ''}" onclick="rqSetImported('${p.id}',true)">Yes</span>
-          </div>
+          <button type="button" class="rq-toggle${importedOn ? ' on' : ''}" onclick="rqToggleImported('${p.id}')">${importedOn ? 'Imported' : 'Border'}</button>
         </div>
-        <button class="btn secondary" id="rq_tt_btn_${p.id}" onclick="rqToggleCalculator('${p.id}')">${p.rqCalculatorOpen ? 'Close Trading Tool' : 'Open Trading Tool'}</button>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
@@ -573,6 +578,23 @@ function rqSetDocsStatus(plantId, status){
   renderRqPlants();
 }
 
+// Single-control toggles — one click flips the state, instead of picking between two buttons.
+function rqToggleDocs(plantId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  rqSetDocsStatus(plantId, p.rqDocsStatus === 'sin' ? 'con' : 'sin');
+}
+function rqToggleFreightMode(plantId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  rqSetDeliveryMode(plantId, p.rqDeliveryMode === 'fob' ? 'delivered' : 'fob');
+}
+function rqToggleImported(plantId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  rqSetImported(plantId, !(p.rqImported === true));
+}
+
 // $200/$350 inspection cost only applies when the plant quoted "sin docs" — Seaboard is always
 // "con docs" so it's $0 for them regardless. The $ depends on packaging (Combo vs Caja/Box),
 // which is already known from the product's catalog record, no extra question needed.
@@ -589,13 +611,13 @@ function rqSetImported(plantId, isImported){
   renderRqPlants();
 }
 
-// Trámite aduanal ($425) + Bodega americana ($200) — shown as two discriminated fields in the
-// Trading Tool (not lumped into the generic Import Cost field). Lumper fee and Liberación de
-// INBOND depend on which carrier is used (e.g. EBI doesn't charge lumper on their own truck)
-// and need a proper customs-agency data model — left out until that exists. Cold Storage/USDA
-// costs stay fully manual/optional in the TT, added later per-load when they actually happen
-// (invoicing phase), never auto-applied from a Quotes toggle.
-const RQ_TRAMITE_ADUANAL = 425;
+// Customs/Import Clearance ($400) + US Warehouse Handling ($200) — shown as two discriminated
+// fields in the Trading Tool (not lumped into the generic Import Cost field). Lumper fee and
+// INBOND Release depend on which carrier is used (e.g. EBI doesn't charge lumper on their own
+// truck) and need a proper customs-agency data model — left out until that exists. Cold
+// Storage/USDA costs stay fully manual/optional in the TT, added later per-load when they
+// actually happen (invoicing phase), never auto-applied from a Quotes toggle.
+const RQ_TRAMITE_ADUANAL = 400;
 const RQ_BODEGA_AMERICANA = 200;
 
 // Opens the REAL trading-tool.html — same file, same calc(), nothing re-implemented here —
@@ -623,7 +645,9 @@ function rqBuildToolUrl(p){
     tramiteAduanal: String(imported ? RQ_TRAMITE_ADUANAL : 0),
     bodegaAmericana: String(imported ? RQ_BODEGA_AMERICANA : 0),
     hideCustomsBrokerage: imported ? '0' : '1',
-    hideMexicanFreight: imported ? '1' : '0',
+    // Imported Load OFF = Border scenario only, no Mexico costs at all. ON = the Mexico-delivery
+    // scenario, so Mexican Freight belongs in view alongside the customs costs above.
+    hideMexicanFreight: imported ? '0' : '1',
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
     v: String(Date.now()), // cache-bust so the embedded Trading Tool always loads the latest file
   });
@@ -649,7 +673,10 @@ function rqToggleCalculator(id){
     rqStartPolling();
   }
   const btn = document.getElementById('rq_tt_btn_' + id);
-  if (btn) btn.textContent = p.rqCalculatorOpen ? 'Close Trading Tool' : 'Open Trading Tool';
+  if (btn){
+    btn.classList.toggle('open', p.rqCalculatorOpen);
+    btn.innerHTML = `<span class="dot"></span>${p.rqCalculatorOpen ? 'Trading Tool open' : 'Trading Tool'}`;
+  }
   rqRenderFinalList();
 }
 
@@ -724,6 +751,8 @@ function rqUpdatePlantField(id, field, val){
   rqUpdateActionButtons();
   const askButtons = document.getElementById('rq_ask_btns_' + id);
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
+  const ttBtn = document.getElementById('rq_tt_btn_' + id);
+  if (ttBtn) ttBtn.disabled = !p.rqPrice;
 }
 
 // While you're still just asking, there's nothing to enter — Purchase $/lb only shows up once
