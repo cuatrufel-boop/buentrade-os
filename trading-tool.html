@@ -1189,8 +1189,14 @@ if (__qp.has('inspection')) document.getElementById('inspection').value = Number
 // calc() still just reads whatever value is in the (possibly hidden) input, untouched.
 if (__qp.get('hideInspection') === '1') document.getElementById('inspectionField').style.display = 'none';
 // Import Cost's emptiness (not "0") is what gates whether Mexico pricing shows at all
-// (importCostFilled below), so only set a value when there actually is one — never force "0".
+// (importCostFilled below), so only set a value when there actually is one — never force "0"
+// as a side effect of some other prefill. forceImportCostZero is the one deliberate exception:
+// Quotes sends it only when the trader picked a real Mexican destination (so Mexico pricing
+// genuinely should activate) and already accounts for customs via tramiteAduanal/bodegaAmericana
+// (part of extraCosts) — Import Cost itself stays a real $0 here, not a stand-in dollar amount,
+// so there's no double-counting.
 if (__qp.has('importCost') && Number(__qp.get('importCost')) > 0) document.getElementById('importCost').value = Number(__qp.get('importCost'));
+else if (__qp.get('forceImportCostZero') === '1') document.getElementById('importCost').value = '0';
 if (__qp.get('hideImportCost') === '1') document.getElementById('importCostField').style.display = 'none';
 // Imported-load toggle in Quotes drives these two discriminated customs fields together
 // (Trámite aduanal + Bodega americana) — same pre-fill + hide pattern as everything above.
