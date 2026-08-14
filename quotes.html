@@ -53,7 +53,8 @@
   .name-link:hover{text-decoration:underline;}
   .mini-field{display:flex;flex-direction:column;gap:3px;}
   .mini-field label{font-size:10.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
-  .mini-field input{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;}
+  .mini-field input,.mini-field select{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;background:#fff;color:var(--ink);height:31px;}
+  .mini-field select{cursor:pointer;}
   .chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;}
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-toggle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
@@ -757,23 +758,39 @@ function rqToggleCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   if (p.rqCalculatorOpen){
-    p.rqCalculatorOpen = false;
-    document.getElementById('rq_iframe_wrap_' + id).style.display = 'none';
-    document.getElementById('rq_iframe_' + id).src = 'about:blank';
-    if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
+    rqCloseCalculator(id);
   } else {
     if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
+    // Accordion: only one plant's Trading Tool open at a time — opening another closes
+    // whichever was open, instead of stacking several heavy iframes on screen at once.
+    rqSelectedPlants.forEach(other => { if (other.id !== id && other.rqCalculatorOpen) rqCloseCalculator(other.id); });
     p.rqCalculatorOpen = true;
     document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
     document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
     rqStartPolling();
-  }
-  const btn = document.getElementById('rq_tt_btn_' + id);
-  if (btn){
-    btn.classList.toggle('open', p.rqCalculatorOpen);
-    btn.innerHTML = `<span class="dot"></span>${p.rqCalculatorOpen ? 'Trading Tool open' : 'Trading Tool'}`;
+    const btn = document.getElementById('rq_tt_btn_' + id);
+    if (btn){
+      btn.classList.add('open');
+      btn.innerHTML = `<span class="dot"></span>Trading Tool open`;
+    }
   }
   rqRenderFinalList();
+}
+
+function rqCloseCalculator(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  if (!p || !p.rqCalculatorOpen) return;
+  p.rqCalculatorOpen = false;
+  const wrap = document.getElementById('rq_iframe_wrap_' + id);
+  if (wrap) wrap.style.display = 'none';
+  const iframe = document.getElementById('rq_iframe_' + id);
+  if (iframe) iframe.src = 'about:blank';
+  const btn = document.getElementById('rq_tt_btn_' + id);
+  if (btn){
+    btn.classList.remove('open');
+    btn.innerHTML = `<span class="dot"></span>Trading Tool`;
+  }
+  if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
 }
 
 let rqPollTimer = null;
