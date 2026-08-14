@@ -589,14 +589,14 @@ function rqSetImported(plantId, isImported){
   renderRqPlants();
 }
 
-// Trámite aduanal ($425) + Bodega americana ($200) = $625 — only these two customs-brokerage
-// costs are wired in for now. Lumper fee and Liberación de INBOND depend on which carrier is
-// used (e.g. EBI doesn't charge lumper on their own truck) and need a proper customs-agency
-// data model — left out until that exists. Cold Storage/USDA costs stay fully manual/optional,
-// added later per-load when they actually happen (invoicing phase), never auto-applied here.
-function rqImportCostForPlant(p){
-  return p.rqImported === true ? 625 : 0;
-}
+// Trámite aduanal ($425) + Bodega americana ($200) — shown as two discriminated fields in the
+// Trading Tool (not lumped into the generic Import Cost field). Lumper fee and Liberación de
+// INBOND depend on which carrier is used (e.g. EBI doesn't charge lumper on their own truck)
+// and need a proper customs-agency data model — left out until that exists. Cold Storage/USDA
+// costs stay fully manual/optional in the TT, added later per-load when they actually happen
+// (invoicing phase), never auto-applied from a Quotes toggle.
+const RQ_TRAMITE_ADUANAL = 425;
+const RQ_BODEGA_AMERICANA = 200;
 
 // Opens the REAL trading-tool.html — same file, same calc(), nothing re-implemented here —
 // embedded per plant so it's fully independent (own Weight/Freight/Inspection/Import Cost/
@@ -610,7 +610,7 @@ function rqBuildToolUrl(p){
   const showFreight = p.rqDeliveryMode === 'fob';
   const freight = showFreight ? (rqFreightForPlant(p) || 0) : 0;
   const inspection = rqInspectionForPlant(p);
-  const importCost = rqImportCostForPlant(p);
+  const imported = p.rqImported === true;
   const params = new URLSearchParams({
     embed: '1',
     weight: '40000',
@@ -619,8 +619,11 @@ function rqBuildToolUrl(p){
     hideFreight: showFreight ? '0' : '1',
     inspection: String(inspection),
     hideInspection: inspection > 0 ? '0' : '1',
-    importCost: String(importCost),
-    hideImportCost: importCost > 0 ? '0' : '1',
+    hideImportCost: '1', // generic Import Cost field stays out of the Quotes flow entirely
+    tramiteAduanal: String(imported ? RQ_TRAMITE_ADUANAL : 0),
+    bodegaAmericana: String(imported ? RQ_BODEGA_AMERICANA : 0),
+    hideCustomsBrokerage: imported ? '0' : '1',
+    hideMexicanFreight: imported ? '1' : '0',
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
     v: String(Date.now()), // cache-bust so the embedded Trading Tool always loads the latest file
   });

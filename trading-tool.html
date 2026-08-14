@@ -579,6 +579,11 @@ if (FIREBASE_READY) {
           <label>US Freight (USD)</label>
           <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
         </div>
+        <div class="field" id="mexicanFreightField">
+          <label>Mexican Freight</label>
+          <div class="inputwrap"><span class="pfx">MX$</span><input type="number" id="freightMx" value="" placeholder="0" oninput="buildProductRows();calc();"></div>
+        </div>
+        <div id="freightMxUsdHint" style="font-size:10.5px;color:var(--ink-soft);text-align:right;margin:-4px 0 8px;"></div>
         <div class="field" id="inspectionField">
           <label>Inspection (USD)</label>
           <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspection" value="0" oninput="calc()"></div>
@@ -589,12 +594,24 @@ if (FIREBASE_READY) {
         </div>
 
         <div class="divider"></div>
-        <div class="section-label">Mexico only</div>
-        <div class="field">
-          <label>Mexican Freight</label>
-          <div class="inputwrap"><span class="pfx">MX$</span><input type="number" id="freightMx" value="" placeholder="0" oninput="buildProductRows();calc();"></div>
-        </div>
-        <div id="freightMxUsdHint" style="font-size:10.5px;color:var(--ink-soft);text-align:right;margin:-4px 0 8px;"></div>
+        <div class="section-label">Customs brokerage — optional</div>
+        <div class="field" id="tramiteAduanalField"><label>Trámite aduanal (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="tramiteAduanal" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field" id="bodegaAmericanaField"><label>Bodega americana (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="bodegaAmericana" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Lumper fee (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="lumperFee" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Liberación de INBOND (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="inbondRelease" value="" placeholder="0" oninput="calc()"></div></div>
+
+        <div class="divider"></div>
+        <div class="section-label">Cold storage & USDA — optional</div>
+        <div class="field"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Plastic wrap (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="plasticWrap" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>IN-LIEU (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="inLieu" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Storage — Overnight (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageOvernight" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Storage — Weekend (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageWeekend" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Storage — Short term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageShortTerm" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Storage — Mid term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageMidTerm" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Storage — Long term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageLongTerm" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Storage — Extra long (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageExtraLong" value="" placeholder="0" oninput="calc()"></div></div>
+        <div class="field"><label>Fresh to Frozen conversion (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="freshToFrozen" value="" placeholder="0" oninput="calc()"></div></div>
 
       </div>
     </div>
@@ -956,12 +973,23 @@ async function fetchExchangeRate(){
   if(statusEl) statusEl.title = errors.join(' | ');
   if(statusEl) statusEl.textContent = 'auto-fetch blocked — tap ↻';
 }
+// Every optional customs-brokerage / cold-storage field (Trámite aduanal, Bodega americana,
+// Lumper fee, Liberación de INBOND, Labels, Plastic wrap, IN-LIEU, Storage tiers, Fresh to
+// Frozen) — all default empty/0, so when none are filled this sums to 0 and Direct Costs is
+// unchanged from before these fields existed. Summed into one number rather than named
+// individually in the cost formulas below, so adding more of these later never touches calc().
+const EXTRA_COST_FIELD_IDS = [
+  'tramiteAduanal','bodegaAmericana','lumperFee','inbondRelease','labelsCost','plasticWrap',
+  'inLieu','storageOvernight','storageWeekend','storageShortTerm','storageMidTerm',
+  'storageLongTerm','storageExtraLong','freshToFrozen'
+];
 function getInputs(){
   return {
     freight: parseFloat(document.getElementById('freight').value)||0,
     inspection: parseFloat(document.getElementById('inspection').value)||0,
     freightMx: parseFloat(document.getElementById('freightMx').value)||0,
     importCost: parseFloat(document.getElementById('importCost').value)||0,
+    extraCosts: EXTRA_COST_FIELD_IDS.reduce((s,id) => s + (parseFloat(document.getElementById(id).value)||0), 0),
     fxRate: parseFloat(document.getElementById('fxRate').value)||0,
     payDays: parseFloat(document.getElementById('payDays').value)||0,
     financeRate: parseFloat(document.getElementById('financeRate').value)||0,
@@ -987,7 +1015,7 @@ function calc(){
   const totalSaleBorder = products.reduce((s,p)=>s+p.weight*p.sellBorder,0);
 
   // ---- Border (USD) ----
-  const directCostsBorder = inp.freight+inp.inspection+inp.importCost;
+  const directCostsBorder = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
   const financeBorder = totalSaleBorder * (inp.payDays * (inp.financeRate/100));
   const grossBaseBorder = totalSaleBorder - totalCostUSD - directCostsBorder;
   const profitBorder = grossBaseBorder - financeBorder;
@@ -1029,7 +1057,7 @@ function calc(){
     if(mxDivider) mxDivider.style.display = '';
     if(profitCols) profitCols.classList.add('split');
     const totalCostMx = totalCostUSD * inp.fxRate;
-    directCostsMx = (inp.freight+inp.inspection+inp.importCost)*inp.fxRate + inp.freightMx;
+    directCostsMx = (inp.freight+inp.inspection+inp.importCost+inp.extraCosts)*inp.fxRate + inp.freightMx;
     const k = inp.payDays * (inp.financeRate/100);
 
     // STEP 1: build the adjusted USD/lb price FIRST — Border price + Import Cost/lb +
@@ -1175,6 +1203,15 @@ if (__qp.get('hideInspection') === '1') document.getElementById('inspectionField
 // (importCostFilled below), so only set a value when there actually is one — never force "0".
 if (__qp.has('importCost') && Number(__qp.get('importCost')) > 0) document.getElementById('importCost').value = Number(__qp.get('importCost'));
 if (__qp.get('hideImportCost') === '1') document.getElementById('importCostField').style.display = 'none';
+// Imported-load toggle in Quotes drives these two discriminated customs fields together
+// (Trámite aduanal + Bodega americana) — same pre-fill + hide pattern as everything above.
+if (__qp.has('tramiteAduanal') && Number(__qp.get('tramiteAduanal')) > 0) document.getElementById('tramiteAduanal').value = Number(__qp.get('tramiteAduanal'));
+if (__qp.has('bodegaAmericana') && Number(__qp.get('bodegaAmericana')) > 0) document.getElementById('bodegaAmericana').value = Number(__qp.get('bodegaAmericana'));
+if (__qp.get('hideCustomsBrokerage') === '1'){
+  document.getElementById('tramiteAduanalField').style.display = 'none';
+  document.getElementById('bodegaAmericanaField').style.display = 'none';
+}
+if (__qp.get('hideMexicanFreight') === '1') document.getElementById('mexicanFreightField').style.display = 'none';
 buildProductRows();
 calc();
 fetchExchangeRate();
