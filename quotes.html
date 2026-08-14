@@ -889,10 +889,18 @@ function rqRevealPrice(id){
   if (input) input.focus();
 }
 
+// Deliberately no cross-plant fallback — a photo/spec on file for Tyson's cut doesn't represent
+// Indiana's, so showing it as if it did would misrepresent what a customer is actually buying.
+// If this specific plant has nothing on file, that just means no attachment goes out for them.
 function rqFindPhotoFor(plant){
   const name = document.getElementById('rq_product_name').value.trim().toLowerCase();
-  return (products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url)
-    || products.find(pr => (pr.name || '').toLowerCase() === name && pr.photo_url) || {}).photo_url;
+  return (products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url) || {}).photo_url;
+}
+
+// The "photo" field sometimes actually holds a spec-sheet PDF rather than an image — label it
+// accurately instead of always calling it "Foto" when it's really a document link.
+function rqPhotoLabel(url){
+  return /\.pdf($|\?)/i.test(url || '') ? 'Spec sheet' : 'Foto';
 }
 
 function rqPricedPlantsSorted(){
@@ -926,7 +934,11 @@ function rqRenderFinalList(){
     const photo = rqFindPhotoFor(plant);
     const delivery = rqDeliveryDatesText();
     return `<div class="offer-item">
-      ${photo ? `<img class="offer-thumb" src="${photo}">` : `<div class="offer-thumb"></div>`}
+      ${photo
+        ? (rqPhotoLabel(photo) === 'Spec sheet'
+            ? `<a class="offer-thumb" href="${photo}" target="_blank" rel="noopener" title="Spec sheet" style="display:flex;align-items:center;justify-content:center;font-size:20px;text-decoration:none;">📄</a>`
+            : `<img class="offer-thumb" src="${photo}">`)
+        : `<div class="offer-thumb"></div>`}
       <div style="flex:1;text-align:center;">
         <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
         <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</div>
@@ -945,7 +957,7 @@ function buildCustomerOfferText(customerFirstName){
   const lines = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
     const delivery = rqDeliveryDatesText();
-    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Delivery ' + delivery : ''}${photo ? '\nFoto: ' + photo : ''}`;
+    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Delivery ' + delivery : ''}${photo ? '\n' + rqPhotoLabel(photo) + ': ' + photo : ''}`;
   }).join('\n\n');
   return greeting + lines;
 }
