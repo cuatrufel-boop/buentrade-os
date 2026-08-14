@@ -487,7 +487,6 @@ function renderRqPlants(){
     row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
     const showPriceRow = !!(p.rqPrice || p.rqPriceRevealed);
     const docsOn = p.rqDocsOn === true;
-    const importedOn = p.rqImported === true;
     row.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
@@ -517,11 +516,6 @@ function renderRqPlants(){
           <label>Documents</label>
           <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'Docs' : 'No Docs'}</button>
         </div>`}
-        <div class="mini-field" style="width:auto;">
-          <label>Imported load</label>
-          <button type="button" class="rq-toggle${importedOn ? ' on' : ''}" onclick="rqToggleImported('${p.id}')">${importedOn ? 'Imported' : 'Border'}</button>
-        </div>
-        ${importedOn ? `
         <div class="mini-field" style="width:210px;">
           <label>Customer (auto-fills destination)</label>
           <select onchange="rqSetMexicanCustomer('${p.id}', this.value)">
@@ -534,10 +528,10 @@ function renderRqPlants(){
         <div class="mini-field" style="width:190px;">
           <label>Delivery location</label>
           <select onchange="rqSetMexicanDest('${p.id}', this.value)">
-            <option value="">— choose —</option>
+            <option value="">Border — $0</option>
             ${rqMexicanFreightRates().map(r => `<option value="${r.id}" ${p.rqMexicanDestRateId === r.id ? 'selected' : ''}>${escapeHtml(r.destination || 'Destination')} — $${r.rate}</option>`).join('')}
           </select>
-        </div>` : ''}
+        </div>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
@@ -599,11 +593,6 @@ function rqToggleDocs(plantId){
   if (!p) return;
   rqSetDocsOn(plantId, !(p.rqDocsOn === true));
 }
-function rqToggleImported(plantId){
-  const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p) return;
-  rqSetImported(plantId, !(p.rqImported === true));
-}
 
 // Selling at the border with no extra documentation is the normal case, so No Docs is the
 // default and costs nothing. Turning Docs ON means we're paying to have it done — $200 for
@@ -613,14 +602,6 @@ function rqInspectionForPlant(p){
   if (rqIsSeaboard(p)) return 0;
   if (p.rqDocsOn !== true) return 0;
   return rqProductIsCombo ? 200 : 350;
-}
-
-function rqSetImported(plantId, isImported){
-  const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p) return;
-  p.rqImported = isImported;
-  rqInvalidateCalc(p);
-  renderRqPlants();
 }
 
 // Customs costs (Trámite aduanal, Bodega americana) are provider-level, not plant-level — read
@@ -710,7 +691,10 @@ function rqBuildToolUrl(p){
   const showFreight = !!p.rqUsFreightRateId;
   const freight = showFreight ? (rqFreightForPlant(p) || 0) : 0;
   const inspection = rqInspectionForPlant(p);
-  const imported = p.rqImported === true;
+  // "Border" (the default) on Delivery location means no customs, no Mexican Freight — same
+  // one-control pattern as US Freight above. Picking an actual destination implies Imported and
+  // pulls both customs costs plus that destination's Mexican Freight rate.
+  const imported = !!p.rqMexicanDestRateId;
   const tramiteAduanal = imported ? rqCustomsRate('tramite_aduanal') : 0;
   const bodegaAmericana = imported ? rqCustomsRate('bodega_americana') : 0;
   const freightMx = imported ? rqMexicanFreightMxnForPlant(p) : null;
