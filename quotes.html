@@ -594,13 +594,14 @@ function rqToggleDocs(plantId){
   rqSetDocsOn(plantId, !(p.rqDocsOn === true));
 }
 
-// Selling at the border with no extra documentation is the normal case, so No Docs is the
-// default and costs nothing. Turning Docs ON means we're paying to have it done — $200 for
-// Combo-packaged product, $350 otherwise (packaging is already known from the product catalog).
+// "No Docs" means the plant does NOT include the paperwork in their price — we have to arrange
+// and pay for it ourselves, $200 for Combo-packaged product / $350 otherwise (packaging already
+// known from the product catalog). "Docs" means the plant already includes it, so it costs us
+// nothing. Most plants quote No Docs, so that's the default — Docs is the toggle-off exception.
 // Seaboard never has this cost either way.
 function rqInspectionForPlant(p){
   if (rqIsSeaboard(p)) return 0;
-  if (p.rqDocsOn !== true) return 0;
+  if (p.rqDocsOn === true) return 0;
   return rqProductIsCombo ? 200 : 350;
 }
 
