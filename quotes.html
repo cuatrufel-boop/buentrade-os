@@ -216,14 +216,20 @@ auth.onAuthStateChanged(user => {
         </div>
       </div>
 
-      <div id="rq_ask_all_wrap" style="display:none;gap:8px;">
-        <button class="btn secondary" onclick="rqAskAllEmails()">Email All</button>
-        <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqAskAllWhatsApp()">WhatsApp All</button>
+      <div id="rq_ask_all_wrap" style="display:none;flex-direction:column;align-items:center;gap:6px;padding-left:14px;border-left:1.5px solid var(--line);">
+        <span style="font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Ask plants</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn secondary" onclick="rqAskAllEmails()">Email All</button>
+          <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqAskAllWhatsApp()">WhatsApp All</button>
+        </div>
       </div>
 
-      <div id="rq_top_actions_wrap" style="display:none;gap:8px;">
-        <button class="btn secondary" onclick="rqOpenAllEmails()">Send Email Offers</button>
-        <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Send WhatsApp Offers</button>
+      <div id="rq_top_actions_wrap" style="display:none;flex-direction:column;align-items:center;gap:6px;padding-left:14px;border-left:1.5px solid var(--line);">
+        <span style="font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Send to customers</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn secondary" onclick="rqOpenAllEmails()">Send Email Offers</button>
+          <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Send WhatsApp Offers</button>
+        </div>
       </div>
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 14px;"></div>
@@ -1075,11 +1081,22 @@ function rqLoadsPhrase(){
 // One click asks every not-yet-priced plant at once — each still gets its own rotated template
 // (rqPickTemplate cycles through RQ_EMAIL_TEMPLATES/RQ_WHATSAPP_TEMPLATES) so consecutive
 // messages don't read as an obvious copy-paste blast.
+// No photo on file from THIS specific plant usually means we're also missing their official
+// spec sheet — asking for the price is already a message in their inbox, so piggyback the spec
+// ask onto it instead of sending a separate message later. Deliberately not rqFindPhotoFor,
+// which falls back to any other plant's photo for the same product — that's fine for display,
+// but useless here since another plant's spec doesn't cover this one.
+function rqSpecAskLine(plant){
+  const name = document.getElementById('rq_product_name').value.trim().toLowerCase();
+  const hasOwnPhoto = products.some(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url);
+  return hasOwnPhoto ? '' : " Also, I don't have your spec sheet for this — could you send it over?";
+}
+
 function rqAskAllEmails(){
   if (!rqProductSpec || !rqRequireDeliveryDay()) return;
   const urls = rqSelectedPlants.filter(p => !p.rqPrice && p.email).map(p => {
     const template = rqPickTemplate(RQ_EMAIL_TEMPLATES, i => rqLastEmailTemplate = i, rqLastEmailTemplate);
-    const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name));
+    const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
     const subject = `${rqProductSpec} — quote request`;
     return `mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
@@ -1091,7 +1108,7 @@ function rqAskAllWhatsApp(){
   const urls = rqSelectedPlants.filter(p => !p.rqPrice && (p.whatsapp || p.phone)).map(p => {
     const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
     const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
-    const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name));
+    const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
     return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg) : null;
   }).filter(Boolean);
   rqOpenAllSync(urls);
