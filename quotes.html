@@ -59,11 +59,8 @@
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-toggle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
   .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
-  .rq-tt-pill{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;background:#fff;color:var(--ink-soft);white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
-  .rq-tt-pill.open{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
-  .rq-tt-pill:disabled{opacity:.45;cursor:not-allowed;}
-  .rq-tt-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--ink-soft);display:inline-block;flex-shrink:0;}
-  .rq-tt-pill.open .dot{background:var(--blue);}
+  .rq-plant-name{cursor:pointer;user-select:none;}
+  .rq-plant-name.tt-open{color:var(--blue);}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
@@ -196,36 +193,37 @@ auth.onAuthStateChanged(user => {
   <h1 id="rq_page_title">Request Quote</h1>
 
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;">
+    <div style="display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px;">
       <div class="field" style="position:relative;margin-bottom:0;">
         <label>Product</label>
         <input id="rq_product_name" placeholder="Type a product name…" autocomplete="off" oninput="onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)" style="width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;">
         <div id="rq_product_suggestions" class="rq-suggest"></div>
       </div>
-      <div id="rq_top_actions_wrap" style="display:none;gap:8px;">
+
+      <div id="rq_plants_header" style="display:none;margin:0;min-height:50px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;">Plants to ask</label>
+        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
+          <option value="">+ Add a plant</option>
+        </select>
+      </div>
+
+      <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
+        <label>Delivery day(s) — one ask, all dates, every plant</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <div id="rq_date_chips" style="display:contents;"></div>
+          <button type="button" class="date-btn" style="width:160px;height:32px;padding:0 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
+            <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
+          </button>
+          <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+        </div>
+      </div>
+
+      <div id="rq_top_actions_wrap" style="display:none;gap:8px;margin-left:auto;">
         <button class="btn secondary" onclick="rqOpenAllEmails()">Send Email Offers</button>
         <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Send WhatsApp Offers</button>
       </div>
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 14px;"></div>
-
-    <div id="rq_plants_header" style="display:none;margin:0 0 8px;">
-      <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;">Plants to ask</label>
-      <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
-        <option value="">+ Add a plant</option>
-      </select>
-    </div>
-
-    <div id="rq_dates_wrap" class="field" style="display:none;margin-top:10px;">
-      <label>Delivery day(s) — one ask, all dates, every plant</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-        <div id="rq_date_chips" style="display:contents;"></div>
-        <button type="button" class="date-btn" style="width:160px;height:32px;padding:0 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
-          <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
-        </button>
-        <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
-      </div>
-    </div>
 
     <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:14px 0 10px;">
       <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
@@ -489,15 +487,11 @@ function renderRqPlants(){
     row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
     const showPriceRow = !!(p.rqPrice || p.rqPriceRevealed);
     const docsOn = p.rqDocsOn === true;
-    const fobOn = p.rqDeliveryMode === 'fob';
     const importedOn = p.rqImported === true;
     row.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          <span style="font-size:13.5px;font-weight:600;">${escapeHtml(p.name)}</span>
-          <button type="button" class="rq-tt-pill${p.rqCalculatorOpen ? ' open' : ''}" id="rq_tt_btn_${p.id}" onclick="rqToggleCalculator('${p.id}')" style="display:${showPriceRow ? 'inline-flex' : 'none'};" ${p.rqPrice ? '' : 'disabled title="Enter a Purchase $/lb first"'}>
-            <span class="dot"></span>${p.rqCalculatorOpen ? 'Trading Tool open' : 'Trading Tool'}
-          </button>
+          <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" ondblclick="rqToggleCalculator('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
         </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
@@ -513,7 +507,7 @@ function renderRqPlants(){
         <div class="mini-field" style="width:170px;">
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
-            <option value="">— choose —</option>
+            <option value="">Del Border — $0</option>
             ${rqUsFreightRatesForPlant(p.id).map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}</option>`).join('')}
           </select>
           ${rqUsFreightRatesForPlant(p.id).length === 0 ? `<span class="loc-hint">No location/freight on file yet.</span>` : ''}
@@ -523,10 +517,6 @@ function renderRqPlants(){
           <label>Documents</label>
           <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'Docs' : 'No Docs'}</button>
         </div>`}
-        <div class="mini-field" style="width:auto;">
-          <label>Freight</label>
-          <button type="button" class="rq-toggle${fobOn ? ' on' : ''}" onclick="rqToggleFreightMode('${p.id}')">${fobOn ? 'FOB' : 'Delivered'}</button>
-        </div>
         <div class="mini-field" style="width:auto;">
           <label>Imported load</label>
           <button type="button" class="rq-toggle${importedOn ? ' on' : ''}" onclick="rqToggleImported('${p.id}')">${importedOn ? 'Imported' : 'Border'}</button>
@@ -542,7 +532,7 @@ function renderRqPlants(){
           ${(p.rqMexicanCustomerId && !p.rqMexicanDestRateId) ? `<span class="loc-hint">No Mexican Freight rate matches this customer's destination — pick manually.</span>` : ''}
         </div>
         <div class="mini-field" style="width:190px;">
-          <label>Mexican destination</label>
+          <label>Delivery location</label>
           <select onchange="rqSetMexicanDest('${p.id}', this.value)">
             <option value="">— choose —</option>
             ${rqMexicanFreightRates().map(r => `<option value="${r.id}" ${p.rqMexicanDestRateId === r.id ? 'selected' : ''}>${escapeHtml(r.destination || 'Destination')} — $${r.rate}</option>`).join('')}
@@ -570,13 +560,9 @@ function rqUsFreightRatesForPlant(plantId){
   return rqAllProviderRates.filter(r => r.service_type === 'us_freight' && r.plant_id === plantId);
 }
 
-function rqSetDeliveryMode(plantId, mode){
-  const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p) return;
-  p.rqDeliveryMode = mode;
-  renderRqPlants();
-}
-
+// Picking a real origin here both selects the rate AND means "FOB from that plant" — leaving it
+// on "Del Border" means the Purchase Price already includes delivery, so there's no separate US
+// Freight cost. One control instead of a location picker plus a separate Delivered/FOB toggle.
 function rqSetUsFreightRate(plantId, rateId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
@@ -584,10 +570,10 @@ function rqSetUsFreightRate(plantId, rateId){
   renderRqPlants();
 }
 
-// FOB + the specific origin rate on file is what determines the US Freight $ — never a static
-// per-plant default.
+// A location/rate picked (not left on "Del Border") is what determines the US Freight $ — never
+// a static per-plant default.
 function rqFreightForPlant(p){
-  if (p.rqDeliveryMode !== 'fob') return null;
+  if (!p.rqUsFreightRateId) return null;
   const rate = rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId);
   return rate ? rate.rate : null;
 }
@@ -610,11 +596,6 @@ function rqToggleDocs(plantId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   rqSetDocsOn(plantId, !(p.rqDocsOn === true));
-}
-function rqToggleFreightMode(plantId){
-  const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p) return;
-  rqSetDeliveryMode(plantId, p.rqDeliveryMode === 'fob' ? 'delivered' : 'fob');
 }
 function rqToggleImported(plantId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
@@ -719,10 +700,9 @@ function rqMexicanFreightMxnForPlant(p){
 // Every $ below is pre-filled as a starting suggestion sourced from Master Data — the trader can
 // freely change any of it inside the Trading Tool itself, same as any other Direct Costs field.
 function rqBuildToolUrl(p){
-  // Delivered (our default ask) hides US Freight entirely — it's baked into the one Purchase
-  // Price number. FOB shows it, pre-filled from the specific origin rate picked (or $0 to fill
-  // in by hand if none is on file yet).
-  const showFreight = p.rqDeliveryMode === 'fob';
+  // "Del Border" (the default) hides US Freight entirely — it's baked into the one Purchase
+  // Price number. Picking an actual origin shows it, pre-filled from that rate.
+  const showFreight = !!p.rqUsFreightRateId;
   const freight = showFreight ? (rqFreightForPlant(p) || 0) : 0;
   const inspection = rqInspectionForPlant(p);
   const imported = p.rqImported === true;
@@ -755,9 +735,8 @@ function rqBuildToolUrl(p){
   return 'trading-tool.html?' + params.toString();
 }
 
-// Single button per plant, toggling between opening its Trading Tool (loads the iframe) and
-// fully closing it (drops the iframe so it stops running) — one control, not a separate
-// open button plus a separate close button.
+// Opens/closes a plant's Trading Tool. Triggered by entering a Purchase $/lb (auto-open) or by
+// double-clicking the plant name — no dedicated button needed for either.
 function rqToggleCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
@@ -772,11 +751,8 @@ function rqToggleCalculator(id){
     document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
     document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
     rqStartPolling();
-    const btn = document.getElementById('rq_tt_btn_' + id);
-    if (btn){
-      btn.classList.add('open');
-      btn.innerHTML = `<span class="dot"></span>Trading Tool open`;
-    }
+    const nameEl = document.getElementById('rq_plant_name_' + id);
+    if (nameEl) nameEl.classList.add('tt-open');
   }
   rqRenderFinalList();
 }
@@ -789,11 +765,8 @@ function rqCloseCalculator(id){
   if (wrap) wrap.style.display = 'none';
   const iframe = document.getElementById('rq_iframe_' + id);
   if (iframe) iframe.src = 'about:blank';
-  const btn = document.getElementById('rq_tt_btn_' + id);
-  if (btn){
-    btn.classList.remove('open');
-    btn.innerHTML = `<span class="dot"></span>Trading Tool`;
-  }
+  const nameEl = document.getElementById('rq_plant_name_' + id);
+  if (nameEl) nameEl.classList.remove('tt-open');
   if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
 }
 
@@ -868,8 +841,6 @@ function rqUpdatePlantField(id, field, val){
   rqUpdateActionButtons();
   const askButtons = document.getElementById('rq_ask_btns_' + id);
   if (askButtons) askButtons.style.display = p.rqPrice ? 'none' : 'flex';
-  const ttBtn = document.getElementById('rq_tt_btn_' + id);
-  if (ttBtn) ttBtn.disabled = !p.rqPrice;
 }
 
 // Leaving the Purchase $/lb field with a real number typed in opens that plant's Trading Tool
