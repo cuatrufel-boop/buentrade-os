@@ -516,26 +516,24 @@ function renderRqPlants(){
           <label>Documents</label>
           <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'Docs' : 'No Docs'}</button>
         </div>`}
-        <div class="mini-field" style="width:210px;">
-          <label>Customer (auto-fills destination)</label>
-          <select onchange="rqSetMexicanCustomer('${p.id}', this.value)">
-            <option value="">— choose —</option>
-            ${rqMatchedCustomers.map(c => `<option value="${c.id}" ${p.rqMexicanCustomerId === c.id ? 'selected' : ''}>${escapeHtml(c.trade_name)}${c.usual_delivery_type === 'Border' ? ' (usually Border)' : ''}</option>`).join('')}
-          </select>
-          ${!rqMatchedCustomers.length ? `<span class="loc-hint">No matched customers yet — still searching or none linked to this product.</span>` : ''}
-          ${(p.rqMexicanCustomerId && !p.rqMexicanDestRateId) ? `<span class="loc-hint">No Mexican Freight rate matches this customer's destination — pick manually.</span>` : ''}
-        </div>
-        <div class="mini-field" style="width:190px;">
+        <div class="mini-field" style="width:220px;">
           <label>Delivery location</label>
           <select onchange="rqSetMexicanDest('${p.id}', this.value)">
             <option value="">Border — $0</option>
             ${rqMexicanFreightRates().map(r => `<option value="${r.id}" ${p.rqMexicanDestRateId === r.id ? 'selected' : ''}>${escapeHtml(r.destination || 'Destination')} — $${r.rate}</option>`).join('')}
           </select>
+          ${p.rqMexicanDestRateId ? (() => {
+            const rate = rqMexicanFreightRates().find(r => r.id === p.rqMexicanDestRateId);
+            const matches = rate ? rqCustomersForDestination(rate.destination) : [];
+            return matches.length
+              ? `<span class="loc-hint" style="color:var(--blue);font-weight:600;">Customer: ${matches.map(c => escapeHtml(c.trade_name)).join(', ')}</span>`
+              : `<span class="loc-hint">No customer profile matches this destination yet.</span>`;
+          })() : ''}
         </div>
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
-        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="setTimeout(rqResizeIframes, 300)"></iframe>
+        <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="rqOnIframeLoaded('${p.id}')"></iframe>
       </div>`;
     container.appendChild(row);
     if (p.rqCalculatorOpen){
@@ -628,29 +626,19 @@ function rqSetMexicanDest(plantId, rateId){
   renderRqPlants();
 }
 
-// Picking the customer is the real-world driver for Mexican Freight (per-customer destination),
-// not a raw city picker — this just auto-fills that same destination selection by matching the
-// customer's usual_destination against Master Data's destination list. Case-insensitive,
-// either string containing the other, since city names are typed slightly differently in
-// different places (e.g. "CDMX" vs "Mexico City"). Always leaves the manual dropdown as the
-// actual source of truth, so a bad/missing match is trivially overridden by hand.
-function rqSetMexicanCustomer(plantId, customerId){
-  const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p) return;
-  p.rqMexicanCustomerId = customerId || null;
-  const customer = rqMatchedCustomers.find(c => c.id === customerId);
-  const dest = (customer && customer.usual_destination || '').trim().toLowerCase();
-  if (dest){
-    const match = rqMexicanFreightRates().find(r => {
-      const rDest = (r.destination || '').toLowerCase();
-      return rDest.includes(dest) || dest.includes(rDest);
-    });
-    p.rqMexicanDestRateId = match ? match.id : null;
-  } else {
-    p.rqMexicanDestRateId = null;
-  }
-  rqInvalidateCalc(p);
-  renderRqPlants();
+// The customer's own profile (usual_destination) is what drives this — pick a Delivery location
+// and the system tells you which matched customer(s) buy there, instead of making the trader
+// pick a customer by hand just to look up their city. Case-insensitive, either string containing
+// the other, since city names are typed slightly differently in different places (e.g. "CDMX"
+// vs "Mexico City").
+function rqCustomersForDestination(destText){
+  const dest = (destText || '').trim().toLowerCase();
+  if (!dest) return [];
+  return rqMatchedCustomers.filter(c => {
+    const cDest = (c.usual_destination || '').trim().toLowerCase();
+    if (!cDest) return false;
+    return cDest.includes(dest) || dest.includes(cDest);
+  });
 }
 
 // Mexican Freight is stored in USD in Master Data — converted to MXN here using a live rate
@@ -807,6 +795,40 @@ function rqResizeIframes(){
     const h = Math.max(gridBottom, advBottom) + 24;
     if (h > 0 && Math.abs(h - iframe.offsetHeight) > 4) iframe.style.height = (h + 20) + 'px';
   });
+}
+
+const RQ_TARGET_PROFIT_USD = 1000;
+
+function rqOnIframeLoaded(id){
+  setTimeout(() => {
+    rqResizeIframes();
+    rqPrefillSellingPrice(id);
+  }, 300);
+}
+
+// Starting point for the Selling Price so the trader doesn't open a fresh Trading Tool to a flat
+// $0 sale every time — solves the frozen calculator's own Border Profit formula
+// (profitBorder = totalSaleBorder*(1-k) - totalCostUSD - directCostsBorder, k = payDays *
+// financeRate/100) for the Selling Price that lands ~$1000 Border profit, using whatever
+// Purchase Price/Freight/Docs/Customs are already filled in. Pure read of __calc plus writing
+// into the existing Selling Price input — same as a trader typing a number in by hand, calc()
+// itself is untouched. Only fires when the field is still empty, so it never overwrites a value
+// the trader already entered.
+function rqPrefillSellingPrice(id){
+  const iframe = document.getElementById('rq_iframe_' + id);
+  const win = iframe && iframe.contentWindow;
+  const calc = win && win.__calc;
+  if (!calc || !calc.totalWeight) return;
+  const inp = win.document.getElementById('prodSellBorder0');
+  if (!inp || parseFloat(inp.value) > 0) return;
+  const k = calc.inp.payDays * (calc.inp.financeRate / 100);
+  const saleNeeded = (RQ_TARGET_PROFIT_USD + calc.totalCostUSD + calc.directCostsBorder) / (1 - k);
+  const sellBorder = saleNeeded / calc.totalWeight;
+  if (!isFinite(sellBorder) || sellBorder <= 0) return;
+  // 4 decimals, not 2 — at a 40,000 lb load a single cent/lb swings total profit by $400, so
+  // rounding to cents alone was landing hundreds of dollars off the $1000 target.
+  inp.value = sellBorder.toFixed(4);
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 // Reads live totals straight from that plant's embedded Trading Tool — pure read, no math
@@ -981,8 +1003,8 @@ async function rqFindCustomers(){
         <button class="wa-btn" onclick="sendOfferWhatsAppTo('${c.id}')" ${(c.whatsapp || c.phone) ? '' : 'disabled title="No phone on file"'}><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
       </div>
     </div>`).join('');
-  // Refresh so the per-plant "Customer" dropdown (Mexican Freight) picks up the list — this
-  // fetch runs async and often finishes after the plant rows already rendered once.
+  // Refresh so the "Customer: ..." match under Delivery location (Mexican Freight) picks up the
+  // list — this fetch runs async and often finishes after the plant rows already rendered once.
   if (rqSelectedPlants.length) renderRqPlants();
 }
 
