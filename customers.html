@@ -213,6 +213,7 @@ auth.onAuthStateChanged(user => {
       <div><label class="view-label">Destination</label><span id="v_usual_destination">—</span></div>
       <div><label class="view-label">Incoterm</label><span id="v_usual_incoterm_text">—</span></div>
       <div><label class="view-label">Payment Method</label><span id="v_payment_method">—</span></div>
+      <div><label class="view-label">Customs Agency</label><span id="v_customs_agency">—</span></div>
     </div>
     <div style="margin-top:10px;"><label class="view-label">Notes</label><span id="v_notes">—</span></div>
   </div>
@@ -268,6 +269,9 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Usual Incoterm</label><input id="usual_incoterm_text" placeholder="e.g. FOB, CIF, DAP"></div>
       <div class="field"><label>Payment method</label><input id="payment_method"></div>
     </div>
+    <div class="field"><label>Customs agency (who they clear with)</label>
+      <select id="customs_agency_provider_id"><option value="">—</option></select>
+    </div>
     <div class="field"><label>Exchange rate preference</label>
       <select id="preferred_exchange_rate_mode"><option value="">—</option><option value="automatic">Automatic (daily)</option><option value="manual">Manual</option></select>
     </div>
@@ -319,7 +323,7 @@ function openForm(customer){
     'contact_role','email','phone','whatsapp','website',
     'payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp',
     'preferred_currency','usual_delivery_type',
-    'payment_days','usual_destination','usual_incoterm_text','payment_method','preferred_exchange_rate_mode','notes'];
+    'payment_days','usual_destination','usual_incoterm_text','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes'];
   fields.forEach(f => document.getElementById(f).value = '');
   if (customer){
     document.getElementById('custId').value = customer.id;
@@ -345,7 +349,21 @@ function suggestCurrency(){
   else if (delivery === 'Delivered Mexico') currencyField.value = 'MXN';
 }
 
+let customsAgencies = []; // providers with role = customs_broker — each customer clears through their own, not necessarily ours
+
+async function loadCustomsAgencies(){
+  const [provRes, roleRes] = await Promise.all([
+    db.from('providers').select('id,name'),
+    db.from('provider_roles').select('provider_id,role').eq('role', 'customs_broker'),
+  ]);
+  const brokerIds = new Set((roleRes.data || []).map(r => r.provider_id));
+  customsAgencies = (provRes.data || []).filter(p => brokerIds.has(p.id)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const sel = document.getElementById('customs_agency_provider_id');
+  sel.innerHTML = '<option value="">—</option>' + customsAgencies.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+}
+
 async function loadCustomers(){
+  await loadCustomsAgencies();
   const { data, error } = await db.from('customers').select('*').order('trade_name');
   if (error){
     document.getElementById('emptyState').style.display = 'block';
@@ -417,6 +435,8 @@ function viewCustomer(id){
   document.getElementById('v_usual_destination').textContent = c.usual_destination || '—';
   document.getElementById('v_usual_incoterm_text').textContent = c.usual_incoterm_text || '—';
   document.getElementById('v_payment_method').textContent = c.payment_method || '—';
+  const agency = customsAgencies.find(a => a.id === c.customs_agency_provider_id);
+  document.getElementById('v_customs_agency').textContent = agency ? agency.name : '—';
   document.getElementById('v_notes').textContent = c.notes || '—';
   const waNumber = c.whatsapp || c.phone;
   const waBtn = document.getElementById('v_waBtn');
@@ -465,6 +485,7 @@ async function saveCustomer(){
     payment_days: document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null,
     usual_destination: document.getElementById('usual_destination').value || null,
     payment_method: document.getElementById('payment_method').value || null,
+    customs_agency_provider_id: document.getElementById('customs_agency_provider_id').value || null,
     preferred_exchange_rate_mode: document.getElementById('preferred_exchange_rate_mode').value || null,
     notes: document.getElementById('notes').value || null,
   };
