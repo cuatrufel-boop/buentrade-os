@@ -218,7 +218,7 @@ auth.onAuthStateChanged(user => {
         </select>
       </div>
 
-      <div id="rq_top_actions_wrap" style="display:none;gap:8px;margin-left:auto;">
+      <div id="rq_top_actions_wrap" style="display:none;gap:8px;">
         <button class="btn secondary" onclick="rqOpenAllEmails()">Send Email Offers</button>
         <button class="wa-btn" style="padding:9px 16px;font-size:13px;" onclick="rqOpenAllWhatsApp()">Send WhatsApp Offers</button>
       </div>
@@ -476,6 +476,31 @@ function removeRqPlant(plantId){
   renderRqPlants();
 }
 
+// Lumper fee, INBOND Release, and every Cold storage & USDA field stay hidden in the embedded
+// Trading Tool by default (see hideExtras in rqBuildToolUrl) — these chips are the only way to
+// reveal one when it actually applies to a specific plant. "storage" reveals all 6 duration
+// tiers at once (they're one cost category, matching trading-tool.html's own grouping) rather
+// than needing 6 separate chips.
+const RQ_EXTRA_COST_KEYS = [
+  { key: 'labels', label: 'Labels' },
+  { key: 'plasticWrap', label: 'Plastic wrap' },
+  { key: 'inLieu', label: 'IN-LIEU' },
+  { key: 'storage', label: 'Storage' },
+  { key: 'freshToFrozen', label: 'Fresh to Frozen' },
+  { key: 'lumperFee', label: 'Lumper fee' },
+  { key: 'inbondRelease', label: 'INBOND Release' },
+];
+
+function rqToggleExtraField(plantId, key){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  p.rqExtraFields = p.rqExtraFields || [];
+  const idx = p.rqExtraFields.indexOf(key);
+  if (idx === -1) p.rqExtraFields.push(key); else p.rqExtraFields.splice(idx, 1);
+  rqInvalidateCalc(p);
+  renderRqPlants();
+}
+
 function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
   container.innerHTML = '';
@@ -531,6 +556,11 @@ function renderRqPlants(){
           })() : ''}
         </div>
       </div>
+      ${showPriceRow ? `
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;">
+        <span style="font-size:10.5px;color:var(--ink-soft);font-weight:600;">More costs:</span>
+        ${RQ_EXTRA_COST_KEYS.map(({key,label}) => `<button type="button" class="chip${(p.rqExtraFields||[]).includes(key) ? ' on' : ''}" onclick="rqToggleExtraField('${p.id}','${key}')">+ ${label}</button>`).join('')}
+      </div>` : ''}
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
         <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="rqOnIframeLoaded('${p.id}')"></iframe>
@@ -696,10 +726,11 @@ function rqBuildToolUrl(p){
     inspection: String(inspection),
     hideInspection: inspection > 0 ? '0' : '1',
     hideImportCost: '1', // generic Import Cost field stays out of the Quotes flow entirely
-    // Lumper fee, INBOND Release, and every Cold storage & USDA field have no control in Quotes
-    // at all — keep them out of view so the embedded panel only shows costs that actually apply
-    // to what's being asked (Docs, US/Mexican Freight, Customs Processing, Warehouse Handling).
+    // Lumper fee, INBOND Release, and every Cold storage & USDA field stay out of view by
+    // default — the "More costs" chips below let the trader reveal specific ones per plant when
+    // they actually apply, instead of always showing all of them.
     hideExtras: '1',
+    showExtras: (p.rqExtraFields || []).join(','),
     tramiteAduanal: String(tramiteAduanal),
     bodegaAmericana: String(bodegaAmericana),
     hideCustomsBrokerage: imported ? '0' : '1',

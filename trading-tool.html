@@ -607,16 +607,16 @@ if (FIREBASE_READY) {
         <div id="coldStorageSection">
           <div class="divider"></div>
           <div class="section-label">Cold storage & USDA — optional</div>
-          <div class="field"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Plastic wrap (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="plasticWrap" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>IN-LIEU (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="inLieu" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Storage — Overnight (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageOvernight" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Storage — Weekend (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageWeekend" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Storage — Short term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageShortTerm" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Storage — Mid term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageMidTerm" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Storage — Long term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageLongTerm" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Storage — Extra long (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageExtraLong" value="" placeholder="0" oninput="calc()"></div></div>
-          <div class="field"><label>Fresh to Frozen conversion (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="freshToFrozen" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="labelsCostField"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="plasticWrapField"><label>Plastic wrap (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="plasticWrap" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="inLieuField"><label>IN-LIEU (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="inLieu" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="storageOvernightField"><label>Storage — Overnight (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageOvernight" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="storageWeekendField"><label>Storage — Weekend (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageWeekend" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="storageShortTermField"><label>Storage — Short term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageShortTerm" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="storageMidTermField"><label>Storage — Mid term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageMidTerm" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="storageLongTermField"><label>Storage — Long term (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageLongTerm" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="storageExtraLongField"><label>Storage — Extra long (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageExtraLong" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="freshToFrozenField"><label>Fresh to Frozen conversion (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="freshToFrozen" value="" placeholder="0" oninput="calc()"></div></div>
         </div>
 
       </div>
@@ -1200,20 +1200,36 @@ if (__qp.get('hideCustomsBrokerage') === '1'){
   document.getElementById('tramiteAduanalField').style.display = 'none';
   document.getElementById('bodegaAmericanaField').style.display = 'none';
 }
-// Quotes never offers a way to set Lumper fee, INBOND Release, or any Cold storage & USDA field
-// — they stay hidden whenever embedded from there so the panel only shows costs that actually
-// apply to what's being quoted. Purely a visibility toggle; calc() still reads these inputs
-// untouched if a value was ever typed into them before.
+// Lumper fee, INBOND Release, and every Cold storage & USDA field stay hidden by default when
+// embedded from Quotes — but the trader can click a "+ Labels" / "+ Storage" / etc. chip there,
+// which re-adds that specific field's key to showExtras and reloads this iframe with it
+// un-hidden. Purely a visibility toggle; calc() still reads these inputs untouched.
+const RQ_EXTRA_FIELD_MAP = {
+  lumperFee: 'lumperFeeField', inbondRelease: 'inbondReleaseField',
+  labels: 'labelsCostField', plasticWrap: 'plasticWrapField', inLieu: 'inLieuField',
+  storage: ['storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField'],
+  freshToFrozen: 'freshToFrozenField',
+};
+const RQ_ALL_EXTRA_FIELD_IDS = ['lumperFeeField','inbondReleaseField','labelsCostField','plasticWrapField','inLieuField','storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField','freshToFrozenField'];
 if (__qp.get('hideExtras') === '1'){
-  document.getElementById('lumperFeeField').style.display = 'none';
-  document.getElementById('inbondReleaseField').style.display = 'none';
-  document.getElementById('coldStorageSection').style.display = 'none';
+  const rqShownExtraIds = new Set();
+  (__qp.get('showExtras') || '').split(',').map(s => s.trim()).filter(Boolean).forEach(key => {
+    const mapped = RQ_EXTRA_FIELD_MAP[key];
+    if (!mapped) return;
+    (Array.isArray(mapped) ? mapped : [mapped]).forEach(id => rqShownExtraIds.add(id));
+  });
+  RQ_ALL_EXTRA_FIELD_IDS.forEach(id => {
+    if (!rqShownExtraIds.has(id)) document.getElementById(id).style.display = 'none';
+  });
 }
 // If Customs brokerage ends up with nothing visible inside it (not Imported, so brokerage is
-// hidden too, plus Lumper/INBOND always hidden from Quotes), don't leave an empty section
-// header + divider dangling on screen.
+// hidden too, plus Lumper/INBOND not requested), don't leave an empty section header + divider
+// dangling on screen. Same cleanup for Cold storage & USDA.
 if (['tramiteAduanalField','bodegaAmericanaField','lumperFeeField','inbondReleaseField'].every(id => document.getElementById(id).style.display === 'none')){
   document.getElementById('customsBrokerageSection').style.display = 'none';
+}
+if (['labelsCostField','plasticWrapField','inLieuField','storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField','freshToFrozenField'].every(id => document.getElementById(id).style.display === 'none')){
+  document.getElementById('coldStorageSection').style.display = 'none';
 }
 if (__qp.get('hideMexicanFreight') === '1') document.getElementById('mexicanFreightField').style.display = 'none';
 // Mexican Freight is stored in USD in Master Data; Quotes converts it to MXN itself (using the
