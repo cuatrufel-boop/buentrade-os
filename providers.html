@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuenTrade Trading OS — Freight & Logistics Providers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF; --blue-light:#EAF3FC;
+    --bg:#F4F7FB; --card:#FFFFFF; --line:#E2E9F2; --ink:#0F1F33; --ink-soft:#64748B; --red:#C4432E; --green:#1E9E6B;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:14px 32px 12px;margin-bottom:24px;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:#fff;line-height:1;}
+  .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;}
+  .nav-row{display:flex;align-items:center;gap:5px;margin-top:22px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 4px;}
+  .subtitle{color:var(--ink-soft);font-size:13px;margin:0 0 16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
+  .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+  .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  #formCard{display:none;}
+  #searchBox{width:100%;max-width:420px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
+  .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
+  .name-link:hover{text-decoration:underline;}
+  .role-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;background:var(--blue-light);color:var(--blue);margin-right:4px;white-space:nowrap;}
+  .role-check{display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;cursor:pointer;font-size:13px;}
+  .role-check input{width:auto;}
+  .tab-row{display:flex;gap:6px;margin-bottom:14px;border-bottom:1.5px solid var(--line);}
+  .tab-btn{background:none;border:none;padding:9px 14px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;}
+  .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .rate-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;}
+  .rate-input:focus{outline:none;border-color:var(--blue);}
+  .save-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;transition:background .2s;}
+  .save-dot.saved{background:var(--green);}
+  .save-dot.saving{background:var(--blue-bright);}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN GATE ============ -->
+<style>
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Trading OS</div>
+    </div>
+    <form id="formSignIn" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit">Sign In</button>
+    </form>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-note">Accounts are created from the Trading Tool. Same login works here.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
+const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  accessToken: async () => {
+    const user = auth.currentUser;
+    return user ? await user.getIdToken(true) : null;
+  }
+});
+
+function showAuthMsg(text){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg err';
+}
+function doSignIn(e){
+  e.preventDefault();
+  const email = document.getElementById('siEmail').value;
+  const pass = document.getElementById('siPass').value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(!cred.user.emailVerified){ showAuthMsg('Please verify your email first.'); auth.signOut(); }
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+function logout(){ auth.signOut(); }
+auth.onAuthStateChanged(user => {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (user && user.emailVerified) {
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    document.getElementById('userBadge').textContent = user.email;
+    loadEverything();
+  } else {
+    gate.style.display = 'flex';
+    app.style.display = 'none';
+  }
+});
+</script>
+<!-- ============ END LOGIN GATE ============ -->
+
+<div id="appContent" style="display:none;">
+<header>
+  <div class="top-row">
+    <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
+    <div style="position:relative;display:flex;align-items:center;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="position:absolute;top:100%;right:0;margin-top:4px;font-size:11px;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;"></span>
+    </div>
+  </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Customers</a>
+    <a href="carriers.html" class="nav-pill">Freight (legacy)</a>
+    <a href="providers.html" class="nav-pill active">Freight &amp; Logistics</a>
+    <a href="plants.html" class="nav-pill">Meat Packers</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="trading-tool.html" class="nav-pill">Trading Tool</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <h1>Freight &amp; Logistics Providers</h1>
+  <p class="subtitle">Carriers, Freight Forwarders, and Customs Brokers — one company, one record, one or more roles. Not to be confused with Meat Packers (product origin).</p>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+      <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()">
+      <button class="btn" onclick="openForm()">+ Add Provider</button>
+    </div>
+  </div>
+
+  <div class="card" id="formCard">
+    <strong id="formTitle">New provider</strong>
+    <input type="hidden" id="providerId">
+    <div class="grid2" style="margin-top:14px;">
+      <div class="field"><label>Name *</label><input id="p_name" required></div>
+      <div class="field"><label>Country</label><input id="p_country"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>City</label><input id="p_city"></div>
+      <div class="field"><label>Phone</label><input id="p_phone" placeholder="+52 6621234567"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Contact Name</label><input id="p_contact_name"></div>
+      <div class="field"><label>Contact Email</label><input id="p_email" type="email"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="p_notes" rows="2"></textarea></div>
+    <div class="field">
+      <label>Roles — a provider can have one, two, or all three</label>
+      <div class="grid2" style="grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <label class="role-check"><input type="checkbox" value="carrier" class="role-cb"> Carrier</label>
+        <label class="role-check"><input type="checkbox" value="freight_forwarder" class="role-cb"> Freight Forwarder</label>
+        <label class="role-check"><input type="checkbox" value="customs_broker" class="role-cb"> Customs Broker</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn" onclick="saveProvider()">Save</button>
+      <button class="btn secondary" onclick="closeForm()">Cancel</button>
+    </div>
+    <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Name</th><th>Roles</th><th>City</th><th>Contact</th><th></th></tr></thead>
+      <tbody id="providerRows"></tbody>
+    </table>
+    <div id="emptyMsg" class="empty" style="display:none;">No providers found.</div>
+  </div>
+
+  <div class="card" id="ratesCard" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <strong id="ratesTitle" style="font-size:16px;"></strong>
+      <button class="btn secondary small" onclick="closeRates()">Close</button>
+    </div>
+    <div class="tab-row">
+      <button class="tab-btn active" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
+      <button class="tab-btn" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
+      <button class="tab-btn" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
+    </div>
+    <div id="rateTableWrap"></div>
+  </div>
+</div>
+</div>
+
+<script>
+let providers = [];
+let providerRolesMap = {}; // provider_id -> [role,...]
+let plantsList = [];
+let allRates = [];
+let currentProviderId = null;
+let currentRateTab = 'us_freight';
+
+const ROLE_LABELS = {carrier:'Carrier', freight_forwarder:'Freight Forwarder', customs_broker:'Customs Broker'};
+const CUSTOMS_TYPES = [
+  {value:'tramite_aduanal', label:'Trámite aduanal (customs processing)'},
+  {value:'bodega_americana', label:'Bodega americana (US warehouse)'},
+  {value:'lumper_fee', label:'Lumper fee'},
+  {value:'inbond_release', label:'INBOND release'},
+  {value:'customs', label:'Other / lump customs cost'},
+];
+
+async function loadEverything(){
+  const fetchAll = () => Promise.all([
+    db.from('providers').select('*').order('name'),
+    db.from('provider_roles').select('*'),
+    db.from('plants').select('id,name').order('name'),
+    db.from('provider_rates').select('*'),
+  ]);
+  let [provRes, rolesRes, plantsRes, ratesRes] = await fetchAll();
+  // Firebase token can still be propagating right after sign-in — RLS can silently return an
+  // empty set (no error) rather than fail outright, so retry on empty plants too, not just on
+  // an explicit error.
+  if (provRes.error || rolesRes.error || plantsRes.error || ratesRes.error || !(plantsRes.data || []).length){
+    await new Promise(r => setTimeout(r, 800));
+    [provRes, rolesRes, plantsRes, ratesRes] = await fetchAll();
+  }
+  providers = provRes.data || [];
+  plantsList = plantsRes.data || [];
+  allRates = ratesRes.data || [];
+  providerRolesMap = {};
+  (rolesRes.data || []).forEach(r => {
+    if (!providerRolesMap[r.provider_id]) providerRolesMap[r.provider_id] = [];
+    providerRolesMap[r.provider_id].push(r.role);
+  });
+  renderProviders();
+}
+
+function renderProviders(){
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  const filtered = providers.filter(p => {
+    const roles = (providerRolesMap[p.id] || []).map(r => ROLE_LABELS[r] || r).join(' ').toLowerCase();
+    return (p.name || '').toLowerCase().includes(q) ||
+      (p.city || '').toLowerCase().includes(q) ||
+      roles.includes(q);
+  });
+  const tbody = document.getElementById('providerRows');
+  tbody.innerHTML = '';
+  document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
+  filtered.forEach(p => {
+    const roles = providerRolesMap[p.id] || [];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><a class="name-link" onclick="openRates('${p.id}')">${escapeHtml(p.name || '')}</a></td>
+      <td>${roles.map(r => `<span class="role-badge">${ROLE_LABELS[r] || r}</span>`).join('') || '—'}</td>
+      <td>${escapeHtml([p.city, p.country].filter(Boolean).join(', ') || '—')}</td>
+      <td>${escapeHtml(p.contact_name || '—')}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn secondary small" onclick="editProvider('${p.id}')">Edit</button>
+        <button class="btn danger" onclick="deleteProvider('${p.id}')">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openForm(){
+  closeRates();
+  document.getElementById('formCard').style.display = 'block';
+  document.getElementById('formTitle').textContent = 'New provider';
+  document.getElementById('providerId').value = '';
+  ['p_name','p_country','p_city','p_phone','p_contact_name','p_email','p_notes'].forEach(f => document.getElementById(f).value = '');
+  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = false);
+  document.getElementById('formMsg').textContent = '';
+  document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
+}
+
+function editProvider(id){
+  const p = providers.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('formCard').style.display = 'block';
+  document.getElementById('formTitle').textContent = 'Edit provider';
+  document.getElementById('providerId').value = p.id;
+  document.getElementById('p_name').value = p.name || '';
+  document.getElementById('p_country').value = p.country || '';
+  document.getElementById('p_city').value = p.city || '';
+  document.getElementById('p_phone').value = p.phone || '';
+  document.getElementById('p_contact_name').value = p.contact_name || '';
+  document.getElementById('p_email').value = p.email || '';
+  document.getElementById('p_notes').value = p.notes || '';
+  const roles = providerRolesMap[id] || [];
+  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = roles.includes(cb.value));
+  document.getElementById('formMsg').textContent = '';
+  document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
+}
+
+function closeForm(){ document.getElementById('formCard').style.display = 'none'; }
+
+async function saveProvider(){
+  const id = document.getElementById('providerId').value;
+  const payload = {
+    name: document.getElementById('p_name').value,
+    country: document.getElementById('p_country').value || null,
+    city: document.getElementById('p_city').value || null,
+    phone: document.getElementById('p_phone').value || null,
+    contact_name: document.getElementById('p_contact_name').value || null,
+    email: document.getElementById('p_email').value || null,
+    notes: document.getElementById('p_notes').value || null,
+  };
+  if (!payload.name){
+    document.getElementById('formMsg').textContent = 'Name is required.';
+    return;
+  }
+  let providerId = id;
+  if (id){
+    const { error } = await db.from('providers').update(payload).eq('id', id);
+    if (error){ document.getElementById('formMsg').textContent = 'Error: ' + error.message; return; }
+  } else {
+    const { data, error } = await db.from('providers').insert(payload).select();
+    if (error){ document.getElementById('formMsg').textContent = 'Error: ' + error.message; return; }
+    providerId = data[0].id;
+  }
+  const selectedRoles = Array.from(document.querySelectorAll('.role-cb:checked')).map(cb => cb.value);
+  await db.from('provider_roles').delete().eq('provider_id', providerId);
+  if (selectedRoles.length){
+    await db.from('provider_roles').insert(selectedRoles.map(role => ({provider_id: providerId, role})));
+  }
+  closeForm();
+  await loadEverything();
+}
+
+async function deleteProvider(id){
+  if (!confirm('Delete this provider? This also deletes its roles and rates.')) return;
+  await db.from('provider_rates').delete().eq('provider_id', id);
+  await db.from('provider_roles').delete().eq('provider_id', id);
+  const { error } = await db.from('providers').delete().eq('id', id);
+  if (error){ alert('Error: ' + error.message); return; }
+  if (currentProviderId === id) closeRates();
+  await loadEverything();
+}
+
+// ============ RATES (spreadsheet-style, per provider) ============
+
+function openRates(providerId){
+  closeForm();
+  currentProviderId = providerId;
+  currentRateTab = 'us_freight';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === 'us_freight'));
+  const p = providers.find(x => x.id === providerId);
+  document.getElementById('ratesTitle').textContent = (p ? p.name : '') + ' — Rates';
+  document.getElementById('ratesCard').style.display = 'block';
+  renderRateTable();
+  document.getElementById('ratesCard').scrollIntoView({behavior:'smooth'});
+}
+
+function closeRates(){
+  document.getElementById('ratesCard').style.display = 'none';
+  currentProviderId = null;
+}
+
+function switchRateTab(svc){
+  currentRateTab = svc;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === svc));
+  renderRateTable();
+}
+
+function ratesForCurrentTab(){
+  if (currentRateTab === 'customs'){
+    const customsTypeValues = CUSTOMS_TYPES.map(t => t.value);
+    return allRates.filter(r => r.provider_id === currentProviderId && customsTypeValues.includes(r.service_type));
+  }
+  return allRates.filter(r => r.provider_id === currentProviderId && r.service_type === currentRateTab);
+}
+
+function renderRateTable(){
+  const wrap = document.getElementById('rateTableWrap');
+  const rows = ratesForCurrentTab();
+
+  if (currentRateTab === 'customs'){
+    wrap.innerHTML = `
+      <table>
+        <thead><tr><th>Type</th><th>Rate</th><th>Currency</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="rateRowsBody"></tbody>
+      </table>
+      <button class="btn secondary small" style="margin-top:10px;" onclick="addRateRow()">+ Add cost</button>`;
+    const tbody = document.getElementById('rateRowsBody');
+    tbody.innerHTML = '';
+    rows.forEach(r => tbody.appendChild(buildCustomsRow(r)));
+    if (!rows.length) tbody.innerHTML = '<tr><td colspan="5" class="empty">No costs yet.</td></tr>';
+    return;
+  }
+
+  const isUs = currentRateTab === 'us_freight';
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>${isUs ? 'Origin' : 'Destination'}</th><th>Rate</th><th>Currency</th>${isUs ? '<th>Plant</th>' : ''}<th>Notes</th><th></th></tr></thead>
+      <tbody id="rateRowsBody"></tbody>
+    </table>
+    <button class="btn secondary small" style="margin-top:10px;" onclick="addRateRow()">+ Add ${isUs ? 'origin' : 'destination'}</button>`;
+  const tbody = document.getElementById('rateRowsBody');
+  tbody.innerHTML = '';
+  rows.forEach(r => tbody.appendChild(buildLaneRow(r, isUs)));
+  if (!rows.length) tbody.innerHTML = `<tr><td colspan="${isUs?5:4}" class="empty">No rates yet.</td></tr>`;
+}
+
+function buildLaneRow(r, isUs){
+  const tr = document.createElement('tr');
+  tr.dataset.id = r.id;
+  const plantOptions = ['<option value="">—</option>'].concat(
+    plantsList.map(p => `<option value="${p.id}" ${r.plant_id === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`)
+  ).join('');
+  tr.innerHTML = `
+    <td><input class="rate-input" value="${escapeHtml(isUs ? r.origin : r.destination)}" onblur="saveRateField('${r.id}','${isUs ? 'origin' : 'destination'}',this.value,this)"></td>
+    <td style="width:100px;"><input class="rate-input" type="number" step="0.01" value="${r.rate}" onblur="saveRateField('${r.id}','rate',parseFloat(this.value)||0,this)"></td>
+    <td style="width:80px;"><input class="rate-input" value="${escapeHtml(r.currency || 'USD')}" onblur="saveRateField('${r.id}','currency',this.value,this)"></td>
+    ${isUs ? `<td style="width:170px;"><select class="rate-input" onchange="saveRateField('${r.id}','plant_id',this.value||null,this)">${plantOptions}</select></td>` : ''}
+    <td><input class="rate-input" value="${escapeHtml(r.notes || '')}" onblur="saveRateField('${r.id}','notes',this.value,this)"></td>
+    <td><button class="btn danger" onclick="deleteRate('${r.id}')">×</button></td>`;
+  return tr;
+}
+
+function buildCustomsRow(r){
+  const tr = document.createElement('tr');
+  tr.dataset.id = r.id;
+  const typeOptions = CUSTOMS_TYPES.map(t => `<option value="${t.value}" ${r.service_type === t.value ? 'selected' : ''}>${t.label}</option>`).join('');
+  tr.innerHTML = `
+    <td style="width:220px;"><select class="rate-input" onchange="saveRateField('${r.id}','service_type',this.value,this)">${typeOptions}</select></td>
+    <td style="width:100px;"><input class="rate-input" type="number" step="0.01" value="${r.rate}" onblur="saveRateField('${r.id}','rate',parseFloat(this.value)||0,this)"></td>
+    <td style="width:80px;"><input class="rate-input" value="${escapeHtml(r.currency || 'USD')}" onblur="saveRateField('${r.id}','currency',this.value,this)"></td>
+    <td><input class="rate-input" value="${escapeHtml(r.notes || '')}" onblur="saveRateField('${r.id}','notes',this.value,this)"></td>
+    <td><button class="btn danger" onclick="deleteRate('${r.id}')">×</button></td>`;
+  return tr;
+}
+
+async function saveRateField(rateId, field, value, inputEl){
+  const row = allRates.find(r => r.id === rateId);
+  if (!row) return;
+  if (row[field] === value) return;
+  const { error } = await db.from('provider_rates').update({[field]: value}).eq('id', rateId);
+  if (error){ alert('Error saving: ' + error.message); return; }
+  row[field] = value;
+  if (inputEl){
+    const cell = inputEl.closest('td');
+    inputEl.style.borderColor = 'var(--green)';
+    setTimeout(() => { inputEl.style.borderColor = ''; }, 700);
+  }
+}
+
+async function addRateRow(){
+  if (!currentProviderId) return;
+  const payload = {
+    provider_id: currentProviderId,
+    service_type: currentRateTab === 'customs' ? 'customs' : currentRateTab,
+    origin: '',
+    destination: '',
+    rate: 0,
+    currency: 'USD',
+  };
+  const { data, error } = await db.from('provider_rates').insert(payload).select();
+  if (error){ alert('Error: ' + error.message); return; }
+  allRates.push(data[0]);
+  renderRateTable();
+}
+
+async function deleteRate(rateId){
+  if (!confirm('Delete this rate?')) return;
+  const { error } = await db.from('provider_rates').delete().eq('id', rateId);
+  if (error){ alert('Error: ' + error.message); return; }
+  allRates = allRates.filter(r => r.id !== rateId);
+  renderRateTable();
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+</script>
+</body>
+</html>
