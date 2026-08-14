@@ -296,6 +296,8 @@ function rqPickTemplate(list, lastIndexVarSetter, lastIndex){
 }
 
 let rqAllLocations = [];
+let rqAllProviders = [];
+let rqAllProviderRates = [];
 
 async function fetchQuotesLookups(){
   return Promise.all([
@@ -304,27 +306,32 @@ async function fetchQuotesLookups(){
     db.from('products').select('*').order('name'),
     db.from('plants').select('id,name,contact_name,email,phone,whatsapp').order('name'),
     db.from('plant_locations').select('id,plant_id,location_name,freight_to_border_usd,delivered_by_plant'),
+    db.from('providers').select('*').order('name'),
+    db.from('provider_rates').select('*'),
   ]);
 }
 
 async function loadQuotesPage(){
-  let [tempRes, packRes, prodRes, plantRes, locRes] = await fetchQuotesLookups();
-  if (tempRes.error || packRes.error || prodRes.error || plantRes.error || locRes.error){
+  let [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
+  if (tempRes.error || packRes.error || prodRes.error || plantRes.error || locRes.error || provRes.error || rateRes.error){
     // Firebase token can still be propagating right after sign-in — retry once.
     await new Promise(r => setTimeout(r, 800));
-    [tempRes, packRes, prodRes, plantRes, locRes] = await fetchQuotesLookups();
+    [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
   }
   temperatures = tempRes.data || [];
   packagings = packRes.data || [];
   products = prodRes.data || [];
   rqAllPlants = plantRes.data || [];
   rqAllLocations = locRes.data || [];
+  rqAllProviders = provRes.data || [];
+  rqAllProviderRates = rateRes.data || [];
 
   const sel = document.getElementById('rq_plant_add');
   rqAllPlants.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`; });
   rqProductNames = [...new Set(products.map(p => p.name).filter(Boolean))].sort();
 
   document.getElementById('rq_newdate').min = rqTodayStr();
+  rqFetchExchangeRate(); // kicked off early, not awaited — usually ready well before Imported Load gets toggled
 }
 
 // Local YYYY-MM-DD for "today" — used as the floor for delivery dates so a trader can't
@@ -473,7 +480,7 @@ function renderRqPlants(){
     const row = document.createElement('div');
     row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
     const showPriceRow = !!(p.rqPrice || p.rqPriceRevealed);
-    const docsOn = p.rqDocsStatus === 'sin';
+    const docsOn = p.rqDocsOn === true;
     const fobOn = p.rqDeliveryMode === 'fob';
     const importedOn = p.rqImported === true;
     row.innerHTML = `
@@ -498,24 +505,34 @@ function renderRqPlants(){
         ${rqIsSeaboard(p) ? '' : `
         <div class="mini-field" style="width:auto;">
           <label>Documents</label>
-          <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'No Docs' : 'Docs Included'}</button>
+          <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'Docs' : 'No Docs'}</button>
         </div>`}
         <div class="mini-field" style="width:auto;">
           <label>Freight</label>
           <button type="button" class="rq-toggle${fobOn ? ' on' : ''}" onclick="rqToggleFreightMode('${p.id}')">${fobOn ? 'FOB' : 'Delivered'}</button>
         </div>
-        ${(fobOn && rqLocationsForPlant(p.id).length > 1) ? `
+        ${(fobOn && rqUsFreightRatesForPlant(p.id).length > 1) ? `
         <div class="mini-field" style="width:170px;">
-          <label>Pickup lane</label>
-          <select onchange="rqSetFreightLocation('${p.id}', this.value)">
+          <label>US origin</label>
+          <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
             <option value="">— choose —</option>
-            ${rqLocationsForPlant(p.id).map(l => `<option value="${l.id}" ${p.rqFreightLocationId === l.id ? 'selected' : ''}>${escapeHtml(l.location_name || 'Lane')} — $${l.freight_to_border_usd}</option>`).join('')}
+            ${rqUsFreightRatesForPlant(p.id).map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}</option>`).join('')}
           </select>
         </div>` : ''}
+        ${(fobOn && rqUsFreightRatesForPlant(p.id).length === 0) ? `
+        <div class="mini-field" style="width:auto;"><span class="loc-hint">No US Freight rate on file for this plant yet.</span></div>` : ''}
         <div class="mini-field" style="width:auto;">
           <label>Imported load</label>
           <button type="button" class="rq-toggle${importedOn ? ' on' : ''}" onclick="rqToggleImported('${p.id}')">${importedOn ? 'Imported' : 'Border'}</button>
         </div>
+        ${importedOn ? `
+        <div class="mini-field" style="width:190px;">
+          <label>Mexican destination</label>
+          <select onchange="rqSetMexicanDest('${p.id}', this.value)">
+            <option value="">— choose —</option>
+            ${rqMexicanFreightRates().map(r => `<option value="${r.id}" ${p.rqMexicanDestRateId === r.id ? 'selected' : ''}>${escapeHtml(r.destination || 'Destination')} — $${r.rate}</option>`).join('')}
+          </select>
+        </div>` : ''}
       </div>
       <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
@@ -530,39 +547,39 @@ function renderRqPlants(){
   rqRenderFinalList();
 }
 
-// Our standard ask is always "price delivered to the border" — so Delivered is the default and
-// there's nothing to hide/show until the plant actually responds otherwise. This can never be
-// predetermined from a saved location flag; it depends on how THIS quote came back.
-function rqLocationsForPlant(plantId){
-  return rqAllLocations.filter(l => l.plant_id === plantId && l.freight_to_border_usd != null);
+// Master Data (provider_rates) is the only source for freight/customs numbers — nothing here is
+// hardcoded. US Freight is looked up by plant_id (set once in Freight & Logistics against the
+// exact plant); if a plant has more than one rate on file (e.g. Tyson ships from several
+// cities), the trader picks which one applies to this ask, same as before.
+function rqUsFreightRatesForPlant(plantId){
+  return rqAllProviderRates.filter(r => r.service_type === 'us_freight' && r.plant_id === plantId);
 }
 
 function rqSetDeliveryMode(plantId, mode){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   p.rqDeliveryMode = mode;
-  if (mode === 'fob' && !p.rqFreightLocationId){
-    // Only one lane on file for this plant (e.g. a single Fremont rate) — no need to make the
-    // trader pick it themselves.
-    const locs = rqLocationsForPlant(plantId);
-    if (locs.length === 1) p.rqFreightLocationId = locs[0].id;
+  if (mode === 'fob' && !p.rqUsFreightRateId){
+    // Only one rate on file for this plant — no need to make the trader pick it themselves.
+    const rates = rqUsFreightRatesForPlant(plantId);
+    if (rates.length === 1) p.rqUsFreightRateId = rates[0].id;
   }
   renderRqPlants();
 }
 
-function rqSetFreightLocation(plantId, locId){
+function rqSetUsFreightRate(plantId, rateId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
-  p.rqFreightLocationId = locId || null;
+  p.rqUsFreightRateId = rateId || null;
   renderRqPlants();
 }
 
-// FOB + a chosen pickup lane (e.g. Wholestone's Fremont-Laredo vs Fremont-McAllen carry
-// different rates) is what determines the US Freight $ — never a static per-plant default.
+// FOB + the specific origin rate on file is what determines the US Freight $ — never a static
+// per-plant default.
 function rqFreightForPlant(p){
   if (p.rqDeliveryMode !== 'fob') return null;
-  const loc = rqAllLocations.find(l => l.id === p.rqFreightLocationId);
-  return loc ? loc.freight_to_border_usd : null;
+  const rate = rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId);
+  return rate ? rate.rate : null;
 }
 
 // Seaboard always ships with docs already handled on their side — this inspection cost never
@@ -571,10 +588,10 @@ function rqIsSeaboard(p){
   return /seaboard/i.test(p.name || '');
 }
 
-function rqSetDocsStatus(plantId, status){
+function rqSetDocsOn(plantId, isOn){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
-  p.rqDocsStatus = status;
+  p.rqDocsOn = isOn;
   renderRqPlants();
 }
 
@@ -582,7 +599,7 @@ function rqSetDocsStatus(plantId, status){
 function rqToggleDocs(plantId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
-  rqSetDocsStatus(plantId, p.rqDocsStatus === 'sin' ? 'con' : 'sin');
+  rqSetDocsOn(plantId, !(p.rqDocsOn === true));
 }
 function rqToggleFreightMode(plantId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
@@ -595,12 +612,13 @@ function rqToggleImported(plantId){
   rqSetImported(plantId, !(p.rqImported === true));
 }
 
-// $200/$350 inspection cost only applies when the plant quoted "sin docs" — Seaboard is always
-// "con docs" so it's $0 for them regardless. The $ depends on packaging (Combo vs Caja/Box),
-// which is already known from the product's catalog record, no extra question needed.
+// Selling at the border with no extra documentation is the normal case, so No Docs is the
+// default and costs nothing. Turning Docs ON means we're paying to have it done — $200 for
+// Combo-packaged product, $350 otherwise (packaging is already known from the product catalog).
+// Seaboard never has this cost either way.
 function rqInspectionForPlant(p){
   if (rqIsSeaboard(p)) return 0;
-  if (p.rqDocsStatus !== 'sin') return 0;
+  if (p.rqDocsOn !== true) return 0;
   return rqProductIsCombo ? 200 : 350;
 }
 
@@ -611,28 +629,72 @@ function rqSetImported(plantId, isImported){
   renderRqPlants();
 }
 
-// Customs/Import Clearance ($400) + US Warehouse Handling ($200) — shown as two discriminated
-// fields in the Trading Tool (not lumped into the generic Import Cost field). Lumper fee and
-// INBOND Release depend on which carrier is used (e.g. EBI doesn't charge lumper on their own
-// truck) and need a proper customs-agency data model — left out until that exists. Cold
-// Storage/USDA costs stay fully manual/optional in the TT, added later per-load when they
-// actually happen (invoicing phase), never auto-applied from a Quotes toggle.
-const RQ_TRAMITE_ADUANAL = 400;
-const RQ_BODEGA_AMERICANA = 200;
+// Customs costs (Trámite aduanal, Bodega americana) are provider-level, not plant-level — read
+// from whichever provider has that service on file. Assumes one provider per service for now;
+// once more than one exists, this is where a provider-selection UI would plug in.
+function rqCustomsRate(serviceType){
+  const r = rqAllProviderRates.find(x => x.service_type === serviceType);
+  return r ? r.rate : 0;
+}
+
+function rqMexicanFreightRates(){
+  return rqAllProviderRates
+    .filter(r => r.service_type === 'mexican_freight')
+    .slice()
+    .sort((a, b) => (a.destination || '').localeCompare(b.destination || ''));
+}
+
+function rqSetMexicanDest(plantId, rateId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  p.rqMexicanDestRateId = rateId || null;
+  renderRqPlants();
+}
+
+// Mexican Freight is stored in USD in Master Data — converted to MXN here using a live rate
+// (same public sources trading-tool.html itself uses), since the Trading Tool's Mexican Freight
+// field has always been MXN-denominated. If the rate hasn't loaded yet, this stays null and the
+// field is simply left for the trader to fill in by hand inside the real Trading Tool.
+let rqCachedFxRate = null;
+async function rqFetchExchangeRate(){
+  const sources = [
+    'https://open.er-api.com/v6/latest/USD',
+    'https://api.frankfurter.dev/v1/latest?from=USD&to=MXN',
+    'https://api.exchangerate-api.com/v4/latest/USD',
+  ];
+  for (const url of sources){
+    try{
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const rate = data && data.rates && data.rates.MXN;
+      if (rate){ rqCachedFxRate = rate; return; }
+    } catch(e){ /* try next source */ }
+  }
+}
+
+function rqMexicanFreightMxnForPlant(p){
+  const rate = rqAllProviderRates.find(r => r.id === p.rqMexicanDestRateId);
+  if (!rate || !rqCachedFxRate) return null;
+  return Math.round(rate.rate * rqCachedFxRate * 100) / 100;
+}
 
 // Opens the REAL trading-tool.html — same file, same calc(), nothing re-implemented here —
 // embedded per plant so it's fully independent (own Weight/Freight/Inspection/Import Cost/
 // Selling price). Quotes only ever READS its live totals via window.__calc, never recomputes.
-// US Freight and Inspection are pre-filled as starting suggestions — the trader can freely
-// change them inside the Trading Tool itself, same as any other Direct Costs field.
+// Every $ below is pre-filled as a starting suggestion sourced from Master Data — the trader can
+// freely change any of it inside the Trading Tool itself, same as any other Direct Costs field.
 function rqBuildToolUrl(p){
   // Delivered (our default ask) hides US Freight entirely — it's baked into the one Purchase
-  // Price number. FOB shows it, pre-filled from whichever pickup lane was picked (or $0 to fill
+  // Price number. FOB shows it, pre-filled from the specific origin rate picked (or $0 to fill
   // in by hand if none is on file yet).
   const showFreight = p.rqDeliveryMode === 'fob';
   const freight = showFreight ? (rqFreightForPlant(p) || 0) : 0;
   const inspection = rqInspectionForPlant(p);
   const imported = p.rqImported === true;
+  const tramiteAduanal = imported ? rqCustomsRate('tramite_aduanal') : 0;
+  const bodegaAmericana = imported ? rqCustomsRate('bodega_americana') : 0;
+  const freightMx = imported ? rqMexicanFreightMxnForPlant(p) : null;
   const params = new URLSearchParams({
     embed: '1',
     weight: '40000',
@@ -642,12 +704,13 @@ function rqBuildToolUrl(p){
     inspection: String(inspection),
     hideInspection: inspection > 0 ? '0' : '1',
     hideImportCost: '1', // generic Import Cost field stays out of the Quotes flow entirely
-    tramiteAduanal: String(imported ? RQ_TRAMITE_ADUANAL : 0),
-    bodegaAmericana: String(imported ? RQ_BODEGA_AMERICANA : 0),
+    tramiteAduanal: String(tramiteAduanal),
+    bodegaAmericana: String(bodegaAmericana),
     hideCustomsBrokerage: imported ? '0' : '1',
     // Imported Load OFF = Border scenario only, no Mexico costs at all. ON = the Mexico-delivery
     // scenario, so Mexican Freight belongs in view alongside the customs costs above.
     hideMexicanFreight: imported ? '0' : '1',
+    freightMx: String(freightMx || 0),
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
     v: String(Date.now()), // cache-bust so the embedded Trading Tool always loads the latest file
   });
