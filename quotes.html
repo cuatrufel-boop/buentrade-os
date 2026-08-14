@@ -193,16 +193,16 @@ auth.onAuthStateChanged(user => {
   <h1 id="rq_page_title">Request Quote</h1>
 
   <div class="card">
-    <div style="display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px;">
-      <div class="field" style="position:relative;margin-bottom:0;">
-        <label>Product</label>
-        <input id="rq_product_name" placeholder="Type a product name…" autocomplete="off" oninput="onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)" style="width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;">
+    <div style="display:flex;align-items:flex-end;justify-content:center;flex-wrap:wrap;gap:14px;">
+      <div class="field" style="position:relative;margin-bottom:0;text-align:center;">
+        <label style="text-align:center;">Product</label>
+        <input id="rq_product_name" placeholder="Type a product name…" autocomplete="off" oninput="onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)" style="width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;text-align:center;">
         <div id="rq_product_suggestions" class="rq-suggest"></div>
       </div>
 
-      <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
-        <label>Delivery day(s) — one ask, all dates, every plant</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+      <div id="rq_dates_wrap" class="field" style="margin-bottom:0;text-align:center;">
+        <label style="text-align:center;">Delivery day</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;">
           <div id="rq_date_chips" style="display:contents;"></div>
           <button type="button" class="date-btn" style="width:160px;height:32px;padding:0 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
             <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
@@ -211,10 +211,10 @@ auth.onAuthStateChanged(user => {
         </div>
       </div>
 
-      <div id="rq_plants_header" style="display:none;margin:0;min-height:50px;">
-        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;">Plants to ask</label>
-        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
-          <option value="">+ Add a plant</option>
+      <div id="rq_plants_header" style="margin:0;min-height:50px;text-align:center;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;">Plants to ask</label>
+        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;text-align:center;text-align-last:center;">
+          <option value="">+ Add New Plant</option>
         </select>
       </div>
 
@@ -837,13 +837,13 @@ function rqInvalidateCalc(p){
   p.rqLastCalc = null;
 }
 
-// "Add a plant" only makes sense while still asking.
+// "Add New Plant" only makes sense while still asking.
 function rqUpdateActionButtons(){
-  const hasProduct = !!document.getElementById('rq_product_name').value.trim();
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
-  document.getElementById('rq_dates_wrap').style.display = hasProduct ? 'block' : 'none';
-  document.getElementById('rq_plants_header').style.display = hasProduct ? 'block' : 'none';
-  document.getElementById('rq_plant_add').style.display = (hasProduct && !anyPriced) ? 'inline-block' : 'none';
+  // Product, Delivery day, and Plants to ask are all visible from the moment the page loads —
+  // no need to type a product first just to see them. "Add New Plant" still hides once pricing
+  // has actually started, since adding more plants mid-quote doesn't make sense.
+  document.getElementById('rq_plant_add').style.display = anyPriced ? 'none' : 'inline-block';
   document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Request Quote';
   rqRenderDateChips();
 }
