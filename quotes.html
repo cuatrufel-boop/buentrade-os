@@ -200,13 +200,6 @@ auth.onAuthStateChanged(user => {
         <div id="rq_product_suggestions" class="rq-suggest"></div>
       </div>
 
-      <div id="rq_plants_header" style="display:none;margin:0;min-height:50px;">
-        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;">Plants to ask</label>
-        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
-          <option value="">+ Add a plant</option>
-        </select>
-      </div>
-
       <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
         <label>Delivery day(s) — one ask, all dates, every plant</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
@@ -216,6 +209,13 @@ auth.onAuthStateChanged(user => {
           </button>
           <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
         </div>
+      </div>
+
+      <div id="rq_plants_header" style="display:none;margin:0;min-height:50px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;">Plants to ask</label>
+        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="display:none;width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;">
+          <option value="">+ Add a plant</option>
+        </select>
       </div>
 
       <div id="rq_top_actions_wrap" style="display:none;gap:8px;margin-left:auto;">
@@ -491,7 +491,7 @@ function renderRqPlants(){
     row.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" ondblclick="rqToggleCalculator('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
+          <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
         </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
@@ -567,6 +567,7 @@ function rqSetUsFreightRate(plantId, rateId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   p.rqUsFreightRateId = rateId || null;
+  rqInvalidateCalc(p);
   renderRqPlants();
 }
 
@@ -588,6 +589,7 @@ function rqSetDocsOn(plantId, isOn){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   p.rqDocsOn = isOn;
+  rqInvalidateCalc(p);
   renderRqPlants();
 }
 
@@ -617,6 +619,7 @@ function rqSetImported(plantId, isImported){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   p.rqImported = isImported;
+  rqInvalidateCalc(p);
   renderRqPlants();
 }
 
@@ -639,6 +642,7 @@ function rqSetMexicanDest(plantId, rateId){
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   p.rqMexicanDestRateId = rateId || null;
+  rqInvalidateCalc(p);
   renderRqPlants();
 }
 
@@ -663,6 +667,7 @@ function rqSetMexicanCustomer(plantId, customerId){
   } else {
     p.rqMexicanDestRateId = null;
   }
+  rqInvalidateCalc(p);
   renderRqPlants();
 }
 
@@ -735,6 +740,21 @@ function rqBuildToolUrl(p){
   return 'trading-tool.html?' + params.toString();
 }
 
+// Manual double-click detection (two clicks within 500ms) instead of relying on the browser's
+// native dblclick event — trackpads register the tiny drift between the two clicks of a real
+// double-click as a selection/drag and can silently swallow dblclick, which is exactly what made
+// this unreliable when it was wired to ondblclick directly.
+let rqNameClickAt = {};
+function rqOnPlantNameClick(id){
+  const now = Date.now();
+  const last = rqNameClickAt[id] || 0;
+  rqNameClickAt[id] = now;
+  if (now - last < 500){
+    rqNameClickAt[id] = 0;
+    rqToggleCalculator(id);
+  }
+}
+
 // Opens/closes a plant's Trading Tool. Triggered by entering a Purchase $/lb (auto-open) or by
 // double-clicking the plant name — no dedicated button needed for either.
 function rqToggleCalculator(id){
@@ -805,19 +825,31 @@ function rqResizeIframes(){
 }
 
 // Reads live totals straight from that plant's embedded Trading Tool — pure read, no math
-// duplicated here beyond dividing by weight to get a per-lb figure.
+// duplicated here beyond dividing by weight to get a per-lb figure. Closing the panel blanks
+// the iframe (it's not running anymore), so the last real result is cached on the plant and
+// reused — collapsing the Trading Tool shouldn't drop a plant off the offer list or hide the
+// Send Offers buttons; only actually changing an input does (see rqInvalidateCalc below).
 function rqCalcRow(p){
   const iframe = document.getElementById('rq_iframe_' + p.id);
   const win = iframe && iframe.contentWindow;
   const calc = win && win.__calc;
-  if (!calc || !calc.totalWeight) return null;
-  return {
-    costPerLb: calc.totalCostUSD / calc.totalWeight,
-    salePerLb: calc.totalSaleBorder / calc.totalWeight,
-    totalCost: calc.totalCostUSD,
-    totalSale: calc.totalSaleBorder,
-    weight: calc.totalWeight,
-  };
+  if (calc && calc.totalWeight){
+    p.rqLastCalc = {
+      costPerLb: calc.totalCostUSD / calc.totalWeight,
+      salePerLb: calc.totalSaleBorder / calc.totalWeight,
+      totalCost: calc.totalCostUSD,
+      totalSale: calc.totalSaleBorder,
+      weight: calc.totalWeight,
+    };
+  }
+  return p.rqLastCalc || null;
+}
+
+// Any change to an input that feeds the calculator invalidates the cached result above — the
+// trader has to reopen the Trading Tool and re-confirm the Selling Price before this plant
+// counts as priced again.
+function rqInvalidateCalc(p){
+  p.rqLastCalc = null;
 }
 
 // "Add a plant" only makes sense while still asking.
@@ -835,6 +867,7 @@ function rqUpdatePlantField(id, field, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   p[field] = parseFloat(val) || 0;
+  rqInvalidateCalc(p);
   // Deliberately not a full renderRqPlants() here — that would rebuild the input the user is
   // actively typing into and steal focus after every keystroke. Just update the bits that need
   // to react live.
