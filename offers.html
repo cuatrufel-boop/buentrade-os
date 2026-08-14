@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BuenTrade Trading OS — Offers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547;
+    --navy-2:#0E3D8F;
+    --blue:#1E6ADB;
+    --blue-bright:#5AAAFF;
+    --blue-light:#EAF3FC;
+    --bg:#F4F7FB;
+    --card:#FFFFFF;
+    --line:#E2E9F2;
+    --ink:#0F1F33;
+    --ink-soft:#64748B;
+    --red:#C4432E;
+    --green:#0F8A5F;
+    --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:14px 32px 12px;margin-bottom:24px;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:#fff;line-height:1;}
+  .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;}
+  .nav-row{display:flex;align-items:center;gap:5px;margin-top:22px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
+  .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
+  .btn.win{background:#fff;color:var(--green);border:1.5px solid var(--green);padding:5px 10px;font-size:12px;font-weight:700;}
+  .btn.win:hover{background:var(--green);color:#fff;}
+  .btn.lose{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);padding:5px 10px;font-size:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);white-space:nowrap;}
+  td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .field{margin-bottom:0;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;}
+  .field input,.field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--blue);}
+  .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  .status-pill{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+  .status-sent{background:var(--blue-light);color:var(--blue);}
+  .status-won{background:#E3F6EC;color:var(--green);}
+  .status-lost{background:var(--bg);color:var(--ink-soft);}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN GATE (same Firebase project/login as the Trading Tool) ============ -->
+<style>
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-field input:focus{outline:none;border-color:#1B6FC9;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-msg.ok{background:#E3F6F4;color:#00776F;display:block;}
+  .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Trading OS</div>
+    </div>
+    <form id="formSignIn" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit">Sign In</button>
+    </form>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-note">Accounts are created from the Trading Tool. Same login works here.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
+const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  accessToken: async () => {
+    const user = auth.currentUser;
+    return user ? await user.getIdToken(false) : null;
+  }
+});
+
+function showAuthMsg(text){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg err';
+}
+
+function doSignIn(e){
+  e.preventDefault();
+  const email = document.getElementById('siEmail').value;
+  const pass = document.getElementById('siPass').value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(!cred.user.emailVerified){
+        showAuthMsg('Please verify your email first.');
+        auth.signOut();
+      }
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+
+function logout(){ auth.signOut(); }
+
+auth.onAuthStateChanged(user => {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (user && user.emailVerified) {
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    document.getElementById('userBadge').textContent = user.email;
+    loadOffers();
+  } else {
+    gate.style.display = 'flex';
+    app.style.display = 'none';
+  }
+});
+</script>
+<!-- ============ END LOGIN GATE ============ -->
+
+<div id="appContent" style="display:none;">
+<header>
+  <div class="top-row">
+    <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
+    <div style="position:relative;display:flex;align-items:center;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="position:absolute;top:100%;right:0;margin-top:4px;font-size:11px;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;"></span>
+    </div>
+  </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Customers</a>
+    <a href="providers.html" class="nav-pill">Freight &amp; Logistics</a>
+    <a href="plants.html" class="nav-pill">Meat Packers</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="offers.html" class="nav-pill active">Offers</a>
+    <a href="trading-tool.html" class="nav-pill">Trading Tool</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <h1>Sent Offers</h1>
+
+  <div class="card">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
+      <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="e.g. Trompa, Tyson…"></div>
+      <div class="field"><label>Status</label>
+        <select id="f_status" onchange="renderOffers()">
+          <option value="">All</option>
+          <option value="sent" selected>Sent (pending)</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+        </select>
+      </div>
+      <div class="field"><label>From</label><input type="date" id="f_from" onchange="loadOffers()"></div>
+      <div class="field"><label>To</label><input type="date" id="f_to" onchange="loadOffers()"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Sent</th>
+          <th>Product</th>
+          <th>Plant</th>
+          <th>Customer</th>
+          <th>Sale $/lb</th>
+          <th>Total</th>
+          <th>Channel</th>
+          <th>Status</th>
+          <th>Order #</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="offerRows"></tbody>
+    </table>
+    <div id="emptyState" class="empty" style="display:none;">No offers in this range yet.</div>
+  </div>
+</div>
+</div>
+
+<script>
+let offers = [];
+
+// Default view: last 30 days, so the list stays light — older sent-but-never-confirmed
+// offers aren't deleted, just not shown unless you widen the date range or search.
+function rqDefaultDates(){
+  const to = new Date();
+  const from = new Date(Date.now() - 30 * 86400000);
+  const fmt = d => d.toISOString().slice(0, 10);
+  document.getElementById('f_from').value = fmt(from);
+  document.getElementById('f_to').value = fmt(to);
+}
+
+async function loadOffers(){
+  const from = document.getElementById('f_from').value;
+  const to = document.getElementById('f_to').value;
+  let q = db.from('sent_offers').select('*').order('sent_at', { ascending: false });
+  if (from) q = q.gte('sent_at', from + 'T00:00:00');
+  if (to) q = q.lte('sent_at', to + 'T23:59:59');
+  const { data, error } = await q;
+  if (error){
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('emptyState').textContent = 'Error loading offers: ' + error.message;
+    return;
+  }
+  offers = data || [];
+  renderOffers();
+}
+
+function renderOffers(){
+  const term = (document.getElementById('f_search').value || '').trim().toLowerCase();
+  const status = document.getElementById('f_status').value;
+  const filtered = offers.filter(o => {
+    if (status && o.status !== status) return false;
+    if (!term) return true;
+    return [o.product_name, o.plant_name, o.customer_name].some(v => (v || '').toLowerCase().includes(term));
+  });
+  const tbody = document.getElementById('offerRows');
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+  document.getElementById('emptyState').textContent = 'No offers match.';
+  tbody.innerHTML = filtered.map(o => {
+    const sentDate = new Date(o.sent_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const statusPill = `<span class="status-pill status-${o.status}">${o.status}</span>`;
+    let action = '';
+    if (o.status === 'sent'){
+      action = `<button class="btn win" onclick="markOffer('${o.id}','won')">✓ Ganada</button> <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Perdida</button>`;
+    }
+    return `<tr>
+      <td>${sentDate}</td>
+      <td>${escapeHtml(o.product_name)}</td>
+      <td>${escapeHtml(o.plant_name)}</td>
+      <td>${escapeHtml(o.customer_name)}</td>
+      <td>$${(o.sale_per_lb || 0).toFixed(4)}</td>
+      <td>$${(o.total_sale || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+      <td>${o.channel}</td>
+      <td>${statusPill}</td>
+      <td>${o.order_number ? `<span class="order-num">${escapeHtml(o.order_number)}</span>` : '—'}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Losing an offer just needs the status flip — no orders, nothing else to generate.
+async function markOffer(id, status){
+  if (status === 'lost'){
+    const { error } = await db.from('sent_offers').update({ status: 'lost' }).eq('id', id);
+    if (error){ alert('Error: ' + error.message); return; }
+    loadOffers();
+    return;
+  }
+  await markWon(id);
+}
+
+// Winning is the real event: stamp a consecutive order number on the offer, then spawn the
+// PO (plant), SO (customer), and — only if freight was actually part of this deal — one
+// freight_orders row per leg (US and/or Mexican), each resolved from the same provider_rates
+// row the offer itself was built from.
+async function markWon(id){
+  const o = offers.find(x => x.id === id);
+  if (!o) return;
+  if (!confirm(`Marcar como Ganada: ${o.product_name} — ${o.plant_name} — ${o.customer_name}?`)) return;
+
+  const { data: numRes, error: numErr } = await db.rpc('next_order_number');
+  if (numErr){ alert('Error generating order number: ' + numErr.message); return; }
+  const orderNumber = numRes;
+  const who = (auth.currentUser && auth.currentUser.email) || null;
+
+  const { error: updErr } = await db.from('sent_offers').update({
+    status: 'won', order_number: orderNumber, won_at: new Date().toISOString(), won_by: who,
+  }).eq('id', id);
+  if (updErr){ alert('Error marking won: ' + updErr.message); return; }
+
+  const { error: poErr } = await db.from('purchase_orders').insert({
+    order_number: orderNumber, sent_offer_id: o.id, plant_id: o.plant_id, plant_name: o.plant_name,
+    product_name: o.product_name, product_spec: o.product_spec, purchase_price: o.purchase_price,
+    weight: o.weight, total_cost: o.total_cost, docs_on: o.docs_on, delivery_dates: o.delivery_dates,
+  });
+  if (poErr) console.error('PO insert failed:', poErr.message);
+
+  const { error: soErr } = await db.from('sales_orders').insert({
+    order_number: orderNumber, sent_offer_id: o.id, customer_id: o.customer_id, customer_name: o.customer_name,
+    product_name: o.product_name, product_spec: o.product_spec, sale_price: o.sale_per_lb,
+    weight: o.weight, total_sale: o.total_sale, delivery_dates: o.delivery_dates,
+  });
+  if (soErr) console.error('SO insert failed:', soErr.message);
+
+  if (o.us_freight_rate_id && o.us_freight_amount > 0){
+    const { data: rate } = await db.from('provider_rates').select('provider_id,origin').eq('id', o.us_freight_rate_id).single();
+    const { error: foErr } = await db.from('freight_orders').insert({
+      order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
+      origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: o.us_freight_amount, currency: 'USD',
+    });
+    if (foErr) console.error('FO (US freight) insert failed:', foErr.message);
+  }
+
+  if (o.mexican_dest_rate_id && o.mexican_freight_mxn){
+    const { data: rate } = await db.from('provider_rates').select('provider_id,destination,rate').eq('id', o.mexican_dest_rate_id).single();
+    const { error: foErr } = await db.from('freight_orders').insert({
+      order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
+      origin: 'Border', destination: rate ? rate.destination : null, quoted_rate: rate ? rate.rate : null, currency: 'USD',
+    });
+    if (foErr) console.error('FO (Mexican freight) insert failed:', foErr.message);
+  }
+
+  alert(`Orden ${orderNumber} creada.`);
+  loadOffers();
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+rqDefaultDates();
+</script>
+</body>
+</html>
