@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>BuenTrade Trading OS — Quotes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -61,6 +64,8 @@
   .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-plant-name{cursor:pointer;user-select:none;}
   .rq-plant-name.tt-open{color:var(--blue);}
+  .rq-price-btn{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid var(--blue);cursor:pointer;background:var(--blue);color:#fff;white-space:nowrap;transition:opacity .15s;}
+  .rq-price-btn:hover{opacity:.85;}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
   .offer-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
   .offer-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--line);flex-shrink:0;}
@@ -201,7 +206,7 @@ auth.onAuthStateChanged(user => {
       </div>
 
       <div id="rq_dates_wrap" class="field" style="margin-bottom:0;text-align:center;">
-        <label style="text-align:center;">Delivery day</label>
+        <label style="text-align:center;">Delivery day <span style="color:#c0392b;">*</span></label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;">
           <div id="rq_date_chips" style="display:contents;"></div>
           <button type="button" class="date-btn" style="width:160px;height:32px;padding:0 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
@@ -209,13 +214,6 @@ auth.onAuthStateChanged(user => {
           </button>
           <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
         </div>
-      </div>
-
-      <div id="rq_plants_header" style="margin:0;min-height:50px;text-align:center;">
-        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;">Plants to ask</label>
-        <select id="rq_plant_add" onchange="onRqPlantAddSelect()" style="width:160px;height:32px;padding:0 8px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;text-align:center;text-align-last:center;">
-          <option value="">+ Add New Plant</option>
-        </select>
       </div>
 
       <div id="rq_ask_all_wrap" style="display:none;gap:8px;">
@@ -230,17 +228,6 @@ auth.onAuthStateChanged(user => {
     </div>
     <div id="rq_spec_line" style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 14px;"></div>
 
-    <div id="rq_new_plant_confirm" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:14px 0 10px;">
-      <div style="font-size:12.5px;margin-bottom:8px;">Saving <strong id="rq_new_plant_name"></strong> as a new supplier for this product — confirm spec:</div>
-      <div class="grid2" style="margin-bottom:8px;">
-        <div class="field" style="margin-bottom:0;"><label>Temperature</label><select id="rq_new_temp"></select></div>
-        <div class="field" style="margin-bottom:0;"><label>Packaging</label><select id="rq_new_pack"></select></div>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="confirmAddRqPlant()">Save & Add</button>
-        <button class="btn danger" onclick="cancelAddRqPlant()">Cancel</button>
-      </div>
-    </div>
     <div id="rq_plant_rows" style="margin-top:14px;"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
@@ -332,8 +319,6 @@ async function loadQuotesPage(){
   rqAllProviders = provRes.data || [];
   rqAllProviderRates = rateRes.data || [];
 
-  const sel = document.getElementById('rq_plant_add');
-  rqAllPlants.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`; });
   rqProductNames = [...new Set(products.map(p => p.name).filter(Boolean))].sort();
 
   document.getElementById('rq_newdate').min = rqTodayStr();
@@ -415,66 +400,6 @@ async function autoPopulateRqPlants(productName){
   renderRqPlants();
 }
 
-function onRqPlantAddSelect(){
-  const plantId = document.getElementById('rq_plant_add').value;
-  if (!plantId) return;
-  if (rqSelectedPlants.find(p => p.id === plantId)){
-    document.getElementById('rq_plant_add').value = '';
-    return;
-  }
-  const plant = rqAllPlants.find(p => p.id === plantId);
-  if (!plant) return;
-
-  const productName = document.getElementById('rq_product_name').value.trim();
-  const existing = products.find(p => (p.name || '').toLowerCase() === productName.toLowerCase());
-
-  document.getElementById('rq_new_plant_name').textContent = plant.name;
-  const tSel = document.getElementById('rq_new_temp');
-  const pSel = document.getElementById('rq_new_pack');
-  tSel.innerHTML = temperatures.map(t => `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('');
-  pSel.innerHTML = packagings.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('');
-  if (existing){
-    tSel.value = existing.temperature_id || '';
-    pSel.value = existing.packaging_id || '';
-  }
-  document.getElementById('rq_new_plant_confirm').style.display = 'block';
-  document.getElementById('rq_new_plant_confirm').dataset.plantId = plantId;
-}
-
-function cancelAddRqPlant(){
-  document.getElementById('rq_new_plant_confirm').style.display = 'none';
-  document.getElementById('rq_plant_add').value = '';
-}
-
-async function confirmAddRqPlant(){
-  const plantId = document.getElementById('rq_new_plant_confirm').dataset.plantId;
-  const plant = rqAllPlants.find(p => p.id === plantId);
-  if (!plant) return;
-
-  const productName = document.getElementById('rq_product_name').value.trim();
-  const existing = products.find(p => (p.name || '').toLowerCase() === productName.toLowerCase());
-  const temperature_id = document.getElementById('rq_new_temp').value || null;
-  const packaging_id = document.getElementById('rq_new_pack').value || null;
-
-  const payload = {
-    category: existing ? existing.category : null,
-    name: productName,
-    name_en: existing ? existing.name_en : productName,
-    temperature_id,
-    packaging_id,
-    brand: plant.name,
-  };
-  const { data: newProd, error } = await db.from('products').insert(payload).select();
-  if (error){ alert('Error saving product: ' + error.message); return; }
-  const { error: linkError } = await db.from('plant_products').insert({plant_id: plantId, product_id: newProd[0].id});
-  if (linkError){ alert('Error linking plant: ' + linkError.message); return; }
-
-  products.push(newProd[0]);
-  rqSelectedPlants.push(plant);
-  document.getElementById('rq_plant_add').value = '';
-  document.getElementById('rq_new_plant_confirm').style.display = 'none';
-  renderRqPlants();
-}
 
 function removeRqPlant(plantId){
   rqSelectedPlants = rqSelectedPlants.filter(p => p.id !== plantId);
@@ -521,7 +446,7 @@ function renderRqPlants(){
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
-          ${!showPriceRow ? `<span class="autocalc-link" onclick="rqRevealPrice('${p.id}')">Got a price? Enter it →</span>` : ''}
+          ${!showPriceRow ? `<button type="button" class="rq-price-btn" onclick="rqRevealPrice('${p.id}')">Got a price</button>` : ''}
         </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
@@ -895,13 +820,8 @@ function rqInvalidateCalc(p){
   p.rqLastCalc = null;
 }
 
-// "Add New Plant" only makes sense while still asking.
 function rqUpdateActionButtons(){
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
-  // Product, Delivery day, and Plants to ask are all visible from the moment the page loads —
-  // no need to type a product first just to see them. "Add New Plant" still hides once pricing
-  // has actually started, since adding more plants mid-quote doesn't make sense.
-  document.getElementById('rq_plant_add').style.display = anyPriced ? 'none' : 'inline-block';
   // "Email All / WhatsApp All" only makes sense while there's still at least one plant waiting
   // to be asked — once pricing starts, the top-of-page "Send Offers" pair takes over instead.
   const anyUnpriced = rqSelectedPlants.some(p => !p.rqPrice);
@@ -1046,7 +966,17 @@ async function rqFindCustomers(){
   if (rqSelectedPlants.length) renderRqPlants();
 }
 
+// Nothing goes out — asking a plant or sending an offer to a customer — without at least one
+// Delivery day set first. Every send/ask trigger below calls this before doing anything.
+function rqRequireDeliveryDay(){
+  if (rqDeliveryDates.length) return true;
+  alert('Set at least one Delivery day before sending or asking.');
+  document.getElementById('rq_dates_wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return false;
+}
+
 function sendOfferEmailTo(customerId){
+  if (!rqRequireDeliveryDay()) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
   const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
@@ -1055,6 +985,7 @@ function sendOfferEmailTo(customerId){
 }
 
 function sendOfferWhatsAppTo(customerId){
+  if (!rqRequireDeliveryDay()) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c) return;
   const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
@@ -1063,32 +994,35 @@ function sendOfferWhatsAppTo(customerId){
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
 }
 
-// Opens one pre-filled draft per customer at once — still nothing gets sent until you press
-// send in each opened window/app, same as the per-customer buttons.
-// Browsers block multiple window.open() calls fired back-to-back as "popup spam", even from a
-// real click — spacing them out avoids that in most browsers. If the browser still only opens
-// the first one, click the small popup-blocked icon in the address bar and choose "Always allow
-// pop-ups from this site" — a one-time setting, after which every one opens every time.
-function rqOpenAllWithDelay(urls){
-  urls.forEach((url, i) => setTimeout(() => window.open(url, '_blank'), i * 350));
+// Opens one pre-filled draft per customer/plant at once — still nothing gets sent until you
+// press send in each opened window/app. Every window.open() fires synchronously, in the same
+// tick as the click — a setTimeout delay (even 0ms) between calls, which this used to do, breaks
+// the browser's "this came directly from a user gesture" check and gets every call after the
+// first one silently blocked. Firing them all back-to-back in one go is what actually lets
+// multiple tabs open. If the browser still only opens one, click the popup-blocked icon in the
+// address bar and choose "Always allow pop-ups from this site" — a one-time setting.
+function rqOpenAllSync(urls){
+  urls.forEach(url => window.open(url, '_blank'));
 }
 
 function rqOpenAllEmails(){
+  if (!rqRequireDeliveryDay()) return;
   const urls = rqMatchedCustomers.filter(c => c.email).map(c => {
     const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
     const subject = `Cotización — ${rqProductSpec || ''}`;
     return `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
-  rqOpenAllWithDelay(urls);
+  rqOpenAllSync(urls);
 }
 
 function rqOpenAllWhatsApp(){
+  if (!rqRequireDeliveryDay()) return;
   const urls = rqMatchedCustomers.filter(c => c.whatsapp || c.phone).map(c => {
     const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
     const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
     return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(body) : null;
   }).filter(Boolean);
-  rqOpenAllWithDelay(urls);
+  rqOpenAllSync(urls);
 }
 
 function rqFmtDate(val){
@@ -1142,25 +1076,25 @@ function rqLoadsPhrase(){
 // (rqPickTemplate cycles through RQ_EMAIL_TEMPLATES/RQ_WHATSAPP_TEMPLATES) so consecutive
 // messages don't read as an obvious copy-paste blast.
 function rqAskAllEmails(){
-  if (!rqProductSpec) return;
+  if (!rqProductSpec || !rqRequireDeliveryDay()) return;
   const urls = rqSelectedPlants.filter(p => !p.rqPrice && p.email).map(p => {
     const template = rqPickTemplate(RQ_EMAIL_TEMPLATES, i => rqLastEmailTemplate = i, rqLastEmailTemplate);
     const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name));
     const subject = `${rqProductSpec} — quote request`;
     return `mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
-  rqOpenAllWithDelay(urls);
+  rqOpenAllSync(urls);
 }
 
 function rqAskAllWhatsApp(){
-  if (!rqProductSpec) return;
+  if (!rqProductSpec || !rqRequireDeliveryDay()) return;
   const urls = rqSelectedPlants.filter(p => !p.rqPrice && (p.whatsapp || p.phone)).map(p => {
     const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
     const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
     const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name));
     return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg) : null;
   }).filter(Boolean);
-  rqOpenAllWithDelay(urls);
+  rqOpenAllSync(urls);
 }
 
 function escapeHtml(str){
