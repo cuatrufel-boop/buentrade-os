@@ -497,6 +497,7 @@ function escapeHtml(str){
 // "Costos reales" without needing to touch this generator.
 const COMPANY = {
   name1: 'Buen', name2: 'Trade',
+  legalName: 'BuenTrade LLC',
   address: '1525 N Park Dr, Suite 104, Weston, FL 33326',
   email: 'buentrade2026@gmail.com',
   phone: '+34 666 318 864',
@@ -504,9 +505,14 @@ const COMPANY = {
 
 // Draft, original language written for BuenTrade — not copied from any other company's forms.
 // Flagged to the user as a draft for legal review, not a finished/reviewed contract.
+// Language is fixed per audience, not per translation preference: PO goes to US plants (English
+// only), SO goes to Latin American customers (Spanish only), FO goes to US/MX carriers (English,
+// matching how US trucking rate confirmations are always written).
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
-const SO_TERMS = "This Sales Confirmation is issued by BuenTrade LLC. By accepting this confirmation, Buyer agrees to the quantity, price, and delivery terms stated above. Product is sold as described, subject to normal industry tolerances in weight and count. Payment is due per the terms stated above from the date of delivery unless otherwise agreed in writing. Any discrepancy in product, weight, or condition must be reported to BuenTrade LLC in writing within 24 hours of delivery.";
+const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
 const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
+const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
+const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 
 function fmtDateStr(d){
   if (!d) return '';
@@ -524,33 +530,61 @@ function pdfDoc(){
   return new jsPDF({ unit: 'pt', format: 'letter' });
 }
 
+// Navy letterhead band with the same circular emblem used on the site's own login screen
+// (circle + wave + teal accent) so the PDF reads as the same brand, not a generic template.
 function pdfHeader(doc, docTitle, orderNumber){
+  doc.setFillColor(10, 37, 71);
+  doc.rect(0, 0, 612, 88, 'F');
+
+  doc.setFillColor(18, 58, 107);
+  doc.circle(58, 42, 17, 'F');
+  doc.setDrawColor(62, 123, 196);
+  doc.setLineWidth(1.3);
+  doc.circle(58, 42, 17, 'S');
+  doc.setDrawColor(95, 168, 232);
+  doc.setLineWidth(1.6);
+  doc.lines([[5, -5], [5, 7], [5, -6]], 47, 46, [1, 1], 'S', false);
+  doc.setFillColor(0, 169, 160);
+  doc.rect(52, 33, 12, 8, 'F');
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.setTextColor(10, 37, 71);
-  doc.text(COMPANY.name1, 40, 50);
+  doc.setFontSize(19);
+  doc.setTextColor(255, 255, 255);
+  doc.text(COMPANY.name1, 86, 46);
   const w = doc.getTextWidth(COMPANY.name1);
-  doc.setTextColor(30, 106, 219);
-  doc.text(COMPANY.name2, 40 + w, 50);
+  doc.setTextColor(94, 175, 255);
+  doc.text(COMPANY.name2, 86 + w, 46);
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
-  doc.text(COMPANY.address, 40, 66);
-  doc.text(`${COMPANY.email}  ·  ${COMPANY.phone}`, 40, 78);
+  doc.setFontSize(8.5);
+  doc.setTextColor(178, 197, 222);
+  doc.text(COMPANY.address, 86, 60);
+  doc.text(`${COMPANY.email}  ·  ${COMPANY.phone}`, 86, 71);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(19);
+  doc.setTextColor(10, 37, 71);
+  doc.text(docTitle, 40, 120);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  const chipText = String(orderNumber);
+  const chipW = doc.getTextWidth(chipText) + 26;
+  doc.setFillColor(30, 106, 219);
+  doc.roundedRect(572 - chipW, 105, chipW, 21, 5, 5, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.text(chipText, 572 - chipW / 2, 119.5, { align: 'center' });
+
   doc.setDrawColor(226, 233, 242);
   doc.setLineWidth(1);
-  doc.line(40, 92, 572, 92);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.setTextColor(150, 160, 175);
-  doc.text(`${docTitle}  ${orderNumber}`, 40, 128);
+  doc.line(40, 134, 572, 134);
   doc.setTextColor(15, 31, 51);
 }
 
 function pdfInfoBlock(doc, x, y, label, lines){
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
+  doc.setTextColor(30, 106, 219);
   doc.text(label, x, y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10.5);
@@ -564,7 +598,7 @@ function pdfKeyValueRows(doc, x, y, rows){
     if (!v) return;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
-    doc.setTextColor(100, 116, 139);
+    doc.setTextColor(30, 106, 219);
     doc.text(k, x, cursorY);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(15, 31, 51);
@@ -574,10 +608,10 @@ function pdfKeyValueRows(doc, x, y, rows){
   return cursorY;
 }
 
-function pdfTerms(doc, y, title, text){
+function pdfTerms(doc, y, title, text, disclaimer){
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
+  doc.setTextColor(30, 106, 219);
   doc.text(title, 40, y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -587,7 +621,7 @@ function pdfTerms(doc, y, title, text){
   doc.setFontSize(7.5);
   doc.setTextColor(190, 60, 60);
   const disclaimerY = y + 14 + split.length * 10 + 12;
-  doc.text('Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
+  doc.text(disclaimer || DRAFT_DISCLAIMER_EN, 40, disclaimerY);
   return disclaimerY + 10;
 }
 
@@ -611,12 +645,18 @@ function pdfSignatureBlock(doc, y, leftLabel, rightLabel){
   doc.text('Date: ______________', rx, y + 26);
 }
 
-function pdfFooter(doc){
+function pdfFooter(doc, lang){
+  doc.setDrawColor(226, 233, 242);
+  doc.setLineWidth(0.75);
+  doc.line(40, 758, 572, 758);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(160, 170, 185);
-  doc.text(`Generated ${new Date().toLocaleString('en-US')}`, 40, 770);
-  doc.text('Page 1 of 1', 572, 770, { align: 'right' });
+  const stamp = lang === 'es'
+    ? `Generado ${new Date().toLocaleString('es-MX')}`
+    : `Generated ${new Date().toLocaleString('en-US')}`;
+  doc.text(stamp, 40, 770);
+  doc.text(lang === 'es' ? 'Página 1 de 1' : 'Page 1 of 1', 572, 770, { align: 'right' });
 }
 
 async function exportPO(orderNumber){
@@ -633,10 +673,10 @@ async function exportPO(orderNumber){
     plant && plant.address,
     plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', '),
   ];
-  pdfInfoBlock(doc, 40, 160, 'VENDOR', vendorLines);
-  pdfInfoBlock(doc, 320, 160, 'SHIP TO / PICK UP LOCATION', vendorLines);
+  pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
+  pdfInfoBlock(doc, 320, 168, 'SHIP TO / PICK UP LOCATION', vendorLines);
 
-  const yLeft = pdfKeyValueRows(doc, 40, 232, [
+  const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['DATE', todayStr()],
     ['PICK-UP / DELIVERY DATE', fmtDatesList(po.delivery_dates)],
     ['PAYMENT TERMS', plant && plant.payment_terms],
@@ -645,7 +685,7 @@ async function exportPO(orderNumber){
   // Pickup happens at the vendor's own dock (SHIP TO / PICK UP LOCATION above == VENDOR),
   // so risk transfers there — that's FCA at the plant under Incoterms 2020, not a guessed term.
   const plantLocation = plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', ');
-  const yRight = pdfKeyValueRows(doc, 320, 232, [
+  const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', plantLocation ? `FCA – ${plantLocation}` : null],
     ['COUNTRY OF ORIGIN', plant && plant.country],
     ['CURRENCY', 'USD'],
@@ -653,17 +693,19 @@ async function exportPO(orderNumber){
   ]);
   const y = Math.max(yLeft, yRight);
 
+  // Plant-facing document: English product name only (products.name_en), never the Spanish
+  // catalog name — the plant's spec sheet and customs paperwork are in English.
   doc.autoTable({
     startY: y + 12,
     head: [['Item Description', 'Qty LBS', 'Unit Cost', 'Amount']],
     body: [[
-      [po.product_name, po.product_spec].filter(Boolean).join(' — '),
+      po.product_spec || po.product_name || '',
       (po.weight || 0).toLocaleString('en-US'),
       '$' + (po.purchase_price || 0).toFixed(4),
       '$' + (po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
     ]],
     theme: 'grid',
-    headStyles: { fillColor: [234, 243, 252], textColor: [15, 31, 51], fontStyle: 'bold', fontSize: 9 },
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
     styles: { fontSize: 9.5, cellPadding: 7 },
     margin: { left: 40, right: 40 },
   });
@@ -674,9 +716,8 @@ async function exportPO(orderNumber){
   doc.setTextColor(100, 116, 139);
   doc.text('NOTES: ' + (po.docs_on ? 'Docs included by vendor.' : 'No export documentation included — buyer to arrange.'), 40, ty);
 
-  const termsEndY = pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
-  pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Vendor');
-  pdfFooter(doc);
+  pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
+  pdfFooter(doc, 'en');
   doc.save(`PO-${orderNumber}.pdf`);
 }
 
@@ -689,49 +730,49 @@ async function exportSO(orderNumber){
     ? await db.from('plants').select('country').eq('id', sentOffer.plant_id).single() : { data: null };
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Sales Confirmation', orderNumber);
+  pdfHeader(doc, 'Confirmación de Venta', orderNumber);
 
   const custLines = [
     customer ? customer.trade_name : so.customer_name,
     customer && customer.address,
     customer && [customer.city, customer.state, customer.country].filter(Boolean).join(', '),
   ];
-  pdfInfoBlock(doc, 40, 160, 'CUSTOMER', custLines);
-  pdfInfoBlock(doc, 320, 160, 'SHIP TO', [customer && customer.usual_destination, customer && customer.usual_delivery_type]);
+  pdfInfoBlock(doc, 40, 168, 'CLIENTE', custLines);
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', [customer && customer.usual_destination, customer && customer.usual_delivery_type]);
 
-  const yLeft = pdfKeyValueRows(doc, 40, 232, [
-    ['DATE', todayStr()],
-    ['EST. DELIVERY DATE', fmtDatesList(so.delivery_dates)],
-    ['PAYMENT TERMS', customer && customer.payment_days ? `Net ${customer.payment_days}` : null],
-    ['ORDER #', orderNumber],
+  const yLeft = pdfKeyValueRows(doc, 40, 240, [
+    ['FECHA', todayStr()],
+    ['ENTREGA ESTIMADA', fmtDatesList(so.delivery_dates)],
+    ['CONDICIONES DE PAGO', customer && customer.payment_days ? `Neto ${customer.payment_days} días` : null],
+    ['ORDEN #', orderNumber],
   ]);
-  const yRight = pdfKeyValueRows(doc, 320, 232, [
+  const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', customer && customer.usual_incoterm_text],
-    ['COUNTRY OF ORIGIN', originPlant && originPlant.country],
-    ['CURRENCY', 'USD'],
-    ['TRADER', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
+    ['PAÍS DE ORIGEN', originPlant && originPlant.country],
+    ['MONEDA', 'USD'],
+    ['EJECUTIVO', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
   ]);
   const y = Math.max(yLeft, yRight);
 
+  // Customer-facing document: Spanish product name only (products.name), never the English spec.
   doc.autoTable({
     startY: y + 12,
-    head: [['Item Description', 'Qty LBS', 'USD / LBS', 'Amount']],
+    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
     body: [[
-      [so.product_name, so.product_spec].filter(Boolean).join(' — '),
+      so.product_name || so.product_spec || '',
       (so.weight || 0).toLocaleString('en-US'),
       '$' + (so.sale_price || 0).toFixed(4),
       '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
     ]],
     theme: 'grid',
-    headStyles: { fillColor: [234, 243, 252], textColor: [15, 31, 51], fontStyle: 'bold', fontSize: 9 },
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
     styles: { fontSize: 9.5, cellPadding: 7 },
     margin: { left: 40, right: 40 },
   });
 
   const ty = doc.lastAutoTable.finalY + 30;
-  const termsEndY = pdfTerms(doc, ty, 'TERMS', SO_TERMS);
-  pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Customer');
-  pdfFooter(doc);
+  pdfTerms(doc, ty, 'TÉRMINOS', SO_TERMS, DRAFT_DISCLAIMER_ES);
+  pdfFooter(doc, 'es');
   doc.save(`SO-${orderNumber}.pdf`);
 }
 
@@ -746,23 +787,28 @@ async function exportFO(orderNumber){
     const doc = pdfDoc();
     pdfHeader(doc, 'Freight Confirmation', orderNumber);
 
-    pdfInfoBlock(doc, 40, 160, 'CARRIER', [
+    pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
       carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
       carrier && carrier.phone,
       carrier && (carrier.mc_number || carrier.dot_number)
         ? `MC# ${carrier.mc_number || '—'}  ·  DOT# ${carrier.dot_number || '—'}` : null,
     ]);
+    pdfInfoBlock(doc, 320, 168, 'BROKER', [COMPANY.legalName, COMPANY.address, COMPANY.phone]);
 
-    const y = pdfKeyValueRows(doc, 40, 232, [
+    const yLeft = pdfKeyValueRows(doc, 40, 240, [
       ['DATE', todayStr()],
       ['PICK UP ADDRESS', fo.origin],
       ['DELIVERY ADDRESS', fo.destination],
       ['PICK UP / DELIVERY DATE', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
+    ]);
+    const yRight = pdfKeyValueRows(doc, 320, 240, [
       ['ESTIMATED WEIGHT', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
       ['CLIENT ORDER #', orderNumber],
+      ['CURRENCY', 'USD'],
       ['BOL / LOAD #', '____________________'],
     ]);
+    const y = Math.max(yLeft, yRight);
 
     doc.autoTable({
       startY: y + 12,
@@ -770,18 +816,21 @@ async function exportFO(orderNumber){
       body: [[
         'Inland Freight',
         '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-        fo.actual_rate != null ? '$' + fo.actual_rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'Pending — see Costos reales',
+        fo.actual_rate != null ? '$' + fo.actual_rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'Pending — confirmed after delivery',
       ]],
       theme: 'grid',
-      headStyles: { fillColor: [234, 243, 252], textColor: [15, 31, 51], fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
       styles: { fontSize: 9.5, cellPadding: 7 },
       margin: { left: 40, right: 40 },
     });
 
     const ty = doc.lastAutoTable.finalY + 30;
     const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
+    // Only the FO carries a signature block: a rate confirmation is standard trucking practice
+    // for the carrier to sign before dispatch. PO/SO are valid without one (UCC, acceptance by
+    // performance) and the MBG reference examples didn't include one either.
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
-    pdfFooter(doc);
+    pdfFooter(doc, 'en');
     doc.save(`FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf`);
   }
 }
