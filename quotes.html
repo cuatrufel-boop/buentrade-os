@@ -697,6 +697,11 @@ function rqSyncOpenCalculator(p){
   const params = {};
   rqBuildToolParams(p).forEach((v, k) => { params[k] = v; });
   iframe.contentWindow.postMessage({ type: 'buentrade:updateParams', params }, '*');
+  // Re-suggest the Selling Price against the new numbers (freight, docs, etc.) — see
+  // rqPrefillSellingPrice for why this has to happen on every sync, not just once at open.
+  // calc() inside the iframe needs a beat to actually run off the message before __calc reflects
+  // the new totals.
+  setTimeout(() => rqPrefillSellingPrice(p.id), 150);
 }
 
 function rqBuildToolParams(p){
@@ -850,22 +855,35 @@ function rqOnIframeLoaded(id){
 // financeRate/100) for the Selling Price that lands ~$1000 Border profit, using whatever
 // Purchase Price/Freight/Docs/Customs are already filled in. Pure read of __calc plus writing
 // into the existing Selling Price input — same as a trader typing a number in by hand, calc()
-// itself is untouched. Only fires when the field is still empty, so it never overwrites a value
-// the trader already entered.
+// itself is untouched.
+//
+// It has to be allowed to RE-suggest, not just fire once: it originally only ever ran once (on
+// iframe load, gated on the field being empty), so a suggestion made before freight was picked
+// went stale the moment freight got added — the field kept showing a "$1000 profit" number that
+// no longer accounted for the freight now included in cost, silently understating the real
+// margin needed. Now it keeps re-suggesting on every relevant change (see rqSyncOpenCalculator)
+// as long as the field still holds exactly what THIS function last put there — the moment the
+// trader types their own number over it, p.rqAutoSuggestedSell no longer matches and it stops
+// touching the field for good.
 function rqPrefillSellingPrice(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
   const iframe = document.getElementById('rq_iframe_' + id);
   const win = iframe && iframe.contentWindow;
   const calc = win && win.__calc;
   if (!calc || !calc.totalWeight) return;
   const inp = win.document.getElementById('prodSellBorder0');
-  if (!inp || parseFloat(inp.value) > 0) return;
+  if (!inp) return;
+  const current = parseFloat(inp.value) || 0;
+  if (current > 0 && (!p || current !== p.rqAutoSuggestedSell)) return; // trader's own number — leave it
   const k = calc.inp.payDays * (calc.inp.financeRate / 100);
   const saleNeeded = (RQ_TARGET_PROFIT_USD + calc.totalCostUSD + calc.directCostsBorder) / (1 - k);
   const sellBorder = saleNeeded / calc.totalWeight;
   if (!isFinite(sellBorder) || sellBorder <= 0) return;
   // 4 decimals, not 2 — at a 40,000 lb load a single cent/lb swings total profit by $400, so
   // rounding to cents alone was landing hundreds of dollars off the $1000 target.
-  inp.value = sellBorder.toFixed(4);
+  const rounded = Number(sellBorder.toFixed(4));
+  inp.value = rounded;
+  if (p) p.rqAutoSuggestedSell = rounded;
   inp.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
