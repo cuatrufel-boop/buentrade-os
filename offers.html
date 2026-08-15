@@ -57,6 +57,8 @@
   .status-won{background:#E3F6EC;color:var(--green);}
   .status-lost{background:var(--bg);color:var(--ink-soft);}
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
+  .edit-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:90px;transition:border-color .3s;}
+  .edit-input:focus{outline:none;border-color:var(--blue);}
 </style>
 </head>
 <body>
@@ -202,6 +204,8 @@ auth.onAuthStateChanged(user => {
           <th>Product</th>
           <th>Plant</th>
           <th>Customer</th>
+          <th>Purchase $/lb</th>
+          <th>Freight $</th>
           <th>Sale $/lb</th>
           <th>Total</th>
           <th>Channel</th>
@@ -266,19 +270,33 @@ function renderOffers(){
     } else if (o.status === 'won'){
       action = `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Costos reales</button>`;
     }
+    // Only "sent" (pending) offers stay editable — once won or lost, the row is history and
+    // should read exactly what happened, not drift if someone tweaks a field afterward.
+    const editable = o.status === 'sent';
+    const purchaseCell = editable
+      ? `<input class="edit-input" type="number" step="0.0001" value="${o.purchase_price ?? ''}" onblur="saveOfferField('${o.id}','purchase_price',this.value,this)">`
+      : `$${(o.purchase_price || 0).toFixed(4)}`;
+    const freightCell = editable
+      ? `<input class="edit-input" type="number" step="0.01" value="${o.us_freight_amount ?? ''}" onblur="saveOfferField('${o.id}','us_freight_amount',this.value,this)">`
+      : `$${(o.us_freight_amount || 0).toLocaleString('en-US')}`;
+    const saleCell = editable
+      ? `<input class="edit-input" type="number" step="0.0001" value="${o.sale_per_lb ?? ''}" onblur="saveOfferField('${o.id}','sale_per_lb',this.value,this)">`
+      : `$${(o.sale_per_lb || 0).toFixed(4)}`;
     return `<tr>
       <td>${sentDate}</td>
       <td>${escapeHtml(o.product_name)}</td>
       <td>${escapeHtml(o.plant_name)}</td>
       <td>${escapeHtml(o.customer_name)}</td>
-      <td>$${(o.sale_per_lb || 0).toFixed(4)}</td>
+      <td>${purchaseCell}</td>
+      <td>${freightCell}</td>
+      <td>${saleCell}</td>
       <td>$${(o.total_sale || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
       <td>${o.channel}</td>
       <td>${statusPill}</td>
       <td>${o.order_number ? `<span class="order-num">${escapeHtml(o.order_number)}</span>` : '—'}</td>
       <td>${action}</td>
     </tr>
-    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="10" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>`;
+    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="12" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>`;
   }).join('');
 }
 
@@ -372,6 +390,28 @@ async function deleteExtraCost(costId, offerId){
   const { error } = await db.from('order_extra_costs').delete().eq('id', costId);
   if (error){ alert('Error: ' + error.message); return; }
   await loadReconcilePanel(offerId);
+}
+
+// Lets a pending offer's price/freight be corrected right in the row — e.g. the customer
+// confirms at the quoted price but freight actually negotiated lower before close. Only "sent"
+// rows are editable (see renderOffers); once won or lost the row is history. Purchase price and
+// Sale price also recompute total_cost/total_sale so "Total" stays accurate without a page reload.
+async function saveOfferField(id, field, value, inputEl){
+  const o = offers.find(x => x.id === id);
+  if (!o) return;
+  const num = value.trim() === '' ? 0 : Number(value);
+  if (o[field] === num) return;
+  const payload = { [field]: num };
+  if (field === 'purchase_price') payload.total_cost = num * (o.weight || 40000);
+  if (field === 'sale_per_lb') payload.total_sale = num * (o.weight || 40000);
+  const { error } = await db.from('sent_offers').update(payload).eq('id', id);
+  if (error){ alert('Error saving: ' + error.message); return; }
+  Object.assign(o, payload);
+  if (inputEl){
+    inputEl.style.borderColor = 'var(--green)';
+    setTimeout(() => { inputEl.style.borderColor = ''; }, 700);
+  }
+  if (field === 'purchase_price' || field === 'sale_per_lb') renderOffers();
 }
 
 // Losing an offer just needs the status flip — no orders, nothing else to generate.
