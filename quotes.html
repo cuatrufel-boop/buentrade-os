@@ -441,12 +441,23 @@ function rqToggleExtraField(plantId, key){
 
 function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
-  container.innerHTML = '';
   const hasProduct = !!document.getElementById('rq_product_name').value.trim();
   document.getElementById('rq_empty').style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
   rqUpdateActionButtons();
+  // A plant whose Trading Tool is open keeps its exact DOM node (iframe included) across this
+  // rebuild — replacing it would tear down and reload the iframe from scratch every time ANY
+  // other field on the page changes (freight, docs, another plant's price…), which looked like
+  // the calculator "closing itself" and reset whatever the trader was mid-typing in it.
+  const openRows = {};
+  container.querySelectorAll('[data-plant-row]').forEach(el => { openRows[el.dataset.plantRow] = el; });
+  const frag = document.createDocumentFragment();
   rqSelectedPlants.forEach(p => {
+    if (p.rqCalculatorOpen && openRows[p.id]){
+      frag.appendChild(openRows[p.id]);
+      return;
+    }
     const row = document.createElement('div');
+    row.dataset.plantRow = p.id;
     row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
     const showPriceRow = !!(p.rqPrice || p.rqPriceRevealed);
     const docsOn = p.rqDocsOn === true;
@@ -501,12 +512,16 @@ function renderRqPlants(){
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
         <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="rqOnIframeLoaded('${p.id}')"></iframe>
       </div>`;
-    container.appendChild(row);
+    frag.appendChild(row);
+    // Only a freshly-built row needs its iframe (re)started — a preserved open row (handled
+    // above) already has a live one and must not be touched.
     if (p.rqCalculatorOpen){
-      document.getElementById('rq_iframe_wrap_' + p.id).style.display = 'block';
-      document.getElementById('rq_iframe_' + p.id).src = rqBuildToolUrl(p);
+      row.querySelector('.tt-card').style.display = 'block';
+      row.querySelector('.tt-frame').src = rqBuildToolUrl(p);
     }
   });
+  container.innerHTML = '';
+  container.appendChild(frag);
   rqRenderFinalList();
 }
 
@@ -858,6 +873,8 @@ function rqUpdateActionButtons(){
   rqRenderDateChips();
 }
 
+const rqAutoOpenTimers = {};
+
 function rqUpdatePlantField(id, field, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
@@ -867,6 +884,13 @@ function rqUpdatePlantField(id, field, val){
   // actively typing into and steal focus after every keystroke. Just update the bits that need
   // to react live.
   rqUpdateActionButtons();
+  // Auto-open the Trading Tool a beat after typing stops — not on blur, which only fired once
+  // the trader happened to click somewhere else (usually the freight dropdown next to it), so
+  // it looked like "setting freight" was what opened it rather than the price itself.
+  if (field === 'rqPrice'){
+    clearTimeout(rqAutoOpenTimers[id]);
+    if (p.rqPrice) rqAutoOpenTimers[id] = setTimeout(() => rqAutoOpenCalculator(id), 700);
+  }
 }
 
 // Leaving the Purchase $/lb field with a real number typed in opens that plant's Trading Tool
