@@ -1507,6 +1507,12 @@ async function negoSaveDefinitive(){
   }
 
   document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Order ${orderNumber} created. Go to Offers to export PO/SO/FO.</span>`;
+
+  // Lets Offers (when this TT is embedded in its inline panel, not a standalone tab) refresh
+  // that row immediately instead of the trader having to leave the panel to go check.
+  if (window.parent !== window){
+    window.parent.postMessage({ type: 'buentrade:offerWon', offerId: negoOffer.id, orderNumber }, '*');
+  }
 }
 </script>
 </div><!-- /appContent -->

@@ -269,8 +269,9 @@ function renderOffers(){
       // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
       // goes through "TT", which has the full calculator, can message either side any number
       // of times, and is the only place that writes the final numbers once actually confirmed.
+      // Opens inline (see toggleTT) instead of a new tab — same page the whole time.
       action = `
-        <button class="tt-btn" onclick="openInTT('${o.id}')">⚙ TT</button>
+        <button class="tt-btn" onclick="toggleTT('${o.id}')">⚙ TT</button>
         <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Win</button>
         <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>`;
     } else if (o.status === 'won'){
@@ -291,7 +292,8 @@ function renderOffers(){
       <td>${statusPill}</td>
       <td>${action}</td>
     </tr>
-    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>`;
+    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>
+    <tr id="tt_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);padding:0;"><div id="tt_panel_${o.id}"></div></td></tr>`;
   }).join('');
 }
 
@@ -391,7 +393,31 @@ async function deleteExtraCost(costId, offerId){
 // already builds for the Trading Tool) plus offerId/plantId so the TT can message the plant,
 // message the customer, and — once a number is actually confirmed — save it back here and
 // generate the order, all without the trader re-entering anything from scratch.
-function openInTT(id){
+// Embeds the calculator right in this row (iframe) instead of a new tab — same page the whole
+// time, so negotiating a bid never means "leaving" Offers. Same Trading Tool file either way,
+// nothing duplicated; only how it's presented changed. Auth carries over automatically since
+// the iframe shares this page's origin/localStorage — no second login.
+let ttOpenId = null;
+
+function toggleTT(id){
+  const row = document.getElementById('tt_row_' + id);
+  if (ttOpenId && ttOpenId !== id){
+    const prev = document.getElementById('tt_row_' + ttOpenId);
+    if (prev) prev.style.display = 'none';
+  }
+  if (row.style.display === 'table-row'){
+    row.style.display = 'none';
+    ttOpenId = null;
+    return;
+  }
+  row.style.display = 'table-row';
+  ttOpenId = id;
+  loadTTPanel(id);
+}
+
+function loadTTPanel(id){
+  const panel = document.getElementById('tt_panel_' + id);
+  if (panel.dataset.loaded) return; // don't reload/reset an already-open negotiation
   const o = offers.find(x => x.id === id);
   if (!o) return;
   const imported = !!o.mexican_dest_rate_id;
@@ -408,8 +434,19 @@ function openInTT(id){
     offerId: o.id, plantId: o.plant_id || '',
     v: String(Date.now()),
   });
-  window.open('trading-tool.html?' + params.toString(), '_blank');
+  panel.innerHTML = `<iframe src="trading-tool.html?${params.toString()}" style="width:100%;height:780px;border:none;display:block;"></iframe>`;
+  panel.dataset.loaded = '1';
 }
+
+// The Trading Tool posts this the moment "Save as Final — Win" succeeds inside the iframe, so
+// this row updates in place (no manual refresh, no leaving the embedded panel to go check).
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'buentrade:offerWon') return;
+  const row = document.getElementById('tt_row_' + e.data.offerId);
+  if (row) row.style.display = 'none';
+  if (ttOpenId === e.data.offerId) ttOpenId = null;
+  loadOffers();
+});
 
 // Losing an offer just needs the status flip — no orders, nothing else to generate.
 async function markOffer(id, status){
