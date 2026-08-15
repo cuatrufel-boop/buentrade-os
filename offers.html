@@ -506,7 +506,7 @@ const COMPANY = {
 // Flagged to the user as a draft for legal review, not a finished/reviewed contract.
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "This Sales Confirmation is issued by BuenTrade LLC. By accepting this confirmation, Buyer agrees to the quantity, price, and delivery terms stated above. Product is sold as described, subject to normal industry tolerances in weight and count. Payment is due per the terms stated above from the date of delivery unless otherwise agreed in writing. Any discrepancy in product, weight, or condition must be reported to BuenTrade LLC in writing within 24 hours of delivery.";
-const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier.";
+const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
 
 function fmtDateStr(d){
   if (!d) return '';
@@ -586,13 +586,44 @@ function pdfTerms(doc, y, title, text){
   doc.text(split, 40, y + 14);
   doc.setFontSize(7.5);
   doc.setTextColor(190, 60, 60);
-  doc.text('Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, y + 14 + split.length * 10 + 12);
+  const disclaimerY = y + 14 + split.length * 10 + 12;
+  doc.text('Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
+  return disclaimerY + 10;
+}
+
+// Signature/acceptance block — separates a working confirmation from a signed one. Real
+// trading-house PO/SO/FO forms all carry this; MBG's reference PDFs didn't, but it's standard
+// practice and costs nothing to include even before e-signature is wired up.
+function pdfSignatureBlock(doc, y, leftLabel, rightLabel){
+  const colW = 240, rx = 332;
+  doc.setDrawColor(150, 160, 175);
+  doc.setLineWidth(0.75);
+  doc.line(40, y, 40 + colW, y);
+  doc.line(rx, y, rx + colW, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(leftLabel, 40, y + 12);
+  doc.text(rightLabel, rx, y + 12);
+  doc.setFontSize(7.5);
+  doc.setTextColor(150, 160, 175);
+  doc.text('Date: ______________', 40, y + 26);
+  doc.text('Date: ______________', rx, y + 26);
+}
+
+function pdfFooter(doc){
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(160, 170, 185);
+  doc.text(`Generated ${new Date().toLocaleString('en-US')}`, 40, 770);
+  doc.text('Page 1 of 1', 572, 770, { align: 'right' });
 }
 
 async function exportPO(orderNumber){
   const { data: po } = await db.from('purchase_orders').select('*').eq('order_number', orderNumber).single();
   if (!po){ alert('PO not found.'); return; }
   const { data: plant } = po.plant_id ? await db.from('plants').select('*').eq('id', po.plant_id).single() : { data: null };
+  const { data: sentOffer } = await db.from('sent_offers').select('won_by').eq('order_number', orderNumber).limit(1).single();
 
   const doc = pdfDoc();
   pdfHeader(doc, 'Purchase Order', orderNumber);
@@ -605,12 +636,22 @@ async function exportPO(orderNumber){
   pdfInfoBlock(doc, 40, 160, 'VENDOR', vendorLines);
   pdfInfoBlock(doc, 320, 160, 'SHIP TO / PICK UP LOCATION', vendorLines);
 
-  const y = pdfKeyValueRows(doc, 40, 232, [
+  const yLeft = pdfKeyValueRows(doc, 40, 232, [
     ['DATE', todayStr()],
     ['PICK-UP / DELIVERY DATE', fmtDatesList(po.delivery_dates)],
     ['PAYMENT TERMS', plant && plant.payment_terms],
     ['ORDER #', orderNumber],
   ]);
+  // Pickup happens at the vendor's own dock (SHIP TO / PICK UP LOCATION above == VENDOR),
+  // so risk transfers there — that's FCA at the plant under Incoterms 2020, not a guessed term.
+  const plantLocation = plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', ');
+  const yRight = pdfKeyValueRows(doc, 320, 232, [
+    ['INCOTERMS', plantLocation ? `FCA – ${plantLocation}` : null],
+    ['COUNTRY OF ORIGIN', plant && plant.country],
+    ['CURRENCY', 'USD'],
+    ['TRADER', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
+  ]);
+  const y = Math.max(yLeft, yRight);
 
   doc.autoTable({
     startY: y + 12,
@@ -633,7 +674,9 @@ async function exportPO(orderNumber){
   doc.setTextColor(100, 116, 139);
   doc.text('NOTES: ' + (po.docs_on ? 'Docs included by vendor.' : 'No export documentation included — buyer to arrange.'), 40, ty);
 
-  pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
+  const termsEndY = pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
+  pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Vendor');
+  pdfFooter(doc);
   doc.save(`PO-${orderNumber}.pdf`);
 }
 
@@ -641,6 +684,9 @@ async function exportSO(orderNumber){
   const { data: so } = await db.from('sales_orders').select('*').eq('order_number', orderNumber).single();
   if (!so){ alert('SO not found.'); return; }
   const { data: customer } = so.customer_id ? await db.from('customers').select('*').eq('id', so.customer_id).single() : { data: null };
+  const { data: sentOffer } = await db.from('sent_offers').select('won_by,plant_id').eq('order_number', orderNumber).limit(1).single();
+  const { data: originPlant } = sentOffer && sentOffer.plant_id
+    ? await db.from('plants').select('country').eq('id', sentOffer.plant_id).single() : { data: null };
 
   const doc = pdfDoc();
   pdfHeader(doc, 'Sales Confirmation', orderNumber);
@@ -653,12 +699,19 @@ async function exportSO(orderNumber){
   pdfInfoBlock(doc, 40, 160, 'CUSTOMER', custLines);
   pdfInfoBlock(doc, 320, 160, 'SHIP TO', [customer && customer.usual_destination, customer && customer.usual_delivery_type]);
 
-  const y = pdfKeyValueRows(doc, 40, 232, [
+  const yLeft = pdfKeyValueRows(doc, 40, 232, [
     ['DATE', todayStr()],
     ['EST. DELIVERY DATE', fmtDatesList(so.delivery_dates)],
     ['PAYMENT TERMS', customer && customer.payment_days ? `Net ${customer.payment_days}` : null],
     ['ORDER #', orderNumber],
   ]);
+  const yRight = pdfKeyValueRows(doc, 320, 232, [
+    ['INCOTERMS', customer && customer.usual_incoterm_text],
+    ['COUNTRY OF ORIGIN', originPlant && originPlant.country],
+    ['CURRENCY', 'USD'],
+    ['TRADER', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
+  ]);
+  const y = Math.max(yLeft, yRight);
 
   doc.autoTable({
     startY: y + 12,
@@ -676,7 +729,9 @@ async function exportSO(orderNumber){
   });
 
   const ty = doc.lastAutoTable.finalY + 30;
-  pdfTerms(doc, ty, 'TERMS', SO_TERMS);
+  const termsEndY = pdfTerms(doc, ty, 'TERMS', SO_TERMS);
+  pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Customer');
+  pdfFooter(doc);
   doc.save(`SO-${orderNumber}.pdf`);
 }
 
@@ -695,6 +750,8 @@ async function exportFO(orderNumber){
       carrier ? carrier.name : 'TBD — not yet booked',
       carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
       carrier && carrier.phone,
+      carrier && (carrier.mc_number || carrier.dot_number)
+        ? `MC# ${carrier.mc_number || '—'}  ·  DOT# ${carrier.dot_number || '—'}` : null,
     ]);
 
     const y = pdfKeyValueRows(doc, 40, 232, [
@@ -704,6 +761,7 @@ async function exportFO(orderNumber){
       ['PICK UP / DELIVERY DATE', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
       ['ESTIMATED WEIGHT', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
       ['CLIENT ORDER #', orderNumber],
+      ['BOL / LOAD #', '____________________'],
     ]);
 
     doc.autoTable({
@@ -721,7 +779,9 @@ async function exportFO(orderNumber){
     });
 
     const ty = doc.lastAutoTable.finalY + 30;
-    pdfTerms(doc, ty, 'TERMS', FO_TERMS);
+    const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
+    pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
+    pdfFooter(doc);
     doc.save(`FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf`);
   }
 }
