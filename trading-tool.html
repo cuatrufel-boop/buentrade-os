@@ -386,6 +386,7 @@
 <!-- Firebase Auth (free tier) — handles real per-employee accounts + email verification -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -396,10 +397,19 @@ const firebaseConfig = {
 const FIREBASE_READY = firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY";
 
 let auth;
+let db; // Supabase — new for this page, only used by the negotiation panel below. calc() never touches it.
 if (FIREBASE_READY) {
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); // stays logged in on this browser/device
+  const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
+  db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    accessToken: async () => {
+      const user = auth.currentUser;
+      return user ? await user.getIdToken(false) : null;
+    }
+  });
 } else {
   document.getElementById('authSetupNote').innerHTML =
     '⚠️ Login not configured yet. Ask Claude for the 5-minute Firebase setup steps, then paste your keys at the top of this file.';
@@ -479,6 +489,7 @@ if (FIREBASE_READY) {
       app.style.display = 'block';
       const badge = document.getElementById('userBadge');
       if (badge) badge.textContent = user.email;
+      negoInit();
     } else {
       gate.style.display = 'flex';
       app.style.display = 'none';
@@ -638,6 +649,24 @@ if (FIREBASE_READY) {
       <div class="card-body" id="productsBody"></div>
       <div class="card-body" style="padding-top:0;">
         <button class="add-btn" id="addProdBtn" onclick="addProduct()">+ Add Product</button>
+      </div>
+    </div>
+
+    <!-- ================= NEGOTIATION (only when opened from Offers with a specific offer) ================= -->
+    <div class="card" id="negoCard" style="display:none;">
+      <div class="card-head"><h2>Negociación</h2></div>
+      <div class="card-body">
+        <div id="negoLog" style="font-size:12.5px;margin-bottom:14px;"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button onclick="negoSendToPlant('email')" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a planta — Email</button>
+          <button onclick="negoSendToPlant('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a planta — WhatsApp</button>
+          <button onclick="negoSendToCustomer('email')" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a cliente — Email</button>
+          <button onclick="negoSendToCustomer('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a cliente — WhatsApp</button>
+        </div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1.5px solid var(--line);">
+          <button onclick="negoSaveDefinitive()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;">✓ Guardar como definitivo — Ganada</button>
+        </div>
+        <div id="negoMsg" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
     </div>
 
@@ -1255,6 +1284,170 @@ if (['freightField','mexicanFreightField','inspectionField','importCostField'].e
 buildProductRows();
 calc();
 fetchExchangeRate();
+
+// ===== Negotiation panel — additive only, never touches calc() or products[]. Opened from
+// Offers' "TT" button with offerId/plantId in the URL; reads/writes sent_offers directly. =====
+let negoOffer = null, negoPlant = null, negoCustomer = null;
+
+function negoEscapeHtml(str){
+  return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function negoFirstName(name){
+  return (name || '').trim().split(/\s+/)[0] || '';
+}
+
+async function negoInit(){
+  const offerId = __qp.get('offerId');
+  if (!offerId || !db) return;
+  document.getElementById('negoCard').style.display = 'block';
+  const { data: offer, error } = await db.from('sent_offers').select('*').eq('id', offerId).single();
+  if (error || !offer){
+    document.getElementById('negoMsg').textContent = 'No se pudo cargar esta oferta: ' + (error ? error.message : 'no encontrada');
+    return;
+  }
+  negoOffer = offer;
+  const plantId = __qp.get('plantId') || offer.plant_id;
+  if (plantId){
+    const { data: plant } = await db.from('plants').select('*').eq('id', plantId).single();
+    negoPlant = plant;
+  }
+  if (offer.customer_id){
+    const { data: customer } = await db.from('customers').select('*').eq('id', offer.customer_id).single();
+    negoCustomer = customer;
+  }
+  negoRenderLog();
+}
+
+function negoRenderLog(){
+  const log = (negoOffer && negoOffer.negotiation_log) || [];
+  const el = document.getElementById('negoLog');
+  if (!log.length){
+    el.innerHTML = '<span style="color:var(--ink-soft);">Sin movimientos todavía — aquí va quedando el historial de idas y vueltas.</span>';
+    return;
+  }
+  el.innerHTML = log.map(e => {
+    const who = e.to === 'plant'
+      ? `→ Planta${negoPlant ? ' (' + negoEscapeHtml(negoPlant.name) + ')' : ''}`
+      : `→ Cliente${negoCustomer ? ' (' + negoEscapeHtml(negoCustomer.trade_name) + ')' : ''}`;
+    const when = new Date(e.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return `<div style="padding:4px 0;">${who} — <b>$${Number(e.price).toFixed(4)}/lb</b> — <span style="color:var(--ink-soft);">${when}</span></div>`;
+  }).join('');
+}
+
+async function negoLogEvent(to, price){
+  if (!negoOffer) return;
+  const log = [...(negoOffer.negotiation_log || []), { to, price, at: new Date().toISOString() }];
+  const { error } = await db.from('sent_offers').update({ negotiation_log: log }).eq('id', negoOffer.id);
+  if (!error){ negoOffer.negotiation_log = log; negoRenderLog(); }
+}
+
+function negoCurrentCost(){
+  const el = document.getElementById('prodCost0');
+  return el ? Number(el.value) || 0 : 0;
+}
+function negoCurrentSale(){
+  const el = document.getElementById('prodSellBorder0');
+  return el ? Number(el.value) || 0 : 0;
+}
+
+function negoSendToPlant(channel){
+  if (!negoPlant){ document.getElementById('negoMsg').textContent = 'No hay planta identificada para esta oferta.'; return; }
+  const price = negoCurrentCost();
+  const contact = negoFirstName(negoPlant.contact_name || negoPlant.name);
+  const body = `Hola ${contact},\n\n¿Nos pueden confirmar ${price.toFixed(4)} USD/lb para esta carga?`;
+  if (channel === 'email'){
+    if (!negoPlant.email){ document.getElementById('negoMsg').textContent = 'La planta no tiene email registrado.'; return; }
+    window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Contraoferta')}&body=${encodeURIComponent(body)}`, '_blank');
+  } else {
+    const phone = (negoPlant.whatsapp || negoPlant.phone || '').replace(/\D/g, '');
+    if (!phone){ document.getElementById('negoMsg').textContent = 'La planta no tiene WhatsApp/teléfono registrado.'; return; }
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
+  }
+  negoLogEvent('plant', price);
+}
+
+function negoSendToCustomer(channel){
+  if (!negoCustomer){ document.getElementById('negoMsg').textContent = 'No hay cliente identificado para esta oferta.'; return; }
+  const price = negoCurrentSale();
+  const contact = negoFirstName(negoCustomer.contact_name || negoCustomer.trade_name);
+  const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.`;
+  if (channel === 'email'){
+    if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'El cliente no tiene email registrado.'; return; }
+    window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
+  } else {
+    const phone = (negoCustomer.whatsapp || negoCustomer.phone || '').replace(/\D/g, '');
+    if (!phone){ document.getElementById('negoMsg').textContent = 'El cliente no tiene WhatsApp/teléfono registrado.'; return; }
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
+  }
+  negoLogEvent('customer', price);
+}
+
+// Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
+// right now in the calculator (not the original quoted snapshot), and additionally pings the
+// customs agency on file — offers.html's quick "Ganada" doesn't need that since nothing changed.
+async function negoSaveDefinitive(){
+  if (!negoOffer) return;
+  if (!confirm(`Guardar como definitivo y marcar Ganada: ${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}?`)) return;
+
+  const purchase_price = negoCurrentCost();
+  const sale_per_lb = negoCurrentSale();
+  const freightEl = document.getElementById('freight');
+  const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
+  const weight = (window.__calc && window.__calc.totalWeight) || negoOffer.weight || 40000;
+  const total_cost = purchase_price * weight;
+  const total_sale = sale_per_lb * weight;
+
+  const { data: numRes, error: numErr } = await db.rpc('next_order_number');
+  if (numErr){ alert('Error generando el número de orden: ' + numErr.message); return; }
+  const orderNumber = numRes;
+  const who = (auth.currentUser && auth.currentUser.email) || null;
+
+  const { error: updErr } = await db.from('sent_offers').update({
+    status: 'won', order_number: orderNumber, won_at: new Date().toISOString(), won_by: who,
+    purchase_price, sale_per_lb, us_freight_amount, total_cost, total_sale, weight,
+  }).eq('id', negoOffer.id);
+  if (updErr){ alert('Error: ' + updErr.message); return; }
+
+  const { error: poErr } = await db.from('purchase_orders').insert({
+    order_number: orderNumber, sent_offer_id: negoOffer.id, plant_id: negoOffer.plant_id, plant_name: negoOffer.plant_name,
+    product_name: negoOffer.product_name, product_spec: negoOffer.product_spec, purchase_price,
+    weight, total_cost, docs_on: negoOffer.docs_on, delivery_dates: negoOffer.delivery_dates,
+  });
+  if (poErr) console.error('PO insert failed:', poErr.message);
+
+  const { error: soErr } = await db.from('sales_orders').insert({
+    order_number: orderNumber, sent_offer_id: negoOffer.id, customer_id: negoOffer.customer_id, customer_name: negoOffer.customer_name,
+    product_name: negoOffer.product_name, product_spec: negoOffer.product_spec, sale_price: sale_per_lb,
+    weight, total_sale, delivery_dates: negoOffer.delivery_dates,
+  });
+  if (soErr) console.error('SO insert failed:', soErr.message);
+
+  if (negoOffer.us_freight_rate_id && us_freight_amount > 0){
+    const { data: rate } = await db.from('provider_rates').select('provider_id,origin').eq('id', negoOffer.us_freight_rate_id).single();
+    const { error: foErr } = await db.from('freight_orders').insert({
+      order_number: orderNumber, sent_offer_id: negoOffer.id, carrier_provider_id: rate ? rate.provider_id : null,
+      origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: us_freight_amount, currency: 'USD',
+    });
+    if (foErr) console.error('FO insert failed:', foErr.message);
+  }
+
+  // Give the customs agency on file a heads-up that a new load is coming — no formal document
+  // for this yet, just a message, same idea as PO/SO/FO but for the crossing broker.
+  if (negoOffer.customs_agency_provider_id){
+    const { data: agency } = await db.from('providers').select('*').eq('id', negoOffer.customs_agency_provider_id).single();
+    if (agency && (agency.email || agency.phone || agency.whatsapp)){
+      const msg = `Nueva carga confirmada — Orden ${orderNumber}: ${negoOffer.product_name}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${(negoOffer.delivery_dates || []).join(', ') || 'por confirmar'}.`;
+      if (agency.email){
+        window.open(`mailto:${agency.email}?subject=${encodeURIComponent('Nueva carga — ' + orderNumber)}&body=${encodeURIComponent(msg)}`, '_blank');
+      } else {
+        const phone = (agency.whatsapp || agency.phone || '').replace(/\D/g, '');
+        if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      }
+    }
+  }
+
+  document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Orden ${orderNumber} creada. Ve a Offers para exportar PO/SO/FO.</span>`;
+}
 </script>
 </div><!-- /appContent -->
 </body>
