@@ -60,6 +60,8 @@
   .status-sent{background:var(--blue-light);color:var(--blue);}
   .status-won{background:#E3F6EC;color:var(--green);}
   .status-lost{background:var(--bg);color:var(--ink-soft);}
+  .status-hot{background:#E3F6EC;color:var(--green);animation:hotPulse 1.4s ease-in-out infinite;}
+  @keyframes hotPulse{0%,100%{box-shadow:0 0 0 0 rgba(15,138,95,.45);}50%{box-shadow:0 0 0 5px rgba(15,138,95,0);}}
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
   .edit-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:90px;transition:border-color .3s;}
   .edit-input:focus{outline:none;border-color:var(--blue);}
@@ -264,7 +266,13 @@ function renderOffers(){
   document.getElementById('emptyState').textContent = 'No offers match.';
   const STATUS_LABEL = { sent: 'pending', won: 'win', lost: 'lost' };
   tbody.innerHTML = filtered.map(o => {
-    const statusPill = `<span class="status-pill status-${o.status}">${STATUS_LABEL[o.status] || o.status}${o.status === 'won' && o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`;
+    // A "pending" offer where a counter-number has actually gone to the plant (or a bid came
+    // back from the customer) is a live negotiation with a real chance of closing soon — flag it
+    // in the list itself so it doesn't read the same as an offer just sitting untouched.
+    const isHot = o.status === 'sent' && (o.negotiation_log || []).length > 0;
+    const statusPill = isHot
+      ? `<span class="status-pill status-hot">🔥 negotiating</span>`
+      : `<span class="status-pill status-${o.status}">${STATUS_LABEL[o.status] || o.status}${o.status === 'won' && o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`;
     let action = '';
     if (o.status === 'sent'){
       // "Win" here is only the fast path — price closed exactly as quoted, nothing to
