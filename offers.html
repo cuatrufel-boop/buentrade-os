@@ -45,6 +45,8 @@
   .btn.win{background:#fff;color:var(--green);border:1.5px solid var(--green);padding:5px 10px;font-size:12px;font-weight:700;}
   .btn.win:hover{background:var(--green);color:#fff;}
   .btn.lose{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);padding:5px 10px;font-size:12px;}
+  .tt-btn{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 2px 6px rgba(10,37,71,.25);}
+  .tt-btn:hover{filter:brightness(1.15);}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);white-space:nowrap;}
   td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap;}
@@ -188,8 +190,8 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Status</label>
         <select id="f_status" onchange="renderOffers()">
           <option value="">All</option>
-          <option value="sent" selected>Sent (pending)</option>
-          <option value="won">Won</option>
+          <option value="sent" selected>Pending</option>
+          <option value="won">Win</option>
           <option value="lost">Lost</option>
         </select>
       </div>
@@ -202,17 +204,12 @@ auth.onAuthStateChanged(user => {
     <table>
       <thead>
         <tr>
-          <th>Sent</th>
           <th>Product</th>
-          <th>Plant</th>
           <th>Customer</th>
-          <th>Purchase $/lb</th>
-          <th>Freight $</th>
-          <th>Sale $/lb</th>
-          <th>Total</th>
-          <th>Channel</th>
+          <th>Plant</th>
+          <th>Purchase</th>
+          <th>Sale</th>
           <th>Status</th>
-          <th>Order #</th>
           <th></th>
         </tr>
       </thead>
@@ -263,43 +260,38 @@ function renderOffers(){
   const tbody = document.getElementById('offerRows');
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = 'No offers match.';
+  const STATUS_LABEL = { sent: 'pending', won: 'win', lost: 'lost' };
   tbody.innerHTML = filtered.map(o => {
-    const sentDate = new Date(o.sent_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    const statusPill = `<span class="status-pill status-${o.status}">${o.status}</span>`;
+    const statusPill = `<span class="status-pill status-${o.status}">${STATUS_LABEL[o.status] || o.status}${o.status === 'won' && o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`;
     let action = '';
     if (o.status === 'sent'){
-      // "Ganada" here is only the fast path — price closed exactly as quoted, nothing to
+      // "Win" here is only the fast path — price closed exactly as quoted, nothing to
       // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
       // goes through "TT", which has the full calculator, can message either side any number
       // of times, and is the only place that writes the final numbers once actually confirmed.
       action = `
-        <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Ganada</button>
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="openInTT('${o.id}')">TT</button>
-        <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Perdida</button>`;
+        <button class="tt-btn" onclick="openInTT('${o.id}')">⚙ TT</button>
+        <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Win</button>
+        <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>`;
     } else if (o.status === 'won'){
       action = `
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportPO('${o.order_number}')">PO</button>
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportSO('${o.order_number}')">SO</button>
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportFO('${o.order_number}')">FO</button>
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Costos reales</button>`;
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Real Costs</button>`;
     }
     // Numbers are read-only here on purpose — editing a price without seeing the rest of the
     // build-up (customs, inspection, freight) isn't safe. Any change goes through "TT" above.
     return `<tr>
-      <td>${sentDate}</td>
       <td>${escapeHtml(o.product_name)}</td>
-      <td>${escapeHtml(o.plant_name)}</td>
       <td>${escapeHtml(o.customer_name)}</td>
+      <td>${escapeHtml(o.plant_name)}</td>
       <td>$${(o.purchase_price || 0).toFixed(4)}</td>
-      <td>$${(o.us_freight_amount || 0).toLocaleString('en-US')}</td>
       <td>$${(o.sale_per_lb || 0).toFixed(4)}</td>
-      <td>$${(o.total_sale || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
-      <td>${o.channel}</td>
       <td>${statusPill}</td>
-      <td>${o.order_number ? `<span class="order-num">${escapeHtml(o.order_number)}</span>` : '—'}</td>
       <td>${action}</td>
     </tr>
-    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="12" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>`;
+    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>`;
   }).join('');
 }
 
