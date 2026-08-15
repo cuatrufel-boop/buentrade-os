@@ -1172,14 +1172,37 @@ function sendOfferWhatsAppTo(customerId){
 // confirm()'s own OK click is itself a user gesture, so the next window.open() right after
 // it still counts as user-initiated and isn't blocked. Only what the trader confirms actually
 // opened gets logged — Cancel stops the run right there, nothing after it is touched.
-function rqSendOneByOne(items, i){
+// Whether an item gets logged is decided by the browser's OWN signal — window.open()'s return
+// value (null when the popup was actually blocked) — never by asking the trader to self-report
+// "did it open?". A yes/no dialog fired once per item, several in a row, is trivial to misclick —
+// that's exactly how a customer whose window never opened ended up logged as sent while two that
+// did open weren't. The trader still paces the run (one Continue/Stop prompt between items,
+// which only reports what already, provably happened), but that click no longer decides what
+// gets recorded — it can't get inverted anymore because it isn't the source of truth anymore.
+function rqSendOneByOne(items, i, failed){
   i = i || 0;
-  if (i >= items.length) return;
+  failed = failed || [];
+  if (i >= items.length){
+    if (failed.length) alert(`Done. These did NOT open (blocked) and were not logged — use the individual button next to their name instead:\n\n${failed.join('\n')}`);
+    return;
+  }
   const item = items[i];
-  window.open(item.url, '_blank');
-  const cont = confirm(`${i + 1} de ${items.length} — ${item.label}\n\n¿Se abrió la ventana? Aceptar = registrar y seguir con el siguiente.\nCancelar = detener aquí.`);
-  if (item.onConfirmed) item.onConfirmed(cont);
-  if (cont) rqSendOneByOne(items, i + 1);
+  const win = window.open(item.url, '_blank');
+  const opened = !!win;
+  if (opened){
+    if (item.onConfirmed) item.onConfirmed(true);
+  } else {
+    failed.push(item.label);
+  }
+  const isLast = i + 1 >= items.length;
+  if (isLast){
+    rqSendOneByOne(items, i + 1, failed);
+    return;
+  }
+  const status = opened ? `✓ Opened for ${item.label}.` : `✗ Blocked for ${item.label} — not logged.`;
+  const cont = confirm(`${status}\n\n${i + 1} of ${items.length} done. Continue to ${items[i + 1].label}?`);
+  if (cont) rqSendOneByOne(items, i + 1, failed);
+  else if (failed.length) alert(`Stopped. These did NOT open and were not logged:\n\n${failed.join('\n')}`);
 }
 
 function rqOpenAllEmails(){
