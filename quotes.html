@@ -1087,32 +1087,49 @@ function sendOfferWhatsAppTo(customerId){
 // first one silently blocked. Firing them all back-to-back in one go is what actually lets
 // multiple tabs open. If the browser still only opens one, click the popup-blocked icon in the
 // address bar and choose "Always allow pop-ups from this site" — a one-time setting.
-function rqOpenAllSync(urls){
-  urls.forEach(url => window.open(url, '_blank'));
+// Opens sends ONE AT A TIME with a confirm() pause in between, instead of firing every
+// window.open() in one burst. Browsers (and the OS mail-client handoff behind mailto:) won't
+// reliably open more than one window per click no matter how the calls are timed — the old
+// "fire them all synchronously" approach still only opened 1 of N in practice, but logged
+// every one as sent regardless, so the offer history recorded windows that never opened.
+// confirm()'s own OK click is itself a user gesture, so the next window.open() right after
+// it still counts as user-initiated and isn't blocked. Only what the trader confirms actually
+// opened gets logged — Cancel stops the run right there, nothing after it is touched.
+function rqSendOneByOne(items, i){
+  i = i || 0;
+  if (i >= items.length) return;
+  const item = items[i];
+  window.open(item.url, '_blank');
+  const cont = confirm(`${i + 1} de ${items.length} — ${item.label}\n\n¿Se abrió la ventana? Aceptar = registrar y seguir con el siguiente.\nCancelar = detener aquí.`);
+  if (item.onConfirmed) item.onConfirmed(cont);
+  if (cont) rqSendOneByOne(items, i + 1);
 }
 
 function rqOpenAllEmails(){
   if (!rqRequireDeliveryDay()) return;
   const targets = rqMatchedCustomers.filter(c => c.email);
-  const urls = targets.map(c => {
-    const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
-    const subject = `Cotización — ${rqProductSpec || ''}`;
-    return `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  });
-  rqOpenAllSync(urls);
-  rqLogSentOffers(targets, 'email');
+  if (!targets.length){ alert('No matched customer has an email on file.'); return; }
+  const items = targets.map(c => ({
+    url: `mailto:${c.email}?subject=${encodeURIComponent('Cotización — ' + (rqProductSpec || ''))}&body=${encodeURIComponent(buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)))}`,
+    label: c.trade_name,
+    onConfirmed: ok => { if (ok) rqLogSentOffers([c], 'email'); },
+  }));
+  rqSendOneByOne(items);
 }
 
 function rqOpenAllWhatsApp(){
   if (!rqRequireDeliveryDay()) return;
   const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
-  const urls = targets.map(c => {
+  if (!targets.length){ alert('No matched customer has a phone/WhatsApp on file.'); return; }
+  const items = targets.map(c => {
     const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
-    const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
-    return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(body) : null;
-  }).filter(Boolean);
-  rqOpenAllSync(urls);
-  rqLogSentOffers(targets, 'whatsapp');
+    return {
+      url: 'https://wa.me/' + phone + '?text=' + encodeURIComponent(buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name))),
+      label: c.trade_name,
+      onConfirmed: ok => { if (ok) rqLogSentOffers([c], 'whatsapp'); },
+    };
+  });
+  rqSendOneByOne(items);
 }
 
 function rqFmtDate(val){
@@ -1178,24 +1195,28 @@ function rqSpecAskLine(plant){
 
 function rqAskAllEmails(){
   if (!rqProductSpec || !rqRequireDeliveryDay()) return;
-  const urls = rqSelectedPlants.filter(p => !p.rqPrice && p.email).map(p => {
+  const targets = rqSelectedPlants.filter(p => !p.rqPrice && p.email);
+  if (!targets.length) return;
+  const items = targets.map(p => {
     const template = rqPickTemplate(RQ_EMAIL_TEMPLATES, i => rqLastEmailTemplate = i, rqLastEmailTemplate);
     const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
     const subject = `${rqProductSpec} — quote request`;
-    return `mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return { url: `mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, label: p.name };
   });
-  rqOpenAllSync(urls);
+  rqSendOneByOne(items);
 }
 
 function rqAskAllWhatsApp(){
   if (!rqProductSpec || !rqRequireDeliveryDay()) return;
-  const urls = rqSelectedPlants.filter(p => !p.rqPrice && (p.whatsapp || p.phone)).map(p => {
+  const targets = rqSelectedPlants.filter(p => !p.rqPrice && (p.whatsapp || p.phone));
+  if (!targets.length) return;
+  const items = targets.map(p => {
     const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
     const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
     const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
-    return phone ? 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg) : null;
-  }).filter(Boolean);
-  rqOpenAllSync(urls);
+    return { url: 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), label: p.name };
+  });
+  rqSendOneByOne(items);
 }
 
 function escapeHtml(str){
