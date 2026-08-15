@@ -7,6 +7,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>BuenTrade Trading OS — Offers</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -268,7 +270,11 @@ function renderOffers(){
     if (o.status === 'sent'){
       action = `<button class="btn win" onclick="markOffer('${o.id}','won')">✓ Ganada</button> <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Perdida</button>`;
     } else if (o.status === 'won'){
-      action = `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Costos reales</button>`;
+      action = `
+        <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportPO('${o.order_number}')">PO</button>
+        <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportSO('${o.order_number}')">SO</button>
+        <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportFO('${o.order_number}')">FO</button>
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Costos reales</button>`;
     }
     // Only "sent" (pending) offers stay editable — once won or lost, the row is history and
     // should read exactly what happened, not drift if someone tweaks a field afterward.
@@ -482,6 +488,242 @@ async function markWon(id){
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ============ PDF EXPORT (PO / SO / FO) ============
+// PO and SO are ready the moment an order exists (Ganada already created them with the last
+// confirmed Trading Tool numbers). FO is exported the same way, but in practice you'd print it
+// once the actual carrier is booked — the numbers on it can still be corrected later via
+// "Costos reales" without needing to touch this generator.
+const COMPANY = {
+  name1: 'Buen', name2: 'Trade',
+  address: '1525 N Park Dr, Suite 104, Weston, FL 33326',
+  email: 'buentrade2026@gmail.com',
+  phone: '+34 666 318 864',
+};
+
+// Draft, original language written for BuenTrade — not copied from any other company's forms.
+// Flagged to the user as a draft for legal review, not a finished/reviewed contract.
+const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
+const SO_TERMS = "This Sales Confirmation is issued by BuenTrade LLC. By accepting this confirmation, Buyer agrees to the quantity, price, and delivery terms stated above. Product is sold as described, subject to normal industry tolerances in weight and count. Payment is due per the terms stated above from the date of delivery unless otherwise agreed in writing. Any discrepancy in product, weight, or condition must be reported to BuenTrade LLC in writing within 24 hours of delivery.";
+const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier.";
+
+function fmtDateStr(d){
+  if (!d) return '';
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+}
+function fmtDatesList(arr){
+  return (arr || []).map(fmtDateStr).join(', ') || 'TBD';
+}
+function todayStr(){
+  return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+}
+
+function pdfDoc(){
+  const { jsPDF } = window.jspdf;
+  return new jsPDF({ unit: 'pt', format: 'letter' });
+}
+
+function pdfHeader(doc, docTitle, orderNumber){
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(10, 37, 71);
+  doc.text(COMPANY.name1, 40, 50);
+  const w = doc.getTextWidth(COMPANY.name1);
+  doc.setTextColor(30, 106, 219);
+  doc.text(COMPANY.name2, 40 + w, 50);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(COMPANY.address, 40, 66);
+  doc.text(`${COMPANY.email}  ·  ${COMPANY.phone}`, 40, 78);
+  doc.setDrawColor(226, 233, 242);
+  doc.setLineWidth(1);
+  doc.line(40, 92, 572, 92);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(150, 160, 175);
+  doc.text(`${docTitle}  ${orderNumber}`, 40, 128);
+  doc.setTextColor(15, 31, 51);
+}
+
+function pdfInfoBlock(doc, x, y, label, lines){
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(label, x, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 31, 51);
+  (lines || []).filter(Boolean).forEach((line, i) => doc.text(String(line), x, y + 16 + i * 14));
+}
+
+function pdfKeyValueRows(doc, x, y, rows){
+  let cursorY = y;
+  rows.forEach(([k, v]) => {
+    if (!v) return;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(k, x, cursorY);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(15, 31, 51);
+    doc.text(String(v), x + 150, cursorY);
+    cursorY += 17;
+  });
+  return cursorY;
+}
+
+function pdfTerms(doc, y, title, text){
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(title, 40, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(120, 130, 145);
+  const split = doc.splitTextToSize(text, 532);
+  doc.text(split, 40, y + 14);
+  doc.setFontSize(7.5);
+  doc.setTextColor(190, 60, 60);
+  doc.text('Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, y + 14 + split.length * 10 + 12);
+}
+
+async function exportPO(orderNumber){
+  const { data: po } = await db.from('purchase_orders').select('*').eq('order_number', orderNumber).single();
+  if (!po){ alert('PO not found.'); return; }
+  const { data: plant } = po.plant_id ? await db.from('plants').select('*').eq('id', po.plant_id).single() : { data: null };
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Purchase Order', orderNumber);
+
+  const vendorLines = [
+    plant ? plant.name : po.plant_name,
+    plant && plant.address,
+    plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', '),
+  ];
+  pdfInfoBlock(doc, 40, 160, 'VENDOR', vendorLines);
+  pdfInfoBlock(doc, 320, 160, 'SHIP TO / PICK UP LOCATION', vendorLines);
+
+  const y = pdfKeyValueRows(doc, 40, 232, [
+    ['DATE', todayStr()],
+    ['PICK-UP / DELIVERY DATE', fmtDatesList(po.delivery_dates)],
+    ['PAYMENT TERMS', plant && plant.payment_terms],
+    ['ORDER #', orderNumber],
+  ]);
+
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Item Description', 'Qty LBS', 'Unit Cost', 'Amount']],
+    body: [[
+      [po.product_name, po.product_spec].filter(Boolean).join(' — '),
+      (po.weight || 0).toLocaleString('en-US'),
+      '$' + (po.purchase_price || 0).toFixed(4),
+      '$' + (po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [234, 243, 252], textColor: [15, 31, 51], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 },
+    margin: { left: 40, right: 40 },
+  });
+
+  let ty = doc.lastAutoTable.finalY + 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text('NOTES: ' + (po.docs_on ? 'Docs included by vendor.' : 'No export documentation included — buyer to arrange.'), 40, ty);
+
+  pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
+  doc.save(`PO-${orderNumber}.pdf`);
+}
+
+async function exportSO(orderNumber){
+  const { data: so } = await db.from('sales_orders').select('*').eq('order_number', orderNumber).single();
+  if (!so){ alert('SO not found.'); return; }
+  const { data: customer } = so.customer_id ? await db.from('customers').select('*').eq('id', so.customer_id).single() : { data: null };
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Sales Confirmation', orderNumber);
+
+  const custLines = [
+    customer ? customer.trade_name : so.customer_name,
+    customer && customer.address,
+    customer && [customer.city, customer.state, customer.country].filter(Boolean).join(', '),
+  ];
+  pdfInfoBlock(doc, 40, 160, 'CUSTOMER', custLines);
+  pdfInfoBlock(doc, 320, 160, 'SHIP TO', [customer && customer.usual_destination, customer && customer.usual_delivery_type]);
+
+  const y = pdfKeyValueRows(doc, 40, 232, [
+    ['DATE', todayStr()],
+    ['EST. DELIVERY DATE', fmtDatesList(so.delivery_dates)],
+    ['PAYMENT TERMS', customer && customer.payment_days ? `Net ${customer.payment_days}` : null],
+    ['ORDER #', orderNumber],
+  ]);
+
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Item Description', 'Qty LBS', 'USD / LBS', 'Amount']],
+    body: [[
+      [so.product_name, so.product_spec].filter(Boolean).join(' — '),
+      (so.weight || 0).toLocaleString('en-US'),
+      '$' + (so.sale_price || 0).toFixed(4),
+      '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [234, 243, 252], textColor: [15, 31, 51], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 },
+    margin: { left: 40, right: 40 },
+  });
+
+  const ty = doc.lastAutoTable.finalY + 30;
+  pdfTerms(doc, ty, 'TERMS', SO_TERMS);
+  doc.save(`SO-${orderNumber}.pdf`);
+}
+
+async function exportFO(orderNumber){
+  const { data: fos } = await db.from('freight_orders').select('*').eq('order_number', orderNumber);
+  if (!fos || !fos.length){ alert('No freight leg on this order.'); return; }
+  const { data: sentOffer } = await db.from('sent_offers').select('weight,delivery_dates').eq('order_number', orderNumber).limit(1).single();
+
+  for (const fo of fos){
+    const { data: carrier } = fo.carrier_provider_id ? await db.from('providers').select('*').eq('id', fo.carrier_provider_id).single() : { data: null };
+
+    const doc = pdfDoc();
+    pdfHeader(doc, 'Freight Confirmation', orderNumber);
+
+    pdfInfoBlock(doc, 40, 160, 'CARRIER', [
+      carrier ? carrier.name : 'TBD — not yet booked',
+      carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
+      carrier && carrier.phone,
+    ]);
+
+    const y = pdfKeyValueRows(doc, 40, 232, [
+      ['DATE', todayStr()],
+      ['PICK UP ADDRESS', fo.origin],
+      ['DELIVERY ADDRESS', fo.destination],
+      ['PICK UP / DELIVERY DATE', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
+      ['ESTIMATED WEIGHT', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
+      ['CLIENT ORDER #', orderNumber],
+    ]);
+
+    doc.autoTable({
+      startY: y + 12,
+      head: [['Service Purchased', 'Quoted Rate', 'Actual Rate']],
+      body: [[
+        'Inland Freight',
+        '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+        fo.actual_rate != null ? '$' + fo.actual_rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'Pending — see Costos reales',
+      ]],
+      theme: 'grid',
+      headStyles: { fillColor: [234, 243, 252], textColor: [15, 31, 51], fontStyle: 'bold', fontSize: 9 },
+      styles: { fontSize: 9.5, cellPadding: 7 },
+      margin: { left: 40, right: 40 },
+    });
+
+    const ty = doc.lastAutoTable.finalY + 30;
+    pdfTerms(doc, ty, 'TERMS', FO_TERMS);
+    doc.save(`FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf`);
+  }
 }
 
 rqDefaultDates();
