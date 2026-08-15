@@ -1239,37 +1239,6 @@ document.addEventListener('focusin', function(e){
   }
 });
 
-if (__qp.has('freight')) document.getElementById('freight').value = Number(__qp.get('freight')) || 0;
-// Quotes hides this field when the plant delivers to the border itself — there's no US Freight
-// for the trader to pay or edit in that case. Pure visibility toggle, same as Inspection.
-if (__qp.get('hideFreight') === '1') document.getElementById('freightField').style.display = 'none';
-if (__qp.has('inspection')) document.getElementById('inspection').value = Number(__qp.get('inspection')) || 0;
-// Quotes hides this field entirely when the plant's price was quoted "with docs" — there's no
-// inspection cost to account for, so nothing to show or edit. Purely a visibility toggle;
-// calc() still just reads whatever value is in the (possibly hidden) input, untouched.
-if (__qp.get('hideInspection') === '1') document.getElementById('inspectionField').style.display = 'none';
-// Import Cost's emptiness (not "0") is what gates whether Mexico pricing shows at all
-// (importCostFilled below), so only set a value when there actually is one — never force "0"
-// as a side effect of some other prefill. forceImportCostZero is the one deliberate exception:
-// Quotes sends it only when the trader picked a real Mexican destination (so Mexico pricing
-// genuinely should activate) and already accounts for customs via tramiteAduanal/bodegaAmericana
-// (part of extraCosts) — Import Cost itself stays a real $0 here, not a stand-in dollar amount,
-// so there's no double-counting.
-if (__qp.has('importCost') && Number(__qp.get('importCost')) > 0) document.getElementById('importCost').value = Number(__qp.get('importCost'));
-else if (__qp.get('forceImportCostZero') === '1') document.getElementById('importCost').value = '0';
-if (__qp.get('hideImportCost') === '1') document.getElementById('importCostField').style.display = 'none';
-// Imported-load toggle in Quotes drives these two discriminated customs fields together
-// (Trámite aduanal + Bodega americana) — same pre-fill + hide pattern as everything above.
-if (__qp.has('tramiteAduanal') && Number(__qp.get('tramiteAduanal')) > 0) document.getElementById('tramiteAduanal').value = Number(__qp.get('tramiteAduanal'));
-if (__qp.has('bodegaAmericana') && Number(__qp.get('bodegaAmericana')) > 0) document.getElementById('bodegaAmericana').value = Number(__qp.get('bodegaAmericana'));
-if (__qp.get('hideCustomsBrokerage') === '1'){
-  document.getElementById('tramiteAduanalField').style.display = 'none';
-  document.getElementById('bodegaAmericanaField').style.display = 'none';
-}
-// Lumper fee, INBOND Release, and every Cold storage & USDA field stay hidden by default when
-// embedded from Quotes — but the trader can click a "+ Labels" / "+ Storage" / etc. chip there,
-// which re-adds that specific field's key to showExtras and reloads this iframe with it
-// un-hidden. Purely a visibility toggle; calc() still reads these inputs untouched.
 const RQ_EXTRA_FIELD_MAP = {
   lumperFee: 'lumperFeeField', inbondRelease: 'inbondReleaseField',
   labels: 'labelsCostField', plasticWrap: 'plasticWrapField', inLieu: 'inLieuField',
@@ -1277,40 +1246,80 @@ const RQ_EXTRA_FIELD_MAP = {
   freshToFrozen: 'freshToFrozenField',
 };
 const RQ_ALL_EXTRA_FIELD_IDS = ['lumperFeeField','inbondReleaseField','labelsCostField','plasticWrapField','inLieuField','storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField','freshToFrozenField'];
-if (__qp.get('hideExtras') === '1'){
-  const rqShownExtraIds = new Set();
-  (__qp.get('showExtras') || '').split(',').map(s => s.trim()).filter(Boolean).forEach(key => {
-    const mapped = RQ_EXTRA_FIELD_MAP[key];
-    if (!mapped) return;
-    (Array.isArray(mapped) ? mapped : [mapped]).forEach(id => rqShownExtraIds.add(id));
-  });
-  RQ_ALL_EXTRA_FIELD_IDS.forEach(id => {
-    if (!rqShownExtraIds.has(id)) document.getElementById(id).style.display = 'none';
-  });
+function rqShow(id, visible){ document.getElementById(id).style.display = visible ? '' : 'none'; }
+
+// Applies (or re-applies) everything Quotes sends this embedded page — pulled into its own
+// function so a live update (postMessage, see below) can re-run the exact same logic instead of
+// only ever working once at initial load. Every visibility toggle is explicit both ways (show
+// AND hide) for the same reason — otherwise a field hidden once could never come back once the
+// trader picks a location/destination that should reveal it.
+function applyEmbedParams(qp){
+  if (qp.has('freight')) document.getElementById('freight').value = Number(qp.get('freight')) || 0;
+  // Quotes hides this field when the plant delivers to the border itself — there's no US Freight
+  // for the trader to pay or edit in that case. Pure visibility toggle, same as Inspection.
+  rqShow('freightField', qp.get('hideFreight') !== '1');
+  if (qp.has('inspection')) document.getElementById('inspection').value = Number(qp.get('inspection')) || 0;
+  rqShow('inspectionField', qp.get('hideInspection') !== '1');
+  // Import Cost's emptiness (not "0") is what gates whether Mexico pricing shows at all, so only
+  // set a value when there actually is one — never force "0" as a side effect of some other
+  // prefill. forceImportCostZero is the one deliberate exception: Quotes sends it only when the
+  // trader picked a real Mexican destination (so Mexico pricing genuinely should activate) and
+  // already accounts for customs via tramiteAduanal/bodegaAmericana — Import Cost itself stays a
+  // real $0 here, not a stand-in dollar amount, so there's no double-counting.
+  if (qp.has('importCost') && Number(qp.get('importCost')) > 0) document.getElementById('importCost').value = Number(qp.get('importCost'));
+  else if (qp.get('forceImportCostZero') === '1') document.getElementById('importCost').value = '0';
+  rqShow('importCostField', qp.get('hideImportCost') !== '1');
+  // Imported-load toggle in Quotes drives these two discriminated customs fields together.
+  if (qp.has('tramiteAduanal')) document.getElementById('tramiteAduanal').value = Number(qp.get('tramiteAduanal')) || 0;
+  if (qp.has('bodegaAmericana')) document.getElementById('bodegaAmericana').value = Number(qp.get('bodegaAmericana')) || 0;
+  const showCustoms = qp.get('hideCustomsBrokerage') !== '1';
+  rqShow('tramiteAduanalField', showCustoms);
+  rqShow('bodegaAmericanaField', showCustoms);
+  // Lumper fee, INBOND Release, and every Cold storage & USDA field stay hidden by default when
+  // embedded from Quotes — the trader can click a "+ Labels" / "+ Storage" chip there, which
+  // adds that field's key to showExtras and live-updates this panel with it un-hidden.
+  if (qp.get('hideExtras') === '1'){
+    const shown = new Set();
+    (qp.get('showExtras') || '').split(',').map(s => s.trim()).filter(Boolean).forEach(key => {
+      const mapped = RQ_EXTRA_FIELD_MAP[key];
+      if (!mapped) return;
+      (Array.isArray(mapped) ? mapped : [mapped]).forEach(id => shown.add(id));
+    });
+    RQ_ALL_EXTRA_FIELD_IDS.forEach(id => rqShow(id, shown.has(id)));
+  } else {
+    RQ_ALL_EXTRA_FIELD_IDS.forEach(id => rqShow(id, true));
+  }
+  // If a section ends up with nothing visible inside it, don't leave an empty header + divider
+  // dangling on screen. Re-evaluated every call so a section that was empty can reappear too.
+  rqShow('customsBrokerageSection', !['tramiteAduanalField','bodegaAmericanaField','lumperFeeField','inbondReleaseField'].every(id => document.getElementById(id).style.display === 'none'));
+  rqShow('coldStorageSection', !['labelsCostField','plasticWrapField','inLieuField','storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField','freshToFrozenField'].every(id => document.getElementById(id).style.display === 'none'));
+  rqShow('mexicanFreightField', qp.get('hideMexicanFreight') !== '1');
+  // Mexican Freight is stored in USD in Master Data; Quotes converts it to MXN itself before
+  // sending it here, since this field has always been MXN-denominated.
+  if (qp.has('freightMx')) document.getElementById('freightMx').value = Number(qp.get('freightMx')) || 0;
+  rqShow('sharedCostsSection', !['freightField','mexicanFreightField','inspectionField','importCostField'].every(id => document.getElementById(id).style.display === 'none'));
 }
-// If Customs brokerage ends up with nothing visible inside it (not Imported, so brokerage is
-// hidden too, plus Lumper/INBOND not requested), don't leave an empty section header + divider
-// dangling on screen. Same cleanup for Cold storage & USDA.
-if (['tramiteAduanalField','bodegaAmericanaField','lumperFeeField','inbondReleaseField'].every(id => document.getElementById(id).style.display === 'none')){
-  document.getElementById('customsBrokerageSection').style.display = 'none';
-}
-if (['labelsCostField','plasticWrapField','inLieuField','storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField','freshToFrozenField'].every(id => document.getElementById(id).style.display === 'none')){
-  document.getElementById('coldStorageSection').style.display = 'none';
-}
-if (__qp.get('hideMexicanFreight') === '1') document.getElementById('mexicanFreightField').style.display = 'none';
-// Mexican Freight is stored in USD in Master Data; Quotes converts it to MXN itself (using the
-// same exchange-rate source as this page) before sending it here, since freightMx has always
-// been a MXN-denominated field — same emptiness-matters rule as Import Cost above.
-if (__qp.has('freightMx') && Number(__qp.get('freightMx')) > 0) document.getElementById('freightMx').value = Number(__qp.get('freightMx'));
-// Same empty-header cleanup as Customs brokerage above: at the default Delivered/No Docs/Border
-// terms, every field under "Shared — applies to both" is legitimately $0 and hidden — don't
-// leave that label sitting over nothing.
-if (['freightField','mexicanFreightField','inspectionField','importCostField'].every(id => document.getElementById(id).style.display === 'none')){
-  document.getElementById('sharedCostsSection').style.display = 'none';
-}
+
+applyEmbedParams(__qp);
 buildProductRows();
 calc();
 fetchExchangeRate();
+
+// Quotes pushes freight/docs/destination/extra-cost changes here live once this Trading Tool is
+// already open, instead of reloading the iframe (which would wipe out any negotiation already
+// happening on screen). Also keeps Purchase $/lb in sync if it's edited from the Quotes side
+// after opening.
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'buentrade:updateParams') return;
+  const qp = new URLSearchParams(e.data.params);
+  if (qp.has('cost') && products[0]){
+    products[0].cost = Number(qp.get('cost')) || 0;
+    const costEl = document.getElementById('prodCost0');
+    if (costEl) costEl.value = products[0].cost;
+  }
+  applyEmbedParams(qp);
+  calc();
+});
 
 // ===== Negotiation panel — additive only, never touches calc() or products[]. Opened from
 // Offers' "TT" button with offerId/plantId in the URL; reads/writes sent_offers directly. =====

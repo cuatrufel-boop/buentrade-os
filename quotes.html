@@ -437,6 +437,7 @@ function rqToggleExtraField(plantId, key){
   if (idx === -1) p.rqExtraFields.push(key); else p.rqExtraFields.splice(idx, 1);
   rqInvalidateCalc(p);
   renderRqPlants();
+  rqSyncOpenCalculator(p);
 }
 
 function renderRqPlants(){
@@ -444,16 +445,22 @@ function renderRqPlants(){
   const hasProduct = !!document.getElementById('rq_product_name').value.trim();
   document.getElementById('rq_empty').style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
   rqUpdateActionButtons();
-  // A plant whose Trading Tool is open keeps its exact DOM node (iframe included) across this
-  // rebuild — replacing it would tear down and reload the iframe from scratch every time ANY
-  // other field on the page changes (freight, docs, another plant's price…), which looked like
-  // the calculator "closing itself" and reset whatever the trader was mid-typing in it.
-  const openRows = {};
-  container.querySelectorAll('[data-plant-row]').forEach(el => { openRows[el.dataset.plantRow] = el; });
-  const frag = document.createDocumentFragment();
+  // A plant whose Trading Tool is open keeps its DOM node completely untouched across this
+  // rebuild — not just "not rebuilt", genuinely never removed or moved. Browsers reload an
+  // <iframe> the moment it's detached and reinserted, even into the exact same spot (e.g. via
+  // appendChild on a node that's already in the document) — that was still happening even after
+  // switching to a "reuse the node" fragment approach, since building the fragment itself moves
+  // every node into it. Only rows that need rebuilding get touched now; an open row is found by
+  // its existing position and simply left alone, with new/updated rows inserted around it.
+  Array.from(container.children).forEach(el => {
+    const id = el.dataset.plantRow;
+    if (id && !rqSelectedPlants.some(p => p.id === id)) el.remove();
+  });
+  let anchor = null;
   rqSelectedPlants.forEach(p => {
-    if (p.rqCalculatorOpen && openRows[p.id]){
-      frag.appendChild(openRows[p.id]);
+    const existing = container.querySelector(`[data-plant-row="${p.id}"]`);
+    if (p.rqCalculatorOpen && existing){
+      anchor = existing;
       return;
     }
     const row = document.createElement('div');
@@ -512,7 +519,14 @@ function renderRqPlants(){
         <div class="tt-brand-header">${escapeHtml(p.name)}</div>
         <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="rqOnIframeLoaded('${p.id}')"></iframe>
       </div>`;
-    frag.appendChild(row);
+    if (existing){
+      existing.replaceWith(row); // rebuilding a row that was never open — nothing live to lose
+    } else if (anchor){
+      anchor.after(row);
+    } else {
+      container.insertBefore(row, container.firstChild);
+    }
+    anchor = row;
     // Only a freshly-built row needs its iframe (re)started — a preserved open row (handled
     // above) already has a live one and must not be touched.
     if (p.rqCalculatorOpen){
@@ -520,8 +534,6 @@ function renderRqPlants(){
       row.querySelector('.tt-frame').src = rqBuildToolUrl(p);
     }
   });
-  container.innerHTML = '';
-  container.appendChild(frag);
   rqRenderFinalList();
 }
 
@@ -542,6 +554,7 @@ function rqSetUsFreightRate(plantId, rateId){
   p.rqUsFreightRateId = rateId || null;
   rqInvalidateCalc(p);
   renderRqPlants();
+  rqSyncOpenCalculator(p);
 }
 
 // A location/rate picked (not left on "Del Border") is what determines the US Freight $ — never
@@ -564,6 +577,7 @@ function rqSetDocsOn(plantId, isOn){
   p.rqDocsOn = isOn;
   rqInvalidateCalc(p);
   renderRqPlants();
+  rqSyncOpenCalculator(p);
 }
 
 // Single-control toggles — one click flips the state, instead of picking between two buttons.
@@ -620,6 +634,7 @@ function rqSetMexicanDest(plantId, rateId){
   p.rqMexicanDestRateId = rateId || null;
   rqInvalidateCalc(p);
   renderRqPlants();
+  rqSyncOpenCalculator(p);
 }
 
 // The customer's own profile (usual_destination) is what drives this — pick a Delivery location
@@ -670,7 +685,21 @@ function rqMexicanFreightMxnForPlant(p){
 // Selling price). Quotes only ever READS its live totals via window.__calc, never recomputes.
 // Every $ below is pre-filled as a starting suggestion sourced from Master Data — the trader can
 // freely change any of it inside the Trading Tool itself, same as any other Direct Costs field.
-function rqBuildToolUrl(p){
+// Pushes the current freight/docs/destination/extra-cost numbers straight into an already-open
+// Trading Tool iframe instead of reloading it — a reload would wipe out any negotiation already
+// happening on screen (this is exactly what used to make freight/location changes look like they
+// "didn't arrive": the row-preservation fix stopped the reload, but nothing was pushing the new
+// values in to replace it). No-op if that plant's calculator isn't open.
+function rqSyncOpenCalculator(p){
+  if (!p.rqCalculatorOpen) return;
+  const iframe = document.getElementById('rq_iframe_' + p.id);
+  if (!iframe || !iframe.contentWindow) return;
+  const params = {};
+  rqBuildToolParams(p).forEach((v, k) => { params[k] = v; });
+  iframe.contentWindow.postMessage({ type: 'buentrade:updateParams', params }, '*');
+}
+
+function rqBuildToolParams(p){
   // "Del Border" (the default) hides US Freight entirely — it's baked into the one Purchase
   // Price number. Picking an actual origin shows it, pre-filled from that rate.
   const showFreight = !!p.rqUsFreightRateId;
@@ -712,8 +741,13 @@ function rqBuildToolUrl(p){
     hideMexicanFreight: imported ? '0' : '1',
     freightMx: String(freightMx || 0),
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
-    v: String(Date.now()), // cache-bust so the embedded Trading Tool always loads the latest file
   });
+  return params;
+}
+
+function rqBuildToolUrl(p){
+  const params = rqBuildToolParams(p);
+  params.set('v', String(Date.now())); // cache-bust so the embedded Trading Tool always loads the latest file
   return 'trading-tool.html?' + params.toString();
 }
 
@@ -888,6 +922,7 @@ function rqUpdatePlantField(id, field, val){
   // the trader happened to click somewhere else (usually the freight dropdown next to it), so
   // it looked like "setting freight" was what opened it rather than the price itself.
   if (field === 'rqPrice'){
+    if (p.rqCalculatorOpen) rqSyncOpenCalculator(p); // already open: keep its price live, no reload
     clearTimeout(rqAutoOpenTimers[id]);
     if (p.rqPrice) rqAutoOpenTimers[id] = setTimeout(() => rqAutoOpenCalculator(id), 700);
   }
