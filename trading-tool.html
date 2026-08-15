@@ -654,17 +654,43 @@ if (FIREBASE_READY) {
 
     <!-- ================= NEGOTIATION (only when opened from Offers with a specific offer) ================= -->
     <div class="card" id="negoCard" style="display:none;">
-      <div class="card-head"><h2>Negociación</h2></div>
+      <div class="card-head"><h2>Negotiation</h2></div>
       <div class="card-body">
-        <div id="negoLog" style="font-size:12.5px;margin-bottom:14px;"></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button onclick="negoSendToPlant('email')" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a planta — Email</button>
-          <button onclick="negoSendToPlant('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a planta — WhatsApp</button>
-          <button onclick="negoSendToCustomer('email')" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a cliente — Email</button>
-          <button onclick="negoSendToCustomer('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Enviar a cliente — WhatsApp</button>
+        <div style="display:flex;gap:16px;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">
+          <span><span style="color:#0F8A5F;font-weight:700;">←</span> Received (their number)</span>
+          <span><span style="color:var(--blue);font-weight:700;">→</span> Sent (your number)</span>
         </div>
+        <div id="negoLog" style="font-size:12.5px;margin-bottom:14px;"></div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Log what they told you (no message sent)</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+            <span style="font-size:12.5px;width:96px;color:var(--ink-soft);">Plant replied</span>
+            <input type="number" step="0.0001" id="negoBidPlant" placeholder="$/lb" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;">
+            <button onclick="negoLogReceived('plant')" style="background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Log</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12.5px;width:96px;color:var(--ink-soft);">Customer bid</span>
+            <input type="number" step="0.0001" id="negoBidCustomer" placeholder="$/lb" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;">
+            <button onclick="negoLogReceived('customer')" style="background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Log</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:20px;flex-wrap:wrap;padding-top:14px;border-top:1.5px solid var(--line);">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Send to Plant</div>
+            <button onclick="negoSendToPlant('email')" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">Email</button>
+            <button onclick="negoSendToPlant('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px;padding:6.5px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">WhatsApp</button>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Send to Customer</div>
+            <button onclick="negoSendToCustomer('email')" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">Email</button>
+            <button onclick="negoSendToCustomer('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px;padding:6.5px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">WhatsApp</button>
+          </div>
+        </div>
+
         <div style="margin-top:16px;padding-top:16px;border-top:1.5px solid var(--line);">
-          <button onclick="negoSaveDefinitive()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;">✓ Guardar como definitivo — Ganada</button>
+          <button onclick="negoSaveDefinitive()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;">✓ Save as Final — Win</button>
         </div>
         <div id="negoMsg" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
@@ -1302,7 +1328,7 @@ async function negoInit(){
   document.getElementById('negoCard').style.display = 'block';
   const { data: offer, error } = await db.from('sent_offers').select('*').eq('id', offerId).single();
   if (error || !offer){
-    document.getElementById('negoMsg').textContent = 'No se pudo cargar esta oferta: ' + (error ? error.message : 'no encontrada');
+    document.getElementById('negoMsg').textContent = 'Could not load this offer: ' + (error ? error.message : 'not found');
     return;
   }
   negoOffer = offer;
@@ -1318,19 +1344,39 @@ async function negoInit(){
   negoRenderLog();
 }
 
+// Full timeline = the two synthetic opening entries (what Quotes actually first sent, read
+// straight off the offer — never stored in negotiation_log since it predates this panel) plus
+// every real event logged since. Rendered as one numbered, color-coded list — green for what
+// came IN (plant's first price, plant replies, customer bids), blue for what went OUT — so the
+// whole arc from first quote to close reads at a glance instead of being spread across clicks.
+const NEGO_STEP_META = {
+  plant_original: { dir: 'in',  label: () => `Plant quoted${negoPlant ? ' (' + negoEscapeHtml(negoPlant.name) + ')' : ''}` },
+  customer_original: { dir: 'out', label: () => `You offered${negoCustomer ? ' (' + negoEscapeHtml(negoCustomer.trade_name) + ')' : ''}` },
+  plant_reply: { dir: 'in',  label: () => `Plant replied${negoPlant ? ' (' + negoEscapeHtml(negoPlant.name) + ')' : ''}` },
+  customer_bid: { dir: 'in',  label: () => `Customer bid${negoCustomer ? ' (' + negoEscapeHtml(negoCustomer.trade_name) + ')' : ''}` },
+  plant: { dir: 'out', label: () => `You countered Plant${negoPlant ? ' (' + negoEscapeHtml(negoPlant.name) + ')' : ''}` },
+  customer: { dir: 'out', label: () => `You offered Customer${negoCustomer ? ' (' + negoEscapeHtml(negoCustomer.trade_name) + ')' : ''}` },
+};
+
 function negoRenderLog(){
-  const log = (negoOffer && negoOffer.negotiation_log) || [];
   const el = document.getElementById('negoLog');
-  if (!log.length){
-    el.innerHTML = '<span style="color:var(--ink-soft);">Sin movimientos todavía — aquí va quedando el historial de idas y vueltas.</span>';
-    return;
-  }
-  el.innerHTML = log.map(e => {
-    const who = e.to === 'plant'
-      ? `→ Planta${negoPlant ? ' (' + negoEscapeHtml(negoPlant.name) + ')' : ''}`
-      : `→ Cliente${negoCustomer ? ' (' + negoEscapeHtml(negoCustomer.trade_name) + ')' : ''}`;
+  if (!negoOffer){ el.innerHTML = ''; return; }
+  const steps = [
+    { to: 'plant_original', price: negoOffer.purchase_price, at: negoOffer.sent_at },
+    { to: 'customer_original', price: negoOffer.sale_per_lb, at: negoOffer.sent_at },
+    ...(negoOffer.negotiation_log || []),
+  ];
+  el.innerHTML = steps.map((e, i) => {
+    const meta = NEGO_STEP_META[e.to] || { dir: 'out', label: () => e.to };
+    const arrow = meta.dir === 'in' ? '←' : '→';
+    const color = meta.dir === 'in' ? '#0F8A5F' : 'var(--blue)';
     const when = new Date(e.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    return `<div style="padding:4px 0;">${who} — <b>$${Number(e.price).toFixed(4)}/lb</b> — <span style="color:var(--ink-soft);">${when}</span></div>`;
+    return `<div style="display:flex;align-items:baseline;gap:8px;padding:5px 0;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);width:16px;">${i + 1}</span>
+      <span style="color:${color};font-weight:700;">${arrow}</span>
+      <span>${meta.label()} — <b>$${Number(e.price).toFixed(4)}/lb</b></span>
+      <span style="color:var(--ink-soft);font-size:11.5px;">${when}</span>
+    </div>`;
   }).join('');
 }
 
@@ -1339,6 +1385,18 @@ async function negoLogEvent(to, price){
   const log = [...(negoOffer.negotiation_log || []), { to, price, at: new Date().toISOString() }];
   const { error } = await db.from('sent_offers').update({ negotiation_log: log }).eq('id', negoOffer.id);
   if (!error){ negoOffer.negotiation_log = log; negoRenderLog(); }
+}
+
+// Logs something you were TOLD (over the phone, in person, a reply that isn't itself in this
+// system) without sending any message — that's the traceability gap a "send" button alone
+// can't cover: the incoming half of the negotiation.
+function negoLogReceived(who){
+  const inputId = who === 'plant' ? 'negoBidPlant' : 'negoBidCustomer';
+  const input = document.getElementById(inputId);
+  const price = Number(input.value);
+  if (!price){ document.getElementById('negoMsg').textContent = 'Enter a price first.'; return; }
+  negoLogEvent(who === 'plant' ? 'plant_reply' : 'customer_bid', price);
+  input.value = '';
 }
 
 function negoCurrentCost(){
@@ -1350,33 +1408,35 @@ function negoCurrentSale(){
   return el ? Number(el.value) || 0 : 0;
 }
 
+// Message to the plant is English — plants are US-based (same rule as the PO/FO documents).
 function negoSendToPlant(channel){
-  if (!negoPlant){ document.getElementById('negoMsg').textContent = 'No hay planta identificada para esta oferta.'; return; }
+  if (!negoPlant){ document.getElementById('negoMsg').textContent = 'No plant on file for this offer.'; return; }
   const price = negoCurrentCost();
   const contact = negoFirstName(negoPlant.contact_name || negoPlant.name);
-  const body = `Hola ${contact},\n\n¿Nos pueden confirmar ${price.toFixed(4)} USD/lb para esta carga?`;
+  const body = `Hi ${contact},\n\nCan you confirm ${price.toFixed(4)} USD/lb for this load?`;
   if (channel === 'email'){
-    if (!negoPlant.email){ document.getElementById('negoMsg').textContent = 'La planta no tiene email registrado.'; return; }
-    window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Contraoferta')}&body=${encodeURIComponent(body)}`, '_blank');
+    if (!negoPlant.email){ document.getElementById('negoMsg').textContent = 'This plant has no email on file.'; return; }
+    window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Counteroffer')}&body=${encodeURIComponent(body)}`, '_blank');
   } else {
     const phone = (negoPlant.whatsapp || negoPlant.phone || '').replace(/\D/g, '');
-    if (!phone){ document.getElementById('negoMsg').textContent = 'La planta no tiene WhatsApp/teléfono registrado.'; return; }
+    if (!phone){ document.getElementById('negoMsg').textContent = 'This plant has no phone/WhatsApp on file.'; return; }
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
   }
   negoLogEvent('plant', price);
 }
 
+// Message to the customer stays Spanish — same rule as the SO document, Latin American buyers.
 function negoSendToCustomer(channel){
-  if (!negoCustomer){ document.getElementById('negoMsg').textContent = 'No hay cliente identificado para esta oferta.'; return; }
+  if (!negoCustomer){ document.getElementById('negoMsg').textContent = 'No customer on file for this offer.'; return; }
   const price = negoCurrentSale();
   const contact = negoFirstName(negoCustomer.contact_name || negoCustomer.trade_name);
   const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.`;
   if (channel === 'email'){
-    if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'El cliente no tiene email registrado.'; return; }
+    if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'This customer has no email on file.'; return; }
     window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
   } else {
     const phone = (negoCustomer.whatsapp || negoCustomer.phone || '').replace(/\D/g, '');
-    if (!phone){ document.getElementById('negoMsg').textContent = 'El cliente no tiene WhatsApp/teléfono registrado.'; return; }
+    if (!phone){ document.getElementById('negoMsg').textContent = 'This customer has no phone/WhatsApp on file.'; return; }
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
   }
   negoLogEvent('customer', price);
@@ -1387,7 +1447,7 @@ function negoSendToCustomer(channel){
 // customs agency on file — offers.html's quick "Ganada" doesn't need that since nothing changed.
 async function negoSaveDefinitive(){
   if (!negoOffer) return;
-  if (!confirm(`Guardar como definitivo y marcar Ganada: ${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}?`)) return;
+  if (!confirm(`Save as final and mark Win: ${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}?`)) return;
 
   const purchase_price = negoCurrentCost();
   const sale_per_lb = negoCurrentSale();
@@ -1398,7 +1458,7 @@ async function negoSaveDefinitive(){
   const total_sale = sale_per_lb * weight;
 
   const { data: numRes, error: numErr } = await db.rpc('next_order_number');
-  if (numErr){ alert('Error generando el número de orden: ' + numErr.message); return; }
+  if (numErr){ alert('Error generating order number: ' + numErr.message); return; }
   const orderNumber = numRes;
   const who = (auth.currentUser && auth.currentUser.email) || null;
 
@@ -1446,7 +1506,7 @@ async function negoSaveDefinitive(){
     }
   }
 
-  document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Orden ${orderNumber} creada. Ve a Offers para exportar PO/SO/FO.</span>`;
+  document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Order ${orderNumber} created. Go to Offers to export PO/SO/FO.</span>`;
 }
 </script>
 </div><!-- /appContent -->
