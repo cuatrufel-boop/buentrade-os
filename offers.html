@@ -236,7 +236,9 @@ function rqDefaultDates(){
 async function loadOffers(){
   const from = document.getElementById('f_from').value;
   const to = document.getElementById('f_to').value;
-  let q = db.from('sent_offers').select('*').order('sent_at', { ascending: false });
+  // Grouped by customer first — when a customer calls in with a bid, that's what you already
+  // know and search by, not the plant or when it was sent.
+  let q = db.from('sent_offers').select('*').order('customer_name', { ascending: true }).order('sent_at', { ascending: false });
   if (from) q = q.gte('sent_at', from + 'T00:00:00');
   if (to) q = q.lte('sent_at', to + 'T23:59:59');
   const { data, error } = await q;

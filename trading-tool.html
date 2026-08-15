@@ -656,9 +656,10 @@ if (FIREBASE_READY) {
     <div class="card" id="negoCard" style="display:none;">
       <div class="card-head"><h2>Negotiation</h2></div>
       <div class="card-body">
-        <div style="display:flex;gap:16px;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">
+        <div style="display:flex;gap:16px;align-items:center;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">
           <span><span style="color:#0F8A5F;font-weight:700;">←</span> Received (their number)</span>
           <span><span style="color:var(--blue);font-weight:700;">→</span> Sent (your number)</span>
+          <span id="negoSaveStatus" style="font-weight:700;"></span>
         </div>
         <div id="negoLog" style="font-size:12.5px;margin-bottom:14px;"></div>
 
@@ -1380,11 +1381,36 @@ function negoRenderLog(){
   }).join('');
 }
 
+let negoSaveStatusTimer = null;
+function negoSetSaveStatus(state, msg){
+  const el = document.getElementById('negoSaveStatus');
+  if (!el) return;
+  clearTimeout(negoSaveStatusTimer);
+  if (state === 'saving'){
+    el.textContent = 'Saving…';
+    el.style.color = 'var(--ink-soft)';
+  } else if (state === 'saved'){
+    el.textContent = '✓ Saved';
+    el.style.color = '#0F8A5F';
+    negoSaveStatusTimer = setTimeout(() => { el.textContent = ''; }, 2000);
+  } else if (state === 'error'){
+    el.textContent = 'Error saving — try again: ' + (msg || '');
+    el.style.color = 'var(--red)';
+  }
+}
+
 async function negoLogEvent(to, price){
   if (!negoOffer) return;
+  negoSetSaveStatus('saving');
   const log = [...(negoOffer.negotiation_log || []), { to, price, at: new Date().toISOString() }];
   const { error } = await db.from('sent_offers').update({ negotiation_log: log }).eq('id', negoOffer.id);
-  if (!error){ negoOffer.negotiation_log = log; negoRenderLog(); }
+  if (!error){
+    negoOffer.negotiation_log = log;
+    negoRenderLog();
+    negoSetSaveStatus('saved');
+  } else {
+    negoSetSaveStatus('error', error.message);
+  }
 }
 
 // Logs something you were TOLD (over the phone, in person, a reply that isn't itself in this
@@ -1448,6 +1474,7 @@ function negoSendToCustomer(channel){
 async function negoSaveDefinitive(){
   if (!negoOffer) return;
   if (!confirm(`Save as final and mark Win: ${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}?`)) return;
+  document.getElementById('negoMsg').innerHTML = '<span style="color:var(--ink-soft);">Saving — creating order and documents…</span>';
 
   const purchase_price = negoCurrentCost();
   const sale_per_lb = negoCurrentSale();
