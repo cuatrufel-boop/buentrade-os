@@ -975,10 +975,12 @@ function rqFindPhotoFor(plant){
   return (products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url) || {}).photo_url;
 }
 
-// The "photo" field sometimes actually holds a spec-sheet PDF rather than an image — label it
-// accurately instead of always calling it "Foto" when it's really a document link.
+// The "photo" field often actually holds a spec-sheet document (PDF, sometimes even .docx)
+// rather than an image — label it accurately instead of always calling it "Foto". Checking
+// FOR an image extension (not just excluding .pdf) so any other document type — .docx, .xlsx,
+// whatever staff actually uploaded — still gets called "Spec sheet" instead of "Foto" by default.
 function rqPhotoLabel(url){
-  return /\.pdf($|\?)/i.test(url || '') ? 'Spec sheet' : 'Foto';
+  return /\.(jpe?g|png|gif|webp|heic)($|\?)/i.test(url || '') ? 'Foto' : 'Spec sheet';
 }
 
 function rqPricedPlantsSorted(){
