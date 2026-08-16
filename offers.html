@@ -472,19 +472,24 @@ async function markWon(id){
   }).eq('id', id);
   if (updErr){ alert('Error marking won: ' + updErr.message); return; }
 
+  // The status update above is the one that must not fail silently — it already returns early
+  // on error. These secondary inserts can still fail independently (e.g. a bad FK), and the
+  // trader needs to know the order isn't fully built, not just see a blanket "created" message.
+  const warnings = [];
+
   const { error: poErr } = await db.from('purchase_orders').insert({
     order_number: orderNumber, sent_offer_id: o.id, plant_id: o.plant_id, plant_name: o.plant_name,
     product_name: o.product_name, product_spec: o.product_spec, purchase_price: o.purchase_price,
     weight: o.weight, total_cost: o.total_cost, docs_on: o.docs_on, delivery_dates: o.delivery_dates,
   });
-  if (poErr) console.error('PO insert failed:', poErr.message);
+  if (poErr) warnings.push('PO: ' + poErr.message);
 
   const { error: soErr } = await db.from('sales_orders').insert({
     order_number: orderNumber, sent_offer_id: o.id, customer_id: o.customer_id, customer_name: o.customer_name,
     product_name: o.product_name, product_spec: o.product_spec, sale_price: o.sale_per_lb,
     weight: o.weight, total_sale: o.total_sale, delivery_dates: o.delivery_dates,
   });
-  if (soErr) console.error('SO insert failed:', soErr.message);
+  if (soErr) warnings.push('SO: ' + soErr.message);
 
   if (o.us_freight_rate_id && o.us_freight_amount > 0){
     const { data: rate } = await db.from('provider_rates').select('provider_id,origin').eq('id', o.us_freight_rate_id).single();
@@ -492,7 +497,7 @@ async function markWon(id){
       order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
       origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: o.us_freight_amount, currency: 'USD',
     });
-    if (foErr) console.error('FO (US freight) insert failed:', foErr.message);
+    if (foErr) warnings.push('FO (US freight): ' + foErr.message);
   }
 
   if (o.mexican_dest_rate_id && o.mexican_freight_mxn){
@@ -501,10 +506,14 @@ async function markWon(id){
       order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
       origin: 'Border', destination: rate ? rate.destination : null, quoted_rate: rate ? rate.rate : null, currency: 'USD',
     });
-    if (foErr) console.error('FO (Mexican freight) insert failed:', foErr.message);
+    if (foErr) warnings.push('FO (Mexican freight): ' + foErr.message);
   }
 
-  alert(`Orden ${orderNumber} creada.`);
+  if (warnings.length){
+    alert(`Orden ${orderNumber} creada, PERO con errores:\n\n${warnings.join('\n')}\n\nRevisa esta orden — puede faltar el PO, SO, o el flete.`);
+  } else {
+    alert(`Orden ${orderNumber} creada.`);
+  }
   loadOffers();
 }
 

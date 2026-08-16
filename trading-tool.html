@@ -1275,6 +1275,11 @@ function applyEmbedParams(qp){
   // Imported-load toggle in Quotes drives these two discriminated customs fields together.
   if (qp.has('tramiteAduanal')) document.getElementById('tramiteAduanal').value = Number(qp.get('tramiteAduanal')) || 0;
   if (qp.has('bodegaAmericana')) document.getElementById('bodegaAmericana').value = Number(qp.get('bodegaAmericana')) || 0;
+  // Same provider-rate lookup as tramiteAduanal/bodegaAmericana above (see rqCustomsRate in
+  // quotes.html) — these two were previously left for the trader to type in by hand every time
+  // even though the rate is already on file for the carrier/provider.
+  if (qp.has('lumperFee')) document.getElementById('lumperFee').value = Number(qp.get('lumperFee')) || 0;
+  if (qp.has('inbondRelease')) document.getElementById('inbondRelease').value = Number(qp.get('inbondRelease')) || 0;
   const showCustoms = qp.get('hideCustomsBrokerage') !== '1';
   rqShow('tramiteAduanalField', showCustoms);
   rqShow('bodegaAmericanaField', showCustoms);
@@ -1598,19 +1603,24 @@ async function negoSaveDefinitive(){
   }).eq('id', negoOffer.id);
   if (updErr){ alert('Error: ' + updErr.message); return; }
 
+  // The status update above is the one that must not fail silently — it already returns early
+  // on error. These secondary inserts can still fail independently, and the trader needs to
+  // know the order isn't fully built, not just see a blanket "created" message.
+  const warnings = [];
+
   const { error: poErr } = await db.from('purchase_orders').insert({
     order_number: orderNumber, sent_offer_id: negoOffer.id, plant_id: negoOffer.plant_id, plant_name: negoOffer.plant_name,
     product_name: negoOffer.product_name, product_spec: negoOffer.product_spec, purchase_price,
     weight, total_cost, docs_on: negoOffer.docs_on, delivery_dates: negoOffer.delivery_dates,
   });
-  if (poErr) console.error('PO insert failed:', poErr.message);
+  if (poErr) warnings.push('PO: ' + poErr.message);
 
   const { error: soErr } = await db.from('sales_orders').insert({
     order_number: orderNumber, sent_offer_id: negoOffer.id, customer_id: negoOffer.customer_id, customer_name: negoOffer.customer_name,
     product_name: negoOffer.product_name, product_spec: negoOffer.product_spec, sale_price: sale_per_lb,
     weight, total_sale, delivery_dates: negoOffer.delivery_dates,
   });
-  if (soErr) console.error('SO insert failed:', soErr.message);
+  if (soErr) warnings.push('SO: ' + soErr.message);
 
   if (negoOffer.us_freight_rate_id && us_freight_amount > 0){
     const { data: rate } = await db.from('provider_rates').select('provider_id,origin').eq('id', negoOffer.us_freight_rate_id).single();
@@ -1618,7 +1628,7 @@ async function negoSaveDefinitive(){
       order_number: orderNumber, sent_offer_id: negoOffer.id, carrier_provider_id: rate ? rate.provider_id : null,
       origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: us_freight_amount, currency: 'USD',
     });
-    if (foErr) console.error('FO insert failed:', foErr.message);
+    if (foErr) warnings.push('FO: ' + foErr.message);
   }
 
   // Give the customs agency on file a heads-up that a new load is coming — no formal document
@@ -1636,7 +1646,11 @@ async function negoSaveDefinitive(){
     }
   }
 
-  document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Order ${orderNumber} created. Go to Offers to export PO/SO/FO.</span>`;
+  if (warnings.length){
+    document.getElementById('negoMsg').innerHTML = `<span style="color:var(--red);font-weight:700;">Order ${orderNumber} created, but with errors:</span><br>${warnings.map(negoEscapeHtml).join('<br>')}<br>Check this order in Offers.`;
+  } else {
+    document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Order ${orderNumber} created. Go to Offers to export PO/SO/FO.</span>`;
+  }
 
   // Lets Offers (when this TT is embedded in its inline panel, not a standalone tab) refresh
   // that row immediately instead of the trader having to leave the panel to go check.
