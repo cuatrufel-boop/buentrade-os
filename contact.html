@@ -70,15 +70,15 @@
     <h3 style="margin-bottom:6px;">Request a Quote</h3>
     <p style="font-size:0.9rem;">Answer a few quick questions so we can route your request to the right team, faster.</p>
 
-    <form onsubmit="event.preventDefault(); document.getElementById('form-success').style.display='block'; this.style.display='none';">
+    <form id="contactForm" onsubmit="submitContactForm(event)">
       <label>Full Name</label>
-      <input type="text" required placeholder="Your name">
+      <input type="text" name="name" required placeholder="Your name">
 
       <label>Company</label>
-      <input type="text" placeholder="Your company">
+      <input type="text" name="company" placeholder="Your company">
 
       <label>What are you interested in?</label>
-      <select>
+      <select name="interest">
         <option>Beef</option>
         <option>Pork</option>
         <option>Poultry</option>
@@ -87,7 +87,7 @@
       </select>
 
       <label>Estimated monthly volume</label>
-      <select>
+      <select name="volume">
         <option>Under 1 container</option>
         <option>1–3 containers</option>
         <option>4–10 containers</option>
@@ -95,18 +95,46 @@
       </select>
 
       <label>Destination</label>
-      <input type="text" placeholder="City / country">
+      <input type="text" name="destination" placeholder="City / country">
 
       <label>Email</label>
-      <input type="email" required placeholder="you@company.com">
+      <input type="email" name="email" required placeholder="you@company.com">
 
       <label>Message (optional)</label>
-      <textarea placeholder="Anything else we should know?"></textarea>
+      <textarea name="message" placeholder="Anything else we should know?"></textarea>
 
       <button type="submit" class="btn solid">Send Request</button>
     </form>
     <div id="form-success" style="display:none; text-align:center; padding:20px 0; font-weight:800; color:#123A6B;">Thanks! Our team will follow up shortly. You can also reach us directly at info@buentradegroup.com.</div>
   </div>
+
+  <script>
+  async function submitContactForm(e){
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button[type="submit"]');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      const res = await fetch('https://formspree.io/f/mqpzdrze', {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' },
+      });
+      if (res.ok){
+        document.getElementById('form-success').style.display = 'block';
+        form.style.display = 'none';
+      } else {
+        throw new Error('Formspree error');
+      }
+    } catch (err){
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      alert('Something went wrong sending your request — please try again or email info@buentradegroup.com directly.');
+    }
+  }
+  </script>
 </section>
 
 <footer>
