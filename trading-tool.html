@@ -445,15 +445,13 @@ function doSignIn(e){
   return false;
 }
 
-const ALLOWED_EMAILS = ["cuatrufel@gmail.com", "info@buentradegroup.com"]; // add more emails here as you add teammates
-
 function doSignUp(e){
   e.preventDefault();
   if(!FIREBASE_READY){ showAuthMsg('Login isn\'t set up yet — see the note below.'); return false; }
   const email = document.getElementById('suEmail').value;
   const pass = document.getElementById('suPass').value;
-  if(!ALLOWED_EMAILS.includes(email.toLowerCase())){
-    showAuthMsg('This email isn\'t authorized to create an account yet.');
+  if(!email.toLowerCase().endsWith('@buentradegroup.com')){
+    showAuthMsg('New accounts must use a @buentradegroup.com email.');
     return false;
   }
   auth.createUserWithEmailAndPassword(email, pass)
