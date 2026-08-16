@@ -458,7 +458,14 @@ function doSignUp(e){
   }
   auth.createUserWithEmailAndPassword(email, pass)
     .then(cred => {
-      return cred.user.sendEmailVerification().then(() => {
+      // Grants the Supabase-required "authenticated" claim right now, automatically — no one
+      // has to remember to run scripts/set-supabase-claim.js for a new teammate ever again.
+      const claimReq = fetch('/.netlify/functions/set-auth-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: cred.user.uid }),
+      }).catch(() => null);
+      return Promise.all([claimReq, cred.user.sendEmailVerification()]).then(() => {
         auth.signOut();
         showAuthMsg('Account created! Check ' + email + ' for a confirmation link, then sign in.', true);
         switchAuthTab('signin');
