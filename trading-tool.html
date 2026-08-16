@@ -682,6 +682,22 @@ if (FIREBASE_READY) {
       </div>
     </div>
 
+    <!-- ================= REAL COSTS (only for an already-Won offer) ================= -->
+    <div class="card" id="realCostsCard" style="display:none;">
+      <div class="card-head"><h2>Real Costs</h2></div>
+      <div class="card-body">
+        <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Freight — costo real</div>
+        <div id="realCostsFreight"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px;">Sobrecostos</div>
+        <div id="realCostsList"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <select id="realCostType" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;"></select>
+          <input type="number" step="0.01" id="realCostAmount" placeholder="Monto" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;">
+          <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="realCostAdd()">+ Agregar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ================= PROFITABILITY ================= -->
     <div class="card profit-card" id="profitCard">
       <div class="card-head"><h2>Profitability</h2></div>
@@ -797,7 +813,7 @@ let products = [
     name: __qp.get('label') || 'Product 1',
     weight: __qp.has('weight') ? Number(__qp.get('weight')) || 40000 : 40000,
     cost: __qp.has('cost') ? Number(__qp.get('cost')) || 0 : 0,
-    sellBorder: 0, sellMx: 0, sellMxManual: false
+    sellBorder: __qp.has('sell') ? Number(__qp.get('sell')) || 0 : 0, sellMx: 0, sellMxManual: false
   }
 ];
 const MAX_PRODUCTS = 6;
@@ -1321,8 +1337,6 @@ async function negoInit(){
   const offerId = __qp.get('offerId');
   if (!offerId || !db) return;
   document.getElementById('negoCard').style.display = 'block';
-  document.getElementById('negoQbLeft').style.display = 'flex';
-  document.getElementById('negoQbRight').style.display = 'flex';
   const { data: offer, error } = await db.from('sent_offers').select('*').eq('id', offerId).single();
   if (error || !offer){
     document.getElementById('negoMsg').textContent = 'Could not load this offer: ' + (error ? error.message : 'not found');
@@ -1339,6 +1353,80 @@ async function negoInit(){
     negoCustomer = customer;
   }
   negoRenderLog();
+  if (offer.status === 'won'){
+    // Already closed — Plant/Customer/Win don't apply anymore. Instead show the real-cost
+    // entry right next to the same numbers that went into the PO/SO/FO, so nothing needs
+    // comparing against a separate table.
+    await realCostsInit();
+  } else {
+    document.getElementById('negoQbLeft').style.display = 'flex';
+    document.getElementById('negoQbRight').style.display = 'flex';
+  }
+}
+
+// ===== Real Costs (Won offers only) — reconciles quoted vs. actual freight/extra costs right
+// inside the same TT view used to quote the deal, instead of a disconnected table elsewhere.
+const REAL_COST_TYPES = ['Labels', 'Plastic wrap', 'IN-LIEU', 'Storage', 'Fresh to Frozen', 'Lumper fee', 'INBOND Release', 'Other'];
+
+async function realCostsInit(){
+  document.getElementById('realCostsCard').style.display = 'block';
+  document.getElementById('realCostType').innerHTML = REAL_COST_TYPES.map(t => `<option>${t}</option>`).join('');
+  await realCostsLoad();
+}
+
+async function realCostsLoad(){
+  if (!negoOffer || !negoOffer.order_number) return;
+  const [foRes, costsRes] = await Promise.all([
+    db.from('freight_orders').select('*').eq('order_number', negoOffer.order_number),
+    db.from('order_extra_costs').select('*').eq('order_number', negoOffer.order_number).order('created_at'),
+  ]);
+  realCostsRender(foRes.data || [], costsRes.data || []);
+}
+
+function realCostsRender(freightOrders, costs){
+  const freightEl = document.getElementById('realCostsFreight');
+  freightEl.innerHTML = freightOrders.map(fo => `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <span style="font-size:12.5px;width:180px;">${negoEscapeHtml(fo.origin || '?')} &rarr; ${negoEscapeHtml(fo.destination || '?')}</span>
+      <span style="font-size:12px;color:var(--ink-soft);">Quoted: $${(fo.quoted_rate || 0).toLocaleString('en-US')}</span>
+      <label style="font-size:12px;color:var(--ink-soft);">Actual:</label>
+      <input type="number" step="0.01" value="${fo.actual_rate ?? ''}" placeholder="0.00" style="width:110px;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;"
+        onchange="realCostSaveFreight('${fo.id}', this.value)">
+    </div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">No freight leg on this order.</div>';
+
+  const listEl = document.getElementById('realCostsList');
+  listEl.innerHTML = costs.map(c => `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:12.5px;">
+      <span style="width:150px;">${negoEscapeHtml(c.cost_type)}</span>
+      <span style="font-family:'IBM Plex Mono',monospace;">$${c.amount.toLocaleString('en-US')}</span>
+      <button class="btn danger" style="padding:2px 8px;font-size:11px;" onclick="realCostDelete('${c.id}')">&times;</button>
+    </div>`).join('');
+}
+
+async function realCostSaveFreight(freightOrderId, value){
+  const amount = value.trim() === '' ? null : Number(value);
+  const { error } = await db.from('freight_orders').update({ actual_rate: amount }).eq('id', freightOrderId);
+  if (error) alert('Error: ' + error.message);
+}
+
+async function realCostAdd(){
+  if (!negoOffer) return;
+  const type = document.getElementById('realCostType').value;
+  const amountInput = document.getElementById('realCostAmount');
+  const amount = Number(amountInput.value);
+  if (!amount || amount <= 0) return;
+  const { error } = await db.from('order_extra_costs').insert({
+    order_number: negoOffer.order_number, sent_offer_id: negoOffer.id, cost_type: type, amount,
+  });
+  if (error){ alert('Error: ' + error.message); return; }
+  amountInput.value = '';
+  await realCostsLoad();
+}
+
+async function realCostDelete(costId){
+  const { error } = await db.from('order_extra_costs').delete().eq('id', costId);
+  if (error){ alert('Error: ' + error.message); return; }
+  await realCostsLoad();
 }
 
 // Full timeline = the two synthetic opening entries (what Quotes actually first sent, read

@@ -298,7 +298,7 @@ function renderOffers(){
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportPO('${o.order_number}')">PO</button>
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportSO('${o.order_number}')">SO</button>
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportFO('${o.order_number}')">FO</button>
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Real Costs</button>
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleTT('${o.id}')">Real Costs</button>
         ${(o.negotiation_log || []).length ? `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleHistory('${o.id}')">History</button>` : ''}`;
     }
     // Numbers are read-only here on purpose — editing a price without seeing the rest of the
@@ -312,7 +312,6 @@ function renderOffers(){
       <td>${statusPill}</td>
       <td>${action}</td>
     </tr>
-    <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>
     <tr id="tt_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);padding:0;"><div id="tt_panel_${o.id}"></div></td></tr>
     <tr id="history_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="history_panel_${o.id}"></div></td></tr>`;
   }).join('');
@@ -380,98 +379,6 @@ function renderHistoryPanel(offerId){
     </div>`;
 }
 
-// Inline, no navigation: opens right under the order's own row. Loads on demand (only when
-// actually toggled open) rather than fetching this for every won row up front.
-const EXTRA_COST_TYPES = ['Labels', 'Plastic wrap', 'IN-LIEU', 'Storage', 'Fresh to Frozen', 'Lumper fee', 'INBOND Release', 'Other'];
-let reconcileOpenId = null;
-
-async function toggleReconcile(offerId){
-  const row = document.getElementById('reconcile_row_' + offerId);
-  if (reconcileOpenId && reconcileOpenId !== offerId){
-    const prev = document.getElementById('reconcile_row_' + reconcileOpenId);
-    if (prev) prev.style.display = 'none';
-  }
-  if (row.style.display === 'table-row'){
-    row.style.display = 'none';
-    reconcileOpenId = null;
-    return;
-  }
-  row.style.display = 'table-row';
-  reconcileOpenId = offerId;
-  await loadReconcilePanel(offerId);
-}
-
-async function loadReconcilePanel(offerId){
-  const o = offers.find(x => x.id === offerId);
-  const panel = document.getElementById('reconcile_panel_' + offerId);
-  panel.innerHTML = '<span style="font-size:12.5px;color:var(--ink-soft);">Loading…</span>';
-  const [foRes, costsRes] = await Promise.all([
-    db.from('freight_orders').select('*').eq('order_number', o.order_number),
-    db.from('order_extra_costs').select('*').eq('order_number', o.order_number).order('created_at'),
-  ]);
-  renderReconcilePanel(offerId, foRes.data || [], costsRes.data || []);
-}
-
-function renderReconcilePanel(offerId, freightOrders, costs){
-  const panel = document.getElementById('reconcile_panel_' + offerId);
-  const freightRows = freightOrders.map(fo => `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-      <span style="font-size:12.5px;width:180px;">${escapeHtml(fo.origin || '?')} → ${escapeHtml(fo.destination || '?')}</span>
-      <span style="font-size:12px;color:var(--ink-soft);">Quoted: $${(fo.quoted_rate || 0).toLocaleString('en-US')}</span>
-      <label style="font-size:12px;color:var(--ink-soft);">Actual:</label>
-      <input type="number" step="0.01" value="${fo.actual_rate ?? ''}" placeholder="0.00" style="width:110px;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;"
-        onchange="saveActualRate('${fo.id}', this.value)">
-    </div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">No freight leg on this order.</div>';
-
-  const costRows = costs.map(c => `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:12.5px;">
-      <span style="width:150px;">${escapeHtml(c.cost_type)}</span>
-      <span style="font-family:'IBM Plex Mono',monospace;">$${c.amount.toLocaleString('en-US')}</span>
-      <button class="btn danger" style="padding:2px 8px;font-size:11px;" onclick="deleteExtraCost('${c.id}','${offerId}')">×</button>
-    </div>`).join('');
-
-  panel.innerHTML = `
-    <div style="padding:12px 4px;">
-      <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Freight — costo real</div>
-      ${freightRows}
-      <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px;">Sobrecostos</div>
-      <div id="cost_list_${offerId}">${costRows}</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-        <select id="cost_type_${offerId}" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;">
-          ${EXTRA_COST_TYPES.map(t => `<option>${t}</option>`).join('')}
-        </select>
-        <input type="number" step="0.01" id="cost_amount_${offerId}" placeholder="Monto" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;">
-        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="addExtraCost('${offerId}')">+ Agregar</button>
-      </div>
-    </div>`;
-}
-
-async function saveActualRate(freightOrderId, value){
-  const amount = value.trim() === '' ? null : Number(value);
-  const { error } = await db.from('freight_orders').update({ actual_rate: amount }).eq('id', freightOrderId);
-  if (error) alert('Error: ' + error.message);
-}
-
-async function addExtraCost(offerId){
-  const o = offers.find(x => x.id === offerId);
-  const type = document.getElementById('cost_type_' + offerId).value;
-  const amountInput = document.getElementById('cost_amount_' + offerId);
-  const amount = Number(amountInput.value);
-  if (!amount || amount <= 0) return;
-  const { error } = await db.from('order_extra_costs').insert({
-    order_number: o.order_number, sent_offer_id: o.id, cost_type: type, amount,
-  });
-  if (error){ alert('Error: ' + error.message); return; }
-  amountInput.value = '';
-  await loadReconcilePanel(offerId);
-}
-
-async function deleteExtraCost(costId, offerId){
-  const { error } = await db.from('order_extra_costs').delete().eq('id', costId);
-  if (error){ alert('Error: ' + error.message); return; }
-  await loadReconcilePanel(offerId);
-}
-
 // Opens the full calculator pre-loaded with this offer's real numbers (same params Quotes
 // already builds for the Trading Tool) plus offerId/plantId so the TT can message the plant,
 // message the customer, and — once a number is actually confirmed — save it back here and
@@ -505,7 +412,7 @@ function loadTTPanel(id){
   if (!o) return;
   const imported = !!o.mexican_dest_rate_id;
   const params = new URLSearchParams({
-    embed: '1', weight: String(o.weight || 40000), cost: String(o.purchase_price || 0),
+    embed: '1', weight: String(o.weight || 40000), cost: String(o.purchase_price || 0), sell: String(o.sale_per_lb || 0),
     freight: String(o.us_freight_amount || 0), hideFreight: o.us_freight_rate_id ? '0' : '1',
     inspection: String(o.inspection_amount || 0), hideInspection: (o.inspection_amount || 0) > 0 ? '0' : '1',
     hideImportCost: '1', forceImportCostZero: imported ? '1' : '0',
