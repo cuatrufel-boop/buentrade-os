@@ -368,7 +368,11 @@ function rqSelectSuggestion(name){
 async function onRqProductInput(){
   rqRenderSuggestions();
   const name = document.getElementById('rq_product_name').value.trim();
-  const match = products.find(p => (p.name || '').toLowerCase() === name.toLowerCase());
+  // Matches on either the Spanish or the English catalog name — typing the English name used to
+  // silently miss the catalog entirely (no photo, no customer-facing Spanish name, sent as
+  // literally typed) since this only checked the Spanish field before.
+  const nameLower = name.toLowerCase();
+  const match = products.find(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
   const specLine = document.getElementById('rq_spec_line');
   document.getElementById('rq_customers_wrap').style.display = 'none';
   document.getElementById('rq_top_actions_wrap').style.display = 'none';
