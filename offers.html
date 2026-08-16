@@ -521,9 +521,14 @@ const COMPANY = {
   name1: 'Buen', name2: 'Trade',
   legalName: 'BuenTrade LLC',
   address: '1525 N Park Dr, Suite 104, Weston, FL 33326',
-  email: 'buentrade2026@gmail.com',
   phone: '+34 666 318 864',
 };
+
+// Contact shown on each document depends on who it's going to — plants deal with Purchasing,
+// customers with Offers, carriers/customs brokers with Logistics.
+const CONTACT_EMAIL_PO = 'purchasing@buentradegroup.com';
+const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
+const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 
 // Draft, original language written for BuenTrade — not copied from any other company's forms.
 // Flagged to the user as a draft for legal review, not a finished/reviewed contract.
@@ -554,7 +559,7 @@ function pdfDoc(){
 
 // Navy letterhead band with the same circular emblem used on the site's own login screen
 // (circle + wave + teal accent) so the PDF reads as the same brand, not a generic template.
-function pdfHeader(doc, docTitle, orderNumber){
+function pdfHeader(doc, docTitle, orderNumber, contactEmail){
   doc.setFillColor(10, 37, 71);
   doc.rect(0, 0, 612, 88, 'F');
 
@@ -581,7 +586,7 @@ function pdfHeader(doc, docTitle, orderNumber){
   doc.setFontSize(8.5);
   doc.setTextColor(178, 197, 222);
   doc.text(COMPANY.address, 86, 60);
-  doc.text(`${COMPANY.email}  ·  ${COMPANY.phone}`, 86, 71);
+  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 86, 71);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(19);
@@ -706,7 +711,7 @@ async function buildPODoc(orderNumber){
   const { data: sentOffer } = await db.from('sent_offers').select('won_by').eq('order_number', orderNumber).limit(1).single();
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Purchase Order', orderNumber);
+  pdfHeader(doc, 'Purchase Order', orderNumber, CONTACT_EMAIL_PO);
 
   const vendorLines = [
     plant ? plant.name : po.plant_name,
@@ -787,7 +792,7 @@ async function buildSODoc(orderNumber){
     ? await db.from('plants').select('country').eq('id', sentOffer.plant_id).single() : { data: null };
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Confirmación de Venta', orderNumber);
+  pdfHeader(doc, 'Confirmación de Venta', orderNumber, CONTACT_EMAIL_SO);
 
   const custLines = [
     customer ? customer.trade_name : so.customer_name,
@@ -860,7 +865,7 @@ async function buildFODocs(orderNumber){
     const { data: carrier } = fo.carrier_provider_id ? await db.from('providers').select('*').eq('id', fo.carrier_provider_id).single() : { data: null };
 
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', orderNumber);
+    pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
