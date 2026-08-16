@@ -718,12 +718,12 @@ function rqBuildToolParams(p){
   const tramiteAduanal = imported ? rqCustomsRate('tramite_aduanal', customsAgencyId) : 0;
   const bodegaAmericana = imported ? rqCustomsRate('bodega_americana', customsAgencyId) : 0;
   const freightMx = imported ? rqMexicanFreightMxnForPlant(p) : null;
-  // Same rate lookup as tramiteAduanal/bodegaAmericana, just not tied to a specific customs
-  // agency — these were previously left for the trader to type in from memory every time even
-  // though a default rate is already on file in Freight & Logistics. Only auto-reveals the field
-  // (via showExtras below) when there's actually a rate on file to show.
-  const lumperFee = rqCustomsRate('lumper_fee', null);
-  const inbondRelease = rqCustomsRate('inbond_release', null);
+  // Same rate lookup as tramiteAduanal/bodegaAmericana, same customs agency, and same "only when
+  // actually importing" gate — these used to run unconditionally with providerId null, which
+  // pulled whichever provider happened to have a rate on file even for a Border-only (not
+  // imported) delivery, showing a customs cost that didn't apply to that load at all.
+  const lumperFee = imported ? rqCustomsRate('lumper_fee', customsAgencyId) : 0;
+  const inbondRelease = imported ? rqCustomsRate('inbond_release', customsAgencyId) : 0;
   const extraFieldKeys = new Set(p.rqExtraFields || []);
   if (lumperFee > 0) extraFieldKeys.add('lumperFee');
   if (inbondRelease > 0) extraFieldKeys.add('inbondRelease');
@@ -1053,6 +1053,25 @@ function buildCustomerOfferText(customerFirstName){
   return greeting + lines;
 }
 
+// HTML twin of buildCustomerOfferText, sent alongside it so the Resend email actually shows the
+// product photo inline instead of a bare URL — a real photo (rqPhotoLabel === 'Foto') renders as
+// an <img>, a spec sheet/PDF stays a plain link since it can't be inlined as an image anyway.
+function buildCustomerOfferHtml(customerFirstName){
+  const withCalc = rqPricedPlantsSorted();
+  const greeting = customerFirstName ? `Hola ${escapeHtml(customerFirstName)},<br><br>` : '';
+  const delivery = rqDeliveryDatesText();
+  const blocks = withCalc.map(({ plant, calc }) => {
+    const photo = rqFindPhotoFor(plant);
+    const line = `<div>${escapeHtml(plant.name)} — ${escapeHtml(rqProductSpec || '')} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Delivery ' + escapeHtml(delivery) : ''}</div>`;
+    if (!photo) return line;
+    const media = rqPhotoLabel(photo) === 'Foto'
+      ? `<div style="margin-top:6px;"><img src="${escapeHtml(photo)}" alt="${escapeHtml(plant.name)}" style="max-width:260px;border-radius:6px;"></div>`
+      : `<div style="margin-top:4px;"><a href="${escapeHtml(photo)}">Spec sheet</a></div>`;
+    return line + media;
+  }).join('<div style="margin:14px 0;"></div>');
+  return greeting + blocks;
+}
+
 let rqMatchedCustomers = [];
 let rqCustomersFetchedFor = null;
 
@@ -1152,7 +1171,7 @@ async function rqLogSentOffers(customers, channel){
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
 // sender automatically. Falls back to mailto: if the API call fails, so a send is never fully
 // blocked by an API/network hiccup.
-async function sendEmailApi(fromAlias, to, subject, text){
+async function sendEmailApi(fromAlias, to, subject, text, html){
   const toList = Array.isArray(to) ? to.join(', ') : to;
   const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
   if (!ok){
@@ -1163,7 +1182,7 @@ async function sendEmailApi(fromAlias, to, subject, text){
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, subject, text }),
+    body: JSON.stringify({ from: fromAlias, to, subject, text, html }),
   });
   if (!res.ok){
     const err = await res.json().catch(() => ({}));
@@ -1176,10 +1195,12 @@ async function sendOfferEmailTo(customerId){
   if (!rqRequireDeliveryDay()) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
-  const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
+  const firstName = rqFirstName(c.contact_name || c.trade_name);
+  const body = buildCustomerOfferText(firstName);
+  const html = buildCustomerOfferHtml(firstName);
   const subject = `Cotización — ${rqProductSpec || ''}`;
   try {
-    await sendEmailApi('offers', c.email, subject, body);
+    await sendEmailApi('offers', c.email, subject, body, html);
     rqLogSentOffers([c], 'email');
   } catch(e){
     if (e.cancelled) return;
@@ -1234,6 +1255,11 @@ function rqSendOneByOne(items, i, failed){
   const opened = !!win;
   if (opened){
     if (item.onConfirmed) item.onConfirmed(true);
+    // window.open() hands focus to the new WhatsApp tab, so the "Continue?" confirm() below would
+    // otherwise fire on a background tab the trader isn't looking at — easy to miss, and looks
+    // exactly like "only the first one sent" when it was really just waiting unseen. Pulling focus
+    // back before asking makes sure the prompt is actually visible.
+    window.focus();
   } else {
     failed.push(item.label);
   }
@@ -1258,9 +1284,11 @@ async function rqOpenAllEmails(){
   const subject = 'Cotización — ' + (rqProductSpec || '');
   const failed = [];
   for (const c of targets){
-    const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
+    const firstName = rqFirstName(c.contact_name || c.trade_name);
+    const body = buildCustomerOfferText(firstName);
+    const html = buildCustomerOfferHtml(firstName);
     try {
-      await sendEmailApi('offers', c.email, subject, body);
+      await sendEmailApi('offers', c.email, subject, body, html);
       rqLogSentOffers([c], 'email');
     } catch(e){
       if (e.cancelled) continue;

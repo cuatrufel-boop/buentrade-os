@@ -40,7 +40,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
-  const { to, cc, subject, text, from } = payload;
+  const { to, cc, subject, text, from, html } = payload;
   const fromAddress = FROM_ADDRESSES[from];
   if (!fromAddress) {
     return { statusCode: 400, body: JSON.stringify({ error: 'from must be one of: ' + Object.keys(FROM_ADDRESSES).join(', ') }) };
@@ -49,7 +49,12 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'to, subject, and text are required' }) };
   }
 
-  const bodyHtml = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;">${escapeHtml(text)}</div><br>${SIGNATURE_HTML}`;
+  // Callers that need real inline content (e.g. a product photo, not just a link to it) send
+  // their own pre-built `html` — trusted since it's assembled server-side-equivalent by our own
+  // pages, not user input. Falls back to escaping `text` for callers that only have plain text.
+  const bodyHtml = html
+    ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;">${html}</div><br>${SIGNATURE_HTML}`
+    : `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;">${escapeHtml(text)}</div><br>${SIGNATURE_HTML}`;
 
   const resendRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
