@@ -690,10 +690,12 @@ if (FIREBASE_READY) {
         <div id="realCostsFreight"></div>
         <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px;">Sobrecostos</div>
         <div id="realCostsList"></div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-          <select id="realCostType" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;"></select>
-          <input type="number" step="0.01" id="realCostAmount" placeholder="Monto" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;">
-          <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="realCostAdd()">+ Agregar</button>
+        <div style="margin-top:8px;">
+          <select id="realCostType" style="width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;margin-bottom:6px;"></select>
+          <div style="display:flex;gap:6px;">
+            <input type="number" step="0.01" id="realCostAmount" placeholder="Monto" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;">
+            <button class="btn" style="padding:6px 10px;font-size:12px;flex-shrink:0;" onclick="realCostAdd()">+ Add</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1383,23 +1385,28 @@ async function realCostsLoad(){
   realCostsRender(foRes.data || [], costsRes.data || []);
 }
 
+// This card lives in the same narrow 3-column grid as Direct Costs/Profitability (~280px),
+// not a full-width panel — everything here stacks vertically instead of trying to fit
+// label+quoted+actual (or type+amount+delete) on one horizontal line, which overflowed the card.
 function realCostsRender(freightOrders, costs){
   const freightEl = document.getElementById('realCostsFreight');
   freightEl.innerHTML = freightOrders.map(fo => `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-      <span style="font-size:12.5px;width:180px;">${negoEscapeHtml(fo.origin || '?')} &rarr; ${negoEscapeHtml(fo.destination || '?')}</span>
-      <span style="font-size:12px;color:var(--ink-soft);">Quoted: $${(fo.quoted_rate || 0).toLocaleString('en-US')}</span>
-      <label style="font-size:12px;color:var(--ink-soft);">Actual:</label>
-      <input type="number" step="0.01" value="${fo.actual_rate ?? ''}" placeholder="0.00" style="width:110px;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;"
-        onchange="realCostSaveFreight('${fo.id}', this.value)">
+    <div style="margin-bottom:10px;">
+      <div style="font-size:12.5px;font-weight:600;">${negoEscapeHtml(fo.origin || '?')} &rarr; ${negoEscapeHtml(fo.destination || '?')}</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin:2px 0 5px;">Quoted: $${(fo.quoted_rate || 0).toLocaleString('en-US')}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="font-size:12px;color:var(--ink-soft);flex-shrink:0;">Actual:</label>
+        <input type="number" step="0.01" value="${fo.actual_rate ?? ''}" placeholder="0.00" style="width:100%;min-width:0;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;"
+          onchange="realCostSaveFreight('${fo.id}', this.value)">
+      </div>
     </div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">No freight leg on this order.</div>';
 
   const listEl = document.getElementById('realCostsList');
   listEl.innerHTML = costs.map(c => `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:12.5px;">
-      <span style="width:150px;">${negoEscapeHtml(c.cost_type)}</span>
-      <span style="font-family:'IBM Plex Mono',monospace;">$${c.amount.toLocaleString('en-US')}</span>
-      <button class="btn danger" style="padding:2px 8px;font-size:11px;" onclick="realCostDelete('${c.id}')">&times;</button>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${negoEscapeHtml(c.cost_type)}</span>
+      <span style="font-family:'IBM Plex Mono',monospace;flex-shrink:0;">$${c.amount.toLocaleString('en-US')}</span>
+      <button class="btn danger" style="padding:2px 7px;font-size:11px;flex-shrink:0;" onclick="realCostDelete('${c.id}')">&times;</button>
     </div>`).join('');
 }
 
