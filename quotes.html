@@ -473,6 +473,7 @@ function renderRqPlants(){
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
           ${!showPriceRow ? `<button type="button" class="rq-price-btn" onclick="rqRevealPrice('${p.id}')">Price?</button>` : ''}
+          ${!p.rqPrice && (p.whatsapp || p.phone) ? `<button type="button" class="wa-btn" style="padding:4px 8px;" onclick="askPlantWhatsApp('${p.id}')" title="WhatsApp ${escapeHtml(p.name)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : ''}
         </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
@@ -1042,13 +1043,20 @@ function rqRenderFinalList(){
   }).join('');
 }
 
+// Spanish label for the photo/spec-sheet line in customer-facing text — rqPhotoLabel itself
+// stays English ('Foto'/'Spec sheet') since it's also used for the trader's own internal list
+// (rqRenderFinalList), which is English like the rest of the app UI.
+function rqPhotoLabelEs(url){
+  return rqPhotoLabel(url) === 'Foto' ? 'Foto' : 'Ficha técnica';
+}
+
 function buildCustomerOfferText(customerFirstName){
   const withCalc = rqPricedPlantsSorted();
   const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
   const lines = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
     const delivery = rqDeliveryDatesText();
-    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Delivery ' + delivery : ''}${photo ? '\n' + rqPhotoLabel(photo) + ': ' + photo : ''}`;
+    return `${plant.name} — ${rqProductSpec || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + delivery : ''}${photo ? '\n' + rqPhotoLabelEs(photo) + ': ' + photo : ''}`;
   }).join('\n\n');
   return greeting + lines;
 }
@@ -1062,11 +1070,11 @@ function buildCustomerOfferHtml(customerFirstName){
   const delivery = rqDeliveryDatesText();
   const blocks = withCalc.map(({ plant, calc }) => {
     const photo = rqFindPhotoFor(plant);
-    const line = `<div>${escapeHtml(plant.name)} — ${escapeHtml(rqProductSpec || '')} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Delivery ' + escapeHtml(delivery) : ''}</div>`;
+    const line = `<div>${escapeHtml(plant.name)} — ${escapeHtml(rqProductSpec || '')} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + escapeHtml(delivery) : ''}</div>`;
     if (!photo) return line;
     const media = rqPhotoLabel(photo) === 'Foto'
       ? `<div style="margin-top:6px;"><img src="${escapeHtml(photo)}" alt="${escapeHtml(plant.name)}" style="max-width:260px;border-radius:6px;"></div>`
-      : `<div style="margin-top:4px;"><a href="${escapeHtml(photo)}">Spec sheet</a></div>`;
+      : `<div style="margin-top:4px;"><a href="${escapeHtml(photo)}">Ficha técnica</a></div>`;
     return line + media;
   }).join('<div style="margin:14px 0;"></div>');
   return greeting + blocks;
@@ -1283,6 +1291,11 @@ async function rqOpenAllEmails(){
   if (!targets.length){ alert('No matched customer has an email on file.'); return; }
   const subject = 'Cotización — ' + (rqProductSpec || '');
   const failed = [];
+  // Tracked separately from `failed` — a cancelled preview is a deliberate "don't send this one",
+  // not a technical failure, so it must never count as "sent" in the summary below (that's
+  // exactly the false "Sent to all N" that showed even after cancelling one in the preview).
+  let sentCount = 0;
+  let cancelledCount = 0;
   for (const c of targets){
     const firstName = rqFirstName(c.contact_name || c.trade_name);
     const body = buildCustomerOfferText(firstName);
@@ -1290,37 +1303,43 @@ async function rqOpenAllEmails(){
     try {
       await sendEmailApi('offers', c.email, subject, body, html);
       rqLogSentOffers([c], 'email');
+      sentCount++;
     } catch(e){
-      if (e.cancelled) continue;
+      if (e.cancelled){ cancelledCount++; continue; }
       failed.push({ c, body });
     }
   }
+  const cancelledNote = cancelledCount ? ` ${cancelledCount} skipped (cancelled in preview).` : '';
   if (failed.length){
-    alert(`${targets.length - failed.length} of ${targets.length} sent automatically. ${failed.length} failed — opening those now, one at a time.`);
+    alert(`${sentCount} of ${targets.length} sent automatically. ${failed.length} failed — opening those now, one at a time.${cancelledNote}`);
     const items = failed.map(({ c, body }) => ({
       url: `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
       label: c.trade_name,
       onConfirmed: ok => { if (ok) rqLogSentOffers([c], 'email'); },
     }));
     rqSendOneByOne(items);
+  } else if (cancelledCount){
+    alert(`Sent to ${sentCount} of ${targets.length} customers.${cancelledNote}`);
   } else {
     alert(`Sent to all ${targets.length} customers.`);
   }
 }
 
+// WhatsApp opens as its own desktop app on most computers (confirmed: not a browser tab), which
+// steals focus from the whole browser window, not just the tab. That makes a confirm()-paced
+// auto-chain unreliable here — the "continue to next?" prompt ends up waiting, unseen, behind
+// WhatsApp.app, which looks exactly like "only the first one sent." No JS can force focus back
+// from a native app, so instead of pretending to automate the rest, this opens the first one for
+// real and points the trader at the individual WhatsApp button next to each customer below —
+// those always work since each click is its own fresh, direct gesture.
 function rqOpenAllWhatsApp(){
   if (!rqRequireDeliveryDay()) return;
   const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   if (!targets.length){ alert('No matched customer has a phone/WhatsApp on file.'); return; }
-  const items = targets.map(c => {
-    const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
-    return {
-      url: 'https://wa.me/' + phone + '?text=' + encodeURIComponent(buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name))),
-      label: c.trade_name,
-      onConfirmed: ok => { if (ok) rqLogSentOffers([c], 'whatsapp'); },
-    };
-  });
-  rqSendOneByOne(items);
+  sendOfferWhatsAppTo(targets[0].id);
+  if (targets.length > 1){
+    alert(`Opened WhatsApp for ${targets[0].trade_name}. WhatsApp opens as a separate app, so the other ${targets.length - 1} need their own click — use the WhatsApp button next to each customer's name below.`);
+  }
 }
 
 function rqFmtDate(val){
@@ -1408,17 +1427,29 @@ async function rqAskAllEmails(){
   }
 }
 
+// Same one-real-send-then-hand-off pattern as rqOpenAllWhatsApp above, and for the same reason:
+// WhatsApp opening as a native app steals focus from the browser, so a confirm()-chained "send
+// to the rest" can't reliably show its prompts. askPlantWhatsApp (below) is the individual
+// button rendered next to each plant — that's what covers the remaining ones.
 function rqAskAllWhatsApp(){
   if (!rqProductSpec || !rqRequireDeliveryDay()) return;
   const targets = rqSelectedPlants.filter(p => !p.rqPrice && (p.whatsapp || p.phone));
   if (!targets.length) return;
-  const items = targets.map(p => {
-    const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
-    const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
-    const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
-    return { url: 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), label: p.name };
-  });
-  rqSendOneByOne(items);
+  askPlantWhatsApp(targets[0].id);
+  if (targets.length > 1){
+    alert(`Opened WhatsApp for ${targets[0].name}. WhatsApp opens as a separate app, so the other ${targets.length - 1} plant(s) need their own click — use the WhatsApp button next to each plant's name below.`);
+  }
+}
+
+function askPlantWhatsApp(plantId){
+  if (!rqProductSpec || !rqRequireDeliveryDay()) return;
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
+  if (!phone) return;
+  const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
+  const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
 function escapeHtml(str){
