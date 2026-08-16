@@ -502,6 +502,22 @@ if (FIREBASE_READY) {
 <div id="appContent" style="display:none;">
 <div class="wrap">
 
+  <!-- Contacting the plant again on an offer that's already out to a customer IS the bid — no
+       separate "log a bid" step needed, that contact itself is what flags this negotiation hot
+       in Offers. Sits above everything else, including the frozen header, so it's the first
+       thing visible the moment this opens from an existing offer. -->
+  <div id="negoTopBar" style="display:none;align-items:center;justify-content:space-between;gap:14px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button onclick="negoSendToPlant('email')" style="background:#fff;color:var(--navy);border:none;border-radius:7px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;">&larr; Email Plant</button>
+      <button onclick="negoSendToPlant('whatsapp')" title="WhatsApp Plant" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;padding:9px 11px;font-size:14px;cursor:pointer;">&#128172;</button>
+    </div>
+    <div id="negoTopStatus" style="font-size:11px;font-weight:700;color:#fff;"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button onclick="negoSendToCustomer('whatsapp')" title="WhatsApp Customer" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;padding:9px 11px;font-size:14px;cursor:pointer;">&#128172;</button>
+      <button onclick="negoSendToCustomer('email')" style="background:#fff;color:var(--navy);border:none;border-radius:7px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;">Email Customer &rarr;</button>
+    </div>
+  </div>
+
   <header>
     <div class="top-row">
       <div class="brand-word">Buen<span>Trade</span> Trading OS</div>
@@ -662,33 +678,6 @@ if (FIREBASE_READY) {
           <span id="negoSaveStatus" style="font-weight:700;"></span>
         </div>
         <div id="negoLog" style="font-size:12.5px;margin-bottom:14px;"></div>
-
-        <div style="margin-bottom:14px;">
-          <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Log what they told you (no message sent)</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-            <span style="font-size:12.5px;width:96px;color:var(--ink-soft);">Plant replied</span>
-            <input type="number" step="0.0001" id="negoBidPlant" placeholder="$/lb" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;">
-            <button onclick="negoLogReceived('plant')" style="background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Log</button>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <span style="font-size:12.5px;width:96px;color:var(--ink-soft);">Customer bid</span>
-            <input type="number" step="0.0001" id="negoBidCustomer" placeholder="$/lb" style="width:100px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;">
-            <button onclick="negoLogReceived('customer')" style="background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Log</button>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:20px;flex-wrap:wrap;padding-top:14px;border-top:1.5px solid var(--line);">
-          <div>
-            <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Send to Plant</div>
-            <button onclick="negoSendToPlant('email')" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">Email</button>
-            <button onclick="negoSendToPlant('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px;padding:6.5px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">WhatsApp</button>
-          </div>
-          <div>
-            <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Send to Customer</div>
-            <button onclick="negoSendToCustomer('email')" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">Email</button>
-            <button onclick="negoSendToCustomer('whatsapp')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px;padding:6.5px 12px;font-weight:600;font-size:12.5px;cursor:pointer;">WhatsApp</button>
-          </div>
-        </div>
 
         <div style="margin-top:16px;padding-top:16px;border-top:1.5px solid var(--line);">
           <button onclick="negoSaveDefinitive()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;">✓ Save as Final — Win</button>
@@ -1336,6 +1325,7 @@ async function negoInit(){
   const offerId = __qp.get('offerId');
   if (!offerId || !db) return;
   document.getElementById('negoCard').style.display = 'block';
+  document.getElementById('negoTopBar').style.display = 'flex';
   const { data: offer, error } = await db.from('sent_offers').select('*').eq('id', offerId).single();
   if (error || !offer){
     document.getElementById('negoMsg').textContent = 'Could not load this offer: ' + (error ? error.message : 'not found');
@@ -1393,18 +1383,19 @@ function negoRenderLog(){
 let negoSaveStatusTimer = null;
 function negoSetSaveStatus(state, msg){
   const el = document.getElementById('negoSaveStatus');
-  if (!el) return;
+  const topEl = document.getElementById('negoTopStatus');
   clearTimeout(negoSaveStatusTimer);
+  const apply = (target, color, text) => { if (target){ target.textContent = text; target.style.color = color; } };
   if (state === 'saving'){
-    el.textContent = 'Saving…';
-    el.style.color = 'var(--ink-soft)';
+    apply(el, 'var(--ink-soft)', 'Saving…');
+    apply(topEl, '#fff', 'Saving…');
   } else if (state === 'saved'){
-    el.textContent = '✓ Saved';
-    el.style.color = '#0F8A5F';
-    negoSaveStatusTimer = setTimeout(() => { el.textContent = ''; }, 2000);
+    apply(el, '#0F8A5F', '✓ Saved');
+    apply(topEl, '#5FD1C9', '✓ Saved');
+    negoSaveStatusTimer = setTimeout(() => { apply(el, '', ''); apply(topEl, '', ''); }, 2000);
   } else if (state === 'error'){
-    el.textContent = 'Error saving — try again: ' + (msg || '');
-    el.style.color = 'var(--red)';
+    apply(el, 'var(--red)', 'Error saving — try again: ' + (msg || ''));
+    apply(topEl, '#FF9B9B', 'Error — try again');
   }
 }
 
@@ -1425,15 +1416,6 @@ async function negoLogEvent(to, price){
 // Logs something you were TOLD (over the phone, in person, a reply that isn't itself in this
 // system) without sending any message — that's the traceability gap a "send" button alone
 // can't cover: the incoming half of the negotiation.
-function negoLogReceived(who){
-  const inputId = who === 'plant' ? 'negoBidPlant' : 'negoBidCustomer';
-  const input = document.getElementById(inputId);
-  const price = Number(input.value);
-  if (!price){ document.getElementById('negoMsg').textContent = 'Enter a price first.'; return; }
-  negoLogEvent(who === 'plant' ? 'plant_reply' : 'customer_bid', price);
-  input.value = '';
-}
-
 function negoCurrentCost(){
   const el = document.getElementById('prodCost0');
   return el ? Number(el.value) || 0 : 0;
