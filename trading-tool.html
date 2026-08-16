@@ -1375,6 +1375,19 @@ async function negoInit(){
 // inside the same TT view used to quote the deal, instead of a disconnected table elsewhere.
 const REAL_COST_TYPES = ['Labels', 'Plastic wrap', 'IN-LIEU', 'Storage', 'Fresh to Frozen', 'Lumper fee', 'INBOND Release', 'Other'];
 
+// Carriers only — same list a trader would pick from in Freight & Logistics. Fetched once per
+// panel open (not per render) since it doesn't change while the panel is up.
+let realCostsCarriers = null;
+async function realCostsFetchCarriers(){
+  if (realCostsCarriers) return realCostsCarriers;
+  const { data: roles } = await db.from('provider_roles').select('provider_id').eq('role', 'carrier');
+  const ids = [...new Set((roles || []).map(r => r.provider_id))];
+  if (!ids.length){ realCostsCarriers = []; return realCostsCarriers; }
+  const { data: providers } = await db.from('providers').select('id,name').in('id', ids).order('name');
+  realCostsCarriers = providers || [];
+  return realCostsCarriers;
+}
+
 async function realCostsInit(){
   document.getElementById('realCostsCard').style.display = 'block';
   document.getElementById('realCostType').innerHTML = REAL_COST_TYPES.map(t => `<option>${t}</option>`).join('');
@@ -1386,6 +1399,7 @@ async function realCostsLoad(){
   const [foRes, costsRes] = await Promise.all([
     db.from('freight_orders').select('*').eq('order_number', negoOffer.order_number),
     db.from('order_extra_costs').select('*').eq('order_number', negoOffer.order_number).order('created_at'),
+    realCostsFetchCarriers(),
   ]);
   realCostsRender(foRes.data || [], costsRes.data || []);
 }
@@ -1393,12 +1407,25 @@ async function realCostsLoad(){
 // This card lives in the same narrow 3-column grid as Direct Costs/Profitability (~280px),
 // not a full-width panel — everything here stacks vertically instead of trying to fit
 // label+quoted+actual (or type+amount+delete) on one horizontal line, which overflowed the card.
+// Carrier picker fixes the gap where a matched freight rate got deleted between quoting and
+// winning — the FO would otherwise say "TBD — not yet booked" forever with no way to fix it
+// short of editing the database directly.
 function realCostsRender(freightOrders, costs){
   const freightEl = document.getElementById('realCostsFreight');
+  const carrierOptions = (carrier) => {
+    const opts = ['<option value="">— No carrier —</option>']
+      .concat((realCostsCarriers || []).map(c => `<option value="${c.id}"${c.id === carrier ? ' selected' : ''}>${negoEscapeHtml(c.name)}</option>`));
+    return opts.join('');
+  };
   freightEl.innerHTML = freightOrders.map(fo => `
     <div style="margin-bottom:10px;">
       <div style="font-size:12.5px;font-weight:600;">${negoEscapeHtml(fo.origin || '?')} &rarr; ${negoEscapeHtml(fo.destination || '?')}</div>
       <div style="font-size:12px;color:var(--ink-soft);margin:2px 0 5px;">Quoted: $${(fo.quoted_rate || 0).toLocaleString('en-US')}</div>
+      <div style="margin-bottom:5px;">
+        <label style="font-size:12px;color:var(--ink-soft);display:block;margin-bottom:3px;">Carrier:</label>
+        <select style="width:100%;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;"
+          onchange="realCostSetCarrier('${fo.id}', this.value)">${carrierOptions(fo.carrier_provider_id)}</select>
+      </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="font-size:12px;color:var(--ink-soft);flex-shrink:0;">Actual:</label>
         <input type="number" step="0.01" value="${fo.actual_rate ?? ''}" placeholder="0.00" style="width:100%;min-width:0;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;"
@@ -1418,6 +1445,11 @@ function realCostsRender(freightOrders, costs){
 async function realCostSaveFreight(freightOrderId, value){
   const amount = value.trim() === '' ? null : Number(value);
   const { error } = await db.from('freight_orders').update({ actual_rate: amount }).eq('id', freightOrderId);
+  if (error) alert('Error: ' + error.message);
+}
+
+async function realCostSetCarrier(freightOrderId, providerId){
+  const { error } = await db.from('freight_orders').update({ carrier_provider_id: providerId || null }).eq('id', freightOrderId);
   if (error) alert('Error: ' + error.message);
 }
 

@@ -209,6 +209,11 @@ auth.onAuthStateChanged(user => {
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
+  <div style="display:flex;gap:8px;margin-bottom:14px;">
+    <button class="btn" id="tabCarriersBtn" onclick="setProviderTab('carriers')">Carriers &amp; Freight Forwarders</button>
+    <button class="btn secondary" id="tabAgenciesBtn" onclick="setProviderTab('agencies')">Customs Agencies</button>
+  </div>
+
   <div class="card">
     <table>
       <thead><tr><th>Name</th><th>Roles</th><th>City</th><th>Contact</th><th></th></tr></thead>
@@ -275,10 +280,27 @@ async function loadEverything(){
   renderProviders();
 }
 
+// Customs agencies are a different relationship than carriers/forwarders — a customer works
+// with their own agency on an ongoing basis (docs, load notices, appointments), not a one-off
+// per-load booking like a carrier. Keeping them in a single mixed list made that easy to miss.
+// A provider that's both a carrier and a customs broker shows up in both tabs.
+let providerTab = 'carriers';
+function setProviderTab(tab){
+  providerTab = tab;
+  document.getElementById('tabCarriersBtn').className = tab === 'carriers' ? 'btn' : 'btn secondary';
+  document.getElementById('tabAgenciesBtn').className = tab === 'agencies' ? 'btn' : 'btn secondary';
+  renderProviders();
+}
+
 function renderProviders(){
   const q = document.getElementById('searchBox').value.toLowerCase();
   const filtered = providers.filter(p => {
-    const roles = (providerRolesMap[p.id] || []).map(r => ROLE_LABELS[r] || r).join(' ').toLowerCase();
+    const providerRoles = providerRolesMap[p.id] || [];
+    const inTab = providerTab === 'agencies'
+      ? providerRoles.includes('customs_broker')
+      : providerRoles.some(r => r === 'carrier' || r === 'freight_forwarder');
+    if (!inTab) return false;
+    const roles = providerRoles.map(r => ROLE_LABELS[r] || r).join(' ').toLowerCase();
     return (p.name || '').toLowerCase().includes(q) ||
       (p.city || '').toLowerCase().includes(q) ||
       roles.includes(q);
