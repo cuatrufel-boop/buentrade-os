@@ -9,6 +9,25 @@ const FROM_ADDRESSES = {
   info: 'BuenTrade <info@buentradegroup.com>',
 };
 
+// Mirrors the signature set up by hand in Gmail — the API path never touches Gmail, so it has
+// to carry its own copy of the same signature to look consistent with manually-sent mail.
+const SIGNATURE_HTML = `
+  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555555;line-height:1.5;">
+    <div style="font-size:19px;margin:0 0 2px;">
+      <span style="color:#0A2547;font-weight:bold;">Buen</span><span style="color:#1E6ADB;font-weight:bold;">Trade</span>
+    </div>
+    <div style="font-size:10.5px;color:#999999;letter-spacing:0.6px;margin:0 0 10px;">GOOD TRADE. GOOD BUSINESS.</div>
+    <div>BuenTrade LLC</div>
+    <div>1525 N Park Dr, Suite 104, Weston, FL 33326</div>
+    <div>+1 954-208-0209 &nbsp;&middot;&nbsp; <a href="https://buentradegroup.com" style="color:#1E6ADB;text-decoration:none;">buentradegroup.com</a></div>
+  </div>`;
+
+const SIGNATURE_TEXT = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
@@ -30,6 +49,8 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'to, subject, and text are required' }) };
   }
 
+  const bodyHtml = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;">${escapeHtml(text)}</div><br>${SIGNATURE_HTML}`;
+
   const resendRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -41,7 +62,8 @@ exports.handler = async (event) => {
       to: Array.isArray(to) ? to : [to],
       cc: cc && cc.length ? cc : undefined,
       subject,
-      text,
+      text: text + SIGNATURE_TEXT,
+      html: bodyHtml,
     }),
   });
 
