@@ -40,7 +40,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
-  const { to, cc, subject, text, from, html } = payload;
+  const { to, cc, subject, text, from, html, attachments } = payload;
   const fromAddress = FROM_ADDRESSES[from];
   if (!fromAddress) {
     return { statusCode: 400, body: JSON.stringify({ error: 'from must be one of: ' + Object.keys(FROM_ADDRESSES).join(', ') }) };
@@ -77,6 +77,9 @@ exports.handler = async (event) => {
       subject,
       text: text + SIGNATURE_TEXT,
       html: bodyHtml,
+      // Resend takes base64 content directly — the caller (offers.html) already builds each
+      // attachment as { filename, content } from the generated PDF, no transform needed here.
+      attachments: attachments && attachments.length ? attachments : undefined,
     }),
   });
 

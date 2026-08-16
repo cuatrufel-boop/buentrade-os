@@ -705,6 +705,12 @@ async function uploadOrderPdf(doc, filename){
   return db.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
 }
 
+// Real attachment for the API send path — Resend can actually carry a file, unlike mailto:/wa.me,
+// so the PDF itself goes in the email instead of making the recipient click a link.
+function pdfAttachment(doc, filename){
+  return { filename, content: doc.output('datauristring').split(',')[1] };
+}
+
 // Primary contact email plus every address in email_cc (comma-separated) — the "varios correos"
 // a plant/customer/carrier/customs agency can have on file, deduped.
 function collectEmails(entity){
@@ -787,7 +793,7 @@ async function exportPO(orderNumber){
 // mailto: (old behavior) if the API call fails for any reason, so a send is never fully blocked.
 // Cancelling the preview throws a flagged error so callers can skip their own fallback/alert —
 // "I said no" isn't the same as "the send failed".
-async function sendEmailApi(fromAlias, to, subject, text){
+async function sendEmailApi(fromAlias, to, subject, text, attachments){
   const toList = Array.isArray(to) ? to.join(', ') : to;
   const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
   if (!ok){
@@ -798,7 +804,7 @@ async function sendEmailApi(fromAlias, to, subject, text){
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, subject, text }),
+    body: JSON.stringify({ from: fromAlias, to, subject, text, attachments }),
   });
   if (!res.ok){
     const err = await res.json().catch(() => ({}));
@@ -816,17 +822,20 @@ async function sharePO(orderNumber){
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.plant);
   if (!emails.length){ alert('This plant has no email on file.'); return; }
+  const filename = `PO-${orderNumber}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, `PO-${orderNumber}.pdf`); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const subject = 'Purchase Order — ' + orderNumber;
-  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`;
+  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.`;
   try {
-    await sendEmailApi('purchasing', emails, subject, body);
+    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)]);
     alert('PO sent to ' + emails.join(', '));
   } catch(e){
     if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
-    mailtoFallback(emails, subject, body);
+    // mailto: genuinely can't carry a file attachment, so the fallback is the one place a link
+    // is unavoidable — the API path above always sends the real PDF.
+    mailtoFallback(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`);
   }
 }
 
@@ -896,17 +905,18 @@ async function shareSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.customer);
   if (!emails.length){ alert('This customer has no email on file.'); return; }
+  const filename = `SO-${orderNumber}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, `SO-${orderNumber}.pdf`); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const subject = 'Confirmación de Venta — ' + orderNumber;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`;
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.`;
   try {
-    await sendEmailApi('offers', emails, subject, body);
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)]);
     alert('SO sent to ' + emails.join(', '));
   } catch(e){
     if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
-    mailtoFallback(emails, subject, body);
+    mailtoFallback(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`);
   }
 }
 
@@ -986,14 +996,14 @@ async function shareFO(orderNumber){
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
     const subject = 'Freight Confirmation — ' + orderNumber;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`;
+    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.`;
     try {
-      await sendEmailApi('logistics', emails, subject, body);
+      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
       alert('FO sent to ' + emails.join(', '));
     } catch(e){
       if (e.cancelled) continue;
       alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
-      mailtoFallback(emails, subject, body);
+      mailtoFallback(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`);
     }
   }
 }
@@ -1008,26 +1018,34 @@ async function shareCustoms(orderNumber){
   const emails = collectEmails(agency);
   if (!emails.length){ alert('This customs agency has no email on file.'); return; }
 
-  const links = [];
+  const docs = []; // { label, doc, filename }
   try {
     const po = await buildPODoc(orderNumber).catch(() => null);
-    if (po) links.push(['Purchase Order', await uploadOrderPdf(po.doc, `PO-${orderNumber}.pdf`)]);
+    if (po) docs.push({ label: 'Purchase Order', doc: po.doc, filename: `PO-${orderNumber}.pdf` });
     const so = await buildSODoc(orderNumber).catch(() => null);
-    if (so) links.push(['Sales Order', await uploadOrderPdf(so.doc, `SO-${orderNumber}.pdf`)]);
+    if (so) docs.push({ label: 'Sales Order', doc: so.doc, filename: `SO-${orderNumber}.pdf` });
     const fos = await buildFODocs(orderNumber).catch(() => []);
-    for (const b of fos) links.push(['Freight Confirmation', await uploadOrderPdf(b.doc, b.filename)]);
+    for (const b of fos) docs.push({ label: 'Freight Confirmation', doc: b.doc, filename: b.filename });
   } catch(e){ alert('Error preparing documents: ' + e.message); return; }
-  if (!links.length){ alert('No documents available yet for this order.'); return; }
+  if (!docs.length){ alert('No documents available yet for this order.'); return; }
+
+  // Links only get built for the mailto: fallback body (mailto: can't carry attachments) — the
+  // API send below always attaches the real PDFs instead.
+  const links = [];
+  for (const d of docs){
+    try { links.push([d.label, await uploadOrderPdf(d.doc, d.filename)]); } catch(e){ alert('Upload error: ' + e.message); return; }
+  }
 
   const subject = 'Documentos — ' + orderNumber;
-  const body = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
+  const body = `Adjuntamos documentación de la orden ${orderNumber}: ${docs.map(d => d.label).join(', ')}.`;
   try {
-    await sendEmailApi('logistics', emails, subject, body);
+    await sendEmailApi('logistics', emails, subject, body, docs.map(d => pdfAttachment(d.doc, d.filename)));
     alert('Documents sent to ' + emails.join(', '));
   } catch(e){
     if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
-    mailtoFallback(emails, subject, body);
+    const fallbackBody = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
+    mailtoFallback(emails, subject, fallbackBody);
   }
 }
 
