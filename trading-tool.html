@@ -1559,6 +1559,13 @@ function negoCurrentSale(){
 // sender automatically. Falls back to mailto: (old behavior) if the API call fails, so a send
 // is never fully blocked by an API/network hiccup.
 async function sendEmailApi(fromAlias, to, subject, text){
+  const toList = Array.isArray(to) ? to.join(', ') : to;
+  const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
+  if (!ok){
+    const cancelErr = new Error('Cancelled by user');
+    cancelErr.cancelled = true;
+    throw cancelErr;
+  }
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1582,6 +1589,7 @@ async function negoSendToPlant(channel){
     try {
       await sendEmailApi('purchasing', negoPlant.email, 'Counteroffer', body);
     } catch(e){
+      if (e.cancelled) return;
       window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Counteroffer')}&body=${encodeURIComponent(body)}`, '_blank');
     }
   } else {
@@ -1603,6 +1611,7 @@ async function negoSendToCustomer(channel){
     try {
       await sendEmailApi('offers', negoCustomer.email, 'Cotización', body);
     } catch(e){
+      if (e.cancelled) return;
       window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
     }
   } else {

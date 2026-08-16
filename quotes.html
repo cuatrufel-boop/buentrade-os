@@ -1153,6 +1153,13 @@ async function rqLogSentOffers(customers, channel){
 // sender automatically. Falls back to mailto: if the API call fails, so a send is never fully
 // blocked by an API/network hiccup.
 async function sendEmailApi(fromAlias, to, subject, text){
+  const toList = Array.isArray(to) ? to.join(', ') : to;
+  const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
+  if (!ok){
+    const cancelErr = new Error('Cancelled by user');
+    cancelErr.cancelled = true;
+    throw cancelErr;
+  }
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1175,6 +1182,7 @@ async function sendOfferEmailTo(customerId){
     await sendEmailApi('offers', c.email, subject, body);
     rqLogSentOffers([c], 'email');
   } catch(e){
+    if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
     window.location.href = `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     rqLogSentOffers([c], 'email');
@@ -1255,6 +1263,7 @@ async function rqOpenAllEmails(){
       await sendEmailApi('offers', c.email, subject, body);
       rqLogSentOffers([c], 'email');
     } catch(e){
+      if (e.cancelled) continue;
       failed.push({ c, body });
     }
   }
@@ -1359,6 +1368,7 @@ async function rqAskAllEmails(){
     try {
       await sendEmailApi('purchasing', p.email, subject, body);
     } catch(e){
+      if (e.cancelled) continue;
       failed.push({ url: `mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, label: p.name });
     }
   }

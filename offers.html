@@ -782,9 +782,19 @@ async function exportPO(orderNumber){
 }
 
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
-// sender automatically — no trader having to pick "From" in Gmail. Falls back to opening a
+// sender automatically — no trader having to pick "From" in Gmail. Shows exactly what will be
+// sent first and requires confirmation — nothing goes out silently. Falls back to opening a
 // mailto: (old behavior) if the API call fails for any reason, so a send is never fully blocked.
+// Cancelling the preview throws a flagged error so callers can skip their own fallback/alert —
+// "I said no" isn't the same as "the send failed".
 async function sendEmailApi(fromAlias, to, subject, text){
+  const toList = Array.isArray(to) ? to.join(', ') : to;
+  const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
+  if (!ok){
+    const cancelErr = new Error('Cancelled by user');
+    cancelErr.cancelled = true;
+    throw cancelErr;
+  }
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -814,6 +824,7 @@ async function sharePO(orderNumber){
     await sendEmailApi('purchasing', emails, subject, body);
     alert('PO sent to ' + emails.join(', '));
   } catch(e){
+    if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
     mailtoFallback(emails, subject, body);
   }
@@ -893,6 +904,7 @@ async function shareSO(orderNumber){
     await sendEmailApi('offers', emails, subject, body);
     alert('SO sent to ' + emails.join(', '));
   } catch(e){
+    if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
     mailtoFallback(emails, subject, body);
   }
@@ -979,6 +991,7 @@ async function shareFO(orderNumber){
       await sendEmailApi('logistics', emails, subject, body);
       alert('FO sent to ' + emails.join(', '));
     } catch(e){
+      if (e.cancelled) continue;
       alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
       mailtoFallback(emails, subject, body);
     }
@@ -1012,6 +1025,7 @@ async function shareCustoms(orderNumber){
     await sendEmailApi('logistics', emails, subject, body);
     alert('Documents sent to ' + emails.join(', '));
   } catch(e){
+    if (e.cancelled) return;
     alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
     mailtoFallback(emails, subject, body);
   }
