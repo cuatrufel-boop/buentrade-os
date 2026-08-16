@@ -261,6 +261,15 @@ function renderOffers(){
     if (!term) return true;
     return [o.product_name, o.plant_name, o.customer_name].some(v => (v || '').toLowerCase().includes(term));
   });
+  // A live negotiation belongs at the top of the list, not wherever it happens to fall by date —
+  // that's the whole point of flagging it "hot": you should see it the moment you open this page,
+  // not have to scroll or scan for it.
+  filtered.sort((a, b) => {
+    const aHot = a.status === 'sent' && (a.negotiation_log || []).length > 0;
+    const bHot = b.status === 'sent' && (b.negotiation_log || []).length > 0;
+    if (aHot !== bHot) return aHot ? -1 : 1;
+    return 0;
+  });
   const tbody = document.getElementById('offerRows');
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = 'No offers match.';
@@ -289,7 +298,8 @@ function renderOffers(){
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportPO('${o.order_number}')">PO</button>
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportSO('${o.order_number}')">SO</button>
         <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportFO('${o.order_number}')">FO</button>
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Real Costs</button>`;
+        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleReconcile('${o.id}')">Real Costs</button>
+        ${(o.negotiation_log || []).length ? `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleHistory('${o.id}')">History</button>` : ''}`;
     }
     // Numbers are read-only here on purpose — editing a price without seeing the rest of the
     // build-up (customs, inspection, freight) isn't safe. Any change goes through "TT" above.
@@ -303,8 +313,71 @@ function renderOffers(){
       <td>${action}</td>
     </tr>
     <tr id="reconcile_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="reconcile_panel_${o.id}"></div></td></tr>
-    <tr id="tt_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);padding:0;"><div id="tt_panel_${o.id}"></div></td></tr>`;
+    <tr id="tt_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);padding:0;"><div id="tt_panel_${o.id}"></div></td></tr>
+    <tr id="history_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="history_panel_${o.id}"></div></td></tr>`;
   }).join('');
+}
+
+// How this order actually closed — read-only, for a WON offer. The negotiation trail (who
+// countered who, and the original quote before any of that) is never deleted when an offer
+// wins, but nothing else in the UI ever showed it again once PO/SO/FO took over the row's
+// buttons — this is the only way to look back at "how did we land on this price" afterward.
+let historyOpenId = null;
+
+function toggleHistory(offerId){
+  const row = document.getElementById('history_row_' + offerId);
+  if (historyOpenId && historyOpenId !== offerId){
+    const prev = document.getElementById('history_row_' + historyOpenId);
+    if (prev) prev.style.display = 'none';
+  }
+  if (row.style.display === 'table-row'){
+    row.style.display = 'none';
+    historyOpenId = null;
+    return;
+  }
+  row.style.display = 'table-row';
+  historyOpenId = offerId;
+  renderHistoryPanel(offerId);
+}
+
+const HISTORY_STEP_LABEL = {
+  plant_original: 'Plant quoted',
+  customer_original: 'You offered customer',
+  plant_reply: 'Plant replied',
+  customer_bid: 'Customer bid',
+  plant: 'You countered plant',
+  customer: 'You offered customer',
+};
+
+function renderHistoryPanel(offerId){
+  const o = offers.find(x => x.id === offerId);
+  const panel = document.getElementById('history_panel_' + offerId);
+  if (!o){ panel.innerHTML = ''; return; }
+  const steps = [
+    { to: 'plant_original', price: o.purchase_price, at: o.sent_at },
+    { to: 'customer_original', price: o.sale_per_lb, at: o.sent_at },
+    ...(o.negotiation_log || []),
+  ];
+  panel.innerHTML = `
+    <div style="padding:14px 4px;">
+      <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">How this closed</div>
+      ${steps.map((s, i) => {
+        const isIn = s.to === 'plant_original' || s.to === 'plant_reply' || s.to === 'customer_bid';
+        const arrow = isIn ? '←' : '→';
+        const color = isIn ? '#0F8A5F' : 'var(--blue)';
+        const when = new Date(s.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        return `<div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:12.5px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);width:16px;">${i + 1}</span>
+          <span style="color:${color};font-weight:700;">${arrow}</span>
+          <span>${HISTORY_STEP_LABEL[s.to] || s.to} — <b>$${Number(s.price).toFixed(4)}/lb</b></span>
+          <span style="color:var(--ink-soft);font-size:11.5px;">${when}</span>
+        </div>`;
+      }).join('')}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;">
+        <b style="color:#0F8A5F;">✓ Won at $${(o.purchase_price || 0).toFixed(4)} / $${(o.sale_per_lb || 0).toFixed(4)}</b>
+        <span style="color:var(--ink-soft);"> — Order ${escapeHtml(o.order_number || '')}</span>
+      </div>
+    </div>`;
 }
 
 // Inline, no navigation: opens right under the order's own row. Loads on demand (only when
