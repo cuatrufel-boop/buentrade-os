@@ -56,6 +56,13 @@ exports.handler = async (event) => {
     ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;">${html}</div><br>${SIGNATURE_HTML}`
     : `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;">${escapeHtml(text)}</div><br>${SIGNATURE_HTML}`;
 
+  // Sending through Resend (not Gmail's own SMTP) means none of this ever shows up in Gmail's
+  // Sent folder, no matter which alias it went from — the trader has no record at all of what
+  // actually went out unless we put one somewhere he does see. BCC'ing the one inbox he actually
+  // watches on every send is the fix, regardless of which alias sent it.
+  const VISIBILITY_BCC = 'info@buentradegroup.com';
+  const bccList = Array.from(new Set([VISIBILITY_BCC].filter(addr => addr !== fromAddress.match(/<(.+)>/)?.[1])));
+
   const resendRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -66,6 +73,7 @@ exports.handler = async (event) => {
       from: fromAddress,
       to: Array.isArray(to) ? to : [to],
       cc: cc && cc.length ? cc : undefined,
+      bcc: bccList.length ? bccList : undefined,
       subject,
       text: text + SIGNATURE_TEXT,
       html: bodyHtml,
