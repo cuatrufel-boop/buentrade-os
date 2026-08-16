@@ -1513,15 +1513,35 @@ function negoCurrentSale(){
   return el ? Number(el.value) || 0 : 0;
 }
 
+// Sends through the Netlify function (Resend) so the right BuenTrade alias goes out as the
+// sender automatically. Falls back to mailto: (old behavior) if the API call fails, so a send
+// is never fully blocked by an API/network hiccup.
+async function sendEmailApi(fromAlias, to, subject, text){
+  const res = await fetch('/.netlify/functions/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: fromAlias, to, subject, text }),
+  });
+  if (!res.ok){
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Send failed');
+  }
+  return res.json();
+}
+
 // Message to the plant is English — plants are US-based (same rule as the PO/FO documents).
-function negoSendToPlant(channel){
+async function negoSendToPlant(channel){
   if (!negoPlant){ document.getElementById('negoMsg').textContent = 'No plant on file for this offer.'; return; }
   const price = negoCurrentCost();
   const contact = negoFirstName(negoPlant.contact_name || negoPlant.name);
   const body = `Hi ${contact},\n\nCan you confirm ${price.toFixed(4)} USD/lb for this load?`;
   if (channel === 'email'){
     if (!negoPlant.email){ document.getElementById('negoMsg').textContent = 'This plant has no email on file.'; return; }
-    window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Counteroffer')}&body=${encodeURIComponent(body)}`, '_blank');
+    try {
+      await sendEmailApi('purchasing', negoPlant.email, 'Counteroffer', body);
+    } catch(e){
+      window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Counteroffer')}&body=${encodeURIComponent(body)}`, '_blank');
+    }
   } else {
     const phone = (negoPlant.whatsapp || negoPlant.phone || '').replace(/\D/g, '');
     if (!phone){ document.getElementById('negoMsg').textContent = 'This plant has no phone/WhatsApp on file.'; return; }
@@ -1531,14 +1551,18 @@ function negoSendToPlant(channel){
 }
 
 // Message to the customer stays Spanish — same rule as the SO document, Latin American buyers.
-function negoSendToCustomer(channel){
+async function negoSendToCustomer(channel){
   if (!negoCustomer){ document.getElementById('negoMsg').textContent = 'No customer on file for this offer.'; return; }
   const price = negoCurrentSale();
   const contact = negoFirstName(negoCustomer.contact_name || negoCustomer.trade_name);
   const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.`;
   if (channel === 'email'){
     if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'This customer has no email on file.'; return; }
-    window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
+    try {
+      await sendEmailApi('offers', negoCustomer.email, 'Cotización', body);
+    } catch(e){
+      window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
+    }
   } else {
     const phone = (negoCustomer.whatsapp || negoCustomer.phone || '').replace(/\D/g, '');
     if (!phone){ document.getElementById('negoMsg').textContent = 'This customer has no phone/WhatsApp on file.'; return; }

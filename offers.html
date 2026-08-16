@@ -772,6 +772,26 @@ async function exportPO(orderNumber){
   built.doc.save(`PO-${orderNumber}.pdf`);
 }
 
+// Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
+// sender automatically — no trader having to pick "From" in Gmail. Falls back to opening a
+// mailto: (old behavior) if the API call fails for any reason, so a send is never fully blocked.
+async function sendEmailApi(fromAlias, to, subject, text){
+  const res = await fetch('/.netlify/functions/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: fromAlias, to, subject, text }),
+  });
+  if (!res.ok){
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Send failed');
+  }
+  return res.json();
+}
+
+function mailtoFallback(emails, subject, body){
+  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+}
+
 async function sharePO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
@@ -779,8 +799,15 @@ async function sharePO(orderNumber){
   if (!emails.length){ alert('This plant has no email on file.'); return; }
   let url;
   try { url = await uploadOrderPdf(built.doc, `PO-${orderNumber}.pdf`); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const subject = 'Purchase Order — ' + orderNumber;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`;
-  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Purchase Order — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+  try {
+    await sendEmailApi('purchasing', emails, subject, body);
+    alert('PO sent to ' + emails.join(', '));
+  } catch(e){
+    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+    mailtoFallback(emails, subject, body);
+  }
 }
 
 async function buildSODoc(orderNumber){
@@ -851,8 +878,15 @@ async function shareSO(orderNumber){
   if (!emails.length){ alert('This customer has no email on file.'); return; }
   let url;
   try { url = await uploadOrderPdf(built.doc, `SO-${orderNumber}.pdf`); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const subject = 'Confirmación de Venta — ' + orderNumber;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`;
-  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Confirmación de Venta — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+  try {
+    await sendEmailApi('offers', emails, subject, body);
+    alert('SO sent to ' + emails.join(', '));
+  } catch(e){
+    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+    mailtoFallback(emails, subject, body);
+  }
 }
 
 async function buildFODocs(orderNumber){
@@ -930,8 +964,15 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
+    const subject = 'Freight Confirmation — ' + orderNumber;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`;
-    window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Freight Confirmation — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+    try {
+      await sendEmailApi('logistics', emails, subject, body);
+      alert('FO sent to ' + emails.join(', '));
+    } catch(e){
+      alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+      mailtoFallback(emails, subject, body);
+    }
   }
 }
 
@@ -956,8 +997,15 @@ async function shareCustoms(orderNumber){
   } catch(e){ alert('Error preparing documents: ' + e.message); return; }
   if (!links.length){ alert('No documents available yet for this order.'); return; }
 
+  const subject = 'Documentos — ' + orderNumber;
   const body = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
-  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Documentos — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+  try {
+    await sendEmailApi('logistics', emails, subject, body);
+    alert('Documents sent to ' + emails.join(', '));
+  } catch(e){
+    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+    mailtoFallback(emails, subject, body);
+  }
 }
 
 rqDefaultDates();
