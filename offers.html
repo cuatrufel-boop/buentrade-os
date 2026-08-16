@@ -47,6 +47,9 @@
   .btn.lose{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);padding:5px 10px;font-size:12px;}
   .tt-btn{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 2px 6px rgba(10,37,71,.25);}
   .tt-btn:hover{filter:brightness(1.15);}
+  .doc-split{display:inline-flex;margin-right:4px;}
+  .doc-split .btn.secondary{border-radius:8px 0 0 8px;border-right:none;}
+  .doc-split .doc-share{border-radius:0 8px 8px 0;padding:5px 7px !important;font-size:11px !important;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);white-space:nowrap;}
   td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap;}
@@ -295,9 +298,10 @@ function renderOffers(){
         <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>`;
     } else if (o.status === 'won'){
       action = `
-        <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportPO('${o.order_number}')">PO</button>
-        <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportSO('${o.order_number}')">SO</button>
-        <button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportFO('${o.order_number}')">FO</button>
+        <span class="doc-split"><button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportPO('${o.order_number}')">PO</button><button class="btn secondary doc-share" title="Email PO to plant" onclick="sharePO('${o.order_number}')">&#9993;</button></span>
+        <span class="doc-split"><button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportSO('${o.order_number}')">SO</button><button class="btn secondary doc-share" title="Email SO to customer" onclick="shareSO('${o.order_number}')">&#9993;</button></span>
+        <span class="doc-split"><button class="btn secondary" style="padding:5px 8px;font-size:11px;" onclick="exportFO('${o.order_number}')">FO</button><button class="btn secondary doc-share" title="Email FO to carrier" onclick="shareFO('${o.order_number}')">&#9993;</button></span>
+        ${o.customs_agency_provider_id ? `<button class="btn secondary doc-share" title="Email docs to customs agency" onclick="shareCustoms('${o.order_number}')">&#9993; Customs</button>` : ''}
         <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleTT('${o.id}')">Real Costs</button>
         ${(o.negotiation_log || []).length ? `<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="toggleHistory('${o.id}')">History</button>` : ''}`;
     }
@@ -677,9 +681,27 @@ function pdfFooter(doc, lang){
   doc.text(lang === 'es' ? 'Página 1 de 1' : 'Page 1 of 1', 572, 770, { align: 'right' });
 }
 
-async function exportPO(orderNumber){
+// Uploads a generated PDF to the public "order-documents" bucket and returns its shareable URL
+// — mailto:/wa.me links can't carry a real attachment, so a link is the only way to actually
+// deliver the file through those channels.
+async function uploadOrderPdf(doc, filename){
+  const blob = doc.output('blob');
+  const { error } = await db.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
+  if (error) throw error;
+  return db.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
+}
+
+// Primary contact email plus every address in email_cc (comma-separated) — the "varios correos"
+// a plant/customer/carrier/customs agency can have on file, deduped.
+function collectEmails(entity){
+  if (!entity) return [];
+  const raw = [entity.email, ...String(entity.email_cc || '').split(',')];
+  return [...new Set(raw.map(e => (e || '').trim()).filter(Boolean))];
+}
+
+async function buildPODoc(orderNumber){
   const { data: po } = await db.from('purchase_orders').select('*').eq('order_number', orderNumber).single();
-  if (!po){ alert('PO not found.'); return; }
+  if (!po) throw new Error('PO not found.');
   const { data: plant } = po.plant_id ? await db.from('plants').select('*').eq('id', po.plant_id).single() : { data: null };
   const { data: sentOffer } = await db.from('sent_offers').select('won_by').eq('order_number', orderNumber).limit(1).single();
 
@@ -736,12 +758,29 @@ async function exportPO(orderNumber){
 
   pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
   pdfFooter(doc, 'en');
-  doc.save(`PO-${orderNumber}.pdf`);
+  return { doc, po, plant };
 }
 
-async function exportSO(orderNumber){
+async function exportPO(orderNumber){
+  let built;
+  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  built.doc.save(`PO-${orderNumber}.pdf`);
+}
+
+async function sharePO(orderNumber){
+  let built;
+  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  const emails = collectEmails(built.plant);
+  if (!emails.length){ alert('This plant has no email on file.'); return; }
+  let url;
+  try { url = await uploadOrderPdf(built.doc, `PO-${orderNumber}.pdf`); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`;
+  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Purchase Order — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+}
+
+async function buildSODoc(orderNumber){
   const { data: so } = await db.from('sales_orders').select('*').eq('order_number', orderNumber).single();
-  if (!so){ alert('SO not found.'); return; }
+  if (!so) throw new Error('SO not found.');
   const { data: customer } = so.customer_id ? await db.from('customers').select('*').eq('id', so.customer_id).single() : { data: null };
   const { data: sentOffer } = await db.from('sent_offers').select('won_by,plant_id').eq('order_number', orderNumber).limit(1).single();
   const { data: originPlant } = sentOffer && sentOffer.plant_id
@@ -791,14 +830,32 @@ async function exportSO(orderNumber){
   const ty = doc.lastAutoTable.finalY + 30;
   pdfTerms(doc, ty, 'TÉRMINOS', SO_TERMS, DRAFT_DISCLAIMER_ES);
   pdfFooter(doc, 'es');
-  doc.save(`SO-${orderNumber}.pdf`);
+  return { doc, so, customer };
 }
 
-async function exportFO(orderNumber){
+async function exportSO(orderNumber){
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  built.doc.save(`SO-${orderNumber}.pdf`);
+}
+
+async function shareSO(orderNumber){
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  const emails = collectEmails(built.customer);
+  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  let url;
+  try { url = await uploadOrderPdf(built.doc, `SO-${orderNumber}.pdf`); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`;
+  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Confirmación de Venta — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+}
+
+async function buildFODocs(orderNumber){
   const { data: fos } = await db.from('freight_orders').select('*').eq('order_number', orderNumber);
-  if (!fos || !fos.length){ alert('No freight leg on this order.'); return; }
+  if (!fos || !fos.length) throw new Error('No freight leg on this order.');
   const { data: sentOffer } = await db.from('sent_offers').select('weight,delivery_dates').eq('order_number', orderNumber).limit(1).single();
 
+  const built = [];
   for (const fo of fos){
     const { data: carrier } = fo.carrier_provider_id ? await db.from('providers').select('*').eq('id', fo.carrier_provider_id).single() : { data: null };
 
@@ -849,8 +906,53 @@ async function exportFO(orderNumber){
     // performance) and the MBG reference examples didn't include one either.
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    doc.save(`FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf`);
+    built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
+  return built;
+}
+
+async function exportFO(orderNumber){
+  let built;
+  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  built.forEach(b => b.doc.save(b.filename));
+}
+
+async function shareFO(orderNumber){
+  let built;
+  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  for (const b of built){
+    const emails = collectEmails(b.carrier);
+    if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
+    let url;
+    try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
+    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`;
+    window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Freight Confirmation — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
+  }
+}
+
+// Border customs paperwork isn't its own document — the broker just needs whatever of
+// PO/SO/FO already exist for this order, so this bundles links to all of them in one email
+// instead of asking the trader to forward each separately.
+async function shareCustoms(orderNumber){
+  const { data: sentOffer } = await db.from('sent_offers').select('customs_agency_provider_id').eq('order_number', orderNumber).limit(1).single();
+  if (!sentOffer || !sentOffer.customs_agency_provider_id){ alert('No customs agency on file for this order.'); return; }
+  const { data: agency } = await db.from('providers').select('*').eq('id', sentOffer.customs_agency_provider_id).single();
+  const emails = collectEmails(agency);
+  if (!emails.length){ alert('This customs agency has no email on file.'); return; }
+
+  const links = [];
+  try {
+    const po = await buildPODoc(orderNumber).catch(() => null);
+    if (po) links.push(['Purchase Order', await uploadOrderPdf(po.doc, `PO-${orderNumber}.pdf`)]);
+    const so = await buildSODoc(orderNumber).catch(() => null);
+    if (so) links.push(['Sales Order', await uploadOrderPdf(so.doc, `SO-${orderNumber}.pdf`)]);
+    const fos = await buildFODocs(orderNumber).catch(() => []);
+    for (const b of fos) links.push(['Freight Confirmation', await uploadOrderPdf(b.doc, b.filename)]);
+  } catch(e){ alert('Error preparing documents: ' + e.message); return; }
+  if (!links.length){ alert('No documents available yet for this order.'); return; }
+
+  const body = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
+  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent('Documentos — ' + orderNumber)}&body=${encodeURIComponent(body)}`, '_blank');
 }
 
 rqDefaultDates();

@@ -188,6 +188,7 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Contact Name</label><input id="p_contact_name"></div>
       <div class="field"><label>Contact Email</label><input id="p_email" type="email"></div>
     </div>
+    <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com"></div>
     <div class="grid2">
       <div class="field"><label>MC# (Motor Carrier)</label><input id="p_mc_number" placeholder="e.g. MC-123456"></div>
       <div class="field"><label>DOT# (USDOT)</label><input id="p_dot_number" placeholder="e.g. 1234567"></div>
@@ -306,7 +307,7 @@ function openForm(){
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = 'New provider';
   document.getElementById('providerId').value = '';
-  ['p_name','p_country','p_city','p_phone','p_contact_name','p_email','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
+  ['p_name','p_country','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
   document.querySelectorAll('.role-cb').forEach(cb => cb.checked = false);
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
@@ -324,6 +325,7 @@ function editProvider(id){
   document.getElementById('p_phone').value = p.phone || '';
   document.getElementById('p_contact_name').value = p.contact_name || '';
   document.getElementById('p_email').value = p.email || '';
+  document.getElementById('p_email_cc').value = p.email_cc || '';
   document.getElementById('p_mc_number').value = p.mc_number || '';
   document.getElementById('p_dot_number').value = p.dot_number || '';
   document.getElementById('p_notes').value = p.notes || '';
@@ -344,6 +346,7 @@ async function saveProvider(){
     phone: document.getElementById('p_phone').value || null,
     contact_name: document.getElementById('p_contact_name').value || null,
     email: document.getElementById('p_email').value || null,
+    email_cc: document.getElementById('p_email_cc').value || null,
     mc_number: document.getElementById('p_mc_number').value || null,
     dot_number: document.getElementById('p_dot_number').value || null,
     notes: document.getElementById('p_notes').value || null,
