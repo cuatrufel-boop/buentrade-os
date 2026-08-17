@@ -625,13 +625,29 @@ function isSectionHeaderLine(line){
   return /^[A-Za-z][A-Za-z /]*:$/.test(line.trim());
 }
 
+// The full fixed catalog (every plant, not just this one) — the whole point of this screen is
+// to link a plant to a product for the FIRST time (price + link created together on Apply), so
+// the picker can't be limited to what's already linked to this plant, or nothing new could ever
+// be added here. Fetched once and cached; only needs a fresh copy if a product was added/renamed
+// elsewhere mid-session, which a full page reload already covers.
+let allCatalogProducts = null;
+async function fetchAllCatalogProducts(){
+  if (allCatalogProducts) return allCatalogProducts;
+  const { data } = await db.from('products').select('*').order('name');
+  allCatalogProducts = data || [];
+  return allCatalogProducts;
+}
+
 async function processPriceListText(){
   const text = document.getElementById('priceListInput').value;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Pega el texto primero.'; return; }
   document.getElementById('priceListMsg').textContent = 'Procesando…';
 
-  const { data: aliases } = await db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId);
+  const [{ data: aliases }] = await Promise.all([
+    db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
+    fetchAllCatalogProducts(),
+  ]);
   const aliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
 
   let currentSection = null;
@@ -651,9 +667,9 @@ async function processPriceListText(){
     const key = normalizeForMatch(rawText);
     let matchedProductId = aliasMap.get(key) || null;
     if (!matchedProductId){
-      // First time this plant's exact wording happens to already match the catalog — covers it
-      // without needing an alias confirmed yet.
-      const found = plantProducts.find(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
+      // First time this plant's exact wording happens to already match a fixed product's own
+      // name — covers it without needing an alias confirmed yet.
+      const found = allCatalogProducts.find(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
       if (found) matchedProductId = found.id;
     }
     priceListRows.push({ rawText, price, matchedProductId });
@@ -674,7 +690,7 @@ function renderPriceListReview(){
     // combo vs not) — without temp/pack in the label those show up as identical-looking
     // duplicates in the picker, impossible to tell apart. This is what ends up on invoices, so
     // getting the right one matters more here than almost anywhere else in the app.
-    const options = plantProducts.map(p => {
+    const options = allCatalogProducts.map(p => {
       const spec = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(', ');
       return `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}${p.name_en ? ' / ' + escapeHtml(p.name_en) : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
