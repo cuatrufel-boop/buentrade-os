@@ -711,10 +711,11 @@ function renderPriceListReview(){
 async function applyPriceList(){
   const today = new Date().toISOString().slice(0, 10);
   const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null);
-  const skipped = priceListRows.length - toApply.length;
+  const pending = priceListRows.filter(r => !(r.matchedProductId && r.price != null));
   if (!toApply.length){ document.getElementById('priceListMsg').textContent = 'Ninguna fila tiene producto y precio seleccionados.'; return; }
 
   document.getElementById('priceListMsg').textContent = 'Guardando…';
+  const applied = [];
   let errors = 0;
   for (const row of toApply){
     // Price lives on the plant+product link, never on the product itself — a fixed/shared
@@ -736,12 +737,21 @@ async function applyPriceList(){
       raw_text: normalizeForMatch(row.rawText),
       product_id: row.matchedProductId,
     }, { onConflict: 'plant_id,raw_text' });
+    applied.push(row);
   }
 
   await loadPlantProducts();
-  closePriceListPanel();
-  document.getElementById('priceListMsg').textContent = '';
-  alert(`${toApply.length - errors} precio(s) actualizado(s).${skipped ? ` ${skipped} fila(s) sin producto/precio, no se aplicaron.` : ''}${errors ? ` ${errors} fallaron.` : ''}`);
+  // Left showing only what's still pending — rows that had no product/price picked, or that
+  // failed to save — instead of closing the whole panel and losing track of where things stood.
+  const failed = toApply.filter(r => !applied.includes(r));
+  priceListRows = [...pending, ...failed];
+  if (priceListRows.length){
+    renderPriceListReview();
+    document.getElementById('priceListMsg').textContent = '';
+  } else {
+    closePriceListPanel();
+  }
+  alert(`${applied.length} precio(s) actualizado(s).${pending.length ? ` ${pending.length} fila(s) sin producto/precio, quedan pendientes arriba.` : ''}${errors ? ` ${errors} fallaron al guardar, quedan pendientes arriba.` : ''}`);
 }
 
 let plantLocations = [];
