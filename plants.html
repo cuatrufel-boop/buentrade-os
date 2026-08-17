@@ -205,8 +205,9 @@ auth.onAuthStateChanged(user => {
         <div id="priceListMsg" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
 
+      <input id="plantProductSearchBox" type="text" placeholder="Search products…" oninput="renderPlantProducts()" style="width:100%;max-width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;margin-bottom:14px;">
       <table>
-        <thead><tr><th>Photo</th><th>Name (ES)</th><th>Name (EN)</th><th>Category</th><th>Subcategory</th><th>Temp/Pack</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th>Temp/Pack</th><th>Price</th><th></th></tr></thead>
         <tbody id="plantProductRows"></tbody>
       </table>
       <div id="plantEmpty" class="empty" style="display:none;">No products linked to this plant yet.</div>
@@ -574,7 +575,7 @@ async function loadPlantProducts(){
 function fmtPriceCell(p){
   if (p.current_price == null) return '<span style="color:var(--ink-soft);">—</span>';
   const dateStr = p.price_date ? new Date(p.price_date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
-  return `$${Number(p.current_price).toFixed(4)}${dateStr ? `<div style="font-size:10.5px;color:var(--ink-soft);">as of ${dateStr}</div>` : ''}`;
+  return `<span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(p.current_price).toFixed(2)}</span>${dateStr ? `<span style="font-size:11px;color:var(--ink-soft);"> · ${dateStr}</span>` : ''}`;
 }
 
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
@@ -867,22 +868,23 @@ function packName(id){ const p = packagings.find(x => x.id === id); return p ? (
 function renderPlantProducts(){
   const tbody = document.getElementById('plantProductRows');
   tbody.innerHTML = '';
-  document.getElementById('plantEmpty').style.display = plantProducts.length ? 'none' : 'block';
-  document.getElementById('plantEmpty').textContent = 'No products linked to this plant yet.';
-  plantProducts.forEach(p => {
+  const term = (document.getElementById('plantProductSearchBox').value || '').trim().toLowerCase();
+  const filtered = term
+    ? plantProducts.filter(p => (p.name_en || p.name || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term))
+    : plantProducts;
+  document.getElementById('plantEmpty').style.display = filtered.length ? 'none' : 'block';
+  document.getElementById('plantEmpty').textContent = plantProducts.length ? 'No products match your search.' : 'No products linked to this plant yet.';
+  filtered.forEach(p => {
     const isImg = p.photo_url && /\.(png|jpe?g|gif|webp)(\?|$)/i.test(p.photo_url);
     const thumb = p.photo_url
       ? (isImg ? `<img class="thumb" src="${p.photo_url}">` : `<a href="${p.photo_url}" target="_blank" rel="noopener">📄</a>`)
       : '';
     const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
-    const sub = [p.subcategory, p.subcategory_en].filter(Boolean).join(' / ') || '—';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${thumb}</td>
-      <td><strong>${escapeHtml(p.name || '')}</strong></td>
-      <td>${escapeHtml(p.name_en || '—')}</td>
+      <td><strong>${escapeHtml(p.name_en || p.name || '')}</strong></td>
       <td>${escapeHtml(p.category || '')}</td>
-      <td>${escapeHtml(sub)}</td>
       <td>${escapeHtml(tp)}</td>
       <td>${fmtPriceCell(p)}</td>
       <td class="row-actions">
