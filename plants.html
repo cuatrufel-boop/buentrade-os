@@ -592,16 +592,26 @@ function normalizeForMatch(s){
   return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-// Best-effort only: grabs the last dollar-looking number on a line as the price, everything
-// before it as the product's raw text. The review table is the real safety net — a parsing
-// miss here just means editing one field before applying, never a bad write, so there's no need
-// to get the exact format right on the first try.
+// Finds the FIRST literal "$<number>" anywhere in the line — not anchored to the end. Real price
+// lists (confirmed against an actual Tyson list) routinely trail qualifiers after the price
+// ("$98, QUICK", "$120 AUG/SEPT"), so anchoring to the end missed most of the sheet. Requires the
+// $ sign specifically so a product code that happens to contain digits itself (e.g. "2407 Rib
+// Tips Poly – 244M...") is never mistaken for a price. A line with two prices ("$120 AUG/$125
+// SEPT") takes the first (today's) — the review table lets the trader fix it if that's wrong.
 function parsePriceListLine(line){
-  const m = line.match(/\$?\s*(\d+(?:[.,]\d+)?)\s*(?:usd)?\s*(?:\/\s*lb)?\.?\s*$/i);
+  const m = line.match(/\$\s*(\d+(?:[.,]\d+)?)/);
   if (!m) return { rawText: line.trim(), price: null };
   const price = parseFloat(m[1].replace(',', '.'));
   const rawText = (line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '')) || line.trim();
   return { rawText, price };
+}
+
+// A line that's just a category header ("Fresh Processor:", "Frozen Boxed Muscles:") — never a
+// product/price row on its own, but real lists repeat the same cut name across sections at
+// different prices ("Bone in Loins" under both Fresh and Frozen), so the section name gets
+// folded into the row's raw text below to keep them distinct instead of colliding.
+function isSectionHeaderLine(line){
+  return /^[A-Za-z][A-Za-z /]*:$/.test(line.trim());
 }
 
 // Every product across every plant — only fetched when the price-list panel is actually used,
@@ -642,8 +652,15 @@ async function processPriceListText(){
   const aliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
   const currentPlant = plants.find(p => p.id === currentPlantId);
 
-  priceListRows = lines.map(line => {
-    const { rawText, price } = parsePriceListLine(line);
+  let currentSection = null;
+  priceListRows = [];
+  for (const line of lines){
+    if (isSectionHeaderLine(line)){
+      currentSection = line.replace(/:\s*$/, '').trim();
+      continue; // the header itself never becomes a row
+    }
+    const { rawText: baseText, price } = parsePriceListLine(line);
+    const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
     const key = normalizeForMatch(rawText);
     let matchedProductId = aliasMap.get(key) || null;
     if (!matchedProductId){
@@ -652,9 +669,9 @@ async function processPriceListText(){
       const found = plantProducts.find(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
       if (found) matchedProductId = found.id;
     }
-    const suggestions = matchedProductId ? [] : findCrossPlantSuggestions(rawText, currentPlant && currentPlant.name);
-    return { rawText, price, matchedProductId, suggestions };
-  });
+    const suggestions = matchedProductId ? [] : findCrossPlantSuggestions(baseText, currentPlant && currentPlant.name);
+    priceListRows.push({ rawText, price, matchedProductId, suggestions });
+  }
 
   renderPriceListReview();
   document.getElementById('priceListMsg').textContent = '';
