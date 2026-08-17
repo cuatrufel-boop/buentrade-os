@@ -607,7 +607,12 @@ function normalizeForMatch(s){
 function parsePriceListLine(line){
   const m = line.match(/\$\s*(\d+(?:[.,]\d+)?)/);
   if (!m) return { rawText: line.trim(), price: null };
-  const price = parseFloat(m[1].replace(',', '.'));
+  const raw = m[1];
+  // Plants write these lists as whole-number shorthand with no decimal point — "$98" means
+  // $0.98/lb, "$220" means $2.20/lb, per the trader's explicit rule. Only scaled when the
+  // matched number truly has no decimal already (a source that ever writes "$0.85" outright
+  // stays 0.85, not divided again).
+  const price = /[.,]/.test(raw) ? parseFloat(raw.replace(',', '.')) : parseFloat(raw) / 100;
   const rawText = (line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '')) || line.trim();
   return { rawText, price };
 }
