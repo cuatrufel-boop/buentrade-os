@@ -859,6 +859,11 @@ async function deleteLocation(id){
   await loadPlantLocations();
 }
 
+// products.category is stored in Spanish (Cerdo, Pollo, Pavo, Res, Vegetales, Marrana) — the
+// canonical value everywhere else, never renamed in the DB. Display-only translation for this
+// page, same English-only rule as tempName/packName below.
+const CATEGORY_EN = { Cerdo: 'Pork', Pollo: 'Chicken', Pavo: 'Turkey', Res: 'Beef', Vegetales: 'Vegetables', Marrana: 'Sow' };
+
 // This whole page is plant-facing (English) — plants.html never shows Spanish, same as every PO
 // sent to a plant is English-only. English name always, falling back to the Spanish catalog
 // entry only if a temp/packaging row somehow has no name_en on file yet.
@@ -881,13 +886,14 @@ function renderPlantProducts(){
       : '';
     const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
     const tr = document.createElement('tr');
+    tr.style.verticalAlign = 'middle';
     tr.innerHTML = `
-      <td>${thumb}</td>
-      <td><strong>${escapeHtml(p.name_en || p.name || '')}</strong></td>
-      <td>${escapeHtml(p.category || '')}</td>
-      <td>${escapeHtml(tp)}</td>
-      <td>${fmtPriceCell(p)}</td>
-      <td class="row-actions">
+      <td style="vertical-align:middle;">${thumb}</td>
+      <td style="vertical-align:middle;"><strong>${escapeHtml(p.name_en || p.name || '')}</strong></td>
+      <td style="vertical-align:middle;">${escapeHtml(CATEGORY_EN[p.category] || p.category || '')}</td>
+      <td style="vertical-align:middle;">${escapeHtml(tp)}</td>
+      <td style="vertical-align:middle;">${fmtPriceCell(p)}</td>
+      <td class="row-actions" style="vertical-align:middle;">
         <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button>
       </td>`;
     tbody.appendChild(tr);
