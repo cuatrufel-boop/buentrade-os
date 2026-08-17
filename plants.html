@@ -614,43 +614,14 @@ function isSectionHeaderLine(line){
   return /^[A-Za-z][A-Za-z /]*:$/.test(line.trim());
 }
 
-// Every product across every plant — only fetched when the price-list panel is actually used,
-// so this doesn't slow down the normal plant profile load. Used purely to warn "this might
-// already exist under another plant with different wording," never to auto-match across plants
-// (each plant genuinely keeps its own product row — see brand field), since a wrong cross-plant
-// auto-match could silently overwrite the wrong product's price.
-let allProductsForDupeCheck = null;
-async function fetchAllProductsForDupeCheck(){
-  if (allProductsForDupeCheck) return allProductsForDupeCheck;
-  const { data } = await db.from('products').select('id,name,name_en,brand');
-  allProductsForDupeCheck = data || [];
-  return allProductsForDupeCheck;
-}
-
-// Crude but useful: flags another plant's product as a possible match if they share a
-// meaningful word (4+ letters, so "de"/"con"/"sin" don't trigger false positives).
-function findCrossPlantSuggestions(rawText, excludeBrand){
-  const words = normalizeForMatch(rawText).split(' ').filter(w => w.length >= 4);
-  if (!words.length || !allProductsForDupeCheck) return [];
-  return allProductsForDupeCheck.filter(p => {
-    if (p.brand === excludeBrand) return false;
-    const hay = normalizeForMatch([p.name, p.name_en].filter(Boolean).join(' '));
-    return words.some(w => hay.includes(w));
-  }).slice(0, 3);
-}
-
 async function processPriceListText(){
   const text = document.getElementById('priceListInput').value;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Pega el texto primero.'; return; }
   document.getElementById('priceListMsg').textContent = 'Procesando…';
 
-  const [{ data: aliases }] = await Promise.all([
-    db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
-    fetchAllProductsForDupeCheck(),
-  ]);
+  const { data: aliases } = await db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId);
   const aliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
-  const currentPlant = plants.find(p => p.id === currentPlantId);
 
   let currentSection = null;
   priceListRows = [];
@@ -669,8 +640,7 @@ async function processPriceListText(){
       const found = plantProducts.find(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
       if (found) matchedProductId = found.id;
     }
-    const suggestions = matchedProductId ? [] : findCrossPlantSuggestions(baseText, currentPlant && currentPlant.name);
-    priceListRows.push({ rawText, price, matchedProductId, suggestions });
+    priceListRows.push({ rawText, price, matchedProductId });
   }
 
   renderPriceListReview();
@@ -683,11 +653,8 @@ function renderPriceListReview(){
   wrap.style.display = 'block';
   tbody.innerHTML = priceListRows.map((row, i) => {
     const options = plantProducts.map(p => `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}${p.name_en ? ' / ' + escapeHtml(p.name_en) : ''}</option>`).join('');
-    const suggestHint = (row.suggestions && row.suggestions.length)
-      ? `<div style="font-size:11px;color:#b8860b;margin-top:4px;">¿Es lo mismo que: ${row.suggestions.map(s => `${escapeHtml(s.name)}${s.name_en ? '/' + escapeHtml(s.name_en) : ''} (${escapeHtml(s.brand || '?')})`).join(', ')}? Si sí, créalo con el mismo nombre en español.</div>`
-      : '';
     return `<tr>
-      <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value">${suggestHint}</td>
+      <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
       <td><select style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].matchedProductId=this.value||null">
         <option value="">— selecciona —</option>
