@@ -408,13 +408,21 @@ async function onRqProductInput(){
 }
 
 async function autoPopulateRqPlants(productName){
-  const matchingProductIds = products
-    .filter(p => (p.name || '').toLowerCase() === productName.toLowerCase())
-    .map(p => p.id);
-  if (!matchingProductIds.length) return;
-  const { data } = await db.from('plant_products').select('plant_id').in('product_id', matchingProductIds);
-  const plantIds = [...new Set((data || []).map(r => r.plant_id))];
-  rqSelectedPlants = plantIds.map(id => rqAllPlants.find(p => p.id === id)).filter(Boolean);
+  const matchingProducts = products.filter(p => (p.name || '').toLowerCase() === productName.toLowerCase());
+  if (!matchingProducts.length) return;
+  const matchingProductIds = matchingProducts.map(p => p.id);
+  const { data } = await db.from('plant_products').select('plant_id, product_id').in('product_id', matchingProductIds);
+  // This is the whole point of the price-list intake in plants.html — a price loaded there
+  // (products.current_price/price_date) shows up here automatically, so the trader isn't
+  // retyping a number from memory every time a quote gets built.
+  const plantProductMap = new Map((data || []).map(r => [r.plant_id, r.product_id]));
+  rqSelectedPlants = [...plantProductMap.keys()].map(plantId => {
+    const plant = rqAllPlants.find(p => p.id === plantId);
+    if (!plant) return null;
+    const product = matchingProducts.find(p => p.id === plantProductMap.get(plantId));
+    const hasPrice = product && product.current_price != null;
+    return { ...plant, rqPrice: hasPrice ? product.current_price : undefined, rqPriceDate: hasPrice ? product.price_date : null };
+  }).filter(Boolean);
   renderRqPlants();
 }
 
@@ -488,7 +496,11 @@ function renderRqPlants(){
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
       </div>
       <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="mini-field" style="width:110px;"><label>Purchase $/lb</label><input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')"></div>
+        <div class="mini-field" style="width:110px;">
+          <label>Purchase $/lb</label>
+          <input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')">
+          ${p.rqPriceDate ? `<span class="loc-hint" style="color:var(--blue);font-weight:600;">as of ${rqFmtDate(p.rqPriceDate)}</span>` : ''}
+        </div>
         <div class="mini-field" style="width:170px;">
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
@@ -953,6 +965,10 @@ function rqUpdatePlantField(id, field, val){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   p[field] = parseFloat(val) || 0;
+  // The "as of [date]" hint only makes sense for a price pulled straight from the plant's
+  // catalog record — the moment the trader types over it by hand, that date no longer describes
+  // what's in the box.
+  if (field === 'rqPrice') p.rqPriceDate = null;
   rqInvalidateCalc(p);
   // Deliberately not a full renderRqPlants() here — that would rebuild the input the user is
   // actively typing into and steal focus after every keystroke. Just update the bits that need
