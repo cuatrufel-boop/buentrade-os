@@ -631,6 +631,11 @@ async function processPriceListText(){
       continue; // the header itself never becomes a row
     }
     const { rawText: baseText, price } = parsePriceListLine(line);
+    // No price found on this line at all — it's a greeting, disclaimer, signature, or a real
+    // "N/A" item, none of which can ever be applied (applyPriceList requires both a product and
+    // a price). Skipping it here instead of showing it means the review screen is only ever the
+    // rows that actually need a decision, not 25+ lines of unrelated email text to scroll past.
+    if (price == null) continue;
     const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
     const key = normalizeForMatch(rawText);
     let matchedProductId = aliasMap.get(key) || null;
@@ -644,7 +649,9 @@ async function processPriceListText(){
   }
 
   renderPriceListReview();
-  document.getElementById('priceListMsg').textContent = '';
+  document.getElementById('priceListMsg').textContent = priceListRows.length
+    ? ''
+    : 'No se encontró ningún precio en el texto pegado.';
 }
 
 function renderPriceListReview(){
