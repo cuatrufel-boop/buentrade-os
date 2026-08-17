@@ -554,14 +554,20 @@ async function saveProfile(){
 async function loadPlantProducts(){
   const { data, error } = await db
     .from('plant_products')
-    .select('id, products(*)')
+    .select('id, current_price, price_currency, price_date, products(*)')
     .eq('plant_id', currentPlantId);
   if (error){
     document.getElementById('plantEmpty').style.display = 'block';
     document.getElementById('plantEmpty').textContent = 'Error loading products: ' + error.message;
     return;
   }
-  plantProducts = (data || []).map(r => r.products).filter(Boolean);
+  // Price lives on the plant_products link row (plant + product), not on the product itself —
+  // the same fixed/canonical product can be carried by several plants at different prices.
+  // Merged onto the product object here so the rest of this page keeps reading p.current_price
+  // like before, just sourced from the right row now.
+  plantProducts = (data || [])
+    .filter(r => r.products)
+    .map(r => ({ ...r.products, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date }));
   renderPlantProducts();
 }
 
@@ -687,11 +693,17 @@ async function applyPriceList(){
   document.getElementById('priceListMsg').textContent = 'Guardando…';
   let errors = 0;
   for (const row of toApply){
-    const { error: priceErr } = await db.from('products').update({
+    // Price lives on the plant+product link, never on the product itself — a fixed/shared
+    // product can be carried by several plants at different prices. This upsert also creates
+    // the link the first time this plant carries that product, so a brand-new plant/product
+    // pairing needs no separate "link it" step.
+    const { error: priceErr } = await db.from('plant_products').upsert({
+      plant_id: currentPlantId,
+      product_id: row.matchedProductId,
       current_price: row.price,
       price_currency: 'USD',
       price_date: today,
-    }).eq('id', row.matchedProductId);
+    }, { onConflict: 'plant_id,product_id' });
     if (priceErr){ errors++; continue; }
     // Remember this plant's exact wording (normalized) for next time — upsert so re-confirming
     // an already-known alias just refreshes it instead of erroring on the unique index.

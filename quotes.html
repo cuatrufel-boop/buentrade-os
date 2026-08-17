@@ -411,17 +411,16 @@ async function autoPopulateRqPlants(productName){
   const matchingProducts = products.filter(p => (p.name || '').toLowerCase() === productName.toLowerCase());
   if (!matchingProducts.length) return;
   const matchingProductIds = matchingProducts.map(p => p.id);
-  const { data } = await db.from('plant_products').select('plant_id, product_id').in('product_id', matchingProductIds);
-  // This is the whole point of the price-list intake in plants.html — a price loaded there
-  // (products.current_price/price_date) shows up here automatically, so the trader isn't
-  // retyping a number from memory every time a quote gets built.
-  const plantProductMap = new Map((data || []).map(r => [r.plant_id, r.product_id]));
-  rqSelectedPlants = [...plantProductMap.keys()].map(plantId => {
-    const plant = rqAllPlants.find(p => p.id === plantId);
+  // Price lives on the plant_products link (plant + product), not on the product itself — the
+  // same fixed/shared product can be carried by several plants at different prices. This is the
+  // whole point of the price-list intake in plants.html: a price loaded there shows up here
+  // automatically, so the trader isn't retyping a number from memory every time.
+  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date').in('product_id', matchingProductIds);
+  rqSelectedPlants = (data || []).map(link => {
+    const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
-    const product = matchingProducts.find(p => p.id === plantProductMap.get(plantId));
-    const hasPrice = product && product.current_price != null;
-    return { ...plant, rqPrice: hasPrice ? product.current_price : undefined, rqPriceDate: hasPrice ? product.price_date : null };
+    const hasPrice = link.current_price != null;
+    return { ...plant, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null };
   }).filter(Boolean);
   renderRqPlants();
 }
