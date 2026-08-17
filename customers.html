@@ -57,6 +57,9 @@
   .name-link:hover{text-decoration:underline;}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   #formCard{display:none;}
+  .tab-row{display:flex;gap:6px;margin:14px 0 18px;border-bottom:1.5px solid var(--line);}
+  .tab-btn{background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;}
+  .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
 </style>
 </head>
 <body>
@@ -179,44 +182,74 @@ auth.onAuthStateChanged(user => {
   <h1>Customers</h1>
 
   <div class="card" id="viewCard" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <strong id="viewTitle" style="font-size:16px;"></strong>
+    <!-- ============ Always-visible header — name, city, contact, WhatsApp — regardless of
+         which tab is active below, same "highlights" pattern as the plant profile. ============ -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+      <div>
+        <strong id="viewTitle" style="font-size:18px;"></strong>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--ink-soft);">
+          <span id="v_location">—</span>
+          <span id="v_contact_name">—</span>
+          <button class="wa-btn" id="v_waBtn" style="display:none;" onclick="openViewWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button>
+        </div>
+      </div>
       <div style="display:flex;gap:8px;">
         <button class="btn secondary" onclick="editFromView()">Edit</button>
         <button class="btn danger" onclick="deleteFromView()">Delete</button>
       </div>
     </div>
-    <div class="section-title">Identity</div>
-    <div class="grid3" style="row-gap:10px;">
-      <div><label class="view-label">Legal Name</label><span id="v_legal_name">—</span></div>
-      <div><label class="view-label">Location</label><span id="v_location">—</span></div>
-      <div><label class="view-label">Address</label><span id="v_address">—</span></div>
+
+    <div class="tab-row">
+      <button type="button" class="tab-btn active" id="custTabBtn_products" onclick="setCustomerTab('products')">Products</button>
+      <button type="button" class="tab-btn" id="custTabBtn_details" onclick="setCustomerTab('details')">Details</button>
     </div>
-    <div class="section-title">Contact</div>
-    <div class="grid3" style="row-gap:10px;">
-      <div><label class="view-label">Contact Name</label><span id="v_contact_name">—</span></div>
-      <div><label class="view-label">Contact Role</label><span id="v_contact_role">—</span></div>
-      <div><label class="view-label">Email</label><span id="v_email">—</span></div>
-      <div><label class="view-label">Phone</label><button class="wa-btn" id="v_waBtn" style="display:none;" onclick="openViewWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button></div>
-      <div><label class="view-label">Website</label><span id="v_website">—</span></div>
+
+    <!-- ============ PRODUCTS THEY BUY — default tab: what does this customer buy, at a
+         glance, editable right here. ============ -->
+    <div id="custTab_products">
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <input type="text" id="custProductInput" placeholder="Buscar producto del catálogo…" list="custProductNames" style="flex:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+        <datalist id="custProductNames"></datalist>
+        <button class="btn" style="padding:8px 16px;font-size:13px;" onclick="addCustomerProduct()">+ Add</button>
+      </div>
+      <table>
+        <thead><tr><th>Producto</th><th></th></tr></thead>
+        <tbody id="custProductRows"></tbody>
+      </table>
+      <div id="custProductsEmpty" class="empty" style="display:none;">No products on file for this customer yet.</div>
     </div>
-    <div class="section-title">Payments contact</div>
-    <div class="grid3" style="row-gap:10px;">
-      <div><label class="view-label">Payments Contact</label><span id="v_payments_contact_name">—</span></div>
-      <div><label class="view-label">Payments Email</label><span id="v_payments_contact_email">—</span></div>
-      <div><label class="view-label">Payments Phone</label><span id="v_payments_contact_phone">—</span></div>
+
+    <!-- ============ DETAILS — everything else. Switching tabs never leaves the record. ============ -->
+    <div id="custTab_details" style="display:none;">
+      <div class="section-title" style="margin-top:0;">Identity</div>
+      <div class="grid3" style="row-gap:10px;">
+        <div><label class="view-label">Legal Name</label><span id="v_legal_name">—</span></div>
+        <div><label class="view-label">Address</label><span id="v_address">—</span></div>
+        <div><label class="view-label">Website</label><span id="v_website">—</span></div>
+      </div>
+      <div class="section-title">Contact</div>
+      <div class="grid3" style="row-gap:10px;">
+        <div><label class="view-label">Contact Role</label><span id="v_contact_role">—</span></div>
+        <div><label class="view-label">Email</label><span id="v_email">—</span></div>
+      </div>
+      <div class="section-title">Payments contact</div>
+      <div class="grid3" style="row-gap:10px;">
+        <div><label class="view-label">Payments Contact</label><span id="v_payments_contact_name">—</span></div>
+        <div><label class="view-label">Payments Email</label><span id="v_payments_contact_email">—</span></div>
+        <div><label class="view-label">Payments Phone</label><span id="v_payments_contact_phone">—</span></div>
+      </div>
+      <div class="section-title">Commercial profile</div>
+      <div class="grid3" style="row-gap:10px;">
+        <div><label class="view-label">Currency</label><span id="v_preferred_currency">—</span></div>
+        <div><label class="view-label">Delivery Type</label><span id="v_usual_delivery_type">—</span></div>
+        <div><label class="view-label">Payment Days</label><span id="v_payment_days">—</span></div>
+        <div><label class="view-label">Destination</label><span id="v_usual_destination">—</span></div>
+        <div><label class="view-label">Incoterm</label><span id="v_usual_incoterm_text">—</span></div>
+        <div><label class="view-label">Payment Method</label><span id="v_payment_method">—</span></div>
+        <div><label class="view-label">Customs Agency</label><span id="v_customs_agency">—</span></div>
+      </div>
+      <div style="margin-top:10px;"><label class="view-label">Notes</label><span id="v_notes">—</span></div>
     </div>
-    <div class="section-title">Commercial profile</div>
-    <div class="grid3" style="row-gap:10px;">
-      <div><label class="view-label">Currency</label><span id="v_preferred_currency">—</span></div>
-      <div><label class="view-label">Delivery Type</label><span id="v_usual_delivery_type">—</span></div>
-      <div><label class="view-label">Payment Days</label><span id="v_payment_days">—</span></div>
-      <div><label class="view-label">Destination</label><span id="v_usual_destination">—</span></div>
-      <div><label class="view-label">Incoterm</label><span id="v_usual_incoterm_text">—</span></div>
-      <div><label class="view-label">Payment Method</label><span id="v_payment_method">—</span></div>
-      <div><label class="view-label">Customs Agency</label><span id="v_customs_agency">—</span></div>
-    </div>
-    <div style="margin-top:10px;"><label class="view-label">Notes</label><span id="v_notes">—</span></div>
   </div>
 
   <div class="card" id="formCard">
@@ -376,6 +409,76 @@ async function loadCustomers(){
   renderCustomers();
 }
 
+// ===== Products a customer buys — customer_products already existed with real data (id,
+// customer_id, product_id, created_at) from an earlier import; this just adds the UI on top,
+// it doesn't touch the table's shape or the 100+ rows already in it. =====
+let allCustProducts = null;
+async function fetchAllCustProducts(){
+  if (allCustProducts) return allCustProducts;
+  const { data } = await db.from('products').select('id,name,name_en,brand').order('name');
+  allCustProducts = data || [];
+  document.getElementById('custProductNames').innerHTML = allCustProducts.map(p => `<option value="${escapeHtml(custProductLabel(p))}">`).join('');
+  return allCustProducts;
+}
+
+// Some rows are generic (brand null — a canonical cut not tied to one plant), others are a
+// specific plant's catalog row — the brand suffix is what tells them apart in the picker.
+function custProductLabel(p){
+  return p.brand ? `${p.name} (${p.brand})` : p.name;
+}
+
+let currentCustProducts = [];
+async function loadCustomerProducts(customerId){
+  await fetchAllCustProducts();
+  const { data, error } = await db.from('customer_products').select('id,product_id').eq('customer_id', customerId);
+  if (error){ currentCustProducts = []; renderCustomerProducts(); return; }
+  currentCustProducts = (data || [])
+    .map(r => ({ linkId: r.id, product: allCustProducts.find(p => p.id === r.product_id) }))
+    .filter(r => r.product);
+  renderCustomerProducts();
+}
+
+function renderCustomerProducts(){
+  const tbody = document.getElementById('custProductRows');
+  document.getElementById('custProductsEmpty').style.display = currentCustProducts.length ? 'none' : 'block';
+  tbody.innerHTML = currentCustProducts
+    .slice()
+    .sort((a, b) => custProductLabel(a.product).localeCompare(custProductLabel(b.product)))
+    .map(r => `<tr>
+      <td>${escapeHtml(custProductLabel(r.product))}</td>
+      <td class="row-actions"><button class="btn danger" onclick="removeCustomerProduct('${r.linkId}')">×</button></td>
+    </tr>`).join('');
+}
+
+async function addCustomerProduct(){
+  const input = document.getElementById('custProductInput');
+  const label = input.value.trim();
+  if (!label || !viewingCustomerId) return;
+  const match = allCustProducts.find(p => custProductLabel(p) === label);
+  if (!match){ alert('Elige un producto de la lista sugerida (empieza a escribir y selecciona una opción exacta).'); return; }
+  if (currentCustProducts.some(r => r.product.id === match.id)){ input.value = ''; return; }
+  const { data, error } = await db.from('customer_products').insert({ customer_id: viewingCustomerId, product_id: match.id }).select();
+  if (error){ alert('Error: ' + error.message); return; }
+  currentCustProducts.push({ linkId: data[0].id, product: match });
+  input.value = '';
+  renderCustomerProducts();
+}
+
+async function removeCustomerProduct(linkId){
+  const { error } = await db.from('customer_products').delete().eq('id', linkId);
+  if (error){ alert('Error: ' + error.message); return; }
+  currentCustProducts = currentCustProducts.filter(r => r.linkId !== linkId);
+  renderCustomerProducts();
+}
+
+const CUST_TABS = ['products', 'details'];
+function setCustomerTab(tab){
+  CUST_TABS.forEach(t => {
+    document.getElementById('custTab_' + t).style.display = (t === tab) ? 'block' : 'none';
+    document.getElementById('custTabBtn_' + t).classList.toggle('active', t === tab);
+  });
+}
+
 function renderCustomers(){
   const tbody = document.getElementById('customerRows');
   tbody.innerHTML = '';
@@ -444,6 +547,8 @@ function viewCustomer(id){
   const waBtn = document.getElementById('v_waBtn');
   if (waNumber){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = waNumber; }
   else { waBtn.style.display = 'none'; waBtn.dataset.number = ''; }
+  setCustomerTab('products'); // always open on what-they-buy, regardless of which tab was open last time
+  loadCustomerProducts(id);
   document.getElementById('viewCard').scrollIntoView({behavior:'smooth'});
 }
 
