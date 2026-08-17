@@ -690,9 +690,12 @@ function renderPriceListReview(){
     // combo vs not) — without temp/pack in the label those show up as identical-looking
     // duplicates in the picker, impossible to tell apart. This is what ends up on invoices, so
     // getting the right one matters more here than almost anywhere else in the app.
+    // English leads (this screen is plant-facing) — Spanish name only as a secondary reference
+    // in parens, since a few teammates may still recognize a cut faster in Spanish.
     const options = allCatalogProducts.map(p => {
       const spec = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(', ');
-      return `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}${p.name_en ? ' / ' + escapeHtml(p.name_en) : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
+      const label = p.name_en || p.name;
+      return `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
@@ -845,8 +848,11 @@ async function deleteLocation(id){
   await loadPlantLocations();
 }
 
-function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? t.name : null; }
-function packName(id){ const p = packagings.find(x => x.id === id); return p ? p.name : null; }
+// This whole page is plant-facing (English) — plants.html never shows Spanish, same as every PO
+// sent to a plant is English-only. English name always, falling back to the Spanish catalog
+// entry only if a temp/packaging row somehow has no name_en on file yet.
+function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? (t.name_en || t.name) : null; }
+function packName(id){ const p = packagings.find(x => x.id === id); return p ? (p.name_en || p.name) : null; }
 
 function renderPlantProducts(){
   const tbody = document.getElementById('plantProductRows');
