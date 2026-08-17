@@ -251,13 +251,37 @@ auth.onAuthStateChanged(user => {
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 14px;border-top:1px solid var(--line);padding-top:14px;">
       <strong>Products</strong>
-      <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="openProductForm()">+ Add New Product</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="openPriceListPanel()">📋 Cargar precios</button>
+        <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="openProductForm()">+ Add New Product</button>
+      </div>
     </div>
     <table>
-      <thead><tr><th>Photo</th><th>Name (ES)</th><th>Name (EN)</th><th>Category</th><th>Subcategory</th><th>Temp/Pack</th><th></th></tr></thead>
+      <thead><tr><th>Photo</th><th>Name (ES)</th><th>Name (EN)</th><th>Category</th><th>Subcategory</th><th>Temp/Pack</th><th>Price</th><th></th></tr></thead>
       <tbody id="plantProductRows"></tbody>
     </table>
     <div id="plantEmpty" class="empty" style="display:none;">No products linked to this plant yet.</div>
+
+    <div class="card" id="priceListCard" style="display:none;margin-top:14px;">
+      <strong>Cargar lista de precios</strong>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Pega el texto tal como llegó (correo, mensaje, o copiado de un Excel) — una línea por producto, precio al final de cada línea. Nada se guarda hasta que revises y confirmes.</p>
+      <textarea id="priceListInput" rows="8" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;" placeholder="Trompa - $0.34&#10;Pierna sin hueso congelada $1.12/lb&#10;..."></textarea>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn" onclick="processPriceListText()">Procesar</button>
+        <button class="btn secondary" onclick="closePriceListPanel()">Cancelar</button>
+      </div>
+      <div id="priceListReviewWrap" style="display:none;margin-top:16px;">
+        <table>
+          <thead><tr><th>Texto original</th><th>Precio (USD/lb)</th><th>Producto en catálogo</th></tr></thead>
+          <tbody id="priceListReviewRows"></tbody>
+        </table>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn" onclick="applyPriceList()">Aplicar todo</button>
+          <button class="btn secondary" onclick="closePriceListPanel()">Cancelar</button>
+        </div>
+      </div>
+      <div id="priceListMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -509,6 +533,118 @@ async function loadPlantProducts(){
   renderPlantProducts();
 }
 
+function fmtPriceCell(p){
+  if (p.current_price == null) return '<span style="color:var(--ink-soft);">—</span>';
+  const dateStr = p.price_date ? new Date(p.price_date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
+  return `$${Number(p.current_price).toFixed(4)}${dateStr ? `<div style="font-size:10.5px;color:var(--ink-soft);">as of ${dateStr}</div>` : ''}`;
+}
+
+// ===== Price list intake — paste a plant's price list, match each line to a catalog product
+// (remembering the plant's own wording as an alias for next time), review, apply in one shot. =====
+let priceListRows = []; // { rawText, price, matchedProductId }
+
+function openPriceListPanel(){
+  document.getElementById('priceListCard').style.display = 'block';
+  document.getElementById('priceListInput').value = '';
+  document.getElementById('priceListReviewWrap').style.display = 'none';
+  document.getElementById('priceListMsg').textContent = '';
+  priceListRows = [];
+}
+
+function closePriceListPanel(){
+  document.getElementById('priceListCard').style.display = 'none';
+  priceListRows = [];
+}
+
+function normalizeForMatch(s){
+  return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Best-effort only: grabs the last dollar-looking number on a line as the price, everything
+// before it as the product's raw text. The review table is the real safety net — a parsing
+// miss here just means editing one field before applying, never a bad write, so there's no need
+// to get the exact format right on the first try.
+function parsePriceListLine(line){
+  const m = line.match(/\$?\s*(\d+(?:[.,]\d+)?)\s*(?:usd)?\s*(?:\/\s*lb)?\.?\s*$/i);
+  if (!m) return { rawText: line.trim(), price: null };
+  const price = parseFloat(m[1].replace(',', '.'));
+  const rawText = (line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '')) || line.trim();
+  return { rawText, price };
+}
+
+async function processPriceListText(){
+  const text = document.getElementById('priceListInput').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Pega el texto primero.'; return; }
+  document.getElementById('priceListMsg').textContent = 'Procesando…';
+
+  const { data: aliases } = await db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId);
+  const aliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
+
+  priceListRows = lines.map(line => {
+    const { rawText, price } = parsePriceListLine(line);
+    const key = normalizeForMatch(rawText);
+    let matchedProductId = aliasMap.get(key) || null;
+    if (!matchedProductId){
+      // First time this plant's exact wording happens to already match the catalog — covers it
+      // without needing an alias confirmed yet.
+      const found = plantProducts.find(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
+      if (found) matchedProductId = found.id;
+    }
+    return { rawText, price, matchedProductId };
+  });
+
+  renderPriceListReview();
+  document.getElementById('priceListMsg').textContent = '';
+}
+
+function renderPriceListReview(){
+  const wrap = document.getElementById('priceListReviewWrap');
+  const tbody = document.getElementById('priceListReviewRows');
+  wrap.style.display = 'block';
+  tbody.innerHTML = priceListRows.map((row, i) => {
+    const options = plantProducts.map(p => `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}${p.name_en ? ' / ' + escapeHtml(p.name_en) : ''}</option>`).join('');
+    return `<tr>
+      <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
+      <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
+      <td><select style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].matchedProductId=this.value||null">
+        <option value="">— selecciona —</option>
+        ${options}
+      </select></td>
+    </tr>`;
+  }).join('');
+}
+
+async function applyPriceList(){
+  const today = new Date().toISOString().slice(0, 10);
+  const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null);
+  const skipped = priceListRows.length - toApply.length;
+  if (!toApply.length){ document.getElementById('priceListMsg').textContent = 'Ninguna fila tiene producto y precio seleccionados.'; return; }
+
+  document.getElementById('priceListMsg').textContent = 'Guardando…';
+  let errors = 0;
+  for (const row of toApply){
+    const { error: priceErr } = await db.from('products').update({
+      current_price: row.price,
+      price_currency: 'USD',
+      price_date: today,
+    }).eq('id', row.matchedProductId);
+    if (priceErr){ errors++; continue; }
+    // Remember this plant's exact wording (normalized) for next time — upsert so re-confirming
+    // an already-known alias just refreshes it instead of erroring on the unique index.
+    await db.from('plant_product_aliases').upsert({
+      plant_id: currentPlantId,
+      raw_text: normalizeForMatch(row.rawText),
+      product_id: row.matchedProductId,
+    }, { onConflict: 'plant_id,raw_text' });
+  }
+
+  await loadPlantProducts();
+  closePriceListPanel();
+  document.getElementById('priceListMsg').textContent = '';
+  alert(`${toApply.length - errors} precio(s) actualizado(s).${skipped ? ` ${skipped} fila(s) sin producto/precio, no se aplicaron.` : ''}${errors ? ` ${errors} fallaron.` : ''}`);
+}
+
 let plantLocations = [];
 
 async function loadPlantLocations(){
@@ -636,6 +772,7 @@ function renderPlantProducts(){
       <td>${escapeHtml(p.category || '')}</td>
       <td>${escapeHtml(sub)}</td>
       <td>${escapeHtml(tp)}</td>
+      <td>${fmtPriceCell(p)}</td>
       <td class="row-actions">
         <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button>
       </td>`;
