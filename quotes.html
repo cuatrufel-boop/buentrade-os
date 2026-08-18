@@ -423,6 +423,11 @@ async function autoPopulateRqPlants(productName){
     return { ...plant, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null };
   }).filter(Boolean);
   renderRqPlants();
+  // Manually typing a price auto-opens the Trading Tool a beat after typing stops (see
+  // rqUpdatePlantField) — a price that arrives pre-filled from the catalog never went through
+  // that path, so it silently never opened. Same result here, just immediate since there's no
+  // keystroke to debounce against.
+  rqSelectedPlants.forEach(p => { if (p.rqPrice) rqAutoOpenCalculator(p.id); });
 }
 
 
