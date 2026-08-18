@@ -1143,6 +1143,17 @@ async function exportPO(orderNumber){
   built.doc.save(`PO-${orderNumber}.pdf`);
 }
 
+// Mirrors netlify/functions/send-email.js's FROM_ADDRESSES/SIGNATURE_TEXT exactly — the preview
+// below must show precisely what gets sent (from address + signature), not a shorter draft of
+// it. A preview that looks thinner than the real email is what made the trader distrust it.
+const FROM_DISPLAY = {
+  purchasing: 'Purchasing BuenTrade <purchasing@buentradegroup.com>',
+  offers: 'Offers BuenTrade <offers@buentradegroup.com>',
+  logistics: 'Logistics BuenTrade <logistics@buentradegroup.com>',
+  info: 'BuenTrade <info@buentradegroup.com>',
+};
+const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
+
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
 // sender automatically — no trader having to pick "From" in Gmail. Shows exactly what will be
 // sent first and requires confirmation — nothing goes out silently. Falls back to opening a
@@ -1151,7 +1162,8 @@ async function exportPO(orderNumber){
 // "I said no" isn't the same as "the send failed".
 async function sendEmailApi(fromAlias, to, subject, text, attachments){
   const toList = Array.isArray(to) ? to.join(', ') : to;
-  const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
+  const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
+  const ok = confirm(`De: ${fromDisplay}\nPara: ${toList}\nAsunto: ${subject}\n\n${text}${EMAIL_SIGNATURE}\n\n¿Enviar este correo?`);
   if (!ok){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
@@ -1193,8 +1205,14 @@ async function sharePO(orderNumber){
   const filename = `PO-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
-  const subject = 'Purchase Order — ' + orderNumber;
-  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.`;
+  const subject = `${orderNumber} — Purchase Order`;
+  const po = built.po;
+  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
+    + `Product: ${po.product_spec || po.product_name || ''}\n`
+    + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
+    + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
+    + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
+    + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
   try {
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)]);
     showToast('PO sent', emails.join(', '));
@@ -1276,8 +1294,14 @@ async function shareSO(orderNumber){
   const filename = `SO-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
-  const subject = 'Confirmación de Venta — ' + orderNumber;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.`;
+  const subject = `${orderNumber} — Confirmación de Venta`;
+  const so = built.so;
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
+    + `Producto: ${so.product_spec_es || so.product_name_es || so.product_name || ''}\n`
+    + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
+    + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
+    + `Total: $${(so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
+    + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)]);
     showToast('SO sent', emails.join(', '));
@@ -1364,8 +1388,12 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = 'Confirmación de Flete — ' + orderNumber;
-    const body = `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}.`;
+    const subject = `${orderNumber} — Confirmación de Flete`;
+    const body = `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}.\n\n`
+      + `Producto: ${b.fo.product_spec_es || b.fo.product_name_es || '—'}\n`
+      + `Recolección: ${b.fo.origin || '—'}\n`
+      + `Entrega: ${b.fo.destination || '—'}\n`
+      + `Tarifa: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
       showToast('FO sent', emails.join(', '));
@@ -1405,7 +1433,7 @@ async function shareCustoms(orderNumber){
     try { links.push([d.label, await uploadOrderPdf(d.doc, d.filename)]); } catch(e){ alert('Upload error: ' + e.message); return; }
   }
 
-  const subject = 'Documentos — ' + orderNumber;
+  const subject = `${orderNumber} — Documentos`;
   const body = `Adjuntamos documentación de la orden ${orderNumber}: ${docs.map(d => d.label).join(', ')}.`;
   try {
     await sendEmailApi('logistics', emails, subject, body, docs.map(d => pdfAttachment(d.doc, d.filename)));
