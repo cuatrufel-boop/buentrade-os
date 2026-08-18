@@ -505,7 +505,10 @@ function renderRqPlants(){
         <div class="mini-field" style="width:110px;">
           <label>Purchase $/lb</label>
           <input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')">
-          ${p.rqPriceDate ? `<span class="loc-hint" style="color:var(--blue);font-weight:600;">as of ${rqFmtDate(p.rqPriceDate)}</span>` : ''}
+          ${p.rqPriceDate ? (() => {
+            const stale = (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
+            return `<span class="loc-hint" style="color:${stale ? '#C4432E' : 'var(--blue)'};font-weight:700;">${stale ? '⚠ stale — verify with plant · ' : ''}as of ${rqFmtDate(p.rqPriceDate)}</span>`;
+          })() : ''}
         </div>
         <div class="mini-field" style="width:170px;">
           <label>Location</label>
@@ -1407,6 +1410,15 @@ function rqFmtDate(val){
   if (!val) return 'Set date';
   const d = new Date(val + 'T00:00:00');
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+
+// A price older than this many days can't be trusted as today's number — matches the same rule
+// applied in plants.html. Prevents quoting off a number that's quietly gone stale.
+const RQ_PRICE_STALE_DAYS = 2;
+function rqPriceAgeDays(priceDate){
+  if (!priceDate) return null;
+  const ms = new Date().setHours(0,0,0,0) - new Date(priceDate + 'T00:00:00').setHours(0,0,0,0);
+  return Math.round(ms / 86400000);
 }
 
 // Delivery dates are shared across every plant in this request — one ask per plant either way,

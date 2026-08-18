@@ -574,10 +574,23 @@ async function loadPlantProducts(){
   renderPlantProducts();
 }
 
+// A price older than this many days can't be trusted as today's number — pork/beef prices move
+// daily, so quoting off a stale number is a real cost risk, not just a display nicety.
+const PRICE_STALE_DAYS = 2;
+function priceAgeDays(priceDate){
+  if (!priceDate) return null;
+  const ms = new Date().setHours(0,0,0,0) - new Date(priceDate + 'T00:00:00').setHours(0,0,0,0);
+  return Math.round(ms / 86400000);
+}
+
 function fmtPriceCell(p){
   if (p.current_price == null) return '<span style="color:var(--ink-soft);">—</span>';
   const dateStr = p.price_date ? new Date(p.price_date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
-  return `<span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(p.current_price).toFixed(2)}</span>${dateStr ? `<span style="font-size:11px;color:var(--ink-soft);"> · ${dateStr}</span>` : ''}`;
+  const age = priceAgeDays(p.price_date);
+  const stale = age != null && age > PRICE_STALE_DAYS;
+  const dateColor = stale ? '#C4432E' : 'var(--ink-soft)';
+  const dateLabel = stale ? `⚠ stale · ${dateStr}` : `· ${dateStr}`;
+  return `<span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(p.current_price).toFixed(2)}</span>${dateStr ? `<span style="font-size:11px;color:${dateColor};font-weight:${stale ? '700' : '400'};"> ${dateLabel}</span>` : ''}`;
 }
 
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
