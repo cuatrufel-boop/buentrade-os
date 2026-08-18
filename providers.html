@@ -243,7 +243,7 @@ auth.onAuthStateChanged(user => {
       </div>
       <div id="rateListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
         <table style="table-layout:fixed;width:100%;min-width:600px;">
-          <thead><tr><th id="rateListColHead" style="width:55%;">Origen / Destino</th><th style="width:20%;">Precio (USD)</th><th style="width:25%;">Notas</th></tr></thead>
+          <thead><tr><th id="rateListColHead" style="width:70%;">Pickup location → Border</th><th style="width:30%;">Precio (USD)</th></tr></thead>
           <tbody id="rateListReviewRows"></tbody>
         </table>
         <div style="display:flex;gap:10px;margin-top:12px;">
@@ -468,7 +468,7 @@ function openRateListPanel(){
   document.getElementById('rateListHint').textContent = isUs
     ? 'Pega directo desde el Excel (columnas: Precio, Nombre, Ciudad, Estado) — una fila por línea. Nada se guarda hasta que revises y confirmes.'
     : 'Pega el texto del PDF tal como está — una línea por destino ("CIUDAD USD $ 1,234.00"). Nada se guarda hasta que revises y confirmes.';
-  document.getElementById('rateListColHead').textContent = isUs ? 'Origen' : 'Destino';
+  document.getElementById('rateListColHead').textContent = isUs ? 'Pickup location → Border' : 'Border → Destino';
   document.getElementById('rateListInput').value = '';
   document.getElementById('rateListReviewWrap').style.display = 'none';
   document.getElementById('rateListMsg').textContent = '';
@@ -485,17 +485,18 @@ function titleCaseWords(s){
 }
 
 // Excel paste comes through as one tab-separated row per line: Price, Ship Name, Ship City, Ship
-// State. Falls back to null (row dropped, never guessed) if it doesn't have all 4 fields.
+// State. Ship Name is only used to locate the city/state columns — not kept, per the user: just
+// the pickup location and the price to the border, nothing else. Falls back to null (row dropped,
+// never guessed) if it doesn't have all 4 fields.
 function parseUsFreightLine(line){
   const parts = line.split('\t').map(s => s.trim()).filter(Boolean);
   if (parts.length < 4) return null;
   const price = parseFloat(parts[0].replace(/[$,]/g, ''));
-  const [, shipName, city, state] = parts;
+  const [, , city, state] = parts;
   if (isNaN(price) || !city || !state) return null;
   return {
     origin: `${titleCaseWords(city)}, ${state.toUpperCase()}`,
     price,
-    notes: `Ship name on rate sheet: ${titleCaseWords(shipName)}`,
   };
 }
 
@@ -507,7 +508,7 @@ function parseMexicanFreightLine(line){
   const destination = m[1].trim();
   const price = parseFloat(m[2].replace(/,/g, ''));
   if (!destination || isNaN(price)) return null;
-  return { destination, price, notes: null };
+  return { destination, price };
 }
 
 function processRateListText(){
@@ -538,7 +539,6 @@ function renderRateListReview(){
     return `<tr>
       <td><input type="text" value="${escapeHtml(place)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].${isUs ? 'origin' : 'destination'}=this.value"></td>
       <td><input type="number" step="0.01" value="${row.price}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].price=parseFloat(this.value)||0"></td>
-      <td style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(row.notes || '')}</td>
     </tr>`;
   }).join('');
 }
@@ -557,7 +557,6 @@ async function applyRateList(){
       destination: isUs ? '' : row.destination,
       rate: row.price,
       currency: 'USD',
-      notes: row.notes,
     };
     // Same lane (provider+service+origin+destination) can already exist from a prior load — update
     // its price instead of erroring on the unique constraint (see the Gadsden/AL multi-plant case).
