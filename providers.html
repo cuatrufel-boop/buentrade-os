@@ -222,13 +222,38 @@ auth.onAuthStateChanged(user => {
   <div class="card" id="ratesCard" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong id="ratesTitle" style="font-size:16px;"></strong>
-      <button class="btn secondary small" onclick="closeRates()">Close</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary small" id="loadRatesBtn" onclick="openRateListPanel()">📋 Cargar precios</button>
+        <button class="btn secondary small" onclick="closeRates()">Close</button>
+      </div>
     </div>
     <div class="tab-row">
       <button class="tab-btn active" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
       <button class="tab-btn" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
       <button class="tab-btn" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
     </div>
+
+    <div class="card" id="rateListCard" style="display:none;margin:14px 0;">
+      <strong id="rateListTitle">Cargar lista de precios</strong>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;" id="rateListHint"></p>
+      <textarea id="rateListInput" rows="8" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;"></textarea>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn" onclick="processRateListText()">Procesar</button>
+        <button class="btn secondary" onclick="closeRateListPanel()">Cancelar</button>
+      </div>
+      <div id="rateListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
+        <table style="table-layout:fixed;width:100%;min-width:600px;">
+          <thead><tr><th id="rateListColHead" style="width:55%;">Origen / Destino</th><th style="width:20%;">Precio (USD)</th><th style="width:25%;">Notas</th></tr></thead>
+          <tbody id="rateListReviewRows"></tbody>
+        </table>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn" onclick="applyRateList()">Aplicar todo</button>
+          <button class="btn secondary" onclick="closeRateListPanel()">Cancelar</button>
+        </div>
+      </div>
+      <div id="rateListMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+
     <div id="rateTableWrap"></div>
   </div>
 </div>
@@ -424,6 +449,128 @@ function closeRates(){
 function switchRateTab(svc){
   currentRateTab = svc;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === svc));
+  closeRateListPanel();
+  document.getElementById('loadRatesBtn').style.display = svc === 'customs' ? 'none' : 'inline-block';
+  renderRateTable();
+}
+
+// ============ CARGAR PRECIOS (bulk paste, same pattern as plants.html's price-list intake) ============
+// US Freight rate sheets arrive as an Excel export (Price, Ship Name, Ship City, Ship State columns)
+// — pasted straight from Excel that comes through tab-separated, which is what this parses.
+// Mexican Freight rate sheets arrive as a PDF (DESTINO / Currency / Dolares columns) — pasted as
+// plain text, one "CITY USD $ 1,234.00" line per destination. Tested against real EBI Transfer
+// rate sheets (Aug 2026) before shipping — both formats confirmed working against actual data.
+let rateListRows = [];
+
+function openRateListPanel(){
+  if (currentRateTab === 'customs') return;
+  const isUs = currentRateTab === 'us_freight';
+  document.getElementById('rateListHint').textContent = isUs
+    ? 'Pega directo desde el Excel (columnas: Precio, Nombre, Ciudad, Estado) — una fila por línea. Nada se guarda hasta que revises y confirmes.'
+    : 'Pega el texto del PDF tal como está — una línea por destino ("CIUDAD USD $ 1,234.00"). Nada se guarda hasta que revises y confirmes.';
+  document.getElementById('rateListColHead').textContent = isUs ? 'Origen' : 'Destino';
+  document.getElementById('rateListInput').value = '';
+  document.getElementById('rateListReviewWrap').style.display = 'none';
+  document.getElementById('rateListMsg').textContent = '';
+  rateListRows = [];
+  document.getElementById('rateListCard').style.display = 'block';
+}
+
+function closeRateListPanel(){
+  document.getElementById('rateListCard').style.display = 'none';
+}
+
+function titleCaseWords(s){
+  return (s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Excel paste comes through as one tab-separated row per line: Price, Ship Name, Ship City, Ship
+// State. Falls back to null (row dropped, never guessed) if it doesn't have all 4 fields.
+function parseUsFreightLine(line){
+  const parts = line.split('\t').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 4) return null;
+  const price = parseFloat(parts[0].replace(/[$,]/g, ''));
+  const [, shipName, city, state] = parts;
+  if (isNaN(price) || !city || !state) return null;
+  return {
+    origin: `${titleCaseWords(city)}, ${state.toUpperCase()}`,
+    price,
+    notes: `Ship name on rate sheet: ${titleCaseWords(shipName)}`,
+  };
+}
+
+// PDF text comes through as "DESTINATION NAME  USD  $ 1,234.00" per line — destination kept
+// exactly as written (existing rows are already uppercase, matching the source PDF's own case).
+function parseMexicanFreightLine(line){
+  const m = line.match(/^(.+?)\s+USD\s+\$\s*([\d,]+\.?\d*)/i);
+  if (!m) return null;
+  const destination = m[1].trim();
+  const price = parseFloat(m[2].replace(/,/g, ''));
+  if (!destination || isNaN(price)) return null;
+  return { destination, price, notes: null };
+}
+
+function processRateListText(){
+  const text = document.getElementById('rateListInput').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length){ document.getElementById('rateListMsg').textContent = 'Pega el texto primero.'; return; }
+
+  const isUs = currentRateTab === 'us_freight';
+  rateListRows = [];
+  for (const line of lines){
+    const parsed = isUs ? parseUsFreightLine(line) : parseMexicanFreightLine(line);
+    if (!parsed) continue; // not a data row (header, note, blank) — silently skipped, never guessed
+    rateListRows.push({ raw: line, ...parsed });
+  }
+  renderRateListReview();
+  document.getElementById('rateListMsg').textContent = rateListRows.length
+    ? ''
+    : 'No se reconoció ninguna fila válida en el texto pegado.';
+}
+
+function renderRateListReview(){
+  const wrap = document.getElementById('rateListReviewWrap');
+  const tbody = document.getElementById('rateListReviewRows');
+  const isUs = currentRateTab === 'us_freight';
+  wrap.style.display = rateListRows.length ? 'block' : 'none';
+  tbody.innerHTML = rateListRows.map((row, i) => {
+    const place = isUs ? row.origin : row.destination;
+    return `<tr>
+      <td><input type="text" value="${escapeHtml(place)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].${isUs ? 'origin' : 'destination'}=this.value"></td>
+      <td><input type="number" step="0.01" value="${row.price}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].price=parseFloat(this.value)||0"></td>
+      <td style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(row.notes || '')}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function applyRateList(){
+  if (!currentProviderId || !rateListRows.length) return;
+  const isUs = currentRateTab === 'us_freight';
+  document.getElementById('rateListMsg').textContent = 'Guardando…';
+  let applied = 0, errors = 0;
+  const failedRows = [];
+  for (const row of rateListRows){
+    const payload = {
+      provider_id: currentProviderId,
+      service_type: currentRateTab,
+      origin: isUs ? row.origin : 'Border',
+      destination: isUs ? '' : row.destination,
+      rate: row.price,
+      currency: 'USD',
+      notes: row.notes,
+    };
+    // Same lane (provider+service+origin+destination) can already exist from a prior load — update
+    // its price instead of erroring on the unique constraint (see the Gadsden/AL multi-plant case).
+    const { error } = await db.from('provider_rates').upsert(payload, { onConflict: 'provider_id,service_type,origin,destination' });
+    if (error){ errors++; failedRows.push(row); } else { applied++; }
+  }
+  rateListRows = failedRows;
+  renderRateListReview();
+  document.getElementById('rateListMsg').textContent = `${applied} tarifa(s) guardada(s).${errors ? ' ' + errors + ' con error, quedaron arriba para reintentar.' : ''}`;
+  if (!errors){
+    closeRateListPanel();
+  }
+  await loadEverything();
   renderRateTable();
 }
 
