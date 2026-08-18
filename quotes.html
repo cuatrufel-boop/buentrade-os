@@ -1200,14 +1200,33 @@ function rqRequireDeliveryDay(){
 // price loaded a week ago is no longer today's price. Only catches auto-populated catalog prices
 // (rqPriceDate is null the moment the trader types a fresh number by hand, see
 // rqUpdatePlantField), so this never blocks on a price someone just confirmed themselves.
-function rqBlockIfStalePrices(){
+async function rqBlockIfStalePrices(){
   const stale = rqPricedPlantsSorted().filter(({ plant }) => {
     const age = rqPriceAgeDays(plant.rqPriceDate);
     return age != null && age > RQ_PRICE_STALE_DAYS;
   });
   if (!stale.length) return true;
-  alert(`Can't send — ${stale.length} price(s) are more than ${RQ_PRICE_STALE_DAYS} days old and need refreshing first:\n\n` +
-    stale.map(({ plant }) => `${plant.name} (as of ${rqFmtDate(plant.rqPriceDate)})`).join('\n'));
+  const list = stale.map(({ plant }) => `${plant.name} (as of ${rqFmtDate(plant.rqPriceDate)})`).join('\n');
+  // Blocking alone just leaves the trader stuck — offer to actually ask the stale plant(s) for a
+  // fresh number right here, same template/one-by-one machinery rqAskAllEmails already uses.
+  const askNow = confirm(`Can't send — ${stale.length} price(s) are more than ${RQ_PRICE_STALE_DAYS} days old:\n\n${list}\n\nSend a price-request email to them now?`);
+  if (askNow){
+    for (const { plant } of stale){
+      if (!plant.email) continue;
+      // Says plainly that this is a stale-price refresh, not a first-time quote request — the
+      // generic RQ_EMAIL_TEMPLATES ("I'm looking for X") don't fit here.
+      const contact = rqFirstName(plant.contact_name || plant.name);
+      const body = `Hi ${contact},\n\nOur price on file for ${rqProductSpec || 'this product'} is from ${rqFmtDate(plant.rqPriceDate)} and needs updating — could you send your current price?`;
+      const subject = `${rqProductSpec || ''} — updated price request`;
+      try {
+        await sendEmailApi('purchasing', plant.email, subject, body);
+      } catch(e){
+        if (!e.cancelled) window.open(`mailto:${plant.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+      }
+    }
+  }
+  // Either way, the send to the customer still doesn't happen — asking for a fresh price doesn't
+  // make the old one current, only an actual updated price (via Cargar precios) does.
   return false;
 }
 
@@ -1279,7 +1298,7 @@ async function sendEmailApi(fromAlias, to, subject, text, html){
 }
 
 async function sendOfferEmailTo(customerId){
-  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
+  if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
   const firstName = rqFirstName(c.contact_name || c.trade_name);
@@ -1297,8 +1316,8 @@ async function sendOfferEmailTo(customerId){
   }
 }
 
-function sendOfferWhatsAppTo(customerId){
-  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
+async function sendOfferWhatsAppTo(customerId){
+  if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c) return;
   const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
@@ -1365,7 +1384,7 @@ function rqSendOneByOne(items, i, failed){
 // sends, so no need for the confirm()-paced one-by-one dance that mailto: requires. Whatever
 // fails automatically still falls back to the old mailto: one-by-one flow, only for those.
 async function rqOpenAllEmails(){
-  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
+  if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const targets = rqMatchedCustomers.filter(c => c.email);
   if (!targets.length){ alert('No matched customer has an email on file.'); return; }
   const subject = 'Cotización — ' + (rqProductSpecEs || '');
@@ -1411,8 +1430,8 @@ async function rqOpenAllEmails(){
 // from a native app, so instead of pretending to automate the rest, this opens the first one for
 // real and points the trader at the individual WhatsApp button next to each customer below —
 // those always work since each click is its own fresh, direct gesture.
-function rqOpenAllWhatsApp(){
-  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
+async function rqOpenAllWhatsApp(){
+  if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   if (!targets.length){ alert('No matched customer has a phone/WhatsApp on file.'); return; }
   sendOfferWhatsAppTo(targets[0].id);
