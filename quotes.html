@@ -417,12 +417,12 @@ async function autoPopulateRqPlants(productName){
   // same fixed/shared product can be carried by several plants at different prices. This is the
   // whole point of the price-list intake in plants.html: a price loaded there shows up here
   // automatically, so the trader isn't retyping a number from memory every time.
-  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date').in('product_id', matchingProductIds);
+  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').in('product_id', matchingProductIds);
   rqSelectedPlants = (data || []).map(link => {
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
     const hasPrice = link.current_price != null;
-    return { ...plant, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null };
+    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null };
   }).filter(Boolean);
   renderRqPlants();
   // Manually typing a price auto-opens the Trading Tool a beat after typing stops (see
@@ -497,6 +497,7 @@ function renderRqPlants(){
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
           ${!showPriceRow ? `<button type="button" class="rq-price-btn" onclick="rqRevealPrice('${p.id}')">Price?</button>` : ''}
+          ${rqPriceRequestControl(p)}
           ${(p.whatsapp || p.phone) ? `<button type="button" class="wa-btn" style="padding:4px 8px;" onclick="askPlantWhatsApp('${p.id}')" title="WhatsApp ${escapeHtml(p.name)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : ''}
         </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
@@ -1196,6 +1197,45 @@ function rqRequireDeliveryDay(){
   return false;
 }
 
+// Lets the trader chase a missing/stale price the moment they notice it while building a quote,
+// instead of only finding out at send time (see rqBlockIfStalePrices below). Only ever shown for
+// a plant we already know carries this product (it's in rqSelectedPlants, sourced from an actual
+// plant_products row) — never used to cold-ask a plant that's never priced this item.
+function rqPriceRequestControl(p){
+  const missing = p.rqPrice == null;
+  const stale = !missing && (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
+  if (!missing && !stale) return '';
+  if (!p.email) return '';
+  const reqAge = rqPriceAgeDays(p.rqLastRequestedAt);
+  if (reqAge != null && reqAge <= RQ_REQUEST_COOLDOWN_DAYS){
+    return `<span class="loc-hint" style="color:var(--blue);font-weight:700;">✓ requested ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>`;
+  }
+  return `<button type="button" class="rq-price-btn" style="background:#C4432E;box-shadow:0 2px 6px rgba(196,67,46,.35);" onclick="rqRequestPlantPrice('${p.id}')">${missing ? 'Ask price' : 'Ask update'}</button>`;
+}
+
+async function rqRequestPlantPrice(plantId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p || !p.email) return;
+  const contact = rqFirstName(p.contact_name || p.name);
+  const missing = p.rqPrice == null;
+  const body = missing
+    ? `Hi ${contact},\n\nWe don't have a current price on file for ${rqProductSpec || 'this product'} — could you send your current price?`
+    : `Hi ${contact},\n\nOur price on file for ${rqProductSpec || 'this product'} is from ${rqFmtDate(p.rqPriceDate)} and needs updating — could you send your current price?`;
+  const subject = `${rqProductSpec || ''} — ${missing ? 'price request' : 'updated price request'}`;
+  try {
+    await sendEmailApi('purchasing', p.email, subject, body);
+  } catch(e){
+    if (e.cancelled) return; // declined at preview — don't start the cooldown on a request that never sent
+    window.open(`mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  p.rqLastRequestedAt = today;
+  if (p.rqProductId){
+    await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', p.id).eq('product_id', p.rqProductId);
+  }
+  renderRqPlants();
+}
+
 // Never send a customer a price built on a stale number — pork/beef prices move daily, and a
 // price loaded a week ago is no longer today's price. Only catches auto-populated catalog prices
 // (rqPriceDate is null the moment the trader types a fresh number by hand, see
@@ -1449,6 +1489,9 @@ function rqFmtDate(val){
 // A price older than this many days can't be trusted as today's number — matches the same rule
 // applied in plants.html. Prevents quoting off a number that's quietly gone stale.
 const RQ_PRICE_STALE_DAYS = 2;
+// After asking a plant for a price, don't ask again for this many days — plants get annoyed by
+// repeat requests for the same product, especially right after they've just answered.
+const RQ_REQUEST_COOLDOWN_DAYS = 2;
 function rqPriceAgeDays(priceDate){
   if (!priceDate) return null;
   const ms = new Date().setHours(0,0,0,0) - new Date(priceDate + 'T00:00:00').setHours(0,0,0,0);

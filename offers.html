@@ -68,6 +68,23 @@
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
   .edit-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:90px;transition:border-color .3s;}
   .edit-input:focus{outline:none;border-color:var(--blue);}
+  .tab-row{display:flex;gap:6px;margin:0 0 18px;border-bottom:1.5px solid var(--line);}
+  .tab-btn{background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;font-family:inherit;}
+  .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .load-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+  .load-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
+  .load-stage-row{display:flex;align-items:center;gap:6px;margin:14px 0 12px;flex-wrap:wrap;}
+  .load-stage{font-size:11.5px;font-weight:700;color:var(--ink-soft);padding:4px 10px;border-radius:20px;background:var(--bg);border:1px solid var(--line);white-space:nowrap;}
+  .load-stage.done{background:#E3F6EC;color:var(--green);border-color:#E3F6EC;}
+  .load-stage.current{background:var(--blue-light);color:var(--blue);border-color:var(--blue);}
+  .load-stage-arrow{color:var(--line);font-size:13px;}
+  .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .wa-btn{background:#25D366;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;font-size:12.5px;cursor:pointer;}
+  .wa-btn.outline{background:#fff;color:#128C4A;border:1.5px solid #25D366;}
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;}
+  .payment-badge.ok{background:var(--bg);color:var(--ink-soft);}
+  .payment-badge.due-soon{background:#FFF4E5;color:#B26A00;}
+  .payment-badge.overdue{background:#FCEBE7;color:var(--red);}
 </style>
 </head>
 <body>
@@ -187,40 +204,52 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Sent Offers</h1>
+  <h1>Offers</h1>
 
-  <div class="card">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
-      <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="e.g. Trompa, Tyson…"></div>
-      <div class="field"><label>Status</label>
-        <select id="f_status" onchange="renderOffers()">
-          <option value="">All</option>
-          <option value="sent" selected>Pending</option>
-          <option value="won">Win</option>
-          <option value="lost">Lost</option>
-        </select>
+  <div class="tab-row">
+    <button type="button" class="tab-btn active" id="offerTabBtn_pipeline" onclick="setOfferTab('pipeline')">Pipeline</button>
+    <button type="button" class="tab-btn" id="offerTabBtn_status" onclick="setOfferTab('status')">Status</button>
+  </div>
+
+  <div id="offerPanel_pipeline">
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
+        <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="e.g. Trompa, Tyson…"></div>
+        <div class="field"><label>Status</label>
+          <select id="f_status" onchange="renderOffers()">
+            <option value="">All</option>
+            <option value="sent" selected>Pending</option>
+            <option value="won">Win</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+        <div class="field"><label>From</label><input type="date" id="f_from" onchange="loadOffers()"></div>
+        <div class="field"><label>To</label><input type="date" id="f_to" onchange="loadOffers()"></div>
       </div>
-      <div class="field"><label>From</label><input type="date" id="f_from" onchange="loadOffers()"></div>
-      <div class="field"><label>To</label><input type="date" id="f_to" onchange="loadOffers()"></div>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Customer</th>
+            <th>Plant</th>
+            <th>Purchase</th>
+            <th>Sale</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="offerRows"></tbody>
+      </table>
+      <div id="emptyState" class="empty" style="display:none;">No offers in this range yet.</div>
     </div>
   </div>
 
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Product</th>
-          <th>Customer</th>
-          <th>Plant</th>
-          <th>Purchase</th>
-          <th>Sale</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="offerRows"></tbody>
-    </table>
-    <div id="emptyState" class="empty" style="display:none;">No offers in this range yet.</div>
+  <div id="offerPanel_status" style="display:none;">
+    <div id="statusCards"></div>
+    <div id="statusEmpty" class="empty" style="display:none;">No active loads right now.</div>
   </div>
 </div>
 </div>
@@ -519,6 +548,185 @@ async function markWon(id){
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ============ STATUS TAB (load lifecycle: pickup -> unloading -> delivered -> payment) ============
+// Lives here, not as its own nav item, because a load only exists once an offer has been Won —
+// it's the next stage of the same pipeline, not a separate concept. Status lives on sales_orders
+// (one row per order_number already) rather than a new table, since it's a 1:1 extension of data
+// that's already there.
+const LOAD_STAGES = [
+  { key: 'pending_pickup', label: 'Pendiente recogida' },
+  { key: 'picked_up', label: 'Recogido' },
+  { key: 'unloading', label: 'Descargando' },
+  { key: 'delivered', label: 'Entregado' },
+];
+
+let statusOrders = [];
+let statusOrdersLoaded = false;
+
+function setOfferTab(tab){
+  document.getElementById('offerTabBtn_pipeline').classList.toggle('active', tab === 'pipeline');
+  document.getElementById('offerTabBtn_status').classList.toggle('active', tab === 'status');
+  document.getElementById('offerPanel_pipeline').style.display = tab === 'pipeline' ? 'block' : 'none';
+  document.getElementById('offerPanel_status').style.display = tab === 'status' ? 'block' : 'none';
+  if (tab === 'status' && !statusOrdersLoaded){
+    statusOrdersLoaded = true;
+    loadStatusOrders();
+  }
+}
+
+async function loadStatusOrders(){
+  const wrap = document.getElementById('statusCards');
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+
+  // A load stops needing attention once it's delivered AND either 3+ days past its payment due
+  // date (paid or written off by then in practice) — no "paid" flag exists yet, so this is a
+  // time-based cutoff to keep old closed loads from accumulating here forever.
+  const { data: orders, error } = await db.from('sales_orders').select('*').order('created_at', { ascending: false });
+  if (error){ wrap.innerHTML = ''; document.getElementById('statusEmpty').style.display = 'block'; document.getElementById('statusEmpty').textContent = 'Error loading: ' + error.message; return; }
+
+  const orderNumbers = (orders || []).map(o => o.order_number);
+  const [{ data: pos }, { data: fos }, { data: customers }] = await Promise.all([
+    db.from('purchase_orders').select('order_number,plant_name').in('order_number', orderNumbers.length ? orderNumbers : ['']),
+    db.from('freight_orders').select('order_number,carrier_provider_id,origin').in('order_number', orderNumbers.length ? orderNumbers : ['']),
+    db.from('customers').select('id,contact_name,whatsapp,phone').in('id', (orders||[]).map(o=>o.customer_id).filter(Boolean)),
+  ]);
+  const plantByOrder = Object.fromEntries((pos||[]).map(p => [p.order_number, p.plant_name]));
+  const freightByOrder = {};
+  (fos||[]).forEach(f => { if (!freightByOrder[f.order_number]) freightByOrder[f.order_number] = f; });
+  const custById = Object.fromEntries((customers||[]).map(c => [c.id, c]));
+
+  const providerIds = [...new Set((fos||[]).map(f => f.carrier_provider_id).filter(Boolean))];
+  const { data: providers } = providerIds.length ? await db.from('providers').select('id,name,phone').in('id', providerIds) : { data: [] };
+  const providerById = Object.fromEntries((providers||[]).map(p => [p.id, p]));
+
+  const today = new Date();
+  const active = (orders || []).filter(o => {
+    if ((o.load_status || 'pending_pickup') !== 'delivered') return true;
+    if (!o.delivered_at) return true;
+    const daysSinceDelivery = (today - new Date(o.delivered_at)) / 86400000;
+    const payDays = 30; // shown badge already accounts for the real payment_due_date; this is just the list cutoff
+    return daysSinceDelivery < payDays + 3;
+  });
+
+  statusOrders = active.map(o => ({
+    ...o,
+    plant_name: plantByOrder[o.order_number] || '',
+    freight: freightByOrder[o.order_number] || null,
+    carrier: freightByOrder[o.order_number] ? providerById[freightByOrder[o.order_number].carrier_provider_id] : null,
+    customer: custById[o.customer_id] || null,
+  }));
+
+  renderStatusOrders();
+}
+
+function paymentBadge(order){
+  if (!order.payment_due_date) return '';
+  const due = new Date(order.payment_due_date + 'T00:00:00');
+  const today = new Date();
+  const daysLeft = Math.ceil((due - today) / 86400000);
+  let cls = 'ok', text = `Pago vence ${fmtDateStr(order.payment_due_date)}`;
+  if (daysLeft < 0){ cls = 'overdue'; text = `Pago vencido hace ${Math.abs(daysLeft)}d`; }
+  else if (daysLeft <= 3){ cls = 'due-soon'; text = `Pago en ${daysLeft}d`; }
+  return `<span class="payment-badge ${cls}">${text}</span>`;
+}
+
+function renderStatusOrders(){
+  const wrap = document.getElementById('statusCards');
+  const emptyEl = document.getElementById('statusEmpty');
+  if (!statusOrders.length){
+    wrap.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  wrap.innerHTML = statusOrders.map(o => {
+    const stage = o.load_status || 'pending_pickup';
+    const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
+    const stagesHtml = LOAD_STAGES.map((s, i) => {
+      const cls = i < stageIdx ? 'done' : (i === stageIdx ? 'current' : '');
+      return `<span class="load-stage ${cls}">${i < stageIdx ? '✓ ' : ''}${s.label}</span>${i < LOAD_STAGES.length - 1 ? '<span class="load-stage-arrow">→</span>' : ''}`;
+    }).join('');
+
+    const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
+    const askFleteroBtn = (stage === 'pending_pickup' && carrierPhone)
+      ? `<button class="wa-btn outline" onclick="askFleteroWhatsApp('${o.order_number}')">💬 WhatsApp fletero</button>`
+      : '';
+
+    let advanceBtn = '';
+    if (stage === 'pending_pickup') advanceBtn = `<button class="wa-btn" onclick="advanceLoadStatus('${o.order_number}','picked_up')">✓ Confirmar recogida</button>`;
+    else if (stage === 'picked_up') advanceBtn = `<button class="wa-btn" onclick="advanceLoadStatus('${o.order_number}','unloading')">✓ Marcar descargando</button>`;
+    else if (stage === 'unloading') advanceBtn = `<button class="wa-btn" onclick="advanceLoadStatus('${o.order_number}','delivered')">✓ Marcar entregado</button>`;
+
+    return `<div class="load-card">
+      <div class="load-card-top">
+        <div>
+          <span class="order-num">${escapeHtml(o.order_number)}</span>
+          <div style="font-weight:700;margin-top:2px;">${escapeHtml(o.customer_name)}</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);">${escapeHtml(o.product_name)} — ${escapeHtml(o.product_spec || '')}${o.plant_name ? ' · ' + escapeHtml(o.plant_name) : ''}</div>
+        </div>
+        ${paymentBadge(o)}
+      </div>
+      <div class="load-stage-row">${stagesHtml}</div>
+      <div class="load-actions">${askFleteroBtn}${advanceBtn}</div>
+    </div>`;
+  }).join('');
+}
+
+function findStatusOrder(orderNumber){
+  return statusOrders.find(o => o.order_number === orderNumber);
+}
+
+function askFleteroWhatsApp(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.carrier) return;
+  const phone = (o.carrier.phone || '').replace(/\D/g, '');
+  if (!phone) { alert('This carrier has no phone on file.'); return; }
+  const msg = `Hi, following up on order ${o.order_number} — ${o.product_name}, picking up from ${o.freight && o.freight.origin ? o.freight.origin : 'origin'}. Can you confirm pickup status?`;
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// One click both records the stage AND opens WhatsApp with the message pre-filled — the wa.me
+// screen itself is the review step (the trader still has to hit send inside WhatsApp), so a
+// separate confirm dialog here would just be a second click for no extra safety, and this is
+// exactly the kind of real-time update that's supposed to be the fast, friendly differentiator.
+const STAGE_MESSAGES_ES = {
+  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${o.product_name} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡gracias por tu confianza!`,
+  unloading: (o, contact) => `Hola ${contact}! 📦 Tu carga de ${o.product_name} está llegando y en proceso de descarga. Te aviso apenas quede entregada.`,
+  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga de ${o.product_name} fue entregada. Espero la recibas en perfectas condiciones — cualquier cosa estoy atento.`,
+};
+
+async function advanceLoadStatus(orderNumber, newStatus){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+
+  const payload = { load_status: newStatus };
+  const now = new Date().toISOString();
+  if (newStatus === 'picked_up') payload.picked_up_at = now;
+  if (newStatus === 'unloading') payload.unloading_at = now;
+  if (newStatus === 'delivered'){
+    payload.delivered_at = now;
+    const days = (o.customer && o.customer.payment_days) || 30;
+    const due = new Date();
+    due.setDate(due.getDate() + days);
+    payload.payment_due_date = due.toISOString().slice(0, 10);
+  }
+
+  const { error } = await db.from('sales_orders').update(payload).eq('order_number', orderNumber);
+  if (error){ alert('Error updating status: ' + error.message); return; }
+
+  const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
+  const phone = ((o.customer && (o.customer.whatsapp || o.customer.phone)) || '').replace(/\D/g, '');
+  const msgFn = STAGE_MESSAGES_ES[newStatus];
+  if (phone && msgFn){
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msgFn(o, contact)), '_blank');
+  } else if (msgFn){
+    alert('Status updated, but this customer has no WhatsApp/phone on file — message not sent.');
+  }
+
+  await loadStatusOrders();
 }
 
 // ============ PDF EXPORT (PO / SO / FO) ============
