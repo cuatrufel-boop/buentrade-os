@@ -63,6 +63,15 @@
   .docs-icon-btn:hover{background:var(--blue-light);color:var(--blue);border-color:var(--blue);}
   .docs-icon-btn svg{width:15px;height:15px;}
   .docs-menu-divider{height:1px;background:var(--line);margin:6px 2px;}
+  .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+  .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);animation:toastIn .25s ease-out;}
+  .toast.error{border-left-color:var(--red);}
+  .toast-icon{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .toast.error .toast-icon{background:var(--red);}
+  .toast-icon svg{width:12px;height:12px;}
+  .toast-text{font-size:13px;color:var(--ink);line-height:1.35;}
+  .toast-text b{display:block;font-size:13px;margin-bottom:1px;}
+  @keyframes toastIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);white-space:nowrap;}
   td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap;}
@@ -285,6 +294,7 @@ auth.onAuthStateChanged(user => {
 </div>
 
 <div id="docsMenu" class="docs-menu" style="display:none;"></div>
+<div id="toastStack" class="toast-stack"></div>
 
 <script>
 let offers = [];
@@ -629,7 +639,15 @@ function toggleDocsMenu(evt, orderNumber, hasCustoms){
 
   const btn = evt.currentTarget;
   const rect = btn.getBoundingClientRect();
-  menu.style.top = (rect.bottom + 6) + 'px';
+  const menuHeight = menu.offsetHeight || 220;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  // Flip above the button when there isn't room below (e.g. the last row in a long table) —
+  // this is exactly what was getting clipped at the bottom of the viewport before.
+  if (spaceBelow < menuHeight + 12 && rect.top > menuHeight + 12){
+    menu.style.top = (rect.top - menuHeight - 6) + 'px';
+  } else {
+    menu.style.top = (rect.bottom + 6) + 'px';
+  }
   let left = rect.left;
   if (left + 300 > window.innerWidth) left = window.innerWidth - 300 - 12;
   menu.style.left = left + 'px';
@@ -1155,6 +1173,18 @@ function mailtoFallback(emails, subject, body){
   window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
 }
 
+const TOAST_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const TOAST_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+function showToast(title, detail, isError){
+  const stack = document.getElementById('toastStack');
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.innerHTML = `<span class="toast-icon">${isError ? TOAST_X : TOAST_CHECK}</span><span class="toast-text"><b>${escapeHtml(title)}</b>${detail ? escapeHtml(detail) : ''}</span>`;
+  stack.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, isError ? 6000 : 4000);
+}
+
 async function sharePO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
@@ -1167,10 +1197,10 @@ async function sharePO(orderNumber){
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.`;
   try {
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)]);
-    alert('PO sent to ' + emails.join(', '));
+    showToast('PO sent', emails.join(', '));
   } catch(e){
     if (e.cancelled) return;
-    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+    showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
     // mailto: genuinely can't carry a file attachment, so the fallback is the one place a link
     // is unavoidable — the API path above always sends the real PDF.
     mailtoFallback(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`);
@@ -1250,10 +1280,10 @@ async function shareSO(orderNumber){
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.`;
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)]);
-    alert('SO sent to ' + emails.join(', '));
+    showToast('SO sent', emails.join(', '));
   } catch(e){
     if (e.cancelled) return;
-    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+    showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
     mailtoFallback(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`);
   }
 }
@@ -1338,10 +1368,10 @@ async function shareFO(orderNumber){
     const body = `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}.`;
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
-      alert('FO sent to ' + emails.join(', '));
+      showToast('FO sent', emails.join(', '));
     } catch(e){
       if (e.cancelled) continue;
-      alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+      showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
       mailtoFallback(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}:\n${url}`);
     }
   }
@@ -1379,10 +1409,10 @@ async function shareCustoms(orderNumber){
   const body = `Adjuntamos documentación de la orden ${orderNumber}: ${docs.map(d => d.label).join(', ')}.`;
   try {
     await sendEmailApi('logistics', emails, subject, body, docs.map(d => pdfAttachment(d.doc, d.filename)));
-    alert('Documents sent to ' + emails.join(', '));
+    showToast('Customs documents sent', emails.join(', '));
   } catch(e){
     if (e.cancelled) return;
-    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
+    showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
     const fallbackBody = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
     mailtoFallback(emails, subject, fallbackBody);
   }
