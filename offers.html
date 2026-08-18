@@ -73,6 +73,17 @@
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
   .load-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px;}
   .load-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
+  .load-product-row{display:flex;align-items:center;gap:14px;}
+  .load-product-icon{width:52px;height:52px;border-radius:10px;background:var(--blue-light);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .load-product-icon svg{width:26px;height:26px;}
+  .load-product-name{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:var(--ink);line-height:1.25;}
+  .load-product-spec{font-size:12.5px;color:var(--ink-soft);margin-top:1px;}
+  .load-route{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin:14px 0;font-size:13px;}
+  .load-route-node{display:flex;align-items:center;gap:7px;min-width:0;}
+  .load-route-node svg{width:15px;height:15px;color:var(--ink-soft);flex-shrink:0;}
+  .load-route-node .rname{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .load-route-arrow{color:var(--line);flex-shrink:0;}
+  .load-route-arrow svg{width:16px;height:16px;display:block;}
   .stepper{display:flex;align-items:flex-start;margin:24px 4px 18px;}
   .step{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:104px;position:relative;}
   .step-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);transition:all .25s;flex-shrink:0;}
@@ -567,6 +578,14 @@ const STEP_ICONS = {
   unloading: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 11 12 16 17 11"/><path d="M20 20H4"/></svg>',
   delivered: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
 };
+// Generic package icon — used whenever a real product photo isn't available (products created
+// via Offers/Trading Tool don't carry a product_id back to `products.photo_url` yet). Swap this
+// for an <img> per-card once that link exists; don't guess a photo by matching on product name.
+const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
+const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
+const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+
 const LOAD_STAGES = [
   { key: 'pending_pickup', label: 'Pending Pickup' },
   { key: 'picked_up', label: 'Picked Up' },
@@ -675,12 +694,22 @@ function renderStatusOrders(){
 
     return `<div class="load-card">
       <div class="load-card-top">
-        <div>
-          <span class="order-num">${escapeHtml(o.order_number)}</span>
-          <div style="font-weight:700;margin-top:2px;">${escapeHtml(o.customer_name)}</div>
-          <div style="font-size:12.5px;color:var(--ink-soft);">${escapeHtml(o.product_name)} — ${escapeHtml(o.product_spec || '')}${o.plant_name ? ' · ' + escapeHtml(o.plant_name) : ''}</div>
+        <div class="load-product-row">
+          <div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div>
+          <div>
+            <div class="load-product-name">${escapeHtml(o.product_name)}</div>
+            <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
+          </div>
         </div>
-        ${paymentBadge(o)}
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="order-num">${escapeHtml(o.order_number)}</span>
+          ${paymentBadge(o)}
+        </div>
+      </div>
+      <div class="load-route">
+        <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
+        <div class="load-route-arrow">${ARROW_ICON}</div>
+        <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
       </div>
       <div class="stepper">${stepsHtml}</div>
       <div class="load-actions">${askFleteroBtn}${advanceBtn}</div>
