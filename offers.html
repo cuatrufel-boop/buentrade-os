@@ -532,7 +532,8 @@ async function markWon(id){
 
   const { error: soErr } = await db.from('sales_orders').insert({
     order_number: orderNumber, sent_offer_id: o.id, customer_id: o.customer_id, customer_name: o.customer_name,
-    product_id: o.product_id, product_name: o.product_name, product_spec: o.product_spec, sale_price: o.sale_per_lb,
+    product_id: o.product_id, product_name: o.product_name, product_spec: o.product_spec,
+    product_name_es: o.product_name_es, product_spec_es: o.product_spec_es, sale_price: o.sale_per_lb,
     weight: o.weight, total_sale: o.total_sale, delivery_dates: o.delivery_dates,
   });
   if (soErr) warnings.push('SO: ' + soErr.message);
@@ -542,6 +543,7 @@ async function markWon(id){
     const { error: foErr } = await db.from('freight_orders').insert({
       order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
       origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: o.us_freight_amount, currency: 'USD',
+      product_name_es: o.product_name_es, product_spec_es: o.product_spec_es,
     });
     if (foErr) warnings.push('FO (US freight): ' + foErr.message);
   }
@@ -551,6 +553,7 @@ async function markWon(id){
     const { error: foErr } = await db.from('freight_orders').insert({
       order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
       origin: 'Border', destination: rate ? rate.destination : null, quoted_rate: rate ? rate.rate : null, currency: 'USD',
+      product_name_es: o.product_name_es, product_spec_es: o.product_spec_es,
     });
     if (foErr) warnings.push('FO (Mexican freight): ' + foErr.message);
   }
@@ -809,6 +812,7 @@ const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
 const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
+const FO_TERMS_ES = "Esta Confirmación de Flete es emitida por BuenTrade LLC. El transportista debe mantener un seguro de carga adecuado y es responsable del valor de la mercancía transportada, esté o no cubierta por su propio seguro, en caso de pérdida o daño. El transportista debe confirmar la cita de recolección con la planta de origen con al menos 24 horas de anticipación y debe registrarse para cualquier inspección USDA requerida antes de las 6:00 AM en la fecha programada de entrega o en tránsito; un registro tardío puede generar demoras, tiempos de espera y cargos de inspección de los cuales el transportista es responsable. Recolecciones tardías, entregas tardías o incumplimientos pueden generar cargos que se trasladarán al transportista. La cancelación de esta carga confirmada que obligue a BuenTrade LLC a conseguir un transportista sustituto con costo adicional resultará en un cargo al transportista original. El transportista tiene derecho a cargos razonables por tiempo de espera (detention) más allá del tiempo libre acordado en la recolección o entrega, siempre que la tarifa haya sido acordada por escrito con BuenTrade LLC antes del despacho. Ningún cargo accesorio (tiempo de espera, reentrega, almacenaje u otro) será reconocido a menos que BuenTrade LLC lo autorice por escrito con anticipación.";
 const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
 const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 
@@ -1139,7 +1143,7 @@ async function buildSODoc(orderNumber){
     startY: y + 12,
     head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
     body: [[
-      so.product_name || so.product_spec || '',
+      so.product_spec_es || so.product_name_es || so.product_name || '',
       (so.weight || 0).toLocaleString('en-US'),
       '$' + (so.sale_price || 0).toFixed(4),
       '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
@@ -1192,38 +1196,39 @@ async function buildFODocs(orderNumber){
     const { data: carrier } = fo.carrier_provider_id ? await db.from('providers').select('*').eq('id', fo.carrier_provider_id).single() : { data: null };
 
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Confirmación de Flete', orderNumber, CONTACT_EMAIL_FO);
 
-    pdfInfoBlock(doc, 40, 168, 'CARRIER', [
-      carrier ? carrier.name : 'TBD — not yet booked',
+    pdfInfoBlock(doc, 40, 168, 'TRANSPORTISTA', [
+      carrier ? carrier.name : 'Por confirmar — aún no reservado',
       carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
       carrier && carrier.phone,
       carrier && (carrier.mc_number || carrier.dot_number)
         ? `MC# ${carrier.mc_number || '—'}  ·  DOT# ${carrier.dot_number || '—'}` : null,
     ]);
-    pdfInfoBlock(doc, 320, 168, 'BROKER', [COMPANY.legalName, COMPANY.address, COMPANY.phone]);
+    pdfInfoBlock(doc, 320, 168, 'BRÓKER', [COMPANY.legalName, COMPANY.address, COMPANY.phone]);
 
     const yLeft = pdfKeyValueRows(doc, 40, 240, [
-      ['DATE', todayStr()],
-      ['PICK UP ADDRESS', fo.origin],
-      ['DELIVERY ADDRESS', fo.destination],
-      ['PICK UP / DELIVERY DATE', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
+      ['FECHA', todayStr()],
+      ['DIRECCIÓN DE RECOLECCIÓN', fo.origin],
+      ['DIRECCIÓN DE ENTREGA', fo.destination],
+      ['FECHA RECOLECCIÓN / ENTREGA', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
     ]);
     const yRight = pdfKeyValueRows(doc, 320, 240, [
-      ['ESTIMATED WEIGHT', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
-      ['CLIENT ORDER #', orderNumber],
-      ['CURRENCY', 'USD'],
-      ['BOL / LOAD #', '____________________'],
+      ['PESO ESTIMADO', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
+      ['ORDEN DEL CLIENTE #', orderNumber],
+      ['MONEDA', 'USD'],
+      ['BOL / CARGA #', '____________________'],
     ]);
     const y = Math.max(yLeft, yRight);
 
     doc.autoTable({
       startY: y + 12,
-      head: [['Service Purchased', 'Quoted Rate', 'Actual Rate']],
+      head: [['Producto', 'Servicio', 'Tarifa Cotizada', 'Tarifa Real']],
       body: [[
-        'Inland Freight',
+        fo.product_spec_es || fo.product_name_es || '—',
+        'Flete terrestre',
         '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-        fo.actual_rate != null ? '$' + fo.actual_rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'Pending — confirmed after delivery',
+        fo.actual_rate != null ? '$' + fo.actual_rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'Pendiente — se confirma tras la entrega',
       ]],
       theme: 'grid',
       headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1232,12 +1237,12 @@ async function buildFODocs(orderNumber){
     });
 
     const ty = doc.lastAutoTable.finalY + 30;
-    const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
+    const termsEndY = pdfTerms(doc, ty, 'TÉRMINOS', FO_TERMS_ES, DRAFT_DISCLAIMER_ES);
     // Only the FO carries a signature block: a rate confirmation is standard trucking practice
     // for the carrier to sign before dispatch. PO/SO are valid without one (UCC, acceptance by
     // performance) and the MBG reference examples didn't include one either.
-    pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
-    pdfFooter(doc, 'en');
+    pdfSignatureBlock(doc, termsEndY + 20, 'Autorizado por — BuenTrade LLC', 'Aceptado por — Transportista / Despacho');
+    pdfFooter(doc, 'es');
     built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
@@ -1257,15 +1262,15 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = 'Freight Confirmation — ' + orderNumber;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.`;
+    const subject = 'Confirmación de Flete — ' + orderNumber;
+    const body = `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}.`;
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
       alert('FO sent to ' + emails.join(', '));
     } catch(e){
       if (e.cancelled) continue;
       alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
-      mailtoFallback(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`);
+      mailtoFallback(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}:\n${url}`);
     }
   }
 }

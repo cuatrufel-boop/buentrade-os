@@ -1283,8 +1283,11 @@ async function rqLogSentOffers(customers, channel){
   // Prefer the catalog's own clean name over whatever was typed in the search box — matches
   // what's actually stored on the product (name_en), so downstream screens (Offers Status) can
   // show the real bilingual name and photo instead of raw, possibly-abbreviated search text.
+  // Both language versions are logged because PO (plant, English) and SO/FO (customer/carrier,
+  // Spanish) each need their own — one field can't serve both.
   const matchedProduct = rqMatchedProductId ? products.find(p => p.id === rqMatchedProductId) : null;
   const loggedProductName = matchedProduct ? (matchedProduct.name_en || matchedProduct.name) : document.getElementById('rq_product_name').value.trim();
+  const loggedProductNameEs = matchedProduct ? matchedProduct.name : document.getElementById('rq_product_name').value.trim();
   withCalc.forEach(({ plant, calc }) => {
     const agencyId = plant.rqMexicanDestRateId ? rqCustomsAgencyForPlant(plant) : null;
     customers.forEach(c => {
@@ -1294,6 +1297,8 @@ async function rqLogSentOffers(customers, channel){
         product_id: rqMatchedProductId,
         product_name: loggedProductName,
         product_spec: rqProductSpec,
+        product_name_es: loggedProductNameEs,
+        product_spec_es: rqProductSpecEs,
         plant_id: plant.id,
         plant_name: plant.name,
         customer_id: c.id,
