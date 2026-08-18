@@ -236,19 +236,20 @@ auth.onAuthStateChanged(user => {
       </select>
       <button class="btn" onclick="openForm()">+ Add Product</button>
     </div>
-    <table id="productTable">
-      <thead>
-        <tr>
-          <th>Photo</th>
-          <th>Category</th>
-          <th>Name (ES)</th>
-          <th>Name (EN)</th>
-          <th>Temp / Pack</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="productRows"></tbody>
-    </table>
+    <div style="overflow-x:auto;">
+      <table id="productTable" style="table-layout:fixed;width:100%;min-width:680px;">
+        <thead>
+          <tr>
+            <th style="width:60px;text-align:center;">Photo</th>
+            <th style="width:14%;text-align:center;">Category</th>
+            <th style="width:40%;text-align:center;">Name</th>
+            <th style="width:20%;text-align:center;">Temp / Pack</th>
+            <th style="width:80px;text-align:center;"></th>
+          </tr>
+        </thead>
+        <tbody id="productRows"></tbody>
+      </table>
+    </div>
     <div id="emptyState" class="empty" style="display:none;">No products yet. Click "+ Add Product" to create the first one.</div>
   </div>
 </div>
@@ -350,12 +351,15 @@ async function loadProducts(){
   products = data || [];
   const cats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
   const catSel = document.getElementById('categoryFilter');
-  cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`);
+  cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(CATEGORY_EN[c] || c)}</option>`);
   renderProducts();
 }
 
-function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? t.name : null; }
-function packName(id){ const p = packagings.find(x => x.id === id); return p ? p.name : null; }
+// English throughout this catalog screen, same rule as everywhere else in the app — falls back
+// to the Spanish catalog entry only if a temp/packaging/category row has no English name on file.
+const CATEGORY_EN = { Cerdo: 'Pork', Pollo: 'Chicken', Pavo: 'Turkey', Res: 'Beef', Vegetales: 'Vegetables', Marrana: 'Sow' };
+function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? (t.name_en || t.name) : null; }
+function packName(id){ const p = packagings.find(x => x.id === id); return p ? (p.name_en || p.name) : null; }
 
 function renderProducts(){
   const tbody = document.getElementById('productRows');
@@ -371,18 +375,18 @@ function renderProducts(){
     : 'No products yet. Click "+ Add Product" to create the first one.';
   filtered.forEach(p => {
     const tr = document.createElement('tr');
+    tr.style.verticalAlign = 'middle';
     const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
     const isImg = p.photo_url && /\.(png|jpe?g|gif|webp)(\?|$)/i.test(p.photo_url);
     const thumbCell = p.photo_url
       ? (isImg ? `<img class="thumb" src="${p.photo_url}">` : `<a href="${p.photo_url}" target="_blank" rel="noopener" title="View attachment">📄</a>`)
       : '';
     tr.innerHTML = `
-      <td>${thumbCell}</td>
-      <td>${escapeHtml(p.category || '')}</td>
-      <td><a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.name || '')}</a></td>
-      <td>${escapeHtml(p.name_en || '—')}</td>
-      <td>${escapeHtml(tp)}</td>
-      <td class="row-actions">
+      <td style="text-align:center;vertical-align:middle;">${thumbCell}</td>
+      <td style="text-align:center;vertical-align:middle;">${escapeHtml(CATEGORY_EN[p.category] || p.category || '')}</td>
+      <td style="text-align:center;vertical-align:middle;"><a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.name_en || p.name || '')}</a></td>
+      <td style="text-align:center;vertical-align:middle;">${escapeHtml(tp)}</td>
+      <td class="row-actions" style="text-align:center;vertical-align:middle;justify-content:center;">
         <button class="btn danger" onclick="deleteProduct('${p.id}')">Delete</button>
       </td>`;
     tbody.appendChild(tr);
