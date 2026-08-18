@@ -1196,6 +1196,21 @@ function rqRequireDeliveryDay(){
   return false;
 }
 
+// Never send a customer a price built on a stale number — pork/beef prices move daily, and a
+// price loaded a week ago is no longer today's price. Only catches auto-populated catalog prices
+// (rqPriceDate is null the moment the trader types a fresh number by hand, see
+// rqUpdatePlantField), so this never blocks on a price someone just confirmed themselves.
+function rqBlockIfStalePrices(){
+  const stale = rqPricedPlantsSorted().filter(({ plant }) => {
+    const age = rqPriceAgeDays(plant.rqPriceDate);
+    return age != null && age > RQ_PRICE_STALE_DAYS;
+  });
+  if (!stale.length) return true;
+  alert(`Can't send — ${stale.length} price(s) are more than ${RQ_PRICE_STALE_DAYS} days old and need refreshing first:\n\n` +
+    stale.map(({ plant }) => `${plant.name} (as of ${rqFmtDate(plant.rqPriceDate)})`).join('\n'));
+  return false;
+}
+
 // Every offer that actually goes out gets logged as a frozen snapshot — one row per (plant,
 // customer) pair actually sent to. Fire-and-forget on purpose: it must never delay or block the
 // real send (window.open/mailto), which still has to fire perfectly synchronously with the click
@@ -1264,7 +1279,7 @@ async function sendEmailApi(fromAlias, to, subject, text, html){
 }
 
 async function sendOfferEmailTo(customerId){
-  if (!rqRequireDeliveryDay()) return;
+  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
   const firstName = rqFirstName(c.contact_name || c.trade_name);
@@ -1283,7 +1298,7 @@ async function sendOfferEmailTo(customerId){
 }
 
 function sendOfferWhatsAppTo(customerId){
-  if (!rqRequireDeliveryDay()) return;
+  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c) return;
   const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
@@ -1350,7 +1365,7 @@ function rqSendOneByOne(items, i, failed){
 // sends, so no need for the confirm()-paced one-by-one dance that mailto: requires. Whatever
 // fails automatically still falls back to the old mailto: one-by-one flow, only for those.
 async function rqOpenAllEmails(){
-  if (!rqRequireDeliveryDay()) return;
+  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
   const targets = rqMatchedCustomers.filter(c => c.email);
   if (!targets.length){ alert('No matched customer has an email on file.'); return; }
   const subject = 'Cotización — ' + (rqProductSpecEs || '');
@@ -1397,7 +1412,7 @@ async function rqOpenAllEmails(){
 // real and points the trader at the individual WhatsApp button next to each customer below —
 // those always work since each click is its own fresh, direct gesture.
 function rqOpenAllWhatsApp(){
-  if (!rqRequireDeliveryDay()) return;
+  if (!rqRequireDeliveryDay() || !rqBlockIfStalePrices()) return;
   const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   if (!targets.length){ alert('No matched customer has a phone/WhatsApp on file.'); return; }
   sendOfferWhatsAppTo(targets[0].id);
