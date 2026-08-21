@@ -830,7 +830,7 @@ function teachTermAlias(i){
 
 function reNarrowPendingRows(){
   priceListRows.forEach(row => {
-    if (row.matchedProductId || !row.candidateIds || row.candidateIds.length < 2) return;
+    if (row.matchedProductId || !row.candidateIds || !row.candidateIds.length) return;
     const candidates = allCatalogProducts.filter(p => row.candidateIds.includes(p.id));
     const narrowed = narrowByTempPack(row.rawText, candidates);
     if (narrowed.length === 1) row.matchedProductId = narrowed[0].id;
@@ -890,14 +890,17 @@ async function processPriceListText(){
     if (!matchedProductId){
       // First time this plant's exact wording happens to already match a fixed product's own
       // name — covers it without needing an alias confirmed yet. But the catalog routinely has
-      // several rows sharing the same name (Fresh/Combo, Frozen/Box, Fresh/VAC, ...) — picking
-      // whichever happened to come first would silently load the wrong temp/pack. Only auto-match
-      // when the name is unique, or when the line's own temp/pack words narrow it to exactly one;
-      // anything still ambiguous is left blank for the trader to pick — never guessed.
+      // several rows sharing the same name (Fresh/Combo, Frozen/Box, Fresh/VAC, ...), and every
+      // plant writes its own shorthand for temp/pack — so name alone, even when it only matches
+      // ONE catalog row, is never enough on its own: the line still has to be checked for a
+      // conflicting signal (e.g. the line says Frozen but the only same-named product on file is
+      // Fresh — almost certainly a variant that doesn't exist yet, not that product). Only
+      // auto-matches when temp/pack narrows the same-name candidates to exactly one; every other
+      // case — genuinely ambiguous, or a contradiction — is left blank for the trader, never
+      // guessed. This is deliberately strict because every plant's own language differs, and a
+      // silent wrong match is worse than one more row to confirm by hand.
       const nameMatches = allCatalogProducts.filter(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
-      if (nameMatches.length === 1){
-        matchedProductId = nameMatches[0].id;
-      } else if (nameMatches.length > 1){
+      if (nameMatches.length){
         // rawText (not the bare line) so a section header carried into it — "Frozen Boxed
         // Muscles — Bone in Loins" — still counts as a frozen signal for items that don't repeat
         // the word themselves.
@@ -905,8 +908,8 @@ async function processPriceListText(){
         if (narrowed.length === 1){
           matchedProductId = narrowed[0].id;
         } else {
-          // Still ambiguous — remembered so the inline "teach me this abbreviation" prompt in the
-          // review table can re-check this exact row the moment the trader confirms what the
+          // Still unresolved — remembered so the inline "teach me this abbreviation" prompt in
+          // the review table can re-check this exact row the moment the trader confirms what the
           // plant's wording meant, without needing to re-paste the whole list.
           candidateIds = nameMatches.map(p => p.id);
         }
@@ -945,13 +948,19 @@ function renderPriceListReview(){
       const label = p.name_en || p.name;
       return `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
-    // A row still ambiguous by name alone (same cut listed at more than one temp/pack) gets an
-    // inline prompt to teach the exact word that distinguishes them — confirmed by the trader,
-    // reused instantly on every other pending row with the same ambiguity, and remembered for
-    // every future price list from this plant once "Aplicar todo" is confirmed.
-    const teachPrompt = (row.candidateIds && row.candidateIds.length > 1 && !row.matchedProductId) ? `
+    // A row where the name alone couldn't be resolved with confidence — either several catalog
+    // products share this exact name and the line's wording didn't narrow it to one, or exactly
+    // one product shares the name but something in the line (a temperature/packaging word) didn't
+    // match what's on file for it — gets an inline prompt to teach the exact word involved.
+    // Confirmed by the trader, reused instantly on every other pending row with the same
+    // ambiguity, and remembered for every future price list from this plant once "Aplicar todo"
+    // is confirmed. Every plant writes its own shorthand, so this is the catch-all for "I don't
+    // understand this plant's wording yet" — nothing gets guessed past it.
+    const teachPrompt = (row.candidateIds && row.candidateIds.length && !row.matchedProductId) ? `
       <div style="margin-top:6px;padding:7px 9px;background:#FFF4E5;border-radius:5px;font-size:11.5px;color:#8a5a00;">
-        Esta planta usa una palabra que no reconozco para distinguir entre ${row.candidateIds.length} productos con este mismo nombre.
+        ${row.candidateIds.length > 1
+          ? `Esta planta usa una palabra que no reconozco para distinguir entre ${row.candidateIds.length} productos con este mismo nombre.`
+          : `Esta línea menciona algo de temperatura o empaque que no coincide con el único producto registrado con este nombre — puede ser un producto nuevo, o una palabra que no reconozco.`}
         <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:center;">
           <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. STL" style="width:110px;padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
           <select id="termTemp_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
