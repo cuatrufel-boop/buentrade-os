@@ -200,6 +200,7 @@ auth.onAuthStateChanged(user => {
           <button class="btn" onclick="processPriceListText()">Procesar</button>
           <button class="btn secondary" onclick="closePriceListPanel()">Cancelar</button>
         </div>
+        <div id="priceListDocsNote" style="display:none;margin-top:14px;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
         <div id="priceListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
           <table style="table-layout:fixed;width:100%;min-width:640px;">
             <thead><tr><th style="width:38%;">Texto original</th><th style="width:14%;">Precio (USD/lb)</th><th style="width:48%;">Producto en catálogo</th></tr></thead>
@@ -622,8 +623,10 @@ function openPriceListPanel(){
   document.getElementById('priceListCard').style.display = 'block';
   document.getElementById('priceListInput').value = '';
   document.getElementById('priceListReviewWrap').style.display = 'none';
+  document.getElementById('priceListDocsNote').style.display = 'none';
   document.getElementById('priceListMsg').textContent = '';
   priceListRows = [];
+  detectedDocsIncluded = null;
 }
 
 function closePriceListPanel(){
@@ -675,11 +678,36 @@ async function fetchAllCatalogProducts(){
   return allCatalogProducts;
 }
 
+// A plant's price sheet almost always states this once for the whole list ("*all prices FOB no
+// docs"), not per line item — so it's captured as a plant-level default (plants.docs_included),
+// not something re-typed into every product row. Applies to every plant's Cargar precios, not
+// just Tyson's. "No docs" checked first since it's the more specific/common phrase — a line
+// containing both would be contradictory anyway, not something to silently pick one side of.
+let detectedDocsIncluded = null; // true | false | null (nothing stated this time)
+function detectDocsNote(text){
+  const norm = text.toLowerCase();
+  if (/\bno\s*docs?\b/.test(norm)) return false;
+  if (/\bdocs?\s*(included|on|incluidos?)\b/.test(norm) || /\bwith\s*docs?\b/.test(norm)) return true;
+  return null;
+}
+
 async function processPriceListText(){
   const text = document.getElementById('priceListInput').value;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Pega el texto primero.'; return; }
   document.getElementById('priceListMsg').textContent = 'Procesando…';
+
+  detectedDocsIncluded = detectDocsNote(text);
+  const docsNoteEl = document.getElementById('priceListDocsNote');
+  if (detectedDocsIncluded === null){
+    docsNoteEl.style.display = 'none';
+  } else {
+    docsNoteEl.style.display = 'block';
+    docsNoteEl.style.background = detectedDocsIncluded ? '#E3F6EC' : '#FFF4E5';
+    docsNoteEl.style.color = detectedDocsIncluded ? '#0F8A5F' : '#B26A00';
+    docsNoteEl.innerHTML = `Detecté "${detectedDocsIncluded ? 'docs incluidos' : 'no docs'}" en el texto — al aplicar, se va a guardar como el default de esta planta en Quotes.
+      <label style="margin-left:10px;font-weight:600;"><input type="checkbox" id="priceListDocsOverride" ${detectedDocsIncluded ? 'checked' : ''} onchange="detectedDocsIncluded=this.checked;"> Docs incluidos</label>`;
+  }
 
   const [{ data: aliases }] = await Promise.all([
     db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
@@ -775,6 +803,12 @@ async function applyPriceList(){
       product_id: row.matchedProductId,
     }, { onConflict: 'plant_id,raw_text' });
     applied.push(row);
+  }
+
+  // Save the plant-level docs default once per apply, not once per row — it's the same fact for
+  // every product on this plant's sheet.
+  if (detectedDocsIncluded !== null){
+    await db.from('plants').update({ docs_included: detectedDocsIncluded }).eq('id', currentPlantId);
   }
 
   await loadPlantProducts();

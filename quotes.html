@@ -309,7 +309,7 @@ async function fetchQuotesLookups(){
     db.from('temperature').select('*').order('name'),
     db.from('packaging').select('*').order('name'),
     db.from('products').select('*').order('name'),
-    db.from('plants').select('id,name,contact_name,email,phone,whatsapp').order('name'),
+    db.from('plants').select('id,name,contact_name,email,phone,whatsapp,docs_included').order('name'),
     db.from('plant_locations').select('id,plant_id,location_name,freight_to_border_usd,delivered_by_plant'),
     db.from('providers').select('*').order('name'),
     db.from('provider_rates').select('*'),
@@ -434,7 +434,11 @@ async function autoPopulateRqPlants(productName){
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
     const hasPrice = link.current_price != null;
-    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null };
+    // Whether this plant's prices include export docs is a per-plant fact ("*all prices FOB no
+    // docs" on their sheet applies to everything they quote, not just one line item) — captured
+    // once in plants.html's Cargar precios and reused here so the trader isn't re-deciding it
+    // by memory on every single quote. Still a toggle they can flip if a specific deal differs.
+    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true };
   }).filter(Boolean);
   // A loaded price list (plants.html "Cargar precios") never carries a pick-up location — that's
   // a separate concept (freight lanes by origin city). Rather than quote with no freight at all
