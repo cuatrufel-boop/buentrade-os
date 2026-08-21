@@ -692,7 +692,13 @@ function parsePriceListLine(line){
   // matched number truly has no decimal already (a source that ever writes "0.85" outright stays
   // 0.85, not divided again).
   const price = /[.,]/.test(raw) ? parseFloat(raw.replace(',', '.')) : parseFloat(raw) / 100;
-  const rawText = (line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '')) || line.trim();
+  const rawText = line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '');
+  // Nothing precedes the matched price at all — the whole line IS the price (a block-format list
+  // pastes each table cell on its own line, so a price sometimes arrives completely alone). There
+  // is no real name here to attach it to, so this is not a usable single-line row — falling back
+  // to the price text itself as the "name" (an earlier version of this function did) produced
+  // rows where the name and the price were literally the same string.
+  if (!rawText) return { rawText: line.trim(), price: null };
   return { rawText, price };
 }
 
@@ -884,37 +890,50 @@ async function processPriceListText(){
   currentAliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
   pendingTermAliases = []; // fresh paste, fresh batch of anything taught during this review
 
-  let currentSection = null;
-  priceListRows = [];
-  for (const line of lines){
-    if (isSectionHeaderLine(line)){
-      currentSection = line.replace(/:\s*$/, '').trim();
-      continue; // the header itself never becomes a row
-    }
-    const { rawText: baseText, price } = parsePriceListLine(line);
-    // No price found on this line at all — it's a greeting, disclaimer, signature, or a real
-    // "N/A" item, none of which can ever be applied (applyPriceList requires both a product and
-    // a price). Skipping it here instead of showing it means the review screen is only ever the
-    // rows that actually need a decision, not 25+ lines of unrelated email text to scroll past.
-    if (price == null) continue;
-    const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
-    // rawText used for both languages here since single-line format never tells us which part of
-    // the line is English vs Spanish — matchCatalogProduct falls back to checking it against
-    // both catalog fields in that case.
-    priceListRows.push({ rawText, price, ...matchCatalogProduct(rawText) });
-  }
+  const toBlockRow = item => {
+    const rawText = item.nameEs ? `${item.nameEn} — ${item.nameEs}` : item.nameEn;
+    return { rawText, price: item.price, ...matchCatalogProduct(rawText, item.nameEn, item.nameEs) };
+  };
 
   // Some plants' price lists (Seaboard confirmed) arrive as an HTML table that gets flattened
   // into one line per CELL when pasted as plain text — name EN, name ES, lead time EN, lead time
-  // ES, then a price per price-column — instead of "name - price" sharing one line. The scan
-  // above finds zero prices for that shape since name and price never land on the same line, so
-  // this is tried as a fallback only when nothing else matched — it can never compete with or
-  // misfire on the common single-line format every other plant so far has used.
-  if (!priceListRows.length){
-    priceListRows = detectBlockFormatItems(lines).map(item => {
-      const rawText = item.nameEs ? `${item.nameEn} — ${item.nameEs}` : item.nameEn;
-      return { rawText, price: item.price, ...matchCatalogProduct(rawText, item.nameEn, item.nameEs) };
-    });
+  // ES, then a price PER PRICE COLUMN — instead of "name - price" sharing one line like Tyson's.
+  // That shape means a meaningful share of lines are nothing but a bare price sitting completely
+  // alone, which never happens in the single-line format (there, a price is always attached to
+  // its own name on the same line). Checked BEFORE running the single-line scan, not just as a
+  // fallback when it finds nothing — the single-line scan can still latch onto false "prices"
+  // in block-format text (e.g. a lead-time line like "Entrega día-24" reads as dash+number), so
+  // waiting for it to find literally zero rows isn't reliable enough on its own.
+  const priceOnlyLines = lines.filter(l => !isSectionHeaderLine(l) && isPriceishLine(l));
+  const looksLikeBlockFormat = priceOnlyLines.length >= 2 && priceOnlyLines.length / lines.length > 0.12;
+
+  priceListRows = [];
+  if (looksLikeBlockFormat){
+    priceListRows = detectBlockFormatItems(lines).map(toBlockRow);
+  } else {
+    let currentSection = null;
+    for (const line of lines){
+      if (isSectionHeaderLine(line)){
+        currentSection = line.replace(/:\s*$/, '').trim();
+        continue; // the header itself never becomes a row
+      }
+      const { rawText: baseText, price } = parsePriceListLine(line);
+      // No price found on this line at all — it's a greeting, disclaimer, signature, or a real
+      // "N/A" item, none of which can ever be applied (applyPriceList requires both a product and
+      // a price). Skipping it here instead of showing it means the review screen is only ever the
+      // rows that actually need a decision, not 25+ lines of unrelated email text to scroll past.
+      if (price == null) continue;
+      const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
+      // rawText used for both languages here since single-line format never tells us which part
+      // of the line is English vs Spanish — matchCatalogProduct falls back to checking it against
+      // both catalog fields in that case.
+      priceListRows.push({ rawText, price, ...matchCatalogProduct(rawText) });
+    }
+    // Safety net for a plant that's neither shape cleanly (few lines, no clear signal either
+    // way) — never worse than the single-line scan finding nothing at all.
+    if (!priceListRows.length){
+      priceListRows = detectBlockFormatItems(lines).map(toBlockRow);
+    }
   }
 
   renderPriceListReview();
