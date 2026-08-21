@@ -720,7 +720,7 @@ function parsePriceListLine(line){
   if (m){
     const raw = m[1];
     const price = priceFromRaw(raw);
-    const rawText = line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '');
+    const rawText = cleanNameText(line.slice(0, m.index));
     // Nothing precedes the matched price at all — the whole line IS the price (a block-format
     // list pastes each table cell on its own line, so a price sometimes arrives completely
     // alone). There is no real name here to attach it to, so this is not a usable single-line row
@@ -747,6 +747,15 @@ function parsePriceListLine(line){
 // stays as written, not divided again).
 function priceFromRaw(raw){
   return /[.,]/.test(raw) ? parseFloat(raw.replace(',', '.')) : parseFloat(raw) / 100;
+}
+
+// Strips the leftover punctuation that would otherwise end up INSIDE the product name — WhatsApp
+// bold markers ("*Fresh Bi Loin COV*") and the "@" that separates a name from its price ("...COV*
+// @ $1.11"), confirmed against a real Smithfield-style WhatsApp price list. Without this, the
+// name never matches the clean catalog entry, and gets saved as its own alias with the asterisks
+// baked in permanently.
+function cleanNameText(s){
+  return s.trim().replace(/[-–—:.\s@]+$/, '').replace(/^\*+|\*+$/g, '').trim();
 }
 
 // A casual, short single-item email (confirmed against a real Amity Packing offer) states the
