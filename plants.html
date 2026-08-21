@@ -858,11 +858,11 @@ async function processPriceListText(){
     docsNoteEl.style.display = 'block';
     docsNoteEl.style.background = detectedDocsIncluded ? '#E3F6EC' : '#FFF4E5';
     docsNoteEl.style.color = detectedDocsIncluded ? '#0F8A5F' : '#B26A00';
-    // Worded carefully so it doesn't read as "this plant is permanently no-docs" — it's only the
-    // fallback for whatever a product's own line doesn't say, it's re-set by every price list
-    // (never sticky beyond what the plant's own sheet keeps saying), and it never overrides a
-    // product that has its own explicit "Docs" value in the table below.
-    docsNoteEl.innerHTML = `Nota general detectada: "${detectedDocsIncluded ? 'docs incluidos' : 'no docs'}". Se guarda como el default de ESTA planta — solo para productos que no digan nada distinto. Cualquier línea marcada individualmente en la columna "Docs" de abajo (with docs, W docs, docs included, no docs) no se ve afectada por esto.
+    // One confirmation per list, not per product: this plant's docs status is a fact about THIS
+    // price list as a whole (today's list says no docs, a future one might say docs included —
+    // same plant, different day). Confirming here sets the plant's current default, which stays
+    // in effect until the next price list from this plant is loaded and re-detected fresh.
+    docsNoteEl.innerHTML = `Nota general detectada en esta lista: "${detectedDocsIncluded ? 'docs incluidos' : 'no docs'}". Al aplicar, se guarda como el default ACTUAL de esta planta — así queda hasta que cargues otra lista con una nota distinta. Si está mal, corrígelo aquí antes de aplicar:
       <label style="margin-left:10px;font-weight:600;"><input type="checkbox" id="priceListDocsOverride" ${detectedDocsIncluded ? 'checked' : ''} onchange="detectedDocsIncluded=this.checked;"> Docs incluidos</label>`;
   }
 
