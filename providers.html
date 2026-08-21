@@ -450,7 +450,7 @@ function switchRateTab(svc){
   currentRateTab = svc;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === svc));
   closeRateListPanel();
-  document.getElementById('loadRatesBtn').style.display = svc === 'customs' ? 'none' : 'inline-block';
+  document.getElementById('loadRatesBtn').style.display = 'inline-block';
   renderRateTable();
 }
 
@@ -463,12 +463,14 @@ function switchRateTab(svc){
 let rateListRows = [];
 
 function openRateListPanel(){
-  if (currentRateTab === 'customs') return;
   const isUs = currentRateTab === 'us_freight';
+  const isCustoms = currentRateTab === 'customs';
   document.getElementById('rateListHint').textContent = isUs
     ? 'Pega directo desde el Excel (columnas: Precio, Nombre, Ciudad, Estado) — una fila por línea. Nada se guarda hasta que revises y confirmes.'
+    : isCustoms
+    ? 'Pega la lista de costos tal como te la mandaron — una línea por costo, con su tipo y precio (ej. "Trámite aduanal: $400"). Nada se guarda hasta que revises y confirmes.'
     : 'Pega el texto del PDF tal como está — una línea por destino ("CIUDAD USD $ 1,234.00"). Nada se guarda hasta que revises y confirmes.';
-  document.getElementById('rateListColHead').textContent = isUs ? 'Pickup location → Border' : 'Border → Destino';
+  document.getElementById('rateListColHead').textContent = isUs ? 'Pickup location → Border' : isCustoms ? 'Tipo de costo' : 'Border → Destino';
   document.getElementById('rateListInput').value = '';
   document.getElementById('rateListReviewWrap').style.display = 'none';
   document.getElementById('rateListMsg').textContent = '';
@@ -511,15 +513,44 @@ function parseMexicanFreightLine(line){
   return { destination, price };
 }
 
+// Matches free text against the fixed CUSTOMS_TYPES list by keyword, not exact string — a real
+// fee sheet writes these differently every time ("Trámite aduanal", "customs processing", "INBOND
+// release fee"). Falls back to the first type (trámite_aduanal) with a flag so the trader picks
+// the right one by hand in review rather than the row being silently dropped — customs costs are
+// few enough per agency that a wrong guess is cheap to catch, an unlisted row isn't.
+const CUSTOMS_KEYWORDS = [
+  { value: 'tramite_aduanal', words: ['tramite aduanal', 'aduanal', 'customs processing', 'customs clearance'] },
+  { value: 'bodega_americana', words: ['bodega americana', 'us warehouse', 'american warehouse'] },
+  { value: 'lumper_fee', words: ['lumper'] },
+  { value: 'inbond_release', words: ['inbond'] },
+];
+function guessCustomsType(line){
+  const norm = line.toLowerCase();
+  for (const k of CUSTOMS_KEYWORDS){
+    if (k.words.some(w => norm.includes(w))) return k.value;
+  }
+  return null;
+}
+function parseCustomsLine(line){
+  const m = line.match(/\$?\s*([\d,]+\.?\d*)\s*$/) || line.match(/\$\s*([\d,]+\.?\d*)/);
+  if (!m) return null;
+  const price = parseFloat(m[1].replace(/,/g, ''));
+  if (isNaN(price)) return null;
+  const serviceType = guessCustomsType(line) || 'tramite_aduanal';
+  const unmatched = !guessCustomsType(line);
+  return { serviceType, price, unmatched };
+}
+
 function processRateListText(){
   const text = document.getElementById('rateListInput').value;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length){ document.getElementById('rateListMsg').textContent = 'Pega el texto primero.'; return; }
 
   const isUs = currentRateTab === 'us_freight';
+  const isCustoms = currentRateTab === 'customs';
   rateListRows = [];
   for (const line of lines){
-    const parsed = isUs ? parseUsFreightLine(line) : parseMexicanFreightLine(line);
+    const parsed = isCustoms ? parseCustomsLine(line) : (isUs ? parseUsFreightLine(line) : parseMexicanFreightLine(line));
     if (!parsed) continue; // not a data row (header, note, blank) — silently skipped, never guessed
     rateListRows.push({ raw: line, ...parsed });
   }
@@ -533,8 +564,16 @@ function renderRateListReview(){
   const wrap = document.getElementById('rateListReviewWrap');
   const tbody = document.getElementById('rateListReviewRows');
   const isUs = currentRateTab === 'us_freight';
+  const isCustoms = currentRateTab === 'customs';
   wrap.style.display = rateListRows.length ? 'block' : 'none';
   tbody.innerHTML = rateListRows.map((row, i) => {
+    if (isCustoms){
+      const typeOptions = CUSTOMS_TYPES.map(t => `<option value="${t.value}" ${row.serviceType === t.value ? 'selected' : ''}>${t.label}</option>`).join('');
+      return `<tr${row.unmatched ? ' style="background:#FFF4E5;"' : ''}>
+        <td><select style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].serviceType=this.value;rateListRows[${i}].unmatched=false;">${typeOptions}</select></td>
+        <td><input type="number" step="0.01" value="${row.price}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].price=parseFloat(this.value)||0"></td>
+      </tr>`;
+    }
     const place = isUs ? row.origin : row.destination;
     return `<tr>
       <td><input type="text" value="${escapeHtml(place)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].${isUs ? 'origin' : 'destination'}=this.value"></td>
@@ -546,11 +585,19 @@ function renderRateListReview(){
 async function applyRateList(){
   if (!currentProviderId || !rateListRows.length) return;
   const isUs = currentRateTab === 'us_freight';
+  const isCustoms = currentRateTab === 'customs';
   document.getElementById('rateListMsg').textContent = 'Guardando…';
   let applied = 0, errors = 0;
   const failedRows = [];
   for (const row of rateListRows){
-    const payload = {
+    const payload = isCustoms ? {
+      provider_id: currentProviderId,
+      service_type: row.serviceType,
+      origin: '',
+      destination: '',
+      rate: row.price,
+      currency: 'USD',
+    } : {
       provider_id: currentProviderId,
       service_type: currentRateTab,
       origin: isUs ? row.origin : 'Border',
