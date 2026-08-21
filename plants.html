@@ -178,34 +178,35 @@ auth.onAuthStateChanged(user => {
     <div class="tab-row">
       <button type="button" class="tab-btn active" id="plantTabBtn_products" onclick="setPlantTab('products')">Products &amp; Prices</button>
       <button type="button" class="tab-btn" id="plantTabBtn_locations" onclick="setPlantTab('locations')">Locations</button>
-      <button type="button" class="tab-btn" id="plantTabBtn_details" onclick="setPlantTab('details')">Details</button>
+      <button type="button" class="tab-btn" id="plantTabBtn_details" onclick="setPlantTab('details')">Profile</button>
     </div>
 
     <!-- ============ PRODUCTS & PRICES — default tab; this is the daily action, always the
          first thing visible when a plant is opened, no scrolling or clicking needed. ============ -->
     <div id="plantTab_products">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openPriceListPanel()">📋 Cargar precios</button>
+        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openPriceListPanel()">📋 Load Prices</button>
         <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openProductForm()">+ Add New Product</button>
       </div>
 
       <div class="card" id="priceListCard" style="display:none;margin-bottom:16px;">
-        <strong>Cargar lista de precios</strong>
-        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Pega el texto tal como llegó (correo, mensaje, o copiado de un Excel) — una línea por producto, precio al final de cada línea. Nada se guarda hasta que revises y confirmes.</p>
+        <strong>Load Price List</strong>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Paste the text as it arrived (email, message, or copied from Excel) — one line per product, price at the end of each line. Nothing is saved until you review and confirm.</p>
         <textarea id="priceListInput" rows="8" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;"></textarea>
         <div style="display:flex;gap:10px;margin-top:10px;">
-          <button class="btn" onclick="processPriceListText()">Procesar</button>
-          <button class="btn secondary" onclick="closePriceListPanel()">Cancelar</button>
+          <button class="btn" onclick="processPriceListText()">Process</button>
+          <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
         </div>
         <div id="priceListDocsNote" style="display:none;margin-top:14px;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
+        <div id="priceListLocationsNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
         <div id="priceListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
           <table style="table-layout:fixed;width:100%;min-width:640px;">
-            <thead><tr><th style="width:38%;">Texto original</th><th style="width:14%;">Precio (USD/lb)</th><th style="width:48%;">Producto en catálogo</th></tr></thead>
+            <thead><tr><th style="width:38%;">Original Text</th><th style="width:14%;">Price (USD/lb)</th><th style="width:48%;">Catalog Product</th></tr></thead>
             <tbody id="priceListReviewRows"></tbody>
           </table>
           <div style="display:flex;gap:10px;margin-top:12px;">
-            <button class="btn" onclick="applyPriceList()">Aplicar todo</button>
-            <button class="btn secondary" onclick="closePriceListPanel()">Cancelar</button>
+            <button class="btn" onclick="applyPriceList()">Apply All</button>
+            <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
           </div>
         </div>
         <div id="priceListMsg" style="font-size:12.5px;margin-top:10px;"></div>
@@ -657,8 +658,8 @@ function startCreateProductForRow(i){
   // while filling in the name fields at the top.
   const refBanner = document.getElementById('priceListRefBanner');
   refBanner.style.display = 'block';
-  refBanner.innerHTML = `<strong>Texto de la planta:</strong> "${escapeHtml(priceListRows[i].rawText)}"<br>Úsalo como referencia para escribir el nombre completo real (ES y EN) — no copies la abreviación de la planta. La temperatura y el empaque van solo en sus propios campos, no repetidos dentro del nombre.`;
-  document.getElementById('formMsg').textContent = 'Completa todos los campos obligatorios y guarda.';
+  refBanner.innerHTML = `<strong>Plant's text:</strong> "${escapeHtml(priceListRows[i].rawText)}"<br>Use it as reference to write the real complete name (ES and EN) — don't copy the plant's abbreviation. Temperature and packaging go only in their own fields, not repeated inside the name.`;
+  document.getElementById('formMsg').textContent = 'Complete all required fields and save.';
 }
 
 // The row's <select> reverts to "— selecciona —" (or whatever was matched before) after opening
@@ -692,6 +693,7 @@ function openPriceListPanel(){
   document.getElementById('priceListInput').value = '';
   document.getElementById('priceListReviewWrap').style.display = 'none';
   document.getElementById('priceListDocsNote').style.display = 'none';
+  document.getElementById('priceListLocationsNote').style.display = 'none';
   document.getElementById('priceListMsg').textContent = '';
   priceListRows = [];
   detectedDocsIncluded = null;
@@ -918,7 +920,7 @@ function teachTermAlias(i){
   const tempVal = document.getElementById(`termTemp_${i}`).value;
   const packVal = document.getElementById(`termPack_${i}`).value;
   if (!term || (!tempVal && !packVal)){
-    document.getElementById('priceListMsg').textContent = 'Escribe la palabra exacta y selecciona qué significa (temperatura y/o empaque).';
+    document.getElementById('priceListMsg').textContent = 'Type the exact word and select what it means (temperature and/or packaging).';
     return;
   }
   // A batch upsert errors if the same (plant_id, term, meaning_type) appears twice in one call —
@@ -935,7 +937,7 @@ function teachTermAlias(i){
   plantTermAliasMap.set(term, entry);
   reNarrowPendingRows();
   renderPriceListReview();
-  document.getElementById('priceListMsg').textContent = `"${term}" aplicado a las filas pendientes — se guarda como abreviación conocida al confirmar "Aplicar todo".`;
+  document.getElementById('priceListMsg').textContent = `"${term}" applied to pending rows — saved as a known abbreviation once you confirm "Apply All".`;
 }
 
 function reNarrowPendingRows(){
@@ -954,11 +956,56 @@ function detectDocsNote(text){
   return null;
 }
 
+// "FOB City, State" (or "FOB City, Country") is the plant stating where it actually ships from —
+// confirmed against a real Smithfield list (FOB Sioux Falls, SD / Monmouth, IL / Denison, IA /
+// Milan, MO all appearing across different lines of the same paste). Only reads what's literally
+// there — never invents a location — and de-duplicates so "FOB Monmouth, IL" repeated across five
+// lines becomes one entry, not five.
+function detectPickupLocations(text){
+  const found = new Map(); // normalized -> display text
+  const re = /\bFOB\s+([A-Z][A-Za-z.]*(?:\s+[A-Z][A-Za-z.]*)*,\s*[A-Za-z]{2,})/g;
+  let m;
+  while ((m = re.exec(text))){
+    const name = m[1].trim().replace(/[.\s]+$/, '');
+    const key = normalizeForMatch(name);
+    if (!found.has(key)) found.set(key, name);
+  }
+  return [...found.values()];
+}
+
+function renderDetectedLocations(names){
+  const el = document.getElementById('priceListLocationsNote');
+  const existingKeys = new Set(plantLocations.map(l => normalizeForMatch(l.location_name)));
+  const newOnes = names.filter(n => !existingKeys.has(normalizeForMatch(n)));
+  if (!newOnes.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = `Pickup locations mentioned in this list that aren't in Locations yet:
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+      ${newOnes.map(n => `<button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" data-name="${escapeHtml(n)}" onclick="addDetectedLocation(this.dataset.name, this)">+ ${escapeHtml(n)}</button>`).join('')}
+    </div>`;
+}
+
+// One click per location — never bulk-created silently. Only fills in the name (the one fact
+// this line actually stated); protein, freight, and contact info are left for the trader to fill
+// in later from the Locations tab, same as any location added by hand.
+async function addDetectedLocation(name, btn){
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  const { error } = await db.from('plant_locations').insert({ plant_id: currentPlantId, location_name: name });
+  if (error){
+    btn.disabled = false;
+    btn.textContent = 'Error — retry';
+    return;
+  }
+  await loadPlantLocations();
+  btn.remove();
+}
+
 async function processPriceListText(){
   const text = document.getElementById('priceListInput').value;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Pega el texto primero.'; return; }
-  document.getElementById('priceListMsg').textContent = 'Procesando…';
+  if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Paste the text first.'; return; }
+  document.getElementById('priceListMsg').textContent = 'Processing…';
 
   // One choice for the whole list, always shown — pre-set from the list's own wording when it
   // says something, otherwise left for the trader to pick. Sets this plant's current default on
@@ -978,6 +1025,12 @@ async function processPriceListText(){
       <option value="true" ${detectedDocsIncluded === true ? 'selected' : ''}>Docs Included</option>
     </select>
   </label>`;
+
+  // A price list stating "FOB <City, State>" per line is telling us where this plant actually
+  // ships from — real pickup locations, not just pricing detail. Detected here (never silently
+  // created) so the trader can add the ones that are new to this plant's Locations tab with one
+  // click, instead of retyping them by hand later.
+  renderDetectedLocations(detectPickupLocations(text));
 
   const [{ data: aliases }] = await Promise.all([
     db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
@@ -1044,7 +1097,7 @@ async function processPriceListText(){
   renderPriceListReview();
   document.getElementById('priceListMsg').textContent = priceListRows.length
     ? ''
-    : 'No se encontró ningún precio en el texto pegado.';
+    : 'No price found in the pasted text.';
 }
 
 // First time this plant's exact wording happens to already match a fixed product's own name —
@@ -1167,29 +1220,29 @@ function renderPriceListReview(){
     const teachPrompt = (row.candidateIds && row.candidateIds.length && !row.matchedProductId) ? `
       <div style="margin-top:6px;padding:7px 9px;background:#FFF4E5;border-radius:5px;font-size:11.5px;color:#8a5a00;">
         ${row.candidateIds.length > 1
-          ? `Esta planta usa una palabra que no reconozco para distinguir entre ${row.candidateIds.length} productos con este mismo nombre.`
-          : `Esta línea menciona algo de temperatura o empaque que no coincide con el único producto registrado con este nombre — puede ser un producto nuevo, o una palabra que no reconozco.`}
+          ? `This plant uses a word I don't recognize to tell apart ${row.candidateIds.length} products with this same name.`
+          : `This line mentions something about temperature or packaging that doesn't match the only product on file with this name — it could be a new product, or a word I don't recognize.`}
         <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:center;">
-          <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. STL" style="width:110px;padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+          <input type="text" id="termInput_${i}" placeholder="exact word, e.g. STL" style="width:110px;padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
           <select id="termTemp_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
-            <option value="">Temperatura —</option>
+            <option value="">Temperature —</option>
             ${temperatures.map(t => `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}
           </select>
           <select id="termPack_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
-            <option value="">Empaque —</option>
+            <option value="">Packaging —</option>
             ${packagings.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}
           </select>
-          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Guardar y reconocer</button>
+          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Save & Recognize</button>
         </div>
       </div>` : '';
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
       <td>
-        <input type="text" placeholder="Buscar producto…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+        <input type="text" placeholder="Search product…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
         <select id="prodSelect_${i}" style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="onPriceListProductSelect(${i}, this)">
-        <option value="">— selecciona —</option>
-        <option value="__new__">+ Crear producto nuevo…</option>
+        <option value="">— select —</option>
+        <option value="__new__">+ Create new product…</option>
         ${options}
       </select>${teachPrompt}</td>
     </tr>`;
@@ -1201,15 +1254,15 @@ async function applyPriceList(){
   // never apply a single price without that decided, rather than silently defaulting to
   // whatever the plant's default happened to be before.
   if (detectedDocsIncluded === null){
-    document.getElementById('priceListMsg').textContent = 'Selecciona Docs o No Docs arriba antes de aplicar.';
+    document.getElementById('priceListMsg').textContent = 'Select Docs or No Docs above before applying.';
     return;
   }
   const today = new Date().toISOString().slice(0, 10);
   const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null);
   const pending = priceListRows.filter(r => !(r.matchedProductId && r.price != null));
-  if (!toApply.length){ document.getElementById('priceListMsg').textContent = 'Ninguna fila tiene producto y precio seleccionados.'; return; }
+  if (!toApply.length){ document.getElementById('priceListMsg').textContent = 'No row has a product and price selected.'; return; }
 
-  document.getElementById('priceListMsg').textContent = 'Guardando…';
+  document.getElementById('priceListMsg').textContent = 'Saving…';
   const applied = [];
   let errors = 0;
   for (const row of toApply){
@@ -1260,7 +1313,7 @@ async function applyPriceList(){
   } else {
     closePriceListPanel();
   }
-  alert(`${applied.length} precio(s) actualizado(s).${pending.length ? ` ${pending.length} fila(s) sin producto/precio, quedan pendientes arriba.` : ''}${errors ? ` ${errors} fallaron al guardar, quedan pendientes arriba.` : ''}`);
+  alert(`${applied.length} price(s) updated.${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}`);
 }
 
 let plantLocations = [];
@@ -1494,7 +1547,7 @@ async function saveProduct(){
   // exactly the ambiguity that later silently misapplies a price to the wrong variant of a
   // shared name. No partial products, ever, however this form was opened.
   if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id){
-    document.getElementById('formMsg').textContent = 'Completa todos los campos obligatorios: nombre ES, nombre EN, categoría, marca, temperatura y empaque.';
+    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature and packaging.';
     return;
   }
   if (pendingPhotoFile){
@@ -1532,7 +1585,7 @@ async function saveProduct(){
   if (newProduct && createdForRow !== null && priceListRows[createdForRow]){
     priceListRows[createdForRow].matchedProductId = productId;
     renderPriceListReview();
-    document.getElementById('priceListMsg').textContent = 'Producto creado y vinculado a esta fila.';
+    document.getElementById('priceListMsg').textContent = 'Product created and linked to this row.';
   }
 }
 
