@@ -1073,7 +1073,7 @@ function rqRenderFinalList(){
       <div style="flex:1;text-align:center;">
         <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
         <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</div>
-        ${photo && rqPhotoLabel(photo) === 'Foto' ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;margin-top:4px;" onclick="rqCopyPhotoToClipboard('${photo}', this)">📋 Copiar foto</button>` : ''}
+        ${photo && rqPhotoLabel(photo) === 'Foto' ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;margin-top:4px;" onclick="rqCopyPhotoToClipboard('${photo}', this)">📋 Descargar foto</button>` : ''}
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
@@ -1083,12 +1083,12 @@ function rqRenderFinalList(){
   }).join('');
 }
 
-// WhatsApp's wa.me links can only pre-fill text, never attach a real image — the only way to
-// actually get the photo INTO the chat is a manual paste. This closes the gap that matters (not
-// having to go hunt down the right file in Finder every time): one click puts the photo on the
-// clipboard, ready for Cmd+V into WhatsApp. Re-drawn through a canvas to a plain PNG blob before
-// writing to the clipboard — Chrome's Clipboard API only reliably accepts image/png, regardless
-// of whether the source file on file is a jpg/webp/etc.
+// WhatsApp's wa.me links can only pre-fill text, never attach a real image. navigator.clipboard.
+// write() was tried here to auto-copy the photo for a Cmd+V paste, but it needs the click's "user
+// activation" to still be live by the time it runs — the fetch()/decode work above reliably burns
+// through that window in real use, so the copy silently failed. Confirmed broken, not
+// hypothetical — downloading the file instead has no such timing requirement and always works;
+// the trader drags/attaches it into WhatsApp themselves.
 async function rqCopyPhotoToClipboard(photoUrl, btn){
   const originalLabel = btn ? btn.textContent : null;
   try {
@@ -1096,17 +1096,19 @@ async function rqCopyPhotoToClipboard(photoUrl, btn){
     const res = await fetch(photoUrl);
     if (!res.ok) throw new Error('Could not fetch the photo file.');
     const blob = await res.blob();
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext('2d').drawImage(bitmap, 0, 0);
-    const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
-    if (btn){ btn.textContent = '✓ Copiada'; setTimeout(() => { btn.disabled = false; btn.textContent = originalLabel; }, 1500); }
+    const ext = (photoUrl.split('.').pop() || 'jpg').split('?')[0];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `foto.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    if (btn){ btn.textContent = '✓ Descargada'; setTimeout(() => { btn.disabled = false; btn.textContent = originalLabel; }, 1500); }
   } catch(e){
     if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
-    alert('No se pudo copiar la foto automáticamente (' + e.message + '). Se abre en una pestaña para que la copies tú manualmente.');
+    alert('No se pudo descargar la foto (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
     window.open(photoUrl, '_blank');
   }
 }
