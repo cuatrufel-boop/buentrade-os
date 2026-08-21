@@ -850,21 +850,22 @@ async function processPriceListText(){
   if (!lines.length){ document.getElementById('priceListMsg').textContent = 'Pega el texto primero.'; return; }
   document.getElementById('priceListMsg').textContent = 'Procesando…';
 
+  // One choice for the whole list, always shown — pre-set from the list's own wording when it
+  // says something, otherwise left for the trader to pick. Sets this plant's current default on
+  // Apply; re-picked fresh every time a new list is processed, never assumed from last time.
   detectedDocsIncluded = detectDocsNote(text);
   const docsNoteEl = document.getElementById('priceListDocsNote');
-  if (detectedDocsIncluded === null){
-    docsNoteEl.style.display = 'none';
-  } else {
-    docsNoteEl.style.display = 'block';
-    docsNoteEl.style.background = detectedDocsIncluded ? '#E3F6EC' : '#FFF4E5';
-    docsNoteEl.style.color = detectedDocsIncluded ? '#0F8A5F' : '#B26A00';
-    // One confirmation per list, not per product: this plant's docs status is a fact about THIS
-    // price list as a whole (today's list says no docs, a future one might say docs included —
-    // same plant, different day). Confirming here sets the plant's current default, which stays
-    // in effect until the next price list from this plant is loaded and re-detected fresh.
-    docsNoteEl.innerHTML = `Nota general detectada en esta lista: "${detectedDocsIncluded ? 'docs incluidos' : 'no docs'}". Al aplicar, se guarda como el default ACTUAL de esta planta — así queda hasta que cargues otra lista con una nota distinta. Si está mal, corrígelo aquí antes de aplicar:
-      <label style="margin-left:10px;font-weight:600;"><input type="checkbox" id="priceListDocsOverride" ${detectedDocsIncluded ? 'checked' : ''} onchange="detectedDocsIncluded=this.checked;"> Docs incluidos</label>`;
-  }
+  docsNoteEl.style.display = 'block';
+  docsNoteEl.style.background = 'transparent';
+  docsNoteEl.style.color = 'inherit';
+  docsNoteEl.style.padding = '0';
+  docsNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Docs de esta lista:
+    <select id="priceListDocsOverride" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="detectedDocsIncluded=this.value===''?null:this.value==='true'">
+      <option value="" ${detectedDocsIncluded === null ? 'selected' : ''}>—</option>
+      <option value="false" ${detectedDocsIncluded === false ? 'selected' : ''}>No docs</option>
+      <option value="true" ${detectedDocsIncluded === true ? 'selected' : ''}>Docs incluidos</option>
+    </select>
+  </label>`;
 
   const [{ data: aliases }] = await Promise.all([
     db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
