@@ -684,6 +684,25 @@ async function fetchAllCatalogProducts(){
 // just Tyson's. "No docs" checked first since it's the more specific/common phrase — a line
 // containing both would be contradictory anyway, not something to silently pick one side of.
 let detectedDocsIncluded = null; // true | false | null (nothing stated this time)
+// Reads packaging/temperature words directly off a line ("Combo", "VAC", "Frozen", "Fresco"...)
+// against the real catalog tables (both languages, since a plant's list can be in either) —
+// used only to disambiguate when a product name matches more than one catalog row, never to
+// invent a product that isn't already there.
+function detectTempPackFromLine(line){
+  const norm = line.toLowerCase();
+  const wordBoundary = w => new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+  let tempId = null, packagingId = null;
+  for (const t of temperatures){
+    const words = [t.name, t.name_en].filter(Boolean);
+    if (words.some(w => wordBoundary(w).test(norm))){ tempId = t.id; break; }
+  }
+  for (const p of packagings){
+    const words = [p.name, p.name_en].filter(Boolean);
+    if (words.some(w => wordBoundary(w).test(norm))){ packagingId = p.id; break; }
+  }
+  return { tempId, packagingId };
+}
+
 function detectDocsNote(text){
   const norm = text.toLowerCase();
   if (/\bno\s*docs?\b/.test(norm)) return false;
@@ -733,9 +752,21 @@ async function processPriceListText(){
     let matchedProductId = aliasMap.get(key) || null;
     if (!matchedProductId){
       // First time this plant's exact wording happens to already match a fixed product's own
-      // name — covers it without needing an alias confirmed yet.
-      const found = allCatalogProducts.find(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
-      if (found) matchedProductId = found.id;
+      // name — covers it without needing an alias confirmed yet. But the catalog routinely has
+      // several rows sharing the same name (Fresh/Combo, Frozen/Box, Fresh/VAC, ...) — picking
+      // whichever happened to come first would silently load the wrong temp/pack. Only auto-match
+      // when the name is unique, or when the line's own temp/pack words narrow it to exactly one;
+      // anything still ambiguous is left blank for the trader to pick — never guessed.
+      const nameMatches = allCatalogProducts.filter(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
+      if (nameMatches.length === 1){
+        matchedProductId = nameMatches[0].id;
+      } else if (nameMatches.length > 1){
+        const { tempId, packagingId } = detectTempPackFromLine(line);
+        const narrowed = nameMatches.filter(p =>
+          (!tempId || p.temperature_id === tempId) && (!packagingId || p.packaging_id === packagingId)
+        );
+        if (narrowed.length === 1) matchedProductId = narrowed[0].id;
+      }
     }
     priceListRows.push({ rawText, price, matchedProductId });
   }
