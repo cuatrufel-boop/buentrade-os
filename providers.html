@@ -228,9 +228,9 @@ auth.onAuthStateChanged(user => {
       </div>
     </div>
     <div class="tab-row">
-      <button class="tab-btn active" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
-      <button class="tab-btn" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
-      <button class="tab-btn" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
+      <button class="tab-btn active" id="rateTabBtn_us_freight" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
+      <button class="tab-btn" id="rateTabBtn_mexican_freight" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
+      <button class="tab-btn" id="rateTabBtn_customs" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
     </div>
 
     <div class="card" id="rateListCard" style="display:none;margin:14px 0;">
@@ -429,11 +429,28 @@ async function deleteProvider(id){
 
 // ============ RATES (spreadsheet-style, per provider) ============
 
+// A provider only sees the tabs its own roles actually use — a pure carrier never had a reason
+// to see a Customs & Fees tab (and vice versa for a pure customs agency), so showing all 3
+// unconditionally was misleading even after the underlying data was already split correctly.
+function ratesTabsForProvider(providerId){
+  const roles = providerRolesMap[providerId] || [];
+  const isFreight = roles.includes('carrier') || roles.includes('freight_forwarder');
+  const isCustoms = roles.includes('customs_broker');
+  return {
+    us_freight: isFreight, mexican_freight: isFreight, customs: isCustoms,
+  };
+}
+
 function openRates(providerId){
   closeForm();
   currentProviderId = providerId;
-  currentRateTab = 'us_freight';
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === 'us_freight'));
+  const visible = ratesTabsForProvider(providerId);
+  ['us_freight', 'mexican_freight', 'customs'].forEach(svc => {
+    document.getElementById('rateTabBtn_' + svc).style.display = visible[svc] ? 'inline-block' : 'none';
+  });
+  currentRateTab = visible.us_freight ? 'us_freight' : (visible.mexican_freight ? 'mexican_freight' : 'customs');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === currentRateTab));
+  document.getElementById('loadRatesBtn').style.display = 'inline-block';
   const p = providers.find(x => x.id === providerId);
   document.getElementById('ratesTitle').textContent = (p ? p.name : '') + ' — Rates';
   document.getElementById('ratesCard').style.display = 'block';
