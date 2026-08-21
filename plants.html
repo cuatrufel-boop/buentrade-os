@@ -732,15 +732,15 @@ function parsePriceListLine(line){
     if (!rawText) return { rawText: line.trim(), price: null };
     return { rawText, price };
   }
-  // Unlike $/dash, an empty "before the price" text here is the NORMAL case, not a sign of
-  // nothing usable — a "PRICE .95" line is, by its nature, usually a price-only line with the
-  // product name on the line above it (handled by detectAdjacentNamePriceItems), not on the same
-  // line. Kept as its own branch instead of folding into the check above for exactly that reason.
-  const km = line.match(/\b(?:price|pric|cost)\b[:\s]*\$?(\.?\d+(?:[.,]\d+)?)/i);
-  if (km){
-    const rawText = line.slice(0, km.index).trim().replace(/[-–—:.\s]+$/, '');
-    return { rawText, price: priceFromRaw(km[1]) };
-  }
+  // A short casual line — one label word, a number, maybe a trailing unit/term word ("PRIC .95
+  // fob") — read by SHAPE rather than requiring an exact spelling of "price". Confirmed necessary
+  // against a real Amity Packing email: the plant's own typo ("PRIC" instead of "PRICE") would
+  // have missed a fixed keyword list entirely, and there's no reason to expect every plant spells
+  // it the same way. Unlike $/dash, an empty "before the price" text here is the NORMAL case, not
+  // a sign of nothing usable — this shape is by nature usually a price-only line with the product
+  // name on the line above it (handled by detectAdjacentNamePriceItems), not the same line.
+  const km = line.match(/^[A-Za-z]{2,10}\.?\s+(\.?\d+(?:[.,]\d+)?)\s*(?:[A-Za-z]{1,10}\.?)?\s*$/);
+  if (km) return { rawText: '', price: priceFromRaw(km[1]) };
   return { rawText: line.trim(), price: null };
 }
 
@@ -771,9 +771,24 @@ function detectAdjacentNamePriceItems(lines){
     const { rawText, price } = parsePriceListLine(lines[i]);
     if (price == null || rawText) continue; // a non-empty rawText already stands on its own
     const prevLine = i > 0 ? lines[i - 1] : null;
-    if (prevLine && looksLikeProductNameLine(prevLine)) items.push({ rawText: prevLine, price });
+    if (!prevLine || !looksLikeProductNameLine(prevLine)) continue;
+    // A short casual email often states temperature/packaging on its OWN line elsewhere ("Load
+    // ready frozen") instead of repeating it on the item's own line — confirmed against the real
+    // Amity email, where "frozen" never appears anywhere near "PORK LOIN TRIM 42%" itself. For an
+    // email this short (one or a couple of items), any other line that reads as a real temp/pack
+    // signal plausibly describes this item, so it's folded into the row's text — the same role a
+    // section header already plays for the single-line format, never applied to a line that
+    // doesn't actually contain a real catalog temp/pack word.
+    const context = lines.filter((l, idx) => idx !== i && idx !== i - 1 && looksLikeTempPackContext(l));
+    const combinedText = context.length ? `${context.join(' — ')} — ${prevLine}` : prevLine;
+    items.push({ rawText: combinedText, price });
   }
   return items;
+}
+
+function looksLikeTempPackContext(line){
+  const { tempId, packagingId } = detectTempPackFromLine(line);
+  return !!(tempId || packagingId);
 }
 
 // A line that's just a category header ("Fresh Processor:", "Frozen Boxed Muscles:") — never a
