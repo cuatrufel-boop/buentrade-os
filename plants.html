@@ -662,6 +662,20 @@ function onPriceListProductSelect(i, selectEl){
   priceListRows[i].matchedProductId = selectEl.value || null;
 }
 
+// The catalog is only going to keep growing — scrolling a plain <select> to find one product
+// among 50+ stops being practical fast. Hides (doesn't remove) non-matching <option>s in place,
+// so the exact same select/onchange/product-id wiring keeps working — this is just a filter on
+// top of it, never a different widget with its own selection logic to keep in sync.
+function filterProductOptions(i, term){
+  const select = document.getElementById(`prodSelect_${i}`);
+  if (!select) return;
+  const norm = term.trim().toLowerCase();
+  Array.from(select.options).forEach(opt => {
+    if (opt.value === '' || opt.value === '__new__'){ opt.style.display = ''; return; }
+    opt.style.display = (!norm || opt.textContent.toLowerCase().includes(norm)) ? '' : 'none';
+  });
+}
+
 function openPriceListPanel(){
   document.getElementById('priceListCard').style.display = 'block';
   document.getElementById('priceListInput').value = '';
@@ -1088,7 +1102,9 @@ function renderPriceListReview(){
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
-      <td><select style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="onPriceListProductSelect(${i}, this)">
+      <td>
+        <input type="text" placeholder="Buscar producto…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+        <select id="prodSelect_${i}" style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="onPriceListProductSelect(${i}, this)">
         <option value="">— selecciona —</option>
         <option value="__new__">+ Crear producto nuevo…</option>
         ${options}
