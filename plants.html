@@ -910,8 +910,10 @@ async function processPriceListText(){
   docsNoteEl.style.background = 'transparent';
   docsNoteEl.style.color = 'inherit';
   docsNoteEl.style.padding = '0';
-  docsNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Docs:
-    <select id="priceListDocsOverride" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="detectedDocsIncluded=this.value===''?null:this.value==='true'">
+  // Required, not optional — applyPriceList() refuses to save anything while this is still
+  // unset, so the orange border matches every other required-but-unfilled field on this screen.
+  docsNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Docs: *
+    <select id="priceListDocsOverride" style="margin-left:6px;padding:5px 8px;border:1.5px solid ${detectedDocsIncluded === null ? '#e0a030' : 'var(--line)'};border-radius:5px;font-size:12.5px;" onchange="detectedDocsIncluded=this.value===''?null:this.value==='true'; this.style.borderColor=this.value===''?'#e0a030':'var(--line)';">
       <option value="" ${detectedDocsIncluded === null ? 'selected' : ''}>—</option>
       <option value="false" ${detectedDocsIncluded === false ? 'selected' : ''}>No Docs</option>
       <option value="true" ${detectedDocsIncluded === true ? 'selected' : ''}>Docs Included</option>
@@ -1128,6 +1130,13 @@ function renderPriceListReview(){
 }
 
 async function applyPriceList(){
+  // Whether this whole list is Docs or No Docs directly drives the inspection cost in Quotes —
+  // never apply a single price without that decided, rather than silently defaulting to
+  // whatever the plant's default happened to be before.
+  if (detectedDocsIncluded === null){
+    document.getElementById('priceListMsg').textContent = 'Selecciona Docs o No Docs arriba antes de aplicar.';
+    return;
+  }
   const today = new Date().toISOString().slice(0, 10);
   const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null);
   const pending = priceListRows.filter(r => !(r.matchedProductId && r.price != null));
