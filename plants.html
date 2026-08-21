@@ -417,15 +417,18 @@ async function loadEverything(){
     plantProteins[link.plant_id].add(cat);
   });
 
+  // English throughout the OS, same rule as everywhere else in the app — falls back to the
+  // Spanish catalog entry only if a temperature/packaging row has no English name on file.
   const tSel = document.getElementById('temperature_id');
-  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
+  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
-  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`);
   // Fixed list, not free text — category drives the ES→EN translation used everywhere else in
-  // the app (products.html's CATEGORY_EN), so "pork" typed by hand would never match "Cerdo" and
-  // silently create a second, disconnected category instead of reusing the real one.
+  // the app (CATEGORY_EN below). The stored value stays the Spanish key (that's what's actually
+  // in the database and what CATEGORY_EN expects), but the label shown here is English-only, to
+  // match the rest of the OS.
   const catSel = document.getElementById('category');
-  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(c)} (${CATEGORY_EN[c]})</option>`);
+  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(CATEGORY_EN[c])}</option>`);
 
   renderPlants();
 }

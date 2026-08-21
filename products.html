@@ -334,15 +334,18 @@ async function loadLookups(){
   ]);
   temperatures = tempRes.data || [];
   packagings = packRes.data || [];
+  // English throughout the OS — falls back to the Spanish catalog entry only if a
+  // temperature/packaging row has no English name on file.
   const tSel = document.getElementById('temperature_id');
-  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
+  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
-  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`);
   // Fixed list, not free text — category drives the ES→EN translation (CATEGORY_EN below), so
   // anything typed by hand that doesn't match one of these exact Spanish values silently creates
-  // a second, disconnected category instead of reusing the real one.
+  // a second, disconnected category instead of reusing the real one. The stored value stays the
+  // Spanish key (that's what's actually in the database), but the label is English-only.
   const catSel = document.getElementById('category');
-  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(c)} (${CATEGORY_EN[c]})</option>`);
+  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(CATEGORY_EN[c])}</option>`);
 }
 
 async function loadProducts(){
