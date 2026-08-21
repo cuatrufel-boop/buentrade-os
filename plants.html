@@ -203,7 +203,7 @@ auth.onAuthStateChanged(user => {
         <div id="priceListDocsNote" style="display:none;margin-top:14px;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
         <div id="priceListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
           <table style="table-layout:fixed;width:100%;min-width:640px;">
-            <thead><tr><th style="width:38%;">Texto original</th><th style="width:14%;">Precio (USD/lb)</th><th style="width:48%;">Producto en catálogo</th></tr></thead>
+            <thead><tr><th style="width:32%;">Texto original</th><th style="width:12%;">Precio (USD/lb)</th><th style="width:42%;">Producto en catálogo</th><th style="width:14%;">Docs</th></tr></thead>
             <tbody id="priceListReviewRows"></tbody>
           </table>
           <div style="display:flex;gap:10px;margin-top:12px;">
@@ -666,20 +666,22 @@ function normalizeForMatch(s){
   return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-// Finds the FIRST literal "$<number>" anywhere in the line — not anchored to the end. Real price
-// lists (confirmed against an actual Tyson list) routinely trail qualifiers after the price
-// ("$98, QUICK", "$120 AUG/SEPT"), so anchoring to the end missed most of the sheet. Requires the
-// $ sign specifically so a product code that happens to contain digits itself (e.g. "2407 Rib
-// Tips Poly – 244M...") is never mistaken for a price. A line with two prices ("$120 AUG/$125
-// SEPT") takes the first (today's) — the review table lets the trader fix it if that's wrong.
+// Finds the price on the line. Real price lists (confirmed against actual plant lists) come in
+// two shapes: with a literal "$" ("Bone in Loins - $120 AUG/SEPT"), or with none at all, just a
+// bare number right after the dash that separates the item name from its price ("FZ Bns
+// Sirloins- 125 Sept") — confirmed against a real Tyson paste where NOT ONE line had a "$" sign,
+// which the $-only version of this function was silently missing entirely. "$" is tried first
+// since it's the more specific, unambiguous signal; the dash+number fallback only fires when no
+// "$" is present anywhere on the line. A line with no number after the dash at all ("Sknls
+// Bellies Combo- CALL") correctly yields no price — "call for price" isn't an applicable number.
 function parsePriceListLine(line){
-  const m = line.match(/\$\s*(\d+(?:[.,]\d+)?)/);
+  const m = line.match(/\$\s*(\d+(?:[.,]\d+)?)/) || line.match(/[-–—]\s*(\d+(?:[.,]\d+)?)\b/);
   if (!m) return { rawText: line.trim(), price: null };
   const raw = m[1];
-  // Plants write these lists as whole-number shorthand with no decimal point — "$98" means
-  // $0.98/lb, "$220" means $2.20/lb, per the trader's explicit rule. Only scaled when the
-  // matched number truly has no decimal already (a source that ever writes "$0.85" outright
-  // stays 0.85, not divided again).
+  // Plants write these lists as whole-number shorthand with no decimal point — "98" (or "$98")
+  // means $0.98/lb, "220" means $2.20/lb, per the trader's explicit rule. Only scaled when the
+  // matched number truly has no decimal already (a source that ever writes "0.85" outright stays
+  // 0.85, not divided again).
   const price = /[.,]/.test(raw) ? parseFloat(raw.replace(',', '.')) : parseFloat(raw) / 100;
   const rawText = (line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '')) || line.trim();
   return { rawText, price };
@@ -838,7 +840,7 @@ function reNarrowPendingRows(){
 function detectDocsNote(text){
   const norm = text.toLowerCase();
   if (/\bno\s*docs?\b/.test(norm)) return false;
-  if (/\bdocs?\s*(included|on|incluidos?)\b/.test(norm) || /\bwith\s*docs?\b/.test(norm)) return true;
+  if (/\bdocs?\s*(included|on|incluidos?)\b/.test(norm) || /\bw(?:ith)?\s*docs?\b/.test(norm)) return true;
   return null;
 }
 
@@ -910,7 +912,15 @@ async function processPriceListText(){
         }
       }
     }
-    priceListRows.push({ rawText, price, matchedProductId, candidateIds });
+    // Docs status can be a whole-plant default ("*all prices FOB no docs" applies to everything,
+    // e.g. Seaboard is always with docs) OR stated per line item on a plant whose docs status
+    // varies product to product — a specific line saying "with docs" / "W docs" / "docs included"
+    // means THAT product is the exception, not that the whole plant flipped. null here just means
+    // this line said nothing, which is not the same as "no docs" — it simply falls through to
+    // whatever the plant-level default already resolves to (itself "no docs" unless stated
+    // otherwise), so nothing gets written to this specific product on Apply.
+    const docsIncluded = detectDocsNote(line);
+    priceListRows.push({ rawText, price, matchedProductId, candidateIds, docsIncluded });
   }
 
   renderPriceListReview();
@@ -955,6 +965,15 @@ function renderPriceListReview(){
           <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Guardar y reconocer</button>
         </div>
       </div>` : '';
+    // Only shown as a highlighted override when THIS line explicitly said something about docs
+    // ("with docs", "W docs", "docs included", "no docs") — a product this plant's sheet is
+    // silent on shows the neutral "planta" option and gets no per-product value written on Apply,
+    // so it correctly falls back to whatever this plant's own default already resolves to.
+    const docsSelect = `<select style="width:100%;padding:5px 7px;border:1.5px solid ${row.docsIncluded !== null ? '#e0a030' : 'var(--line)'};border-radius:5px;font-size:11.5px;" onchange="priceListRows[${i}].docsIncluded=this.value===''?null:this.value==='true'">
+        <option value="" ${row.docsIncluded === null ? 'selected' : ''}>— planta —</option>
+        <option value="false" ${row.docsIncluded === false ? 'selected' : ''}>No docs</option>
+        <option value="true" ${row.docsIncluded === true ? 'selected' : ''}>Docs incluidos</option>
+      </select>`;
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
@@ -963,6 +982,7 @@ function renderPriceListReview(){
         <option value="__new__">+ Crear producto nuevo…</option>
         ${options}
       </select>${teachPrompt}</td>
+      <td>${docsSelect}</td>
     </tr>`;
   }).join('');
 }
@@ -981,13 +1001,18 @@ async function applyPriceList(){
     // product can be carried by several plants at different prices. This upsert also creates
     // the link the first time this plant carries that product, so a brand-new plant/product
     // pairing needs no separate "link it" step.
-    const { error: priceErr } = await db.from('plant_products').upsert({
+    const linkPayload = {
       plant_id: currentPlantId,
       product_id: row.matchedProductId,
       current_price: row.price,
       price_currency: 'USD',
       price_date: today,
-    }, { onConflict: 'plant_id,product_id' });
+    };
+    // Only written when THIS line explicitly stated a docs status — leaving it out entirely
+    // (rather than writing null) when the row said nothing means a price re-load that's silent
+    // on docs can never wipe out a docs fact this exact product was given on a previous load.
+    if (row.docsIncluded !== null) linkPayload.docs_included = row.docsIncluded;
+    const { error: priceErr } = await db.from('plant_products').upsert(linkPayload, { onConflict: 'plant_id,product_id' });
     if (priceErr){ errors++; continue; }
     // Remember this plant's exact wording (normalized) for next time — upsert so re-confirming
     // an already-known alias just refreshes it instead of erroring on the unique index.

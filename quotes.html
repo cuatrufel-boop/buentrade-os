@@ -429,16 +429,18 @@ async function autoPopulateRqPlants(productName){
   // same fixed/shared product can be carried by several plants at different prices. This is the
   // whole point of the price-list intake in plants.html: a price loaded there shows up here
   // automatically, so the trader isn't retyping a number from memory every time.
-  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').in('product_id', matchingProductIds);
+  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at, docs_included').in('product_id', matchingProductIds);
   rqSelectedPlants = (data || []).map(link => {
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
     const hasPrice = link.current_price != null;
-    // Whether this plant's prices include export docs is a per-plant fact ("*all prices FOB no
-    // docs" on their sheet applies to everything they quote, not just one line item) — captured
-    // once in plants.html's Cargar precios and reused here so the trader isn't re-deciding it
-    // by memory on every single quote. Still a toggle they can flip if a specific deal differs.
-    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true };
+    // Docs status is usually a whole-plant default ("*all prices FOB no docs" applies to
+    // everything they quote — captured once in plants.html's Cargar precios) but some plants
+    // state it per product instead, so a specific product this plant explicitly marked
+    // with/without docs (plant_products.docs_included) wins over the plant-wide default. Still a
+    // toggle the trader can flip if a specific deal differs from both.
+    const docsOn = link.docs_included != null ? link.docs_included === true : plant.docs_included === true;
+    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: docsOn };
   }).filter(Boolean);
   // A loaded price list (plants.html "Cargar precios") never carries a pick-up location — that's
   // a separate concept (freight lanes by origin city). Rather than quote with no freight at all
