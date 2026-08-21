@@ -387,14 +387,23 @@ async function onRqProductInput(){
     const nameEn = match.name_en || match.name;
     const tempEn = temperatures.find(t => t.id === match.temperature_id);
     const packEn = packagings.find(p => p.id === match.packaging_id);
-    const parts = [nameEn, tempEn ? tempEn.name_en : null, packEn ? packEn.name_en : null].filter(Boolean);
-    rqProductSpec = parts.join(', ');
+    // Reads as one phrase (temperature leads, like real spec sheets do — "Frozen Pork Snouts,
+    // Box") instead of comma-joined fragments in field order ("Snout, Frozen, Box") — the
+    // full products.name_en plus its subcategory (e.g. "5%") if this product has one.
+    const fullNameEn = nameEn + (match.subcategory_en ? ' ' + match.subcategory_en : '');
+    rqProductSpec = [
+      tempEn ? tempEn.name_en : null,
+      fullNameEn,
+    ].filter(Boolean).join(' ') + (packEn ? ', ' + packEn.name_en : '');
     specLine.textContent = rqProductSpec;
     rqProductIsCombo = /combo/i.test((packEn && (packEn.name_en || packEn.name)) || '');
     // Same product, Spanish fields — this is what customers actually see (WhatsApp/email),
     // never the English spec built above, which is only for messages to the (US) plants.
-    const parEs = [match.name, tempEn ? tempEn.name : null, packEn ? packEn.name : null].filter(Boolean);
-    rqProductSpecEs = parEs.join(', ');
+    const fullNameEs = match.name + (match.subcategory ? ' ' + match.subcategory : '');
+    rqProductSpecEs = [
+      tempEn ? tempEn.name : null,
+      fullNameEs,
+    ].filter(Boolean).join(' ') + (packEn ? ', ' + packEn.name : '');
     // Fetched as soon as the product is known (not just once a plant is priced) — the Mexican
     // Freight "Customer" picker needs this list right away, well before any Trading Tool opens.
     rqCustomersFetchedFor = name;
@@ -1210,28 +1219,40 @@ function rqPriceRequestControl(p){
   const missing = p.rqPrice == null;
   const stale = !missing && (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
   if (!missing && !stale) return '';
-  if (!p.email) return '';
+  const hasPhone = !!(p.whatsapp || p.phone);
+  if (!p.email && !hasPhone) return '';
   const reqAge = rqPriceAgeDays(p.rqLastRequestedAt);
   if (reqAge != null && reqAge <= RQ_REQUEST_COOLDOWN_DAYS){
     return `<span class="loc-hint" style="color:var(--blue);font-weight:700;">✓ requested ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>`;
   }
-  return `<button type="button" class="rq-price-btn" style="background:#C4432E;box-shadow:0 2px 6px rgba(196,67,46,.35);" onclick="rqRequestPlantPrice('${p.id}')">${missing ? 'Ask price' : 'Ask update'}</button>`;
+  const label = missing ? 'Ask price' : 'Ask update';
+  return `<span style="display:inline-flex;gap:4px;">
+    ${p.email ? `<button type="button" class="rq-price-btn" style="background:#C4432E;box-shadow:0 2px 6px rgba(196,67,46,.35);" onclick="rqRequestPlantPrice('${p.id}','email')">${label}</button>` : ''}
+    ${hasPhone ? `<button type="button" class="rq-price-btn" style="background:#25D366;box-shadow:0 2px 6px rgba(37,211,102,.35);" onclick="rqRequestPlantPrice('${p.id}','whatsapp')">${p.email ? 'WA' : label}</button>` : ''}
+  </span>`;
 }
 
-async function rqRequestPlantPrice(plantId){
+async function rqRequestPlantPrice(plantId, channel){
   const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p || !p.email) return;
+  if (!p) return;
   const contact = rqFirstName(p.contact_name || p.name);
   const missing = p.rqPrice == null;
   const body = missing
     ? `Hi ${contact},\n\nWe don't have a current price on file for ${rqProductSpec || 'this product'} — could you send your current price?`
     : `Hi ${contact},\n\nOur price on file for ${rqProductSpec || 'this product'} is from ${rqFmtDate(p.rqPriceDate)} and needs updating — could you send your current price?`;
   const subject = `${rqProductSpec || ''} — ${missing ? 'price request' : 'updated price request'}`;
-  try {
-    await sendEmailApi('purchasing', p.email, subject, body);
-  } catch(e){
-    if (e.cancelled) return; // declined at preview — don't start the cooldown on a request that never sent
-    window.open(`mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+  if (channel === 'whatsapp'){
+    const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
+    if (!phone) return;
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
+  } else {
+    if (!p.email) return;
+    try {
+      await sendEmailApi('purchasing', p.email, subject, body);
+    } catch(e){
+      if (e.cancelled) return; // declined at preview — don't start the cooldown on a request that never sent
+      window.open(`mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    }
   }
   const today = new Date().toISOString().slice(0, 10);
   p.rqLastRequestedAt = today;
@@ -1288,8 +1309,8 @@ async function rqLogSentOffers(customers, channel){
   // Both language versions are logged because PO (plant, English) and SO/FO (customer/carrier,
   // Spanish) each need their own — one field can't serve both.
   const matchedProduct = rqMatchedProductId ? products.find(p => p.id === rqMatchedProductId) : null;
-  const loggedProductName = matchedProduct ? (matchedProduct.name_en || matchedProduct.name) : document.getElementById('rq_product_name').value.trim();
-  const loggedProductNameEs = matchedProduct ? matchedProduct.name : document.getElementById('rq_product_name').value.trim();
+  const loggedProductName = matchedProduct ? (matchedProduct.name_en || matchedProduct.name) + (matchedProduct.subcategory_en ? ' ' + matchedProduct.subcategory_en : '') : document.getElementById('rq_product_name').value.trim();
+  const loggedProductNameEs = matchedProduct ? matchedProduct.name + (matchedProduct.subcategory ? ' ' + matchedProduct.subcategory : '') : document.getElementById('rq_product_name').value.trim();
   withCalc.forEach(({ plant, calc }) => {
     const agencyId = plant.rqMexicanDestRateId ? rqCustomsAgencyForPlant(plant) : null;
     customers.forEach(c => {

@@ -64,6 +64,17 @@
   .docs-icon-btn svg{width:15px;height:15px;}
   .docs-menu-divider{height:1px;background:var(--line);margin:6px 2px;}
   .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+  .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .email-modal-box{background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(15,31,51,.35);}
+  .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .email-modal-field{margin-bottom:12px;}
+  .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
+  .email-modal-field textarea{min-height:130px;resize:vertical;}
+  .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .email-modal-chip{background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
+  .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
   .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);animation:toastIn .25s ease-out;}
   .toast.error{border-left-color:var(--red);}
   .toast-icon{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -295,6 +306,25 @@ auth.onAuthStateChanged(user => {
 
 <div id="docsMenu" class="docs-menu" style="display:none;"></div>
 <div id="toastStack" class="toast-stack"></div>
+
+<div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box">
+    <h3 id="emailModalTitle">Review before sending</h3>
+    <div class="email-modal-from" id="emailModalFrom"></div>
+    <div class="email-modal-field"><label>To</label><input type="text" id="emailModalTo"></div>
+    <div class="email-modal-field"><label>CC (optional — add more recipients, comma-separated)</label><input type="text" id="emailModalCc" placeholder="name@example.com, name2@example.com"></div>
+    <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject"></div>
+    <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody"></textarea></div>
+    <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
+      <label>Attachments</label>
+      <div class="email-modal-attachments" id="emailModalAttachments"></div>
+    </div>
+    <div class="email-modal-actions">
+      <button onclick="emailModalCancel()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
+    </div>
+  </div>
+</div>
 
 <script>
 let offers = [];
@@ -903,7 +933,6 @@ const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
 const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
-const FO_TERMS_ES = "Esta Confirmación de Flete es emitida por BuenTrade LLC. El transportista debe mantener un seguro de carga adecuado y es responsable del valor de la mercancía transportada, esté o no cubierta por su propio seguro, en caso de pérdida o daño. El transportista debe confirmar la cita de recolección con la planta de origen con al menos 24 horas de anticipación y debe registrarse para cualquier inspección USDA requerida antes de las 6:00 AM en la fecha programada de entrega o en tránsito; un registro tardío puede generar demoras, tiempos de espera y cargos de inspección de los cuales el transportista es responsable. Recolecciones tardías, entregas tardías o incumplimientos pueden generar cargos que se trasladarán al transportista. La cancelación de esta carga confirmada que obligue a BuenTrade LLC a conseguir un transportista sustituto con costo adicional resultará en un cargo al transportista original. El transportista tiene derecho a cargos razonables por tiempo de espera (detention) más allá del tiempo libre acordado en la recolección o entrega, siempre que la tarifa haya sido acordada por escrito con BuenTrade LLC antes del despacho. Ningún cargo accesorio (tiempo de espera, reentrega, almacenaje u otro) será reconocido a menos que BuenTrade LLC lo autorice por escrito con anticipación.";
 const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
 const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 
@@ -1080,7 +1109,14 @@ async function buildPODoc(orderNumber){
   const { data: po } = await db.from('purchase_orders').select('*').eq('order_number', orderNumber).single();
   if (!po) throw new Error('PO not found.');
   const { data: plant } = po.plant_id ? await db.from('plants').select('*').eq('id', po.plant_id).single() : { data: null };
-  const { data: sentOffer } = await db.from('sent_offers').select('won_by').eq('order_number', orderNumber).limit(1).single();
+  const { data: sentOffer } = await db.from('sent_offers').select('won_by,us_freight_rate_id,customs_agency_provider_id').eq('order_number', orderNumber).limit(1).single();
+
+  // FOB (BuenTrade booked the truck, us_freight_rate_id is set) vs Delivered by plant (no
+  // freight leg on file — the plant's own truck brings it in, so there's no pick-up to schedule
+  // and the address that matters is where it's actually going: the customer's customs broker).
+  const isFob = !!(sentOffer && sentOffer.us_freight_rate_id);
+  const { data: agency } = (!isFob && sentOffer && sentOffer.customs_agency_provider_id)
+    ? await db.from('providers').select('*').eq('id', sentOffer.customs_agency_provider_id).single() : { data: null };
 
   const doc = pdfDoc();
   pdfHeader(doc, 'Purchase Order', orderNumber, CONTACT_EMAIL_PO);
@@ -1091,21 +1127,26 @@ async function buildPODoc(orderNumber){
     plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', '),
   ];
   pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
-  pdfInfoBlock(doc, 320, 168, 'SHIP TO / PICK UP LOCATION', vendorLines);
+  pdfInfoBlock(doc, 320, 168, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO',
+    isFob ? vendorLines : [
+      agency ? agency.name : 'Customs broker — TBD',
+      agency && agency.address,
+      agency && [agency.city, agency.country].filter(Boolean).join(', '),
+    ]);
 
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['DATE', todayStr()],
-    ['PICK-UP / DELIVERY DATE', fmtDatesList(po.delivery_dates)],
+    [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', fmtDatesList(po.delivery_dates)],
     ['PAYMENT TERMS', plant && plant.payment_terms],
     ['ORDER #', orderNumber],
   ]);
   // Pickup happens at the vendor's own dock (SHIP TO / PICK UP LOCATION above == VENDOR),
   // so risk transfers there — that's FCA at the plant under Incoterms 2020, not a guessed term.
+  // When the plant delivers instead, risk transfers at the customs broker's dock (DAP).
   const plantLocation = plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', ');
   const yRight = pdfKeyValueRows(doc, 320, 240, [
-    ['INCOTERMS', plantLocation ? `FCA – ${plantLocation}` : null],
+    ['INCOTERMS', isFob ? (plantLocation ? `FCA – ${plantLocation}` : null) : (agency ? `DAP – ${[agency.city, agency.country].filter(Boolean).join(', ')}` : null)],
     ['COUNTRY OF ORIGIN', plant && plant.country],
-    ['CURRENCY', 'USD'],
     ['TRADER', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
   ]);
   const y = Math.max(yLeft, yRight);
@@ -1155,6 +1196,42 @@ const FROM_DISPLAY = {
 };
 const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
 
+// A plain confirm() only ever showed what was already decided — no way to fix a typo, add a CC,
+// or actually see the attachment before it goes out. This is a real modal: To/CC/Subject/Body
+// are all editable, and every attachment is listed so nothing ships as a surprise.
+let emailModalResolve = null;
+function openEmailModal(toList, subject, text, attachments, fromDisplay){
+  document.getElementById('emailModalFrom').textContent = 'From: ' + (fromDisplay || '');
+  document.getElementById('emailModalTo').value = toList;
+  document.getElementById('emailModalCc').value = '';
+  document.getElementById('emailModalSubject').value = subject;
+  document.getElementById('emailModalBody').value = text;
+  const attachWrap = document.getElementById('emailModalAttachWrap');
+  const attachEl = document.getElementById('emailModalAttachments');
+  if (attachments && attachments.length){
+    attachWrap.style.display = 'block';
+    attachEl.innerHTML = attachments.map(a => `<span class="email-modal-chip">📎 ${escapeHtml(a.filename)}</span>`).join('');
+  } else {
+    attachWrap.style.display = 'none';
+  }
+  document.getElementById('emailModalOverlay').style.display = 'flex';
+  return new Promise(resolve => { emailModalResolve = resolve; });
+}
+function emailModalCancel(){
+  document.getElementById('emailModalOverlay').style.display = 'none';
+  if (emailModalResolve) emailModalResolve(null);
+  emailModalResolve = null;
+}
+function emailModalConfirm(){
+  const to = document.getElementById('emailModalTo').value;
+  const cc = document.getElementById('emailModalCc').value;
+  const subject = document.getElementById('emailModalSubject').value;
+  const text = document.getElementById('emailModalBody').value;
+  document.getElementById('emailModalOverlay').style.display = 'none';
+  if (emailModalResolve) emailModalResolve({ to, cc, subject, text });
+  emailModalResolve = null;
+}
+
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
 // sender automatically — no trader having to pick "From" in Gmail. Shows exactly what will be
 // sent first and requires confirmation — nothing goes out silently. Falls back to opening a
@@ -1164,16 +1241,18 @@ const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenT
 async function sendEmailApi(fromAlias, to, subject, text, attachments){
   const toList = Array.isArray(to) ? to.join(', ') : to;
   const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
-  const ok = confirm(`De: ${fromDisplay}\nPara: ${toList}\nAsunto: ${subject}\n\n${text}${EMAIL_SIGNATURE}\n\n¿Enviar este correo?`);
-  if (!ok){
+  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay);
+  if (!edited){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
     throw cancelErr;
   }
+  const finalTo = edited.to.split(',').map(s => s.trim()).filter(Boolean);
+  const finalCc = edited.cc.split(',').map(s => s.trim()).filter(Boolean);
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, subject, text, attachments }),
+    body: JSON.stringify({ from: fromAlias, to: finalTo, cc: finalCc.length ? finalCc : undefined, subject: edited.subject, text: edited.text, attachments }),
   });
   if (!res.ok){
     const err = await res.json().catch(() => ({}));
@@ -1309,15 +1388,14 @@ async function waCardFO(orderNumber, btn){
   const b = built[0];
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
   const fo = b.fo, carrier = b.carrier;
-  const canvas = buildOrderCardCanvas('Confirmación de Flete', orderNumber, [
-    ['Transportista', carrier ? carrier.name : 'Por confirmar'],
-    ['Producto', fo.product_spec_es || fo.product_name_es || '—'],
-    ['Recolección', fo.origin || '—'],
-    ['Entrega', fo.destination || '—'],
-    ['Tarifa', '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
+  const canvas = buildOrderCardCanvas('Freight Confirmation', orderNumber, [
+    ['Carrier', carrier ? carrier.name : 'TBD'],
+    ['Pick-up', fo.origin || '—'],
+    ['Delivery', fo.destination || '—'],
+    ['Agreed Rate', '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
   ]);
   const phone = carrier && carrier.phone;
-  shareCardAndOpenWhatsApp(canvas, phone, `Orden ${orderNumber} — te mando el resumen del flete.`, `FO-${orderNumber}.png`, btn);
+  shareCardAndOpenWhatsApp(canvas, phone, `Order ${orderNumber} — sending you the freight summary.`, `FO-${orderNumber}.png`, btn);
 }
 
 const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
@@ -1369,6 +1447,23 @@ async function buildSODoc(orderNumber){
   const { data: sentOffer } = await db.from('sent_offers').select('won_by,plant_id').eq('order_number', orderNumber).limit(1).single();
   const { data: originPlant } = sentOffer && sentOffer.plant_id
     ? await db.from('plants').select('country').eq('id', sentOffer.plant_id).single() : { data: null };
+  // "Border" is a delivery TYPE (who pays for the last leg), never a mailing address — when a
+  // customer is set up that way, the real place the load goes is their customs broker's address.
+  const { data: agency } = (customer && customer.usual_delivery_type === 'Border' && customer.customs_agency_provider_id)
+    ? await db.from('providers').select('*').eq('id', customer.customs_agency_provider_id).single() : { data: null };
+  // Only shown when the customer is actually billed in MXN and we have a rate on file — never
+  // fabricated. Latest row in exchange_rates wins; if that table is empty, this block is skipped.
+  let mxnLine = null;
+  if (customer && customer.preferred_currency === 'MXN'){
+    const { data: rates } = await db.from('exchange_rates').select('rate').order('created_at', { ascending: false }).limit(1);
+    const rate = rates && rates[0] ? rates[0].rate : null;
+    if (rate){
+      const lbToKg = 0.453592;
+      const pricePerKgMxn = (so.sale_price || 0) * rate / lbToKg;
+      const totalMxn = (so.total_sale || 0) * rate;
+      mxnLine = `MXN $${pricePerKgMxn.toFixed(2)} / kg — Total MXN $${totalMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (TC ${rate})`;
+    }
+  }
 
   const doc = pdfDoc();
   pdfHeader(doc, 'Confirmación de Venta', orderNumber, CONTACT_EMAIL_SO);
@@ -1379,7 +1474,13 @@ async function buildSODoc(orderNumber){
     customer && [customer.city, customer.state, customer.country].filter(Boolean).join(', '),
   ];
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', custLines);
-  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', [customer && customer.usual_destination, customer && customer.usual_delivery_type]);
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', agency ? [
+    agency.name, agency.address, [agency.city, agency.country].filter(Boolean).join(', '),
+  ] : [
+    customer && customer.address,
+    customer && [customer.city, customer.state, customer.country].filter(Boolean).join(', '),
+    customer && customer.usual_delivery_type && customer.usual_delivery_type !== 'Border' ? customer.usual_delivery_type : null,
+  ]);
 
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()],
@@ -1390,17 +1491,21 @@ async function buildSODoc(orderNumber){
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', customer && customer.usual_incoterm_text],
     ['PAÍS DE ORIGEN', originPlant && originPlant.country],
-    ['MONEDA', 'USD'],
+    ['MONEDA', customer && customer.preferred_currency ? customer.preferred_currency : 'USD'],
     ['EJECUTIVO', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
   ]);
   const y = Math.max(yLeft, yRight);
 
-  // Customer-facing document: Spanish product name only (products.name), never the English spec.
+  // Both full names shown — Spanish leads (this is the customer-facing document) with the
+  // English catalog name underneath in parentheses, so nothing is left to a single casilla.
+  const nameEs = so.product_spec_es || so.product_name_es || so.product_name || '';
+  const nameEn = so.product_spec || so.product_name || '';
+  const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
   doc.autoTable({
     startY: y + 12,
     head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
     body: [[
-      so.product_spec_es || so.product_name_es || so.product_name || '',
+      description,
       (so.weight || 0).toLocaleString('en-US'),
       '$' + (so.sale_price || 0).toFixed(4),
       '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
@@ -1411,8 +1516,16 @@ async function buildSODoc(orderNumber){
     margin: { left: 40, right: 40 },
   });
 
-  const ty = doc.lastAutoTable.finalY + 30;
-  pdfTerms(doc, ty, 'TÉRMINOS', SO_TERMS, DRAFT_DISCLAIMER_ES);
+  let ty = doc.lastAutoTable.finalY + 20;
+  if (mxnLine){
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('EQUIVALENTE: ' + mxnLine, 40, ty);
+    ty += 20;
+  }
+
+  pdfTerms(doc, ty + 10, 'TÉRMINOS', SO_TERMS, DRAFT_DISCLAIMER_ES);
   pdfFooter(doc, 'es');
   return { doc, so, customer };
 }
@@ -1449,49 +1562,75 @@ async function shareSO(orderNumber){
   }
 }
 
+// A US-leg's "Border" destination and a Mexican-leg's "Border" origin both used to print as the
+// literal word "Border" — not a real place a driver can navigate to. This resolves it to the
+// carrier's own crossing facility (their city/state/country on file) when known.
+function describeBorderPoint(carrier){
+  if (carrier && (carrier.city || carrier.country)){
+    return `Border crossing — ${[carrier.city, carrier.state, carrier.country].filter(Boolean).join(', ')}${carrier.address ? ' (' + carrier.address + ')' : ''}`;
+  }
+  return 'Border crossing — facility TBD';
+}
+
+// Picks out the temperature word already leading product_spec ("Frozen Pork Snouts, Box" ->
+// "Frozen") rather than a second lookup — quotes.html always puts it first now.
+function temperatureFromSpec(spec){
+  if (!spec) return null;
+  const m = spec.match(/^(Frozen|Fresh)\b/i);
+  return m ? m[1] : null;
+}
+
 async function buildFODocs(orderNumber){
   const { data: fos } = await db.from('freight_orders').select('*').eq('order_number', orderNumber);
   if (!fos || !fos.length) throw new Error('No freight leg on this order.');
-  const { data: sentOffer } = await db.from('sent_offers').select('weight,delivery_dates').eq('order_number', orderNumber).limit(1).single();
+  const { data: sentOffer } = await db.from('sent_offers').select('weight,delivery_dates,product_name,product_spec,customs_agency_provider_id').eq('order_number', orderNumber).limit(1).single();
+  const { data: agency } = sentOffer && sentOffer.customs_agency_provider_id
+    ? await db.from('providers').select('name').eq('id', sentOffer.customs_agency_provider_id).single() : { data: null };
 
   const built = [];
   for (const fo of fos){
     const { data: carrier } = fo.carrier_provider_id ? await db.from('providers').select('*').eq('id', fo.carrier_provider_id).single() : { data: null };
+    const pickupAddress = fo.origin === 'Border' ? describeBorderPoint(carrier) : fo.origin;
+    const deliveryAddress = fo.destination === 'Border' ? describeBorderPoint(carrier) : fo.destination;
 
     const doc = pdfDoc();
-    pdfHeader(doc, 'Confirmación de Flete', orderNumber, CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
 
-    pdfInfoBlock(doc, 40, 168, 'TRANSPORTISTA', [
-      carrier ? carrier.name : 'Por confirmar — aún no reservado',
+    pdfInfoBlock(doc, 40, 168, 'CARRIER', [
+      carrier ? carrier.name : 'TBD — not yet booked',
       carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
       carrier && carrier.phone,
       carrier && (carrier.mc_number || carrier.dot_number)
         ? `MC# ${carrier.mc_number || '—'}  ·  DOT# ${carrier.dot_number || '—'}` : null,
     ]);
-    pdfInfoBlock(doc, 320, 168, 'BRÓKER', [COMPANY.legalName, COMPANY.address, COMPANY.phone]);
+    pdfInfoBlock(doc, 320, 168, 'CLIENT (BROKER)', ['BuenTrade LLC', COMPANY.address, COMPANY.phone]);
 
     const yLeft = pdfKeyValueRows(doc, 40, 240, [
-      ['FECHA', todayStr()],
-      ['DIRECCIÓN DE RECOLECCIÓN', fo.origin],
-      ['DIRECCIÓN DE ENTREGA', fo.destination],
-      ['FECHA RECOLECCIÓN / ENTREGA', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
+      ['DATE', todayStr()],
+      ['PICK-UP ADDRESS', pickupAddress],
+      ['DELIVERY ADDRESS', deliveryAddress],
+      ['PICK-UP / DELIVERY DATE', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
     ]);
     const yRight = pdfKeyValueRows(doc, 320, 240, [
-      ['PESO ESTIMADO', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
-      ['ORDEN DEL CLIENTE #', orderNumber],
-      ['MONEDA', 'USD'],
-      ['BOL / CARGA #', '____________________'],
+      ['TEMPERATURE SETTING', sentOffer ? (temperatureFromSpec(sentOffer.product_spec) || 'Confirm with plant') : null],
+      ['WEIGHT', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
+      ['CLIENT ORDER #', orderNumber],
+      ['RELEASE #', '____________________'],
     ]);
-    const y = Math.max(yLeft, yRight);
+    const y2 = pdfKeyValueRows(doc, 40, Math.max(yLeft, yRight) + 30, [
+      ['CUSTOMS BROKER', agency ? agency.name : 'TBD'],
+    ]);
+    const y = Math.max(yLeft, yRight, y2);
 
+    // Single negotiated rate only — this is what releases the truck. Any overage/accessorial
+    // cost is a separate matter tracked later in Real Costs, never itemized on this document.
     doc.autoTable({
       startY: y + 12,
-      head: [['Producto', 'Servicio', 'Tarifa Cotizada', 'Tarifa Real']],
+      head: [['Product', 'Service', 'Agreed Rate']],
       body: [[
-        fo.product_spec_es || fo.product_name_es || '—',
-        'Flete terrestre',
+        sentOffer ? sentOffer.product_name : '—',
+        'Inland Freight',
         '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-        fo.actual_rate != null ? '$' + fo.actual_rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'Pendiente — se confirma tras la entrega',
       ]],
       theme: 'grid',
       headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1500,12 +1639,12 @@ async function buildFODocs(orderNumber){
     });
 
     const ty = doc.lastAutoTable.finalY + 30;
-    const termsEndY = pdfTerms(doc, ty, 'TÉRMINOS', FO_TERMS_ES, DRAFT_DISCLAIMER_ES);
+    const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
     // Only the FO carries a signature block: a rate confirmation is standard trucking practice
     // for the carrier to sign before dispatch. PO/SO are valid without one (UCC, acceptance by
     // performance) and the MBG reference examples didn't include one either.
-    pdfSignatureBlock(doc, termsEndY + 20, 'Autorizado por — BuenTrade LLC', 'Aceptado por — Transportista / Despacho');
-    pdfFooter(doc, 'es');
+    pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
+    pdfFooter(doc, 'en');
     built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
@@ -1525,19 +1664,18 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `${orderNumber} — Confirmación de Flete`;
-    const body = `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}.\n\n`
-      + `Producto: ${b.fo.product_spec_es || b.fo.product_name_es || '—'}\n`
-      + `Recolección: ${b.fo.origin || '—'}\n`
-      + `Entrega: ${b.fo.destination || '—'}\n`
-      + `Tarifa: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    const subject = `${orderNumber} — Freight Confirmation`;
+    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
+      + `Pick-up: ${b.fo.origin || '—'}\n`
+      + `Delivery: ${b.fo.destination || '—'}\n`
+      + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
       showToast('FO sent', emails.join(', '));
     } catch(e){
       if (e.cancelled) continue;
       showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
-      mailtoFallback(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Flete de la orden ${orderNumber}:\n${url}`);
+      mailtoFallback(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`);
     }
   }
 }

@@ -602,19 +602,20 @@ function renderRateTable(){
   const isUs = currentRateTab === 'us_freight';
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>${isUs ? 'Origin' : 'Destination'}</th><th>Rate</th><th>Currency</th>${isUs ? '<th>Plant</th>' : ''}<th></th></tr></thead>
+      <thead><tr><th>${isUs ? 'Origin' : 'Destination'}</th><th>Rate (USD)</th>${isUs ? '<th>Plant</th>' : ''}<th></th></tr></thead>
       <tbody id="rateRowsBody"></tbody>
     </table>
     <button class="btn secondary small" style="margin-top:10px;" onclick="addRateRow()">+ Add ${isUs ? 'origin' : 'destination'}</button>`;
   const tbody = document.getElementById('rateRowsBody');
   tbody.innerHTML = '';
   rows.forEach(r => tbody.appendChild(buildLaneRow(r, isUs)));
-  if (!rows.length) tbody.innerHTML = `<tr><td colspan="${isUs?4:3}" class="empty">No rates yet.</td></tr>`;
+  if (!rows.length) tbody.innerHTML = `<tr><td colspan="${isUs?3:2}" class="empty">No rates yet.</td></tr>`;
 }
 
 // Plant is kept (US Freight only) — quotes.html looks up a plant's freight rate by this field
-// when building a quote, so it drives real auto-fill logic, not just a label. Notes was dropped
-// entirely: nothing in the system ever reads it back, it was purely decorative.
+// when building a quote, so it drives real auto-fill logic, not just a label. Currency dropped:
+// every rate loaded so far (both real EBI sheets) is USD, so the editable field was just an
+// extra click that never changed anything — still stored as 'USD' on save, just not shown.
 function buildLaneRow(r, isUs){
   const tr = document.createElement('tr');
   tr.dataset.id = r.id;
@@ -624,7 +625,6 @@ function buildLaneRow(r, isUs){
   tr.innerHTML = `
     <td><input class="rate-input" value="${escapeHtml(isUs ? r.origin : r.destination)}" onblur="saveRateField('${r.id}','${isUs ? 'origin' : 'destination'}',this.value,this)"></td>
     <td style="width:100px;"><input class="rate-input" type="number" step="0.01" value="${r.rate}" onblur="saveRateField('${r.id}','rate',parseFloat(this.value)||0,this)"></td>
-    <td style="width:80px;"><input class="rate-input" value="${escapeHtml(r.currency || 'USD')}" onblur="saveRateField('${r.id}','currency',this.value,this)"></td>
     ${isUs ? `<td style="width:170px;"><select class="rate-input" onchange="saveRateField('${r.id}','plant_id',this.value||null,this)">${plantOptions}</select></td>` : ''}
     <td><button class="btn danger" onclick="deleteRate('${r.id}')">×</button></td>`;
   return tr;
