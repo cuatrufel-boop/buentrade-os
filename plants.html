@@ -618,6 +618,9 @@ function fmtPriceCell(p){
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
 // (remembering the plant's own wording as an alias for next time), review, apply in one shot. =====
 let priceListRows = []; // { rawText, price, matchedProductId }
+// Set at the start of each processPriceListText() run — read by matchCatalogProduct() below so
+// both the single-line loop and the block-format fallback share the exact same alias lookup.
+let currentAliasMap = new Map();
 // Set while the "+ Crear producto nuevo…" product form is open on behalf of one price-list row,
 // so saveProduct() knows which row to link the new product back into. Null the rest of the time.
 let priceListCreateForRowIndex = null;
@@ -878,7 +881,7 @@ async function processPriceListText(){
     fetchAllCatalogProducts(),
     fetchPlantTermAliases(),
   ]);
-  const aliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
+  currentAliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
   pendingTermAliases = []; // fresh paste, fresh batch of anything taught during this review
 
   let currentSection = null;
@@ -895,44 +898,122 @@ async function processPriceListText(){
     // rows that actually need a decision, not 25+ lines of unrelated email text to scroll past.
     if (price == null) continue;
     const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
-    const key = normalizeForMatch(rawText);
-    let matchedProductId = aliasMap.get(key) || null;
-    let candidateIds = null;
-    if (!matchedProductId){
-      // First time this plant's exact wording happens to already match a fixed product's own
-      // name — covers it without needing an alias confirmed yet. But the catalog routinely has
-      // several rows sharing the same name (Fresh/Combo, Frozen/Box, Fresh/VAC, ...), and every
-      // plant writes its own shorthand for temp/pack — so name alone, even when it only matches
-      // ONE catalog row, is never enough on its own: the line still has to be checked for a
-      // conflicting signal (e.g. the line says Frozen but the only same-named product on file is
-      // Fresh — almost certainly a variant that doesn't exist yet, not that product). Only
-      // auto-matches when temp/pack narrows the same-name candidates to exactly one; every other
-      // case — genuinely ambiguous, or a contradiction — is left blank for the trader, never
-      // guessed. This is deliberately strict because every plant's own language differs, and a
-      // silent wrong match is worse than one more row to confirm by hand.
-      const nameMatches = allCatalogProducts.filter(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
-      if (nameMatches.length){
-        // rawText (not the bare line) so a section header carried into it — "Frozen Boxed
-        // Muscles — Bone in Loins" — still counts as a frozen signal for items that don't repeat
-        // the word themselves.
-        const narrowed = narrowByTempPack(rawText, nameMatches);
-        if (narrowed.length === 1){
-          matchedProductId = narrowed[0].id;
-        } else {
-          // Still unresolved — remembered so the inline "teach me this abbreviation" prompt in
-          // the review table can re-check this exact row the moment the trader confirms what the
-          // plant's wording meant, without needing to re-paste the whole list.
-          candidateIds = nameMatches.map(p => p.id);
-        }
-      }
-    }
-    priceListRows.push({ rawText, price, matchedProductId, candidateIds });
+    // rawText used for both languages here since single-line format never tells us which part of
+    // the line is English vs Spanish — matchCatalogProduct falls back to checking it against
+    // both catalog fields in that case.
+    priceListRows.push({ rawText, price, ...matchCatalogProduct(rawText) });
+  }
+
+  // Some plants' price lists (Seaboard confirmed) arrive as an HTML table that gets flattened
+  // into one line per CELL when pasted as plain text — name EN, name ES, lead time EN, lead time
+  // ES, then a price per price-column — instead of "name - price" sharing one line. The scan
+  // above finds zero prices for that shape since name and price never land on the same line, so
+  // this is tried as a fallback only when nothing else matched — it can never compete with or
+  // misfire on the common single-line format every other plant so far has used.
+  if (!priceListRows.length){
+    priceListRows = detectBlockFormatItems(lines).map(item => {
+      const rawText = item.nameEs ? `${item.nameEn} — ${item.nameEs}` : item.nameEn;
+      return { rawText, price: item.price, ...matchCatalogProduct(rawText, item.nameEn, item.nameEs) };
+    });
   }
 
   renderPriceListReview();
   document.getElementById('priceListMsg').textContent = priceListRows.length
     ? ''
     : 'No se encontró ningún precio en el texto pegado.';
+}
+
+// First time this plant's exact wording happens to already match a fixed product's own name —
+// covers it without needing an alias confirmed yet. But the catalog routinely has several rows
+// sharing the same name (Fresh/Combo, Frozen/Box, Fresh/VAC, ...), and every plant writes its own
+// shorthand for temp/pack — so name alone, even when it only matches ONE catalog row, is never
+// enough on its own: the line still has to be checked for a conflicting signal (e.g. the line
+// says Frozen but the only same-named product on file is Fresh — almost certainly a variant that
+// doesn't exist yet, not that product). Only auto-matches when temp/pack narrows the same-name
+// candidates to exactly one; every other case — genuinely ambiguous, or a contradiction — is left
+// blank for the trader, never guessed. This is deliberately strict because every plant's own
+// language differs, and a silent wrong match is worse than one more row to confirm by hand.
+// When nameEn/nameEs are known separately (block-format lists), each is checked against its own
+// catalog field only — more precise than the single-line case, which has to check one ambiguous
+// text against both fields since it never knows which language it's reading.
+function matchCatalogProduct(rawText, nameEn, nameEs){
+  const key = normalizeForMatch(rawText);
+  const matchedProductId = currentAliasMap.get(key) || null;
+  if (matchedProductId) return { matchedProductId, candidateIds: null };
+  const nameMatches = (nameEn || nameEs)
+    ? allCatalogProducts.filter(p =>
+        (nameEn && normalizeForMatch(p.name_en) === normalizeForMatch(nameEn)) ||
+        (nameEs && normalizeForMatch(p.name) === normalizeForMatch(nameEs)))
+    : allCatalogProducts.filter(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
+  if (!nameMatches.length) return { matchedProductId: null, candidateIds: null };
+  // rawText (not a bare line) so a section header carried into it — "Frozen Boxed Muscles — Bone
+  // in Loins" — still counts as a frozen signal for items that don't repeat the word themselves.
+  const narrowed = narrowByTempPack(rawText, nameMatches);
+  if (narrowed.length === 1) return { matchedProductId: narrowed[0].id, candidateIds: null };
+  // Still unresolved — remembered so the inline "teach me this abbreviation" prompt in the review
+  // table can re-check this exact row the moment the trader confirms what the plant's wording
+  // meant, without needing to re-paste the whole list.
+  return { matchedProductId: null, candidateIds: nameMatches.map(p => p.id) };
+}
+
+// A price-only line: a bare dollar amount ("$1.95", "$.54"), a dash placeholder meaning "not
+// offered on this column" ("------"), or a "call for price" note ("Check with Nora") — never a
+// product name or lead-time line, which is how block-format detection tells them apart.
+function isPriceishLine(line){
+  return /^\$?\.?\d+(?:\.\d+)?$/.test(line) || /^-{2,}$/.test(line) || /check\s*with/i.test(line);
+}
+
+function parsePriceValue(str){
+  const m = str.match(/\$?\.?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const raw = m[0].replace('$', '');
+  // Same whole-number shorthand rule as the single-line parser: a bare "98" means $0.98, but a
+  // number that already has a decimal point ("$.54", "$1.95") is taken exactly as written.
+  return /\./.test(raw) ? parseFloat(raw) : parseFloat(raw) / 100;
+}
+
+// Confirmed against a real Seaboard offering: each product is a fixed 6-line group — Name (EN),
+// Name (ES), lead time (EN), lead time (ES), then one price line per price column (here: FOB,
+// then Delivered-to-border) — preceded by an unpredictable amount of header/contact/disclaimer
+// text that never contains a price. Reading backward from each detected price-line run instead of
+// forward from the start of the paste is what makes this robust to that leading junk: whatever
+// came before the two name lines is simply ignored, no matter how much of it there is.
+function detectBlockFormatItems(lines){
+  const items = [];
+  let descriptive = [];
+  for (let idx = 0; idx < lines.length; idx++){
+    const line = lines[idx];
+    if (!isPriceishLine(line)){
+      descriptive.push(line);
+      continue;
+    }
+    // A price line with nothing described yet is a stray column header ("FOB") or artifact, not
+    // an item — never fabricate a row from it.
+    if (descriptive.length < 2){ descriptive = []; continue; }
+    const prices = [line];
+    while (idx + 1 < lines.length && isPriceishLine(lines[idx + 1])){
+      idx++;
+      prices.push(lines[idx]);
+    }
+    // Per the trader's explicit choice for Seaboard-style lists: use the LAST price column
+    // (Delivered-to-border) as the base price, since it already includes the trucking BuenTrade
+    // would otherwise add itself in Quotes — using the first (FOB) column here would silently
+    // omit that freight instead of the reverse mistake of double-charging it.
+    const price = parsePriceValue(prices[prices.length - 1]);
+    // Confirmed shape: [Name EN, (Name ES), Lead time EN, Lead time ES] immediately before the
+    // price run. Drop the trailing lead-time pair first, THEN take the last 1-2 of whatever
+    // remains as the name — reading from the end on both steps is what makes this immune to (a)
+    // leading junk of unpredictable length ("Reynosa Plant Freezer" / "Contact: ..." / repeated
+    // "FOB" column headers) and (b) a real item that's missing its Spanish name line entirely
+    // (confirmed: "Frozen Neck Bones" / "Frozen Hard Bones" have no Spanish line at all).
+    const withoutLead = descriptive.slice(0, Math.max(0, descriptive.length - 2));
+    const m = withoutLead.length;
+    const nameEn = m >= 2 ? withoutLead[m - 2] : withoutLead[m - 1];
+    const nameEs = m >= 2 ? withoutLead[m - 1] : null;
+    if (price != null && nameEn) items.push({ nameEn, nameEs, price });
+    descriptive = [];
+  }
+  return items;
 }
 
 function renderPriceListReview(){
