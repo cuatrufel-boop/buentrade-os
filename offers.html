@@ -52,7 +52,7 @@
   .doc-split > .btn:last-child{border-radius:0 8px 8px 0;padding:5px 7px !important;font-size:11px !important;}
   .docs-btn{background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:6px 12px;font-weight:600;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
   .docs-btn svg{width:14px;height:14px;}
-  .docs-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(15,31,51,.18);padding:8px;z-index:500;min-width:280px;}
+  .docs-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(15,31,51,.18);padding:8px;z-index:500;min-width:320px;}
   .docs-menu-row{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;}
   .docs-menu-row:hover{background:var(--bg);}
   .docs-menu-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
@@ -598,9 +598,9 @@ const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const EMAIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>';
 
 const DOC_TYPES = [
-  { key: 'PO', color: '#1E6ADB', desc: 'To plant', exportFn: 'exportPO', shareFn: 'sharePO' },
-  { key: 'SO', color: '#0F8A5F', desc: 'To customer', exportFn: 'exportSO', shareFn: 'shareSO' },
-  { key: 'FO', color: '#C4432E', desc: 'To carrier', exportFn: 'exportFO', shareFn: 'shareFO' },
+  { key: 'PO', color: '#1E6ADB', desc: 'To plant', exportFn: 'exportPO', shareFn: 'sharePO', waFn: 'waCardPO' },
+  { key: 'SO', color: '#0F8A5F', desc: 'To customer', exportFn: 'exportSO', shareFn: 'shareSO', waFn: 'waCardSO' },
+  { key: 'FO', color: '#C4432E', desc: 'To carrier', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO' },
 ];
 
 function toggleDocsMenu(evt, orderNumber, hasCustoms){
@@ -620,6 +620,7 @@ function toggleDocsMenu(evt, orderNumber, hasCustoms){
       <span class="docs-menu-actions">
         <button class="docs-icon-btn" title="Download PDF" onclick="${d.exportFn}('${orderNumber}')">${DOWNLOAD_ICON}</button>
         <button class="docs-icon-btn" title="Email" onclick="${d.shareFn}('${orderNumber}')">${EMAIL_ICON}</button>
+        <button class="docs-icon-btn" title="Copy WhatsApp card" onclick="${d.waFn}('${orderNumber}', this)" style="color:#25D366;">${WA_ICON}</button>
       </span>
     </div>`).join('');
 
@@ -649,7 +650,7 @@ function toggleDocsMenu(evt, orderNumber, hasCustoms){
     menu.style.top = (rect.bottom + 6) + 'px';
   }
   let left = rect.left;
-  if (left + 300 > window.innerWidth) left = window.innerWidth - 300 - 12;
+  if (left + 320 > window.innerWidth) left = window.innerWidth - 320 - 12;
   menu.style.left = left + 'px';
 }
 
@@ -1184,6 +1185,134 @@ async function sendEmailApi(fromAlias, to, subject, text, attachments){
 function mailtoFallback(emails, subject, body){
   window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
 }
+
+// ============ WHATSAPP CARD (PO/SO/FO as an image, never a PDF link) ============
+// wa.me can only pre-fill text, never attach a file — and a PDF can't be put on the clipboard the
+// way an image can (Chrome's Clipboard API only reliably accepts image/png). So instead of trying
+// to rasterize the actual legal PDF, this draws a separate, short summary card straight to canvas
+// — same underlying order data as the email body, just as a clean image instead of a dense
+// document. One click copies it to the clipboard (Cmd/Ctrl+V into WhatsApp) and opens the right
+// contact's chat with a short pre-filled line.
+function buildOrderCardCanvas(title, orderNumber, rows){
+  const W = 640, padX = 32;
+  const rowH = 34;
+  const H = 190 + rows.length * rowH;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#F4F7FB';
+  ctx.fillRect(0, 0, W, H);
+
+  const grad = ctx.createLinearGradient(0, 0, W, 0);
+  grad.addColorStop(0, '#0A2547');
+  grad.addColorStop(1, '#0E3D8F');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, 96);
+
+  ctx.font = '700 26px "Space Grotesk", Arial, sans-serif';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText('Buen', padX, 42);
+  const buenW = ctx.measureText('Buen').width;
+  ctx.fillStyle = '#5AAAFF';
+  ctx.fillText('Trade', padX + buenW, 42);
+
+  ctx.font = '600 13px Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.75)';
+  ctx.fillText(title.toUpperCase(), padX, 66);
+
+  ctx.font = '700 13px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#5AAAFF';
+  ctx.fillText(orderNumber, padX, 86);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(padX - 12, 116, W - (padX - 12) * 2, H - 116 - 24);
+  ctx.strokeStyle = '#E2E9F2';
+  ctx.strokeRect(padX - 12, 116, W - (padX - 12) * 2, H - 116 - 24);
+
+  let y = 116 + 34;
+  rows.forEach(([label, value]) => {
+    ctx.font = '600 13px Arial, sans-serif';
+    ctx.fillStyle = '#64748B';
+    ctx.fillText(label, padX, y);
+    ctx.font = '700 15px Arial, sans-serif';
+    ctx.fillStyle = '#0F1F33';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(value), W - padX, y);
+    ctx.textAlign = 'left';
+    y += rowH;
+  });
+
+  return canvas;
+}
+
+async function copyCardAndOpenWhatsApp(canvas, phone, message, btn){
+  const originalHtml = btn ? btn.innerHTML : null;
+  try {
+    if (btn) btn.innerHTML = '…';
+    const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+    if (btn) btn.innerHTML = '✓';
+    showToast('Tarjeta copiada', 'Pégala con Cmd/Ctrl+V dentro de WhatsApp.');
+  } catch(e){
+    showToast('No se pudo copiar la tarjeta', e.message, true);
+  } finally {
+    if (btn) setTimeout(() => { btn.innerHTML = originalHtml; }, 1500);
+  }
+  if (!phone){ showToast('Sin WhatsApp en archivo', 'Copia la tarjeta y mándala manualmente.', true); return; }
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+}
+
+async function waCardPO(orderNumber, btn){
+  let built;
+  try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
+  const po = built.po, plant = built.plant;
+  const canvas = buildOrderCardCanvas('Purchase Order', orderNumber, [
+    ['Plant', plant ? plant.name : po.plant_name],
+    ['Product', po.product_spec || po.product_name || ''],
+    ['Quantity', (po.weight || 0).toLocaleString('en-US') + ' lbs'],
+    ['Unit Cost', '$' + (po.purchase_price || 0).toFixed(4)],
+    ['Total', '$' + (po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
+    ['Pick-up / Delivery', fmtDatesList(po.delivery_dates)],
+  ]);
+  const phone = plant && (plant.whatsapp || plant.phone);
+  await copyCardAndOpenWhatsApp(canvas, phone, `Purchase Order ${orderNumber} — sending you the summary now.`, btn);
+}
+
+async function waCardSO(orderNumber, btn){
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
+  const so = built.so, customer = built.customer;
+  const canvas = buildOrderCardCanvas('Confirmación de Venta', orderNumber, [
+    ['Cliente', customer ? customer.trade_name : so.customer_name],
+    ['Producto', so.product_spec_es || so.product_name_es || so.product_name || ''],
+    ['Cantidad', (so.weight || 0).toLocaleString('en-US') + ' lbs'],
+    ['Precio', '$' + (so.sale_price || 0).toFixed(4) + ' USD/lb'],
+    ['Total', '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
+    ['Entrega estimada', fmtDatesList(so.delivery_dates)],
+  ]);
+  const phone = customer && (customer.whatsapp || customer.phone);
+  await copyCardAndOpenWhatsApp(canvas, phone, `Orden ${orderNumber} — te mando el resumen.`, btn);
+}
+
+async function waCardFO(orderNumber, btn){
+  let built;
+  try { built = await buildFODocs(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
+  const b = built[0];
+  if (!b){ showToast('No freight leg on this order.', '', true); return; }
+  const fo = b.fo, carrier = b.carrier;
+  const canvas = buildOrderCardCanvas('Confirmación de Flete', orderNumber, [
+    ['Transportista', carrier ? carrier.name : 'Por confirmar'],
+    ['Producto', fo.product_spec_es || fo.product_name_es || '—'],
+    ['Recolección', fo.origin || '—'],
+    ['Entrega', fo.destination || '—'],
+    ['Tarifa', '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
+  ]);
+  const phone = carrier && carrier.phone;
+  await copyCardAndOpenWhatsApp(canvas, phone, `Orden ${orderNumber} — te mando el resumen del flete.`, btn);
+}
+
+const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
 
 const TOAST_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const TOAST_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
