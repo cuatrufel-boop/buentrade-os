@@ -711,31 +711,69 @@ function normalizeForMatch(s){
   return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-// Finds the price on the line. Real price lists (confirmed against actual plant lists) come in
-// two shapes: with a literal "$" ("Bone in Loins - $120 AUG/SEPT"), or with none at all, just a
-// bare number right after the dash that separates the item name from its price ("FZ Bns
-// Sirloins- 125 Sept") — confirmed against a real Tyson paste where NOT ONE line had a "$" sign,
-// which the $-only version of this function was silently missing entirely. "$" is tried first
-// since it's the more specific, unambiguous signal; the dash+number fallback only fires when no
-// "$" is present anywhere on the line. A line with no number after the dash at all ("Sknls
-// Bellies Combo- CALL") correctly yields no price — "call for price" isn't an applicable number.
+// Finds the price on the line, and separately what precedes it (the name, if any). Real price
+// lists (confirmed against actual plant lists) come in several shapes: a literal "$" ("Bone in
+// Loins - $120 AUG/SEPT"), no $ at all — just a bare number right after the dash that separates
+// name from price ("FZ Bns Sirloins- 125 Sept", confirmed against a real Tyson paste with NOT ONE
+// "$" sign anywhere), or a "PRICE"/"PRIC"/"COST" keyword with no $ or dash (confirmed against a
+// real Amity Packing email: "PRIC .95 fob"). "$" and dash are tried first since they're the more
+// specific, unambiguous signals.
 function parsePriceListLine(line){
-  const m = line.match(/\$\s*(\d+(?:[.,]\d+)?)/) || line.match(/[-–—]\s*(\d+(?:[.,]\d+)?)\b/);
-  if (!m) return { rawText: line.trim(), price: null };
-  const raw = m[1];
-  // Plants write these lists as whole-number shorthand with no decimal point — "98" (or "$98")
-  // means $0.98/lb, "220" means $2.20/lb, per the trader's explicit rule. Only scaled when the
-  // matched number truly has no decimal already (a source that ever writes "0.85" outright stays
-  // 0.85, not divided again).
-  const price = /[.,]/.test(raw) ? parseFloat(raw.replace(',', '.')) : parseFloat(raw) / 100;
-  const rawText = line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '');
-  // Nothing precedes the matched price at all — the whole line IS the price (a block-format list
-  // pastes each table cell on its own line, so a price sometimes arrives completely alone). There
-  // is no real name here to attach it to, so this is not a usable single-line row — falling back
-  // to the price text itself as the "name" (an earlier version of this function did) produced
-  // rows where the name and the price were literally the same string.
-  if (!rawText) return { rawText: line.trim(), price: null };
-  return { rawText, price };
+  const m = line.match(/\$\s*(\.?\d+(?:[.,]\d+)?)/) || line.match(/[-–—]\s*(\.?\d+(?:[.,]\d+)?)\b/);
+  if (m){
+    const raw = m[1];
+    const price = priceFromRaw(raw);
+    const rawText = line.slice(0, m.index).trim().replace(/[-–—:.\s]+$/, '');
+    // Nothing precedes the matched price at all — the whole line IS the price (a block-format
+    // list pastes each table cell on its own line, so a price sometimes arrives completely
+    // alone). There is no real name here to attach it to, so this is not a usable single-line row
+    // — falling back to the price text itself as the "name" (an earlier version of this function
+    // did) produced rows where the name and the price were literally the same string.
+    if (!rawText) return { rawText: line.trim(), price: null };
+    return { rawText, price };
+  }
+  // Unlike $/dash, an empty "before the price" text here is the NORMAL case, not a sign of
+  // nothing usable — a "PRICE .95" line is, by its nature, usually a price-only line with the
+  // product name on the line above it (handled by detectAdjacentNamePriceItems), not on the same
+  // line. Kept as its own branch instead of folding into the check above for exactly that reason.
+  const km = line.match(/\b(?:price|pric|cost)\b[:\s]*\$?(\.?\d+(?:[.,]\d+)?)/i);
+  if (km){
+    const rawText = line.slice(0, km.index).trim().replace(/[-–—:.\s]+$/, '');
+    return { rawText, price: priceFromRaw(km[1]) };
+  }
+  return { rawText: line.trim(), price: null };
+}
+
+// Plants write these lists as whole-number shorthand with no decimal point — "98" (or "$98")
+// means $0.98/lb, "220" means $2.20/lb, per the trader's explicit rule. Only scaled when the
+// matched number truly has no decimal already (a source that ever writes "0.95"/".95" outright
+// stays as written, not divided again).
+function priceFromRaw(raw){
+  return /[.,]/.test(raw) ? parseFloat(raw.replace(',', '.')) : parseFloat(raw) / 100;
+}
+
+// A casual, short single-item email (confirmed against a real Amity Packing offer) states the
+// product on its own line and the price on a separate line right below it, with no $ or dash —
+// neither the single-line nor the block-table parser fits that shape. Tried last, only when both
+// found nothing: pairs a price-only line with the line immediately above it, but only when that
+// line actually looks like a product name — ALL CAPS, or containing a number/percent — so a
+// greeting or closing remark ("Let me know it will sell fast !!") can never get mistaken for one.
+function looksLikeProductNameLine(line){
+  if (!line) return false;
+  if (/\d|%/.test(line)) return true;
+  const letters = line.replace(/[^A-Za-z]/g, '');
+  return letters.length >= 4 && letters === letters.toUpperCase();
+}
+
+function detectAdjacentNamePriceItems(lines){
+  const items = [];
+  for (let i = 0; i < lines.length; i++){
+    const { rawText, price } = parsePriceListLine(lines[i]);
+    if (price == null || rawText) continue; // a non-empty rawText already stands on its own
+    const prevLine = i > 0 ? lines[i - 1] : null;
+    if (prevLine && looksLikeProductNameLine(prevLine)) items.push({ rawText: prevLine, price });
+  }
+  return items;
 }
 
 // A line that's just a category header ("Fresh Processor:", "Frozen Boxed Muscles:") — never a
@@ -960,17 +998,25 @@ async function processPriceListText(){
       // "N/A" item, none of which can ever be applied (applyPriceList requires both a product and
       // a price). Skipping it here instead of showing it means the review screen is only ever the
       // rows that actually need a decision, not 25+ lines of unrelated email text to scroll past.
-      if (price == null) continue;
+      // No price on this line, OR a price with nothing before it (a "PRICE .95" line whose name
+      // lives on the PREVIOUS line instead — handled below by detectAdjacentNamePriceItems, not
+      // here). Either way, not a usable single-line row.
+      if (price == null || !baseText) continue;
       const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
       // rawText used for both languages here since single-line format never tells us which part
       // of the line is English vs Spanish — matchCatalogProduct falls back to checking it against
       // both catalog fields in that case.
       priceListRows.push({ rawText, price, ...matchCatalogProduct(rawText) });
     }
-    // Safety net for a plant that's neither shape cleanly (few lines, no clear signal either
-    // way) — never worse than the single-line scan finding nothing at all.
+    // Safety nets for a plant that's neither shape cleanly — never worse than the single-line
+    // scan finding nothing at all. Block-format first (a table with only 1-2 rows might not have
+    // hit the ratio threshold above), then the casual "name line, price line right after"
+    // pairing (confirmed against a real Amity Packing email).
     if (!priceListRows.length){
       priceListRows = detectBlockFormatItems(lines).map(toBlockRow);
+    }
+    if (!priceListRows.length){
+      priceListRows = detectAdjacentNamePriceItems(lines).map(item => ({ rawText: item.rawText, price: item.price, ...matchCatalogProduct(item.rawText) }));
     }
   }
 
