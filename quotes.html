@@ -436,6 +436,18 @@ async function autoPopulateRqPlants(productName){
     const hasPrice = link.current_price != null;
     return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null };
   }).filter(Boolean);
+  // A loaded price list (plants.html "Cargar precios") never carries a pick-up location — that's
+  // a separate concept (freight lanes by origin city). Rather than quote with no freight at all
+  // until the trader manually picks a city, default every plant to its most expensive known lane
+  // — a safe overestimate the trader can correct downward once they know the real origin, never
+  // a number that quietly ships too cheap. Applies to every plant, not just Tyson.
+  rqSelectedPlants.forEach(p => {
+    const rates = rqUsFreightRatesForPlant(p.id);
+    if (rates.length && !p.rqUsFreightRateId){
+      const priciest = rates.reduce((max, r) => (r.rate > max.rate ? r : max), rates[0]);
+      p.rqUsFreightRateId = priciest.id;
+    }
+  });
   renderRqPlants();
   // Manually typing a price auto-opens the Trading Tool a beat after typing stops (see
   // rqUpdatePlantField) — a price that arrives pre-filled from the catalog never went through
