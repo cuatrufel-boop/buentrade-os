@@ -622,15 +622,21 @@ let priceListRows = []; // { rawText, price, matchedProductId }
 // so saveProduct() knows which row to link the new product back into. Null the rest of the time.
 let priceListCreateForRowIndex = null;
 
-// Opens the full product form pre-filled with this row's own wording as a starting point — the
-// trader still has to fill in everything else (name ES, temperature, packaging...) since a
-// product created from here is subject to the exact same "no incomplete products" rule as one
-// created anywhere else in the app.
+// Opens the full product form for a brand-new product prompted by this price-list row. The
+// plant's own raw wording ("FZ Bns Sirloins") is shorthand for THEIR sheet, never BuenTrade's own
+// product name — it's shown as reference text only, never dropped into the name fields, so the
+// trader writes out the real complete name in both languages (the one name customers, plants,
+// borders and truckers all see from then on) instead of inheriting an abbreviation, and so
+// temperature/packaging words never end up baked into the free-text name on top of their own
+// dropdowns (e.g. a name that literally says "Combo Frozen" as text AND has Combo/Frozen selected
+// separately). Brand is pre-filled since it's simply a fact already known here — this row came
+// from this exact plant's price list.
 function startCreateProductForRow(i){
   priceListCreateForRowIndex = i;
   openProductForm(null);
-  document.getElementById('name_en').value = priceListRows[i].rawText;
-  document.getElementById('formMsg').textContent = 'Creando producto nuevo para esta fila — completa todos los campos obligatorios y guarda.';
+  const plant = plants.find(p => p.id === currentPlantId);
+  if (plant) document.getElementById('brand').value = plant.name;
+  document.getElementById('formMsg').textContent = `Texto de la planta: "${priceListRows[i].rawText}" — úsalo como referencia, pero escribe el nombre completo real (ES y EN), no la abreviación de la planta. La temperatura y el empaque van solo en sus propios campos, no repetidos dentro del nombre.`;
 }
 
 // The row's <select> reverts to "— selecciona —" (or whatever was matched before) after opening
