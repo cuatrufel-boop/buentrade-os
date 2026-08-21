@@ -858,7 +858,11 @@ async function processPriceListText(){
     docsNoteEl.style.display = 'block';
     docsNoteEl.style.background = detectedDocsIncluded ? '#E3F6EC' : '#FFF4E5';
     docsNoteEl.style.color = detectedDocsIncluded ? '#0F8A5F' : '#B26A00';
-    docsNoteEl.innerHTML = `Detecté "${detectedDocsIncluded ? 'docs incluidos' : 'no docs'}" en el texto — al aplicar, se va a guardar como el default de esta planta en Quotes.
+    // Worded carefully so it doesn't read as "this plant is permanently no-docs" — it's only the
+    // fallback for whatever a product's own line doesn't say, it's re-set by every price list
+    // (never sticky beyond what the plant's own sheet keeps saying), and it never overrides a
+    // product that has its own explicit "Docs" value in the table below.
+    docsNoteEl.innerHTML = `Nota general detectada: "${detectedDocsIncluded ? 'docs incluidos' : 'no docs'}". Se guarda como el default de ESTA planta — solo para productos que no digan nada distinto. Cualquier línea marcada individualmente en la columna "Docs" de abajo (with docs, W docs, docs included, no docs) no se ve afectada por esto.
       <label style="margin-left:10px;font-weight:600;"><input type="checkbox" id="priceListDocsOverride" ${detectedDocsIncluded ? 'checked' : ''} onchange="detectedDocsIncluded=this.checked;"> Docs incluidos</label>`;
   }
 
