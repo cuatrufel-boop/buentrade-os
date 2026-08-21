@@ -653,11 +653,13 @@ function openPriceListPanel(){
   document.getElementById('priceListMsg').textContent = '';
   priceListRows = [];
   detectedDocsIncluded = null;
+  pendingTermAliases = [];
 }
 
 function closePriceListPanel(){
   document.getElementById('priceListCard').style.display = 'none';
   priceListRows = [];
+  pendingTermAliases = [];
 }
 
 function normalizeForMatch(s){
@@ -737,7 +739,100 @@ function detectTempPackFromLine(line){
     const vac = packagings.find(p => (p.name_en || '').toLowerCase() === 'vac');
     if (vac) packagingId = vac.id;
   }
+  // Terms the trader has personally taught this plant's system (see teachTermAlias below) — once
+  // confirmed, remembered for every future price list from this plant, not just this paste.
+  if (!tempId || !packagingId){
+    for (const [term, meaning] of plantTermAliasMap){
+      if (!wordBoundary(term).test(norm)) continue;
+      if (!tempId && meaning.temperature) tempId = meaning.temperature;
+      if (!packagingId && meaning.packaging) packagingId = meaning.packaging;
+    }
+  }
+  // Business rule confirmed by the trader: Combo packaging is only ever sold Fresh, never Frozen
+  // — so resolving to Combo is on its own enough to know Fresh, without waiting on an explicit
+  // temperature word.
+  if (!tempId && packagingId){
+    const combo = packagings.find(p => (p.name_en || '').toLowerCase() === 'combo');
+    const fresh = temperatures.find(t => (t.name_en || '').toLowerCase() === 'fresh');
+    if (combo && fresh && packagingId === combo.id) tempId = fresh.id;
+  }
   return { tempId, packagingId };
+}
+
+// Rows the plant's own wording never plainly said the temperature/packaging for, and the name
+// alone matched more than one catalog product — narrows the candidate set down using whatever
+// detectTempPackFromLine can read off the line (catalog words, FZ/COV, taught terms, the
+// Combo-is-always-Fresh rule), falling back to "no signal at all ⇒ Fresh" only when Fresh is
+// actually one of the real candidates. Pulled out as its own function so teaching a new
+// abbreviation mid-review can re-run this against every row still waiting on it, not just the
+// one row that prompted the teaching.
+function narrowByTempPack(rawText, candidates){
+  const { tempId, packagingId } = detectTempPackFromLine(rawText);
+  let effectiveTempId = tempId;
+  if (!effectiveTempId){
+    const fresh = temperatures.find(t => (t.name_en || '').toLowerCase() === 'fresh');
+    if (fresh && candidates.some(p => p.temperature_id === fresh.id)) effectiveTempId = fresh.id;
+  }
+  return candidates.filter(p =>
+    (!effectiveTempId || p.temperature_id === effectiveTempId) && (!packagingId || p.packaging_id === packagingId)
+  );
+}
+
+// In-memory dictionary of plant-specific abbreviations the trader has confirmed the meaning of
+// (term -> { temperature?: id, packaging?: id }) — reloaded fresh from plant_term_aliases each
+// time a price list is processed for a plant. Newly taught terms during THIS review are held
+// only here plus pendingTermAliases until "Aplicar todo" persists them, same single-confirm
+// point as every other write this screen makes.
+let plantTermAliasMap = new Map();
+let pendingTermAliases = []; // [{ term, meaning_type, meaning_id }] taught but not yet applied
+
+async function fetchPlantTermAliases(){
+  const { data } = await db.from('plant_term_aliases').select('*').eq('plant_id', currentPlantId);
+  plantTermAliasMap = new Map();
+  (data || []).forEach(a => {
+    const entry = plantTermAliasMap.get(a.term) || {};
+    entry[a.meaning_type] = a.meaning_id;
+    plantTermAliasMap.set(a.term, entry);
+  });
+}
+
+// Called from the review table when a row is still ambiguous and the trader tells us what word
+// in the line distinguishes it. Updates matching in memory and re-checks every other row still
+// stuck on the same ambiguity — but does NOT write to the database yet: like every other decision
+// made on this screen, it only gets saved when the trader reviews the whole table and clicks
+// "Aplicar todo".
+function teachTermAlias(i){
+  const term = normalizeForMatch(document.getElementById(`termInput_${i}`).value);
+  const tempVal = document.getElementById(`termTemp_${i}`).value;
+  const packVal = document.getElementById(`termPack_${i}`).value;
+  if (!term || (!tempVal && !packVal)){
+    document.getElementById('priceListMsg').textContent = 'Escribe la palabra exacta y selecciona qué significa (temperatura y/o empaque).';
+    return;
+  }
+  // A batch upsert errors if the same (plant_id, term, meaning_type) appears twice in one call —
+  // drop any earlier pending entry for this exact term+meaning before adding the new one, so
+  // re-teaching the same word (e.g. after picking a different temperature by mistake) can't
+  // collide with itself when "Aplicar todo" saves the batch.
+  const replace = (type, val) => {
+    pendingTermAliases = pendingTermAliases.filter(a => !(a.term === term && a.meaning_type === type));
+    if (val) pendingTermAliases.push({ plant_id: currentPlantId, term, meaning_type: type, meaning_id: val });
+  };
+  const entry = plantTermAliasMap.get(term) || {};
+  if (tempVal){ entry.temperature = tempVal; replace('temperature', tempVal); }
+  if (packVal){ entry.packaging = packVal; replace('packaging', packVal); }
+  plantTermAliasMap.set(term, entry);
+  reNarrowPendingRows();
+  renderPriceListReview();
+  document.getElementById('priceListMsg').textContent = `"${term}" aplicado a las filas pendientes — se guarda como abreviación conocida al confirmar "Aplicar todo".`;
+}
+
+function reNarrowPendingRows(){
+  priceListRows.forEach(row => {
+    if (row.matchedProductId || !row.candidateIds || row.candidateIds.length < 2) return;
+    const candidates = allCatalogProducts.filter(p => row.candidateIds.includes(p.id));
+    const narrowed = narrowByTempPack(row.rawText, candidates);
+    if (narrowed.length === 1) row.matchedProductId = narrowed[0].id;
+  });
 }
 
 function detectDocsNote(text){
@@ -768,8 +863,10 @@ async function processPriceListText(){
   const [{ data: aliases }] = await Promise.all([
     db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
     fetchAllCatalogProducts(),
+    fetchPlantTermAliases(),
   ]);
   const aliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
+  pendingTermAliases = []; // fresh paste, fresh batch of anything taught during this review
 
   let currentSection = null;
   priceListRows = [];
@@ -787,6 +884,7 @@ async function processPriceListText(){
     const rawText = currentSection ? `${currentSection} — ${baseText}` : baseText;
     const key = normalizeForMatch(rawText);
     let matchedProductId = aliasMap.get(key) || null;
+    let candidateIds = null;
     if (!matchedProductId){
       // First time this plant's exact wording happens to already match a fixed product's own
       // name — covers it without needing an alias confirmed yet. But the catalog routinely has
@@ -801,23 +899,18 @@ async function processPriceListText(){
         // rawText (not the bare line) so a section header carried into it — "Frozen Boxed
         // Muscles — Bone in Loins" — still counts as a frozen signal for items that don't repeat
         // the word themselves.
-        const { tempId, packagingId } = detectTempPackFromLine(rawText);
-        // Per the trader's own confirmed convention: a plant marks Frozen explicitly (FZ,
-        // Frozen, Congelado) and simply omits any temperature word for Fresh — so no explicit
-        // signal at all defaults to Fresh, but only when Fresh is actually one of the real
-        // candidates (never invents an option that isn't already in the catalog).
-        let effectiveTempId = tempId;
-        if (!effectiveTempId){
-          const fresh = temperatures.find(t => (t.name_en || '').toLowerCase() === 'fresh');
-          if (fresh && nameMatches.some(p => p.temperature_id === fresh.id)) effectiveTempId = fresh.id;
+        const narrowed = narrowByTempPack(rawText, nameMatches);
+        if (narrowed.length === 1){
+          matchedProductId = narrowed[0].id;
+        } else {
+          // Still ambiguous — remembered so the inline "teach me this abbreviation" prompt in the
+          // review table can re-check this exact row the moment the trader confirms what the
+          // plant's wording meant, without needing to re-paste the whole list.
+          candidateIds = nameMatches.map(p => p.id);
         }
-        const narrowed = nameMatches.filter(p =>
-          (!effectiveTempId || p.temperature_id === effectiveTempId) && (!packagingId || p.packaging_id === packagingId)
-        );
-        if (narrowed.length === 1) matchedProductId = narrowed[0].id;
       }
     }
-    priceListRows.push({ rawText, price, matchedProductId });
+    priceListRows.push({ rawText, price, matchedProductId, candidateIds });
   }
 
   renderPriceListReview();
@@ -842,6 +935,26 @@ function renderPriceListReview(){
       const label = p.name_en || p.name;
       return `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
+    // A row still ambiguous by name alone (same cut listed at more than one temp/pack) gets an
+    // inline prompt to teach the exact word that distinguishes them — confirmed by the trader,
+    // reused instantly on every other pending row with the same ambiguity, and remembered for
+    // every future price list from this plant once "Aplicar todo" is confirmed.
+    const teachPrompt = (row.candidateIds && row.candidateIds.length > 1 && !row.matchedProductId) ? `
+      <div style="margin-top:6px;padding:7px 9px;background:#FFF4E5;border-radius:5px;font-size:11.5px;color:#8a5a00;">
+        Esta planta usa una palabra que no reconozco para distinguir entre ${row.candidateIds.length} productos con este mismo nombre.
+        <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. STL" style="width:110px;padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+          <select id="termTemp_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+            <option value="">Temperatura —</option>
+            ${temperatures.map(t => `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}
+          </select>
+          <select id="termPack_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+            <option value="">Empaque —</option>
+            ${packagings.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}
+          </select>
+          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Guardar y reconocer</button>
+        </div>
+      </div>` : '';
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
@@ -849,7 +962,7 @@ function renderPriceListReview(){
         <option value="">— selecciona —</option>
         <option value="__new__">+ Crear producto nuevo…</option>
         ${options}
-      </select></td>
+      </select>${teachPrompt}</td>
     </tr>`;
   }).join('');
 }
@@ -890,6 +1003,14 @@ async function applyPriceList(){
   // every product on this plant's sheet.
   if (detectedDocsIncluded !== null){
     await db.from('plants').update({ docs_included: detectedDocsIncluded }).eq('id', currentPlantId);
+  }
+
+  // Any abbreviation the trader taught mid-review (see teachTermAlias) only lived in memory until
+  // now — this is the one confirm point the whole screen funnels through, so it's persisted here,
+  // together with everything else, never earlier.
+  if (pendingTermAliases.length){
+    await db.from('plant_term_aliases').upsert(pendingTermAliases, { onConflict: 'plant_id,term,meaning_type' });
+    pendingTermAliases = [];
   }
 
   await loadPlantProducts();
