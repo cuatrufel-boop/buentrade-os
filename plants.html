@@ -342,6 +342,7 @@ auth.onAuthStateChanged(user => {
   <div class="card" id="formCard">
     <strong id="formTitle">New product</strong>
     <input type="hidden" id="prodId">
+    <div id="priceListRefBanner" style="display:none;margin-top:10px;padding:8px 12px;background:#EEF3FF;border-radius:7px;font-size:12.5px;"></div>
 
     <div class="section-title">Photo / Attachment</div>
     <img id="photoPreview" class="photo-preview" style="display:none;">
@@ -647,7 +648,20 @@ function startCreateProductForRow(i){
   openProductForm(null);
   const plant = plants.find(p => p.id === currentPlantId);
   if (plant) document.getElementById('brand').value = plant.name;
-  document.getElementById('formMsg').textContent = `Texto de la planta: "${priceListRows[i].rawText}" — úsalo como referencia, pero escribe el nombre completo real (ES y EN), no la abreviación de la planta. La temperatura y el empaque van solo en sus propios campos, no repetidos dentro del nombre.`;
+  // Temperature/Packaging aren't a judgment call here — if the row's own wording already reads
+  // as Frozen/Combo/etc. (the same detection used to match against the catalog), it's already
+  // "explicit" in the plant's own text, just not typed into the form yet. Only pre-filled when
+  // actually detected, never guessed — an undetected field is left on "—" for the trader to pick.
+  const { tempId, packagingId } = detectTempPackFromLine(priceListRows[i].rawText);
+  if (tempId) document.getElementById('temperature_id').value = tempId;
+  if (packagingId) document.getElementById('packaging_id').value = packagingId;
+  // Shown at the TOP of the form, right under the title — not buried in a message below the
+  // Save button, which meant scrolling all the way down just to re-read the plant's own wording
+  // while filling in the name fields at the top.
+  const refBanner = document.getElementById('priceListRefBanner');
+  refBanner.style.display = 'block';
+  refBanner.innerHTML = `<strong>Texto de la planta:</strong> "${escapeHtml(priceListRows[i].rawText)}"<br>Úsalo como referencia para escribir el nombre completo real (ES y EN) — no copies la abreviación de la planta. La temperatura y el empaque van solo en sus propios campos, no repetidos dentro del nombre.`;
+  document.getElementById('formMsg').textContent = 'Completa todos los campos obligatorios y guarda.';
 }
 
 // The row's <select> reverts to "— selecciona —" (or whatever was matched before) after opening
@@ -1347,6 +1361,7 @@ function openProductForm(product){
     if (product.photo_url) showFilePreview(product.photo_url, preview, filePrev);
   }
   document.getElementById('formMsg').textContent = '';
+  document.getElementById('priceListRefBanner').style.display = 'none';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
 }
 
