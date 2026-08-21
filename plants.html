@@ -354,7 +354,7 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Name (English) *</label><input id="name_en" required></div>
     </div>
     <div class="grid3">
-      <div class="field"><label>Category *</label><input id="category" required></div>
+      <div class="field"><label>Category *</label><select id="category" required><option value="">—</option></select></div>
       <div class="field"><label>Subcategory (ES)</label><input id="subcategory"></div>
       <div class="field"><label>Subcategory (EN)</label><input id="subcategory_en"></div>
     </div>
@@ -421,6 +421,11 @@ async function loadEverything(){
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
   packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+  // Fixed list, not free text — category drives the ES→EN translation used everywhere else in
+  // the app (products.html's CATEGORY_EN), so "pork" typed by hand would never match "Cerdo" and
+  // silently create a second, disconnected category instead of reusing the real one.
+  const catSel = document.getElementById('category');
+  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(c)} (${CATEGORY_EN[c]})</option>`);
 
   renderPlants();
 }

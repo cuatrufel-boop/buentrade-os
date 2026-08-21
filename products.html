@@ -197,7 +197,7 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Name (English)</label><input id="name_en"></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Category *</label><input id="category" required></div>
+      <div class="field"><label>Category *</label><select id="category" required><option value="">—</option></select></div>
       <div class="field"><label>Subcategory</label><input id="subcategory"></div>
     </div>
 
@@ -338,6 +338,11 @@ async function loadLookups(){
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
   packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`);
+  // Fixed list, not free text — category drives the ES→EN translation (CATEGORY_EN below), so
+  // anything typed by hand that doesn't match one of these exact Spanish values silently creates
+  // a second, disconnected category instead of reusing the real one.
+  const catSel = document.getElementById('category');
+  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(c)} (${CATEGORY_EN[c]})</option>`);
 }
 
 async function loadProducts(){
