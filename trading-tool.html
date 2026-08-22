@@ -632,12 +632,13 @@ if (FIREBASE_READY) {
             <span class="card-chevron open">▾</span>
           </div>
         </div>
-        <div id="targetProfitRow" style="display:none;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);padding-top:2px;border-top:1px dashed var(--line);" onclick="event.stopPropagation();">
+        <div id="targetProfitRow" style="display:none;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);padding-top:2px;border-top:1px dashed var(--line);flex-wrap:wrap;" onclick="event.stopPropagation();">
           🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:3px 5px;" oninput="applyProfitTarget(null);calc();">%
           <span style="display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-left:auto;">
             <span id="liveSolveSellChip" class="chip on" style="font-size:10.5px;padding:4px 9px;border-radius:0;" onclick="setLiveSolveFor('sell')" title="Typing a selling price rebalances the OTHER products' selling prices">🏷️ Sell</span>
             <span id="liveSolveBuyChip" class="chip" style="font-size:10.5px;padding:4px 9px;border-radius:0;" onclick="setLiveSolveFor('purchase')" title="Typing a selling price (the customer's bid) instead solves what you can pay THIS product's plant">💰 Buy</span>
           </span>
+          <span id="liveSolveHint" style="display:none;flex-basis:100%;color:var(--teal);font-size:10.5px;"></span>
         </div>
       </div>
       <div class="card-body" id="productsBody"></div>
@@ -827,6 +828,16 @@ function setLiveSolveFor(mode){
   const buyChip = document.getElementById('liveSolveBuyChip');
   if(sellChip) sellChip.classList.toggle('on', mode==='sell');
   if(buyChip) buyChip.classList.toggle('on', mode==='purchase');
+  // Buy/Sell only change what happens the NEXT time a Selling Price is typed — nothing recalculates
+  // just from clicking the chip itself, so this hint makes clear what to do next instead of it
+  // looking like the click "did nothing."
+  const hint = document.getElementById('liveSolveHint');
+  if(hint){
+    hint.style.display = 'block';
+    hint.textContent = mode==='purchase'
+      ? '→ Type the customer\'s bid into that product\'s Selling Price — the Purchase Price you need will show up there.'
+      : '→ Type a Selling Price on any product — the others adjust to hold the Target Margin.';
+  }
 }
 let fxRateManuallySet = false;
 
@@ -876,10 +887,10 @@ function buildProductRows(){
           <div class="inputwrap"><span class="pfx" style="visibility:hidden;">#</span><input type="number" id="prodWeight${i}" value="${p.weight}" oninput="updateProd(${i},'weight',this.value)"></div>
         </div>
         <div class="mini"><span>Purchase $/lb (USD)</span>
-          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="prodCost${i}" step="0.01" value="${p.cost}" ${priceDisabled} oninput="updateProd(${i},'cost',this.value)"></div>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="prodCost${i}" step="0.01" value="${p.cost}" ${priceDisabled} oninput="updateProd(${i},'cost',this.value)" onblur="this.value=(parseFloat(this.value)||0)"></div>
         </div>
         <div class="mini"><span>Selling $/lb (USD)</span>
-          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="prodSellBorder${i}" step="0.01" value="${p.sellBorder}" ${priceDisabled} oninput="updateProd(${i},'sellBorder',this.value)"></div>
+          <div class="inputwrap"><span class="pfx">$</span><input type="number" id="prodSellBorder${i}" step="0.01" value="${p.sellBorder}" ${priceDisabled} oninput="updateProd(${i},'sellBorder',this.value)" onblur="this.value=(parseFloat(this.value)||0)"></div>
         </div>
       </div>
       ${showMx ? `
