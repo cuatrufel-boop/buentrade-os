@@ -73,7 +73,7 @@
   .loc-hint{font-size:10.5px;color:var(--ink-soft);margin-top:-2px;}
   .rq-suggest{position:absolute;top:calc(100% + 4px);left:0;width:100%;background:#fff;border:1.5px solid var(--line);border-radius:10px;max-height:280px;overflow-y:auto;z-index:20;display:none;box-shadow:0 12px 28px rgba(15,31,51,.14);}
   .rq-suggest.show{display:block;}
-  .rq-suggest-item{padding:10px 14px;font-size:13.5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .12s ease;}
+  .rq-suggest-item{padding:10px 14px;font-size:13.5px;cursor:pointer;white-space:normal;transition:background .12s ease;}
   .rq-suggest-item:hover{background:var(--blue-light);}
   .rq-suggest-item:first-child{border-radius:9px 9px 0 0;}
   .rq-suggest-item:last-child{border-radius:0 0 9px 9px;}
@@ -203,7 +203,7 @@ auth.onAuthStateChanged(user => {
 
   <div class="card">
     <div style="display:flex;align-items:flex-end;justify-content:center;flex-wrap:wrap;gap:14px;">
-      <div class="field" style="position:relative;margin-bottom:0;width:320px;">
+      <div class="field" style="position:relative;margin-bottom:0;width:480px;max-width:100%;">
         <label>Product</label>
         <input id="rq_product_name" placeholder="Search products…" autocomplete="off" oninput="rqPreferredVariantId=null; onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)" style="width:100%;height:38px;padding:0 12px;border:1.5px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;">
         <div id="rq_product_suggestions" class="rq-suggest"></div>
@@ -339,22 +339,16 @@ async function loadQuotesPage(){
   // (onRqProductInput) already accepts either the Spanish or English catalog name, but the old
   // suggestion list only offered Spanish, so typing in English (e.g. "belly") surfaced nothing.
   //
-  // Deduped case-INsensitively per (name, product): two real catalog rows can carry the literal
-  // same name with only a casing slip ("Cabeza de lomo de Cerdo con hueso" vs "...de cerdo con
-  // hueso") — every match in this file already compares names lowercased, so showing both as
-  // separate suggestions was pure visual noise, never a sign of two different products.
-  const seen = new Set();
-  rqProductSuggestions = [];
-  products.forEach(p => {
+  // English only — showing both languages per variant was clutter, not a second useful option;
+  // the exact-match below (onRqProductInput) still accepts either language if something's typed
+  // by hand, this is just what gets suggested. Falls back to the Spanish name only for the rare
+  // product that has no English name on file at all, so nothing becomes unsearchable.
+  rqProductSuggestions = products.map(p => {
     const spec = rqVariantSpec(p.id);
-    const suffix = spec ? ' — ' + spec : '';
-    [p.name_en, p.name].filter(Boolean).forEach(n => {
-      const key = n.toLowerCase() + '::' + p.id;
-      if (seen.has(key)) return;
-      seen.add(key);
-      rqProductSuggestions.push({ label: n + suffix, matchName: n, productId: p.id });
-    });
-  });
+    const n = p.name_en || p.name;
+    if (!n) return null;
+    return { label: n + (spec ? ' — ' + spec : ''), matchName: n, productId: p.id };
+  }).filter(Boolean);
   rqProductSuggestions.sort((a, b) => a.label.localeCompare(b.label));
 
   document.getElementById('rq_newdate').min = rqTodayStr();
@@ -418,9 +412,10 @@ async function onRqProductInput(){
     || products.find(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
   const specLine = document.getElementById('rq_spec_line');
   // One step leads to the next instead of both fields demanding attention at once: Delivery day
-  // only appears once a product has actually been typed, not upfront alongside an empty search
-  // box (where it read as an immediate blocking requirement rather than the next natural step).
-  document.getElementById('rq_dates_wrap').style.display = name ? 'block' : 'none';
+  // only appears once a real product has actually been PICKED (a confirmed catalog match), not
+  // the moment any character is typed into an otherwise-empty search box — mid-typing isn't
+  // "chose the product" yet.
+  document.getElementById('rq_dates_wrap').style.display = match ? 'block' : 'none';
   document.getElementById('rq_customers_wrap').style.display = 'none';
   document.getElementById('rq_top_actions_wrap').style.display = 'none';
   rqMatchedCustomers = [];
