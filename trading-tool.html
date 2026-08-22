@@ -660,7 +660,7 @@ if (FIREBASE_READY) {
         <div id="coldStorageSection">
           <div class="divider"></div>
           <div class="section-label">Cold storage & USDA — optional</div>
-          <div class="field" id="labelsCostField"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div><div id="labelsHint" style="font-size:9px;color:var(--ink-soft);text-align:right;margin-top:-2px;"></div></div>
+          <div class="field" id="labelsCostField"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div></div>
           <div class="field" id="plasticWrapField"><label>Plastic wrap (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="plasticWrap" value="" placeholder="0" oninput="calc()"></div></div>
           <div class="field" id="inLieuField"><label>IN-LIEU (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="inLieu" value="" placeholder="0" oninput="calc()"></div></div>
           <div class="field" id="storageOvernightField"><label>Storage — Overnight (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageOvernight" value="" placeholder="0" oninput="calc()"></div></div>
@@ -1361,11 +1361,10 @@ const RQ_STANDARD_COST_FIELDS = {
   // carry both, and calc() already sums them back into one inspection cost either way.
   inspectionCases: 'inspection_cases', inspectionCombos: 'inspection_combos',
 };
-// A load is typically ~100 cases — Labels prices per case ($0.14), so this multiplies the real
-// per-case rate by that typical count to land on a usable per-load default. Explicitly an
-// assumption, not a fact the way every other suggested rate here is — the hint under the field
-// says so, and the trader edits the field directly if a specific load's case count differs.
-const RQ_LABELS_TYPICAL_CASES = 100;
+// A load is typically ~1000 cases — Labels prices per case ($0.14), so this multiplies the real
+// per-case rate by that typical count to land on a usable per-load default, same as every other
+// field here. The trader edits the field directly if a specific load's case count differs.
+const RQ_LABELS_TYPICAL_CASES = 1000;
 
 async function fetchStandardCostSuggestions(){
   const types = [...Object.values(RQ_STANDARD_COST_FIELDS), 'labels'];
@@ -1388,9 +1387,7 @@ async function fetchStandardCostSuggestions(){
 
   if (byType.labels != null){
     const labelsInput = document.getElementById('labelsCost');
-    const labelsHint = document.getElementById('labelsHint');
     const perLoad = Math.round(byType.labels * RQ_LABELS_TYPICAL_CASES * 100) / 100;
-    if (labelsHint) labelsHint.textContent = `Based on ${RQ_LABELS_TYPICAL_CASES} cases ($${byType.labels}/case) — edit if this load differs`;
     if (labelsInput){
       labelsInput.addEventListener('focus', () => {
         if (labelsInput.value.trim() !== '') return;
