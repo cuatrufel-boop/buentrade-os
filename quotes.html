@@ -64,7 +64,7 @@
   .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-plant-name{cursor:pointer;user-select:none;}
   .rq-plant-name.tt-open{color:var(--blue);}
-  .rq-price-btn{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;background:var(--blue);color:#fff;white-space:nowrap;box-shadow:0 2px 6px rgba(30,106,219,.35);transition:transform .1s,box-shadow .1s;}
+  .rq-price-btn{display:inline-flex;align-items:center;gap:5px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;background:var(--blue);color:#fff;white-space:nowrap;box-shadow:0 2px 6px rgba(30,106,219,.35);transition:transform .1s,box-shadow .1s;}
   .rq-price-btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,106,219,.4);}
   .rq-price-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(30,106,219,.35);}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
@@ -467,6 +467,16 @@ async function onRqProductInput(){
   rqCustomersFetchedFor = null;
   rqStopPolling();
   if (match){
+    // Delivery day only ever announced itself as required by refusing to show a price later —
+    // the trader had no reason to notice it until they hit that wall. Opening the date picker
+    // itself the moment a product is actually picked (not on every keystroke — only the first
+    // time this exact product resolves) puts the ask right where their attention already is.
+    // Has to happen before the awaits below: showPicker() only works within the same synchronous
+    // stretch as the triggering keystroke, a browser rule that stops it firing after an await.
+    if (rqMatchedProductId !== match.id && !rqDeliveryDates.length){
+      const dateInput = document.getElementById('rq_newdate');
+      if (dateInput.showPicker){ try { dateInput.showPicker(); } catch(e){} }
+    }
     rqMatchedProductId = match.id;
     const nameEn = match.name_en || match.name;
     const tempEn = temperatures.find(t => t.id === match.temperature_id);
@@ -1355,15 +1365,16 @@ function rqPriceRequestControl(p){
   if (reqAge != null && reqAge <= RQ_REQUEST_COOLDOWN_DAYS){
     return `<span class="loc-hint" style="color:var(--blue);font-weight:700;">✓ requested ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>`;
   }
-  // The stale/missing date used to also print as a separate red line under Purchase $/lb
-  // ("⚠ stale — verify with plant · as of Aug 17") — long enough to wrap onto two lines and throw
-  // off that field's height next to Location/Documents/Delivery location beside it. Folding the
-  // date into the button itself keeps the row one line and puts the info right on the action that
-  // fixes it, instead of off to the side.
-  const label = missing ? 'Ask Price' : `Update Price · ${rqFmtDate(p.rqPriceDate)}`;
-  return `<span style="display:inline-flex;gap:4px;">
-    ${p.email ? `<button type="button" class="rq-price-btn" style="background:#C4432E;box-shadow:0 2px 6px rgba(196,67,46,.35);" onclick="rqRequestPlantPrice('${p.id}','email')">${RQ_EMAIL_ICON} ${label}</button>` : ''}
+  // The stale/missing date used to print as a separate red line under Purchase $/lb ("⚠ stale —
+  // verify with plant · as of Aug 17"), long enough to wrap onto two lines and throw off that
+  // field's height next to Location/Documents/Delivery location beside it — then, briefly, got
+  // folded into the button text itself ("Update Price · Aug 17"), which read as clutter on the
+  // button. Landing spot: its own short badge next to the buttons, same row, never wraps.
+  const label = missing ? 'Ask Price' : 'Update Price';
+  return `<span style="display:inline-flex;align-items:center;gap:6px;">
+    ${p.email ? `<button type="button" class="rq-price-btn" onclick="rqRequestPlantPrice('${p.id}','email')">${RQ_EMAIL_ICON} ${label}</button>` : ''}
     ${hasPhone ? `<button type="button" class="rq-price-btn" style="background:#25D366;box-shadow:0 2px 6px rgba(37,211,102,.35);" onclick="rqRequestPlantPrice('${p.id}','whatsapp')">${RQ_WA_ICON} ${label}</button>` : ''}
+    ${stale ? `<span class="loc-hint" style="color:#C4432E;font-weight:700;">as of ${rqFmtDate(p.rqPriceDate)}</span>` : ''}
   </span>`;
 }
 
