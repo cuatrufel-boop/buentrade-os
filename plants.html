@@ -198,6 +198,7 @@ auth.onAuthStateChanged(user => {
           <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
         </div>
         <div id="priceListDocsNote" style="display:none;margin-top:14px;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
+        <div id="priceListCategoryNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
         <div id="priceListLocationsNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
         <div id="priceListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
           <table style="table-layout:fixed;width:100%;min-width:640px;">
@@ -680,6 +681,21 @@ function onPriceListProductSelect(i, selectEl){
   priceListRows[i].matchedProductId = selectEl.value || null;
 }
 
+// The full shared catalog spans every protein at every plant — a chicken plant like Sanderson
+// showing pork options mixed in by default is exactly the noise this exists to cut. Blank means
+// no restriction; set from the one selector above the table, applied to every row's dropdown at
+// once (never per-row — a plant is virtually always one protein for the whole list).
+let priceListCategoryFilter = '';
+
+function setPriceListCategoryFilter(value){
+  priceListCategoryFilter = value;
+  document.querySelectorAll('select[id^="prodSelect_"]').forEach(select => {
+    const i = select.id.replace('prodSelect_', '');
+    const searchEl = document.getElementById(`prodSearch_${i}`);
+    filterProductOptions(i, searchEl ? searchEl.value : '');
+  });
+}
+
 // The catalog is only going to keep growing — scrolling a plain <select> to find one product
 // among 50+ stops being practical fast. Hides (doesn't remove) non-matching <option>s in place,
 // so the exact same select/onchange/product-id wiring keeps working — this is just a filter on
@@ -690,7 +706,9 @@ function filterProductOptions(i, term){
   const norm = term.trim().toLowerCase();
   Array.from(select.options).forEach(opt => {
     if (opt.value === '' || opt.value === '__new__'){ opt.style.display = ''; return; }
-    opt.style.display = (!norm || opt.textContent.toLowerCase().includes(norm)) ? '' : 'none';
+    const matchesCategory = !priceListCategoryFilter || opt.dataset.category === priceListCategoryFilter;
+    const matchesTerm = !norm || opt.textContent.toLowerCase().includes(norm);
+    opt.style.display = (matchesCategory && matchesTerm) ? '' : 'none';
   });
 }
 
@@ -699,10 +717,12 @@ function openPriceListPanel(){
   document.getElementById('priceListInput').value = '';
   document.getElementById('priceListReviewWrap').style.display = 'none';
   document.getElementById('priceListDocsNote').style.display = 'none';
+  document.getElementById('priceListCategoryNote').style.display = 'none';
   document.getElementById('priceListLocationsNote').style.display = 'none';
   document.getElementById('priceListMsg').textContent = '';
   priceListRows = [];
   detectedDocsIncluded = null;
+  priceListCategoryFilter = '';
   pendingTermAliases = [];
 }
 
@@ -1036,6 +1056,22 @@ async function processPriceListText(){
     </select>
   </label>`;
 
+  // The product dropdown below draws from the ENTIRE shared catalog — every protein, every plant
+  // — so a poultry-only plant would otherwise show pork/beef/etc. options mixed in by default.
+  // Pre-selects the plant's own known protein when it already carries exactly one (a recorded
+  // fact from its existing products, never a guess); otherwise starts on "All categories" and
+  // leaves it to the trader, since a brand-new plant has no history to infer it from yet.
+  const knownProteins = plantProteins[currentPlantId];
+  priceListCategoryFilter = (knownProteins && knownProteins.size === 1) ? [...knownProteins][0] : '';
+  const catNoteEl = document.getElementById('priceListCategoryNote');
+  catNoteEl.style.display = 'block';
+  catNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Category:
+    <select style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="setPriceListCategoryFilter(this.value)">
+      <option value="">All categories</option>
+      ${Object.keys(CATEGORY_EN).map(c => `<option value="${c}" ${priceListCategoryFilter === c ? 'selected' : ''}>${escapeHtml(CATEGORY_EN[c])}</option>`).join('')}
+    </select>
+  </label>`;
+
   // A price list stating "FOB <City, State>" per line is telling us where this plant actually
   // ships from — real pickup locations, not just pricing detail. Detected here (never silently
   // created) so the trader can add the ones that are new to this plant's Locations tab with one
@@ -1217,7 +1253,7 @@ function renderPriceListReview(){
     const options = allCatalogProducts.map(p => {
       const spec = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(', ');
       const label = p.name_en || p.name;
-      return `<option value="${p.id}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
+      return `<option value="${p.id}" data-category="${escapeHtml(p.category || '')}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
     // A row where the name alone couldn't be resolved with confidence — either several catalog
     // products share this exact name and the line's wording didn't narrow it to one, or exactly
@@ -1249,7 +1285,7 @@ function renderPriceListReview(){
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
       <td>
-        <input type="text" placeholder="Search product…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
+        <input type="text" id="prodSearch_${i}" placeholder="Search product…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
         <select id="prodSelect_${i}" style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="onPriceListProductSelect(${i}, this)">
         <option value="">— select —</option>
         <option value="__new__">+ Create new product…</option>
@@ -1257,6 +1293,10 @@ function renderPriceListReview(){
       </select>${teachPrompt}</td>
     </tr>`;
   }).join('');
+  // The table just got rebuilt from scratch, which drops any previously-hidden <option>s along
+  // with it — re-apply the standing category filter (and each row's own search text, if any) so
+  // it doesn't silently reset back to "show everything" on every re-render.
+  if (priceListCategoryFilter) setPriceListCategoryFilter(priceListCategoryFilter);
 }
 
 async function applyPriceList(){
