@@ -52,7 +52,8 @@
   .doc-split > .btn:last-child{border-radius:0 8px 8px 0;padding:5px 7px !important;font-size:11px !important;}
   .docs-btn{background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:6px 12px;font-weight:600;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
   .docs-btn svg{width:14px;height:14px;}
-  .docs-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(15,31,51,.18);padding:8px;z-index:500;min-width:320px;}
+  .menu-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .docs-menu{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:8px;min-width:320px;max-width:calc(100vw - 40px);max-height:80vh;overflow-y:auto;}
   .docs-menu-row{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;}
   .docs-menu-row:hover{background:var(--bg);}
   .docs-menu-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
@@ -71,13 +72,18 @@
   .row-menu-btn{background:#fff;border:1.5px solid var(--line);color:var(--ink-soft);border-radius:8px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
   .row-menu-btn:hover{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
   .row-menu-btn svg{width:17px;height:17px;}
-  .share-btn{background:linear-gradient(135deg,var(--blue) 0%,#3E7BC4 100%);border:none;color:#fff;border-radius:7px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(30,106,219,.35);transition:transform .12s,box-shadow .12s;}
-  .share-btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,106,219,.4);}
-  .share-btn svg{width:15px;height:15px;}
-  .share-chooser{position:fixed;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(15,31,51,.18);padding:6px;z-index:600;min-width:210px;animation:menuPop .16s cubic-bezier(.2,.9,.3,1.2);}
-  .share-chooser-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink);transition:background .12s;}
-  .share-chooser-row:hover{background:var(--bg);}
-  .share-chooser-row svg{width:16px;height:16px;flex-shrink:0;}
+  .doc-preview-box{background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,31,51,.4);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;animation:menuPop .18s cubic-bezier(.2,.9,.3,1.2);}
+  .doc-preview-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);flex-shrink:0;}
+  .doc-preview-title{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:var(--ink);}
+  .doc-preview-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .doc-preview-body{flex:1;min-height:0;background:var(--bg);position:relative;display:flex;align-items:center;justify-content:center;}
+  .doc-preview-loading{color:var(--ink-soft);font-size:13px;display:flex;align-items:center;gap:10px;}
+  .doc-preview-loading::before{content:'';width:16px;height:16px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--blue);animation:docSpin .7s linear infinite;}
+  @keyframes docSpin{to{transform:rotate(360deg);}}
+  .doc-preview-frame{width:100%;height:100%;min-height:60vh;border:none;background:#fff;}
+  .doc-preview-actions{display:flex;justify-content:flex-end;gap:10px;padding:16px 22px;border-top:1px solid var(--line);flex-shrink:0;}
+  .doc-preview-actions .btn{display:inline-flex;align-items:center;gap:7px;}
+  .doc-preview-actions .btn svg{width:15px;height:15px;}
   .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
   .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
   .email-modal-box{background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(15,31,51,.35);}
@@ -279,7 +285,7 @@ auth.onAuthStateChanged(user => {
   <div id="offerPanel_pipeline">
     <div class="card">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
-        <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="e.g. Trompa, Tyson…"></div>
+        <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="Search…"></div>
         <div class="field"><label>Status</label>
           <select id="f_status" onchange="renderOffers()">
             <option value="">All</option>
@@ -297,13 +303,13 @@ auth.onAuthStateChanged(user => {
       <table>
         <thead>
           <tr>
+            <th></th>
             <th>Product</th>
             <th>Customer</th>
             <th>Plant</th>
             <th>Purchase</th>
             <th>Sale</th>
             <th>Status</th>
-            <th></th>
           </tr>
         </thead>
         <tbody id="offerRows"></tbody>
@@ -319,8 +325,25 @@ auth.onAuthStateChanged(user => {
 </div>
 </div>
 
-<div id="docsMenu" class="docs-menu" style="display:none;"></div>
-<div id="shareChooser" class="share-chooser" style="display:none;"></div>
+<div id="menuOverlay" class="menu-overlay" style="display:none;" onclick="closeFloatingMenus()">
+  <div id="docsMenu" class="docs-menu" style="display:none;" onclick="event.stopPropagation()"></div>
+</div>
+<div id="docPreviewOverlay" class="menu-overlay" style="display:none;" onclick="closeDocPreview()">
+  <div class="doc-preview-box" onclick="event.stopPropagation()">
+    <div class="doc-preview-head">
+      <div>
+        <div class="doc-preview-title" id="docPreviewTitle">Purchase Order</div>
+        <div class="doc-preview-sub" id="docPreviewSub"></div>
+      </div>
+      <button class="row-menu-btn" onclick="closeDocPreview()" title="Close" style="width:32px;height:32px;">✕</button>
+    </div>
+    <div class="doc-preview-body" id="docPreviewBody">
+      <div class="doc-preview-loading" id="docPreviewLoading">Building document…</div>
+      <iframe id="docPreviewFrame" class="doc-preview-frame" style="display:none;"></iframe>
+    </div>
+    <div class="doc-preview-actions" id="docPreviewActions"></div>
+  </div>
+</div>
 <div id="toastStack" class="toast-stack"></div>
 
 <div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
@@ -422,13 +445,13 @@ function renderOffers(){
     // Numbers are read-only here on purpose — editing a price without seeing the rest of the
     // build-up (customs, inspection, freight) isn't safe. Any change goes through "TT" above.
     return `<tr>
+      <td>${action}</td>
       <td>${escapeHtml(o.product_name)}</td>
       <td>${escapeHtml(o.customer_name)}</td>
       <td>${escapeHtml(o.plant_name)}</td>
       <td>$${(o.purchase_price || 0).toFixed(4)}</td>
       <td>$${(o.sale_per_lb || 0).toFixed(4)}</td>
       <td>${statusPill}</td>
-      <td>${action}</td>
     </tr>
     <tr id="tt_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);padding:0;"><div id="tt_panel_${o.id}"></div></td></tr>
     <tr id="history_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="history_panel_${o.id}"></div></td></tr>`;
@@ -644,11 +667,9 @@ const DOC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 const EMAIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>';
 const KEBAB_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
-// The familiar three-nodes "share" glyph — opens the Email/WhatsApp chooser (see shareSmart
-// below), not the OS's own native share sheet (tried that; see the comment on shareSmart).
-const SHARE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>';
 const COSTS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
 const HISTORY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 16 14"/></svg>';
+const PREVIEW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 const DOC_TYPES = [
   { key: 'PO', color: '#1E6ADB', desc: 'To plant', exportFn: 'exportPO', shareFn: 'sharePO', waFn: 'waCardPO', title: 'Purchase Order' },
@@ -660,20 +681,17 @@ function toggleRowMenu(evt, offerId, orderNumber, hasCustoms, historyCount){
   evt.stopPropagation();
   const menu = document.getElementById('docsMenu');
   if (menu.dataset.orderNumber === orderNumber && menu.style.display === 'block'){
-    menu.style.display = 'none';
+    closeFloatingMenus();
     return;
   }
   menu.dataset.orderNumber = orderNumber;
 
   const rows = DOC_TYPES.map(d => `
-    <div class="docs-menu-row">
+    <div class="docs-menu-row" style="cursor:pointer;" onclick="closeFloatingMenus(); openDocPreview('${d.key}','${orderNumber}')">
       <span class="docs-menu-dot" style="background:${d.color};"></span>
       <span class="docs-menu-label" style="color:${d.color};">${d.key}</span>
       <span class="docs-menu-desc">${d.desc}</span>
-      <span class="docs-menu-actions">
-        <button class="docs-icon-btn" title="Download PDF" onclick="${d.exportFn}('${orderNumber}')">${DOWNLOAD_ICON}</button>
-        <button class="share-btn" title="Share" onclick="shareSmart(event,'${d.key}','${orderNumber}')">${SHARE_ICON}</button>
-      </span>
+      <span class="docs-menu-actions" style="color:var(--ink-soft);">${PREVIEW_ICON}</span>
     </div>`).join('');
 
   const customsRow = hasCustoms ? `
@@ -689,67 +707,76 @@ function toggleRowMenu(evt, offerId, orderNumber, hasCustoms, historyCount){
 
   const otherRows = `
     <div class="docs-menu-divider"></div>
-    <div class="docs-menu-action-row" onclick="document.getElementById('docsMenu').style.display='none'; toggleTT('${offerId}')">
+    <div class="docs-menu-action-row" onclick="closeFloatingMenus(); toggleTT('${offerId}')">
       ${COSTS_ICON}<span>Real Costs</span>
     </div>
-    ${historyCount ? `<div class="docs-menu-action-row" onclick="document.getElementById('docsMenu').style.display='none'; toggleHistory('${offerId}')">
+    ${historyCount ? `<div class="docs-menu-action-row" onclick="closeFloatingMenus(); toggleHistory('${offerId}')">
       ${HISTORY_ICON}<span>History</span>
     </div>` : ''}`;
 
   menu.innerHTML = rows + customsRow + otherRows;
   menu.style.display = 'block';
-  positionFloatingMenu(menu, evt.currentTarget);
+  document.getElementById('menuOverlay').style.display = 'flex';
 }
 
-// Shared by every floating menu in this file (row actions, share chooser) — flips above the
-// button when there isn't room below (e.g. the last row in a long table, where it used to get
-// clipped at the bottom of the viewport) and keeps it from running off the right edge.
-function positionFloatingMenu(menu, btn, width){
-  width = width || 320;
-  const rect = btn.getBoundingClientRect();
-  const menuHeight = menu.offsetHeight || 220;
-  const spaceBelow = window.innerHeight - rect.bottom;
-  if (spaceBelow < menuHeight + 12 && rect.top > menuHeight + 12){
-    menu.style.top = (rect.top - menuHeight - 6) + 'px';
-  } else {
-    menu.style.top = (rect.bottom + 6) + 'px';
-  }
-  let left = rect.left;
-  if (left + width > window.innerWidth) left = window.innerWidth - width - 12;
-  menu.style.left = left + 'px';
-}
-
-document.addEventListener('click', (e) => {
-  const menu = document.getElementById('docsMenu');
-  if (menu && menu.style.display === 'block' && !menu.contains(e.target)){
-    menu.style.display = 'none';
-  }
-  const chooser = document.getElementById('shareChooser');
-  if (chooser && chooser.style.display === 'block' && !chooser.contains(e.target)){
-    chooser.style.display = 'none';
-  }
-});
-
-// ============ SHARE ============
-// A real navigator.share() attempt used to run first here, handing the PDF straight to the OS
-// share sheet. Confirmed live on macOS Chrome: that sheet doesn't list WhatsApp at all (WhatsApp
-// Desktop never registered as a share target) and its "Mail" opens the system Mail app instead
-// of BuenTrade's own branded, Resend-backed send — worse than what it replaced, not better. Share
-// always opens the chooser below now, which routes to the flows that actually work.
-function shareSmart(evt, kind, orderNumber){
-  evt.stopPropagation();
+// One shared centered overlay for the row-actions menu — replaced the old anchored-to-the-button
+// positioning (positionFloatingMenu), which had to flip above/below and clamp off the right edge
+// to avoid clipping near the table's own edges. Centering sidesteps that entirely and matches
+// every other modal in the app (email preview, WhatsApp preview) instead of being the one
+// floating exception.
+function closeFloatingMenus(){
+  document.getElementById('menuOverlay').style.display = 'none';
   document.getElementById('docsMenu').style.display = 'none';
-  openShareChooser(evt.currentTarget, kind, orderNumber);
 }
 
-function openShareChooser(btn, kind, orderNumber){
+// ============ DOCUMENT PREVIEW ============
+// A real navigator.share() attempt used to run here first, handing the PDF straight to the OS
+// share sheet. Confirmed live on macOS Chrome: that sheet doesn't list WhatsApp at all (WhatsApp
+// Desktop never registered as a share target) and its "Mail" opens the system Mail app instead of
+// BuenTrade's own branded, Resend-backed send — worse than what it replaced, not better.
+//
+// Clicking a document type now opens this instead — the actual generated PDF rendered inline
+// (jsPDF's own blob-URL output, no separate render step) so the trader sees exactly what's about
+// to go out before picking Download/Email/WhatsApp, all three right below the preview.
+async function openDocPreview(kind, orderNumber){
   const cfg = DOC_TYPES.find(d => d.key === kind);
-  const chooser = document.getElementById('shareChooser');
-  chooser.innerHTML = `
-    <div class="share-chooser-row" onclick="document.getElementById('shareChooser').style.display='none'; ${cfg.shareFn}('${orderNumber}')">${EMAIL_ICON}<span>Email</span></div>
-    <div class="share-chooser-row" style="color:#25D366;" onclick="document.getElementById('shareChooser').style.display='none'; ${cfg.waFn}('${orderNumber}', this)">${WA_ICON}<span style="color:var(--ink);">WhatsApp</span></div>`;
-  chooser.style.display = 'block';
-  positionFloatingMenu(chooser, btn, 210);
+  document.getElementById('docPreviewTitle').textContent = cfg.title;
+  document.getElementById('docPreviewSub').textContent = `Order ${orderNumber}`;
+  document.getElementById('docPreviewActions').innerHTML = '';
+  const frame = document.getElementById('docPreviewFrame');
+  const loading = document.getElementById('docPreviewLoading');
+  frame.style.display = 'none';
+  frame.src = 'about:blank';
+  loading.style.display = 'flex';
+  loading.textContent = 'Building document…';
+  document.getElementById('docPreviewOverlay').style.display = 'flex';
+
+  try {
+    let doc;
+    if (kind === 'PO'){ doc = (await buildPODoc(orderNumber)).doc; }
+    else if (kind === 'SO'){ doc = (await buildSODoc(orderNumber)).doc; }
+    else if (kind === 'FO'){
+      const legs = await buildFODocs(orderNumber);
+      if (!legs.length) throw new Error('No freight leg on this order.');
+      // Multiple legs (more than one truck on this order) all still go out correctly through
+      // Download/Email/WhatsApp below (those cover every leg) — only the preview itself shows
+      // the first, since previewing several PDFs at once has nowhere sensible to put the rest.
+      doc = legs[0].doc;
+    }
+    frame.src = doc.output('bloburl');
+    frame.onload = () => { loading.style.display = 'none'; frame.style.display = 'block'; };
+    document.getElementById('docPreviewActions').innerHTML = `
+      <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.exportFn}('${orderNumber}')">${DOWNLOAD_ICON}Download</button>
+      <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.shareFn}('${orderNumber}')">${EMAIL_ICON}Email</button>
+      <button class="wa-btn" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.waFn}('${orderNumber}', this)">${WA_ICON}WhatsApp</button>`;
+  } catch(e){
+    loading.textContent = 'Could not build this document: ' + e.message;
+  }
+}
+
+function closeDocPreview(){
+  document.getElementById('docPreviewOverlay').style.display = 'none';
+  document.getElementById('docPreviewFrame').src = 'about:blank';
 }
 
 // ============ STATUS TAB (load lifecycle: pickup -> unloading -> delivered -> payment) ============
