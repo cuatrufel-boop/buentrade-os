@@ -632,6 +632,7 @@ if (FIREBASE_READY) {
           <div class="field" id="inspectionField">
             <label>Inspection (USD)</label>
             <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspection" value="0" oninput="calc()"></div>
+            <div id="inspectionHint" style="font-size:9px;color:var(--ink-soft);text-align:right;margin-top:-2px;"></div>
           </div>
           <div class="field" id="importCostField">
             <label>Import Cost (USD)</label>
@@ -651,7 +652,7 @@ if (FIREBASE_READY) {
         <div id="coldStorageSection">
           <div class="divider"></div>
           <div class="section-label">Cold storage & USDA — optional</div>
-          <div class="field" id="labelsCostField"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div></div>
+          <div class="field" id="labelsCostField"><label>Labels (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="labelsCost" value="" placeholder="0" oninput="calc()"></div><div id="labelsHint" style="font-size:9px;color:var(--ink-soft);text-align:right;margin-top:-2px;"></div></div>
           <div class="field" id="plasticWrapField"><label>Plastic wrap (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="plasticWrap" value="" placeholder="0" oninput="calc()"></div></div>
           <div class="field" id="inLieuField"><label>IN-LIEU (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="inLieu" value="" placeholder="0" oninput="calc()"></div></div>
           <div class="field" id="storageOvernightField"><label>Storage — Overnight (USD)</label><div class="inputwrap"><span class="pfx">$</span><input type="number" id="storageOvernight" value="" placeholder="0" oninput="calc()"></div></div>
@@ -1333,10 +1334,55 @@ function applyEmbedParams(qp){
   rqShow('sharedCostsSection', !['freightField','mexicanFreightField','inspectionField','importCostField'].every(id => document.getElementById(id).style.display === 'none'));
 }
 
+// Standard, non-freight cost fields (Customs brokerage + Cold storage & USDA) come from a real,
+// live rate on file (provider_rates) instead of the trader having to remember or go look each one
+// up — focusing an empty field fills in the known rate, same as reading it off a printed rate
+// sheet. Freight is deliberately excluded: it varies by lane, there's no single "standard" number.
+const RQ_STANDARD_COST_FIELDS = {
+  tramiteAduanal: 'tramite_aduanal', bodegaAmericana: 'bodega_americana', lumperFee: 'lumper_fee', inbondRelease: 'inbond_release',
+  plasticWrap: 'plastic_wrap', inLieu: 'in_lieu', freshToFrozen: 'fresh_to_frozen',
+  storageOvernight: 'storage_overnight', storageWeekend: 'storage_weekend', storageShortTerm: 'storage_short_term',
+  storageMidTerm: 'storage_mid_term', storageLongTerm: 'storage_long_term', storageExtraLong: 'storage_extra_long',
+};
+async function fetchStandardCostSuggestions(){
+  const types = [...Object.values(RQ_STANDARD_COST_FIELDS), 'inspection_cases', 'inspection_combos', 'labels'];
+  const { data, error } = await db.from('provider_rates').select('service_type,rate').in('service_type', types);
+  if (error || !data) return;
+  const byType = {};
+  data.forEach(r => { if (!(r.service_type in byType)) byType[r.service_type] = r.rate; });
+
+  Object.entries(RQ_STANDARD_COST_FIELDS).forEach(([fieldId, serviceType]) => {
+    const rate = byType[serviceType];
+    if (rate == null) return;
+    const input = document.getElementById(fieldId);
+    if (!input) return;
+    input.addEventListener('focus', () => {
+      if (input.value.trim() !== '') return; // trader's own number already there — never override
+      input.value = rate;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+
+  // Inspection and Labels don't get auto-filled on focus — Inspection's real rate depends on
+  // packaging (Cases vs Combo), which nothing in this calculator tracks, and Labels is priced per
+  // case, not per load, so a single auto-filled number would only be right by accident. Showing
+  // both as a reference hint still saves the trip to go look them up, without risking a silently
+  // wrong total.
+  const inspHint = document.getElementById('inspectionHint');
+  if (inspHint && byType.inspection_cases != null && byType.inspection_combos != null){
+    inspHint.textContent = `Reference: $${byType.inspection_cases} cases · $${byType.inspection_combos} combos`;
+  }
+  const labelsHint = document.getElementById('labelsHint');
+  if (labelsHint && byType.labels != null){
+    labelsHint.textContent = `Reference: $${byType.labels}/case`;
+  }
+}
+
 applyEmbedParams(__qp);
 buildProductRows();
 calc();
 fetchExchangeRate();
+fetchStandardCostSuggestions();
 
 // Quotes pushes freight/docs/destination/extra-cost changes here live once this Trading Tool is
 // already open, instead of reloading the iframe (which would wipe out any negotiation already
