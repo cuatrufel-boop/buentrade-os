@@ -1527,6 +1527,7 @@ async function sendEmailApiRaw(fromAlias, to, subject, text, html){
 // replaces the old browser confirm() (plain text, one recipient at a time, nothing editable).
 // A card that already sent stays visible (greyed out, fields locked) so the trader can see the
 // whole batch's status at a glance instead of it vanishing the moment it goes out.
+const RQ_EMAIL_ICON = `<svg viewBox="0 0 24 24" fill="#fff" style="width:13px;height:13px;flex-shrink:0;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>`;
 let rqEmailModalItems = [];
 let rqEmailModalIsOffer = false;
 function rqOpenEmailModal(title, items, isOffer){
@@ -1538,7 +1539,10 @@ function rqOpenEmailModal(title, items, isOffer){
 }
 function rqRenderEmailModal(){
   const list = document.getElementById('rq_email_modal_list');
-  const sendLabel = rqEmailModalIsOffer ? 'Send Offer' : 'Send';
+  // Same reasoning as the WhatsApp modal: sending a customer offer logs a live, followable row in
+  // sent_offers, so that button says so — plant asks (rqAskAllEmails, stale-price refresh) don't
+  // create anything trackable and keep the plain "Send" label.
+  const sendLabel = rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make an Offer` : 'Send';
   list.innerHTML = rqEmailModalItems.map((it, i) => `
     <div class="rq-email-card${it.sent ? ' sent' : ''}">
       <div class="rq-email-card-head">
@@ -1548,12 +1552,16 @@ function rqRenderEmailModal(){
       <div class="rq-email-field"><label>To</label><input type="text" value="${escapeHtml(it.to)}" readonly></div>
       <div class="rq-email-field"><label>Subject</label><input type="text" ${it.sent ? 'disabled' : ''} value="${escapeHtml(it.subject)}" oninput="rqEmailModalItems[${i}].subject=this.value"></div>
       <div class="rq-email-field"><label>Message</label><textarea ${it.sent ? 'disabled' : ''} oninput="rqEmailModalItems[${i}].body=this.value">${escapeHtml(it.body)}</textarea></div>
-      ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>` : ''}
+      ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>` : ''}
     </div>`).join('');
   const sendAllBtn = document.getElementById('rq_email_modal_sendall');
-  sendAllBtn.style.display = rqEmailModalItems.every(it => it.sent) ? 'none' : '';
+  sendAllBtn.style.display = rqEmailModalItems.every(it => it.sent) ? 'none' : 'inline-flex';
+  sendAllBtn.style.alignItems = 'center';
+  sendAllBtn.style.gap = '5px';
   const remaining = rqEmailModalItems.filter(it => !it.sent).length;
-  sendAllBtn.textContent = rqEmailModalItems.length > 1 ? `${sendLabel} All (${remaining})` : sendLabel;
+  sendAllBtn.innerHTML = rqEmailModalItems.length > 1
+    ? (rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make All Offers (${remaining})` : `Send All (${remaining})`)
+    : sendLabel;
 }
 async function rqEmailModalSendOne(i){
   const it = rqEmailModalItems[i];
