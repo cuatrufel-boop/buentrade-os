@@ -223,11 +223,16 @@
   .rm-btn:hover{background:#FBEAE6; color:var(--red);}
 
   .add-btn{
-    width:100%; padding:10px; border:1.5px dashed var(--blue); border-radius:8px; background:var(--blue-light);
-    color:var(--blue); font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; cursor:pointer;
+    width:100%; padding:11px; border:none; border-radius:10px;
+    background:linear-gradient(135deg,var(--blue) 0%,#3E7BC4 100%); color:#fff;
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:7px;
+    box-shadow:0 3px 10px rgba(30,106,219,.3); transition:transform .12s,box-shadow .12s;
   }
-  .add-btn:hover{background:#DCEAFB;}
-  .add-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .add-btn svg{width:15px; height:15px; flex-shrink:0;}
+  .add-btn:hover{transform:translateY(-1px); box-shadow:0 5px 14px rgba(30,106,219,.4);}
+  .add-btn:active{transform:translateY(0);}
+  .add-btn:disabled{opacity:.4; cursor:not-allowed; transform:none; box-shadow:none;}
 
   .profit-cols{display:grid; grid-template-columns:minmax(0,1fr); gap:0 14px; padding:11px 14px 12px;}
   .profit-cols.split{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);}
@@ -256,12 +261,6 @@
   .advanced-tools[open] summary{border-radius:10px 10px 0 0; margin-bottom:0;}
 
   .profit-details{margin-top:4px;}
-  .profit-details summary{
-    cursor:pointer; list-style:none; font-size:11px; font-weight:600;
-    color:var(--blue); user-select:none; padding:6px 0 2px;
-  }
-  .profit-details summary::-webkit-details-marker{display:none;}
-  .profit-details[open] summary{color:var(--ink-soft);}
 
   .scenario-toggle{display:flex; gap:6px;}
   .scenario-toggle .chip{flex:1; text-align:center; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.25); color:#BBD4EE;}
@@ -678,7 +677,7 @@ if (FIREBASE_READY) {
       </div>
       <div class="card-body" id="productsBody"></div>
       <div class="card-body" style="padding-top:0;">
-        <button class="add-btn" id="addProdBtn" onclick="addProduct()">+ Add Product</button>
+        <button class="add-btn" id="addProdBtn" onclick="addProduct()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>
       </div>
     </div>
 
@@ -730,8 +729,7 @@ if (FIREBASE_READY) {
           <div class="totals-mini" style="grid-template-columns:1fr;">
             <div class="t"><span>Product Cost</span><b id="outProdCost">$0</b></div>
           </div>
-          <details class="profit-details">
-            <summary>See full breakdown</summary>
+          <div class="profit-details">
             <div class="kpi"><span class="k-label">Profit / Lb</span><span class="k-val" id="outProfitLb">$0</span></div>
             <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMargin">0%</span></div>
             <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkup">$0</span></div>
@@ -747,7 +745,7 @@ if (FIREBASE_READY) {
               <span class="mx-note-icon">🇲🇽</span>
               <span>Add <b>Import Cost</b> + <b>Mexican Freight</b> in Direct Costs to also see your Mexico (MXN) price here.</span>
             </div>
-          </details>
+          </div>
         </div>
 
         <div class="profit-col-divider" id="profitColDivider" style="display:none;"></div>
@@ -759,8 +757,7 @@ if (FIREBASE_READY) {
           <div class="totals-mini" style="grid-template-columns:1fr;">
             <div class="t"><span>Product Cost</span><b id="outProdCostMx">MX$0</b></div>
           </div>
-          <details class="profit-details">
-            <summary>See full breakdown</summary>
+          <div class="profit-details">
             <div class="kpi"><span class="k-label">Profit (MXN)</span><span class="k-val" id="outProfitMx">MX$0</span></div>
             <div class="kpi"><span class="k-label">Profit / Kg</span><span class="k-val" id="outProfitKgMx">MX$0</span></div>
             <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMarginMx">0%</span></div>
@@ -773,7 +770,7 @@ if (FIREBASE_READY) {
               <div class="t"><span>Direct Costs</span><b id="outDirectMx">MX$0</b></div>
               <div class="t"><span>Finance Cost</span><b id="outAdditionalMx">MX$0</b></div>
             </div>
-          </details>
+          </div>
         </div>
       </div>
     </div>
