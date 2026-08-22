@@ -1634,6 +1634,15 @@ document.getElementById('specFile').addEventListener('change', (e) => {
   specPrev.style.display = 'block';
 });
 
+// Grade numbers (#2), percentages (42%), and size ranges (13/15, 4/5KG) — the exact kind of
+// detail confirmed missing from one language while present in the other in two real catalog
+// entries. Normalized (spaces stripped, uppercased) so "# 2" and "#2" count as the same marker.
+function extractMarkers(text){
+  if (!text) return [];
+  const matches = text.match(/#\s?\d+|\d+%|\d+\/\d+(?:KG)?/gi) || [];
+  return matches.map(m => m.replace(/\s+/g, '').toUpperCase());
+}
+
 async function saveProduct(){
   const id = document.getElementById('prodId').value;
   const payload = {
@@ -1653,6 +1662,18 @@ async function saveProduct(){
   // shared name. No partial products, ever, however this form was opened.
   if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id){
     document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature and packaging.';
+    return;
+  }
+  // Confirmed real, pre-existing catalog errors: a grade/size/percentage detail present in one
+  // language's text and silently missing from the other ("#2 Pork Backribs" whose Spanish name
+  // never got the "#2") — never caught until someone happened to compare them side by side. Blocks
+  // save instead, forcing it to be caught right here, every time, rather than trusting anyone to
+  // remember to check both languages by hand.
+  const markersEn = new Set([...extractMarkers(payload.name_en), ...extractMarkers(payload.subcategory_en)]);
+  const markersEs = new Set([...extractMarkers(payload.name), ...extractMarkers(payload.subcategory)]);
+  const sameMarkers = markersEn.size === markersEs.size && [...markersEn].every(m => markersEs.has(m));
+  if (!sameMarkers){
+    document.getElementById('formMsg').textContent = `The Spanish and English text don't carry the same detail (a #, %, or size like 13/15) — found [${[...markersEn].join(', ') || '—'}] in English vs [${[...markersEs].join(', ') || '—'}] in Spanish. Make sure both say the same thing before saving.`;
     return;
   }
   if (pendingPhotoFile){

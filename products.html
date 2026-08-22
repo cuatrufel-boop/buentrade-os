@@ -472,6 +472,15 @@ function editProduct(id){
   }
 }
 
+// Grade numbers (#2), percentages (42%), and size ranges (13/15, 4/5KG) — the exact kind of
+// detail confirmed missing from one language while present in the other in two real catalog
+// entries. Normalized (spaces stripped, uppercased) so "# 2" and "#2" count as the same marker.
+function extractMarkers(text){
+  if (!text) return [];
+  const matches = text.match(/#\s?\d+|\d+%|\d+\/\d+(?:KG)?/gi) || [];
+  return matches.map(m => m.replace(/\s+/g, '').toUpperCase());
+}
+
 async function saveProduct(){
   const id = document.getElementById('prodId').value;
   const payload = {
@@ -490,6 +499,19 @@ async function saveProduct(){
   if (!payload.name || !payload.category){
     document.getElementById('formMsg').textContent = 'Name and category are required.';
     return;
+  }
+  // Confirmed real catalog errors: a grade/size/percentage detail present in one language's name
+  // and silently missing from the other ("#2 Pork Backribs" whose Spanish name never got the
+  // "#2") — never caught until someone happened to compare them side by side. Blocks save so it's
+  // caught right here instead.
+  if (payload.name_en){
+    const markersEn = new Set(extractMarkers(payload.name_en));
+    const markersEs = new Set(extractMarkers(payload.name));
+    const sameMarkers = markersEn.size === markersEs.size && [...markersEn].every(m => markersEs.has(m));
+    if (!sameMarkers){
+      document.getElementById('formMsg').textContent = `The Spanish and English names don't carry the same detail (a #, %, or size like 13/15) — found [${[...markersEn].join(', ') || '—'}] in English vs [${[...markersEs].join(', ') || '—'}] in Spanish. Make sure both say the same thing before saving.`;
+      return;
+    }
   }
 
   if (pendingPhotoFile){
