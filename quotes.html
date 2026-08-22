@@ -205,11 +205,11 @@ auth.onAuthStateChanged(user => {
     <div style="display:flex;align-items:flex-end;justify-content:center;flex-wrap:wrap;gap:14px;">
       <div class="field" style="position:relative;margin-bottom:0;width:320px;">
         <label>Product</label>
-        <input id="rq_product_name" placeholder="Search products…" autocomplete="off" oninput="onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)" style="width:100%;height:38px;padding:0 12px;border:1.5px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;">
+        <input id="rq_product_name" placeholder="Search products…" autocomplete="off" oninput="rqPreferredVariantId=null; onRqProductInput()" onfocus="rqRenderSuggestions()" onblur="setTimeout(rqHideSuggestions, 150)" style="width:100%;height:38px;padding:0 12px;border:1.5px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;">
         <div id="rq_product_suggestions" class="rq-suggest"></div>
       </div>
 
-      <div id="rq_dates_wrap" class="field" style="margin-bottom:0;text-align:center;">
+      <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;text-align:center;">
         <label style="text-align:center;">Delivery day <span style="color:#c0392b;">*</span></label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;">
           <div id="rq_date_chips" style="display:contents;"></div>
@@ -261,7 +261,8 @@ let products = [];
 let temperatures = [];
 let packagings = [];
 let rqAllPlants = [];
-let rqProductNames = [];
+let rqProductSuggestions = []; // [{ label (name + full spec), matchName, productId }]
+let rqPreferredVariantId = null; // set only when a suggestion for a SPECIFIC variant was clicked
 let rqSelectedPlants = [];
 let rqProductSpec = null; // English — plant-facing (name_en, temp_en, pack_en)
 let rqProductSpecEs = null; // Spanish twin — customer-facing (name, temp, pack), same product
@@ -331,25 +332,30 @@ async function loadQuotesPage(){
   rqAllProviders = provRes.data || [];
   rqAllProviderRates = rateRes.data || [];
 
-  // Both languages — the exact-match below (onRqProductInput) already accepts either the Spanish
-  // or the English catalog name, but the suggestion list itself only offered Spanish, so typing
-  // in English (e.g. "belly") surfaced no suggestions at all and silently fell through to "not in
-  // catalog", even though the exact English name would have matched.
+  // A bare name is never enough to pick from — the same name can point to several real products
+  // (Fresh vs Frozen, Combo vs Box), and picking blind meant no way to tell which one a click
+  // would actually select. Every suggestion now carries its own full spec (temp/pack) in the
+  // label, one entry PER VARIANT (not per name), in both languages — the exact-match below
+  // (onRqProductInput) already accepts either the Spanish or English catalog name, but the old
+  // suggestion list only offered Spanish, so typing in English (e.g. "belly") surfaced nothing.
   //
-  // Deduped case-INsensitively, not just by exact string: two real catalog rows can carry the
-  // literal same name with only a casing slip ("Cabeza de lomo de Cerdo con hueso" vs "...de
-  // cerdo con hueso") — every match in this file already compares names lowercased, so both rows
-  // are found regardless of which casing gets typed; showing both as separate suggestions was
-  // pure visual noise, never a sign of two different products.
-  const seenLower = new Set();
-  rqProductNames = [];
-  products.flatMap(p => [p.name, p.name_en]).filter(Boolean).forEach(n => {
-    const key = n.toLowerCase();
-    if (seenLower.has(key)) return;
-    seenLower.add(key);
-    rqProductNames.push(n);
+  // Deduped case-INsensitively per (name, product): two real catalog rows can carry the literal
+  // same name with only a casing slip ("Cabeza de lomo de Cerdo con hueso" vs "...de cerdo con
+  // hueso") — every match in this file already compares names lowercased, so showing both as
+  // separate suggestions was pure visual noise, never a sign of two different products.
+  const seen = new Set();
+  rqProductSuggestions = [];
+  products.forEach(p => {
+    const spec = rqVariantSpec(p.id);
+    const suffix = spec ? ' — ' + spec : '';
+    [p.name_en, p.name].filter(Boolean).forEach(n => {
+      const key = n.toLowerCase() + '::' + p.id;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rqProductSuggestions.push({ label: n + suffix, matchName: n, productId: p.id });
+    });
   });
-  rqProductNames.sort();
+  rqProductSuggestions.sort((a, b) => a.label.localeCompare(b.label));
 
   document.getElementById('rq_newdate').min = rqTodayStr();
   rqFetchExchangeRate(); // kicked off early, not awaited — usually ready well before Imported Load gets toggled
@@ -369,10 +375,11 @@ function rqRenderSuggestions(){
   const box = document.getElementById('rq_product_suggestions');
   const term = document.getElementById('rq_product_name').value.trim().toLowerCase();
   // Once the text is already an exact match, the pick is done — no need to keep suggesting.
-  if (term && rqProductNames.some(n => n.toLowerCase() === term)){ box.classList.remove('show'); box.innerHTML = ''; return; }
-  const matches = (term ? rqProductNames.filter(n => n.toLowerCase().includes(term)) : rqProductNames).slice(0, 8);
+  if (term && rqProductSuggestions.some(s => s.matchName.toLowerCase() === term)){ box.classList.remove('show'); box.innerHTML = ''; return; }
+  const matches = (term ? rqProductSuggestions.filter(s => s.label.toLowerCase().includes(term)) : rqProductSuggestions).slice(0, 8);
   if (!matches.length){ box.classList.remove('show'); box.innerHTML = ''; return; }
-  box.innerHTML = matches.map(n => `<div class="rq-suggest-item" onmousedown="rqSelectSuggestion('${n.replace(/'/g,"\\'")}')">${escapeHtml(n)}</div>`).join('');
+  box.innerHTML = matches.map((s, i) => `<div class="rq-suggest-item" data-suggest-idx="${i}" onmousedown="rqSelectSuggestionIdx(${i})">${escapeHtml(s.label)}</div>`).join('');
+  box.dataset.matches = JSON.stringify(matches.map(s => ({ n: s.matchName, p: s.productId })));
   box.classList.add('show');
 }
 
@@ -380,9 +387,20 @@ function rqHideSuggestions(){
   document.getElementById('rq_product_suggestions').classList.remove('show');
 }
 
-function rqSelectSuggestion(name){
-  document.getElementById('rq_product_name').value = name;
+// Referenced by index into the last-rendered list rather than passing the name/id through the
+// onclick string — a product name can contain characters (quotes, etc.) that are awkward to
+// safely escape into an inline JS string; an index into a small JSON blob already on the element
+// avoids that entirely.
+function rqSelectSuggestionIdx(i){
+  const box = document.getElementById('rq_product_suggestions');
+  const list = JSON.parse(box.dataset.matches || '[]');
+  const picked = list[i];
+  if (!picked) return;
+  document.getElementById('rq_product_name').value = picked.n;
   rqHideSuggestions();
+  // Pins the EXACT variant that was clicked (not whichever one autoPopulateRqPlants would have
+  // defaulted to) — applied to every plant that actually carries it, once plants load.
+  rqPreferredVariantId = picked.p || null;
   onRqProductInput();
 }
 
@@ -393,8 +411,16 @@ async function onRqProductInput(){
   // silently miss the catalog entirely (no photo, no customer-facing Spanish name, sent as
   // literally typed) since this only checked the Spanish field before.
   const nameLower = name.toLowerCase();
-  const match = products.find(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
+  // A specific-variant suggestion click (rqSelectSuggestionIdx) pins exactly which product this
+  // is — preferred over the plain name lookup, which would otherwise land on whichever same-named
+  // product happens to come first and show the wrong temp/pack in the spec line below.
+  const match = (rqPreferredVariantId && products.find(p => p.id === rqPreferredVariantId && ((p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower)))
+    || products.find(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
   const specLine = document.getElementById('rq_spec_line');
+  // One step leads to the next instead of both fields demanding attention at once: Delivery day
+  // only appears once a product has actually been typed, not upfront alongside an empty search
+  // box (where it read as an immediate blocking requirement rather than the next natural step).
+  document.getElementById('rq_dates_wrap').style.display = name ? 'block' : 'none';
   document.getElementById('rq_customers_wrap').style.display = 'none';
   document.getElementById('rq_top_actions_wrap').style.display = 'none';
   rqMatchedCustomers = [];
@@ -462,8 +488,11 @@ async function autoPopulateRqPlants(productName){
   rqSelectedPlants = [...linksByPlant.entries()].map(([plantId, links]) => {
     const plant = rqAllPlants.find(p => p.id === plantId);
     if (!plant) return null;
+    // A specific-variant suggestion click wins when this plant actually carries it; otherwise
+    // fall back to whichever variant has the most recent price on file.
+    const preferred = rqPreferredVariantId && links.find(l => l.product_id === rqPreferredVariantId);
     const priced = links.filter(l => l.current_price != null).sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
-    const active = priced[0] || links[0];
+    const active = preferred || priced[0] || links[0];
     const hasPrice = active.current_price != null;
     // Whether this plant's prices include export docs is a per-plant fact — a given price list is
     // uniformly one or the other ("*all prices FOB no docs" applies to everything on that sheet),
