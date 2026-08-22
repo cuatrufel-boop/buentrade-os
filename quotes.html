@@ -64,7 +64,7 @@
   .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-plant-name{cursor:pointer;user-select:none;}
   .rq-plant-name.tt-open{color:var(--blue);}
-  .rq-price-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;background:var(--blue);color:#fff;white-space:nowrap;box-shadow:0 2px 6px rgba(30,106,219,.35);transition:transform .1s,box-shadow .1s;}
+  .rq-price-btn{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;background:var(--blue);color:#fff;white-space:nowrap;box-shadow:0 2px 6px rgba(30,106,219,.35);transition:transform .1s,box-shadow .1s;}
   .rq-price-btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,106,219,.4);}
   .rq-price-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(30,106,219,.35);}
   .plant-calc-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;}
@@ -646,10 +646,7 @@ function renderRqPlants(){
         <div class="mini-field" style="width:110px;">
           <label>Purchase $/lb</label>
           <input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')">
-          ${p.rqPriceDate ? (() => {
-            const stale = (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
-            return `<span class="loc-hint" style="color:${stale ? '#C4432E' : 'var(--blue)'};font-weight:700;">${stale ? '⚠ stale — verify with plant · ' : ''}as of ${rqFmtDate(p.rqPriceDate)}</span>`;
-          })() : ''}
+          ${p.rqPriceDate && (rqPriceAgeDays(p.rqPriceDate) || 0) <= RQ_PRICE_STALE_DAYS ? `<span class="loc-hint" style="color:var(--blue);font-weight:700;">as of ${rqFmtDate(p.rqPriceDate)}</span>` : ''}
         </div>
         <div class="mini-field" style="width:170px;">
           <label>Location</label>
@@ -1358,10 +1355,15 @@ function rqPriceRequestControl(p){
   if (reqAge != null && reqAge <= RQ_REQUEST_COOLDOWN_DAYS){
     return `<span class="loc-hint" style="color:var(--blue);font-weight:700;">✓ requested ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>`;
   }
-  const label = missing ? 'Ask price' : 'Ask update';
+  // The stale/missing date used to also print as a separate red line under Purchase $/lb
+  // ("⚠ stale — verify with plant · as of Aug 17") — long enough to wrap onto two lines and throw
+  // off that field's height next to Location/Documents/Delivery location beside it. Folding the
+  // date into the button itself keeps the row one line and puts the info right on the action that
+  // fixes it, instead of off to the side.
+  const label = missing ? 'Ask Price' : `Update Price · ${rqFmtDate(p.rqPriceDate)}`;
   return `<span style="display:inline-flex;gap:4px;">
-    ${p.email ? `<button type="button" class="rq-price-btn" style="background:#C4432E;box-shadow:0 2px 6px rgba(196,67,46,.35);" onclick="rqRequestPlantPrice('${p.id}','email')">${label}</button>` : ''}
-    ${hasPhone ? `<button type="button" class="rq-price-btn" style="background:#25D366;box-shadow:0 2px 6px rgba(37,211,102,.35);" onclick="rqRequestPlantPrice('${p.id}','whatsapp')">${p.email ? 'WA' : label}</button>` : ''}
+    ${p.email ? `<button type="button" class="rq-price-btn" style="background:#C4432E;box-shadow:0 2px 6px rgba(196,67,46,.35);" onclick="rqRequestPlantPrice('${p.id}','email')">${RQ_EMAIL_ICON} ${label}</button>` : ''}
+    ${hasPhone ? `<button type="button" class="rq-price-btn" style="background:#25D366;box-shadow:0 2px 6px rgba(37,211,102,.35);" onclick="rqRequestPlantPrice('${p.id}','whatsapp')">${RQ_WA_ICON} ${label}</button>` : ''}
   </span>`;
 }
 
