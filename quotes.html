@@ -80,6 +80,28 @@
   .tt-card{border-radius:16px;overflow:hidden;margin-top:16px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
   .tt-frame{width:100%;border:none;display:block;}
   .tt-brand-header{text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;}
+
+  .rq-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .rq-modal-box{background:#fff;border-radius:14px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,31,51,.35);}
+  .rq-modal-header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line);flex-shrink:0;}
+  .rq-modal-header h3{margin:0;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .rq-modal-list{overflow-y:auto;padding:18px 22px;flex:1;}
+  .rq-email-card{border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
+  .rq-email-card.sent{opacity:.55;}
+  .rq-email-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .rq-email-card-head strong{font-size:13.5px;}
+  .rq-email-card-status{font-size:11px;font-weight:700;color:var(--blue);}
+  .rq-email-field{margin-bottom:9px;}
+  .rq-email-field label{display:block;font-size:10.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px;}
+  .rq-email-field input,.rq-email-field textarea{width:100%;padding:7px 9px;border:1.5px solid var(--line);border-radius:7px;font-size:13px;font-family:inherit;}
+  .rq-email-field textarea{min-height:100px;resize:vertical;}
+  .rq-email-card-actions{display:flex;justify-content:flex-end;margin-top:8px;}
+  .rq-wa-card{margin-bottom:22px;}
+  .rq-wa-card-head{font-size:13px;font-weight:600;margin-bottom:7px;}
+  .rq-wa-bubble-wrap{background:#e5ddd5;border-radius:10px;padding:14px;}
+  .rq-wa-bubble textarea{background:#dcf8c6;border:none;border-radius:8px 8px 2px 8px;padding:10px 12px;font-size:13.5px;font-family:inherit;width:100%;min-height:76px;resize:vertical;box-shadow:0 1px 1px rgba(0,0,0,.1);}
+  .rq-wa-bubble textarea:focus{outline:2px solid var(--blue);outline-offset:1px;}
+  .rq-wa-card-actions{display:flex;justify-content:flex-end;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -254,6 +276,29 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 </div>
+</div>
+
+<div id="rq_email_modal_overlay" class="rq-modal-overlay" style="display:none;">
+  <div class="rq-modal-box">
+    <div class="rq-modal-header">
+      <h3 id="rq_email_modal_title">Review emails</h3>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" id="rq_email_modal_sendall" onclick="rqEmailModalSendAll()">Send All</button>
+        <button class="btn secondary" onclick="rqEmailModalClose()">Close</button>
+      </div>
+    </div>
+    <div id="rq_email_modal_list" class="rq-modal-list"></div>
+  </div>
+</div>
+
+<div id="rq_wa_modal_overlay" class="rq-modal-overlay" style="display:none;">
+  <div class="rq-modal-box">
+    <div class="rq-modal-header">
+      <h3 id="rq_wa_modal_title">Review WhatsApp messages</h3>
+      <button class="btn secondary" onclick="rqWaModalClose()">Close</button>
+    </div>
+    <div id="rq_wa_modal_list" class="rq-modal-list"></div>
+  </div>
 </div>
 
 <script>
@@ -1360,25 +1405,22 @@ async function rqRequestPlantPrice(plantId, channel){
     ? `Hi ${contact},\n\nWe don't have a current price on file for ${rqProductSpec || 'this product'} — could you send your current price?`
     : `Hi ${contact},\n\nOur price on file for ${rqProductSpec || 'this product'} is from ${rqFmtDate(p.rqPriceDate)} and needs updating — could you send your current price?`;
   const subject = `${rqProductSpec || ''} — ${missing ? 'price request' : 'updated price request'}`;
+  const onSent = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    p.rqLastRequestedAt = today;
+    if (p.rqProductId){
+      await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', p.id).eq('product_id', p.rqProductId);
+    }
+    renderRqPlants();
+  };
   if (channel === 'whatsapp'){
     const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
     if (!phone) return;
-    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
+    rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: onSent }]);
   } else {
     if (!p.email) return;
-    try {
-      await sendEmailApi('purchasing', p.email, subject, body);
-    } catch(e){
-      if (e.cancelled) return; // declined at preview — don't start the cooldown on a request that never sent
-      window.open(`mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-    }
+    rqOpenEmailModal(`Ask ${p.name} for a price`, [{ id: p.id, label: p.name, to: p.email, subject, body, fromAlias: 'purchasing', onSent }]);
   }
-  const today = new Date().toISOString().slice(0, 10);
-  p.rqLastRequestedAt = today;
-  if (p.rqProductId){
-    await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', p.id).eq('product_id', p.rqProductId);
-  }
-  renderRqPlants();
 }
 
 // Never send a customer a price built on a stale number — pork/beef prices move daily, and a
@@ -1393,22 +1435,15 @@ async function rqBlockIfStalePrices(){
   if (!stale.length) return true;
   const list = stale.map(({ plant }) => `${plant.name} (as of ${rqFmtDate(plant.rqPriceDate)})`).join('\n');
   // Blocking alone just leaves the trader stuck — offer to actually ask the stale plant(s) for a
-  // fresh number right here, same template/one-by-one machinery rqAskAllEmails already uses.
+  // fresh number right here, in the same editable email preview as everywhere else.
   const askNow = confirm(`Can't send — ${stale.length} price(s) are more than ${RQ_PRICE_STALE_DAYS} days old:\n\n${list}\n\nSend a price-request email to them now?`);
   if (askNow){
-    for (const { plant } of stale){
-      if (!plant.email) continue;
-      // Says plainly that this is a stale-price refresh, not a first-time quote request — the
-      // generic RQ_EMAIL_TEMPLATES ("I'm looking for X") don't fit here.
+    const items = stale.filter(({ plant }) => plant.email).map(({ plant }) => {
       const contact = rqFirstName(plant.contact_name || plant.name);
       const body = `Hi ${contact},\n\nOur price on file for ${rqProductSpec || 'this product'} is from ${rqFmtDate(plant.rqPriceDate)} and needs updating — could you send your current price?`;
-      const subject = `${rqProductSpec || ''} — updated price request`;
-      try {
-        await sendEmailApi('purchasing', plant.email, subject, body);
-      } catch(e){
-        if (!e.cancelled) window.open(`mailto:${plant.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-      }
-    }
+      return { id: plant.id, label: plant.name, to: plant.email, subject: `${rqProductSpec || ''} — updated price request`, body, fromAlias: 'purchasing' };
+    });
+    if (items.length) rqOpenEmailModal('Ask for updated prices', items);
   }
   // Either way, the send to the customer still doesn't happen — asking for a fresh price doesn't
   // make the old one current, only an actual updated price (via Cargar precios) does.
@@ -1473,14 +1508,7 @@ async function rqLogSentOffers(customers, channel){
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
 // sender automatically. Falls back to mailto: if the API call fails, so a send is never fully
 // blocked by an API/network hiccup.
-async function sendEmailApi(fromAlias, to, subject, text, html){
-  const toList = Array.isArray(to) ? to.join(', ') : to;
-  const ok = confirm(`Para: ${toList}\nAsunto: ${subject}\n\n${text}\n\n¿Enviar este correo?`);
-  if (!ok){
-    const cancelErr = new Error('Cancelled by user');
-    cancelErr.cancelled = true;
-    throw cancelErr;
-  }
+async function sendEmailApiRaw(fromAlias, to, subject, text, html){
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1493,23 +1521,103 @@ async function sendEmailApi(fromAlias, to, subject, text, html){
   return res.json();
 }
 
+// ---- Editable email preview modal --------------------------------------------------------
+// One card per recipient, To/Subject/Body all editable right up until that card's own Send —
+// replaces the old browser confirm() (plain text, one recipient at a time, nothing editable).
+// A card that already sent stays visible (greyed out, fields locked) so the trader can see the
+// whole batch's status at a glance instead of it vanishing the moment it goes out.
+let rqEmailModalItems = [];
+function rqOpenEmailModal(title, items){
+  rqEmailModalItems = items.map(it => ({ ...it, sent: false }));
+  document.getElementById('rq_email_modal_title').textContent = title;
+  rqRenderEmailModal();
+  document.getElementById('rq_email_modal_overlay').style.display = 'flex';
+}
+function rqRenderEmailModal(){
+  const list = document.getElementById('rq_email_modal_list');
+  list.innerHTML = rqEmailModalItems.map((it, i) => `
+    <div class="rq-email-card${it.sent ? ' sent' : ''}">
+      <div class="rq-email-card-head">
+        <strong>${escapeHtml(it.label)}</strong>
+        ${it.sent ? '<span class="rq-email-card-status">✓ Sent</span>' : ''}
+      </div>
+      <div class="rq-email-field"><label>To</label><input type="text" value="${escapeHtml(it.to)}" readonly></div>
+      <div class="rq-email-field"><label>Subject</label><input type="text" ${it.sent ? 'disabled' : ''} value="${escapeHtml(it.subject)}" oninput="rqEmailModalItems[${i}].subject=this.value"></div>
+      <div class="rq-email-field"><label>Message</label><textarea ${it.sent ? 'disabled' : ''} oninput="rqEmailModalItems[${i}].body=this.value">${escapeHtml(it.body)}</textarea></div>
+      ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" onclick="rqEmailModalSendOne(${i})">Send</button></div>` : ''}
+    </div>`).join('');
+  const sendAllBtn = document.getElementById('rq_email_modal_sendall');
+  sendAllBtn.style.display = rqEmailModalItems.every(it => it.sent) ? 'none' : '';
+  sendAllBtn.textContent = rqEmailModalItems.length > 1 ? `Send All (${rqEmailModalItems.filter(it => !it.sent).length})` : 'Send';
+}
+async function rqEmailModalSendOne(i){
+  const it = rqEmailModalItems[i];
+  if (!it || it.sent) return;
+  try {
+    await sendEmailApiRaw(it.fromAlias, it.to, it.subject, it.body, it.html);
+  } catch(e){
+    alert(`Automatic send to ${it.label} failed (${e.message}) — opening your email client instead.`);
+    window.open(`mailto:${it.to}?subject=${encodeURIComponent(it.subject)}&body=${encodeURIComponent(it.body)}`, '_blank');
+  }
+  it.sent = true;
+  if (it.onSent) await it.onSent();
+  rqRenderEmailModal();
+}
+async function rqEmailModalSendAll(){
+  for (let i = 0; i < rqEmailModalItems.length; i++){
+    if (!rqEmailModalItems[i].sent) await rqEmailModalSendOne(i);
+  }
+}
+function rqEmailModalClose(){
+  document.getElementById('rq_email_modal_overlay').style.display = 'none';
+}
+
+// ---- Editable WhatsApp preview modal ------------------------------------------------------
+// One chat-bubble card per contact, editable right up until that card's own "Open WhatsApp".
+// WhatsApp itself can't be sent through here — it opens as its own desktop app (confirmed: not
+// a browser tab) and steals focus, so nothing after the first window.open() in a chain can ever
+// be relied on to fire. Showing every conversation at once, each with its own real click, is the
+// closest this can get to "send all" without silently dropping messages the trader thinks went out.
+let rqWaModalItems = [];
+function rqOpenWaModal(title, items){
+  rqWaModalItems = items.map(it => ({ ...it, opened: false }));
+  document.getElementById('rq_wa_modal_title').textContent = title;
+  rqRenderWaModal();
+  document.getElementById('rq_wa_modal_overlay').style.display = 'flex';
+}
+function rqRenderWaModal(){
+  const list = document.getElementById('rq_wa_modal_list');
+  list.innerHTML = rqWaModalItems.map((it, i) => `
+    <div class="rq-wa-card">
+      <div class="rq-wa-card-head">${escapeHtml(it.label)}${it.opened ? ' <span class="rq-email-card-status">✓ Opened</span>' : ''}</div>
+      <div class="rq-wa-bubble-wrap">
+        <div class="rq-wa-bubble"><textarea oninput="rqWaModalItems[${i}].body=this.value">${escapeHtml(it.body)}</textarea></div>
+      </div>
+      <div class="rq-wa-card-actions"><button type="button" class="wa-btn" style="padding:7px 14px;" onclick="rqWaModalOpenOne(${i})">${it.opened ? 'Reopen WhatsApp' : 'Open WhatsApp'}</button></div>
+    </div>`).join('');
+}
+function rqWaModalOpenOne(i){
+  const it = rqWaModalItems[i];
+  if (!it) return;
+  window.open('https://wa.me/' + it.phone + '?text=' + encodeURIComponent(it.body), '_blank');
+  it.opened = true;
+  if (it.onOpened) it.onOpened();
+  rqRenderWaModal();
+}
+function rqWaModalClose(){
+  document.getElementById('rq_wa_modal_overlay').style.display = 'none';
+}
+
 async function sendOfferEmailTo(customerId){
   if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
   const firstName = rqFirstName(c.contact_name || c.trade_name);
-  const body = buildCustomerOfferText(firstName);
-  const html = buildCustomerOfferHtml(firstName);
-  const subject = `Cotización — ${rqProductSpecEs || ''}`;
-  try {
-    await sendEmailApi('offers', c.email, subject, body, html);
-    rqLogSentOffers([c], 'email');
-  } catch(e){
-    if (e.cancelled) return;
-    alert('Automatic send failed (' + e.message + ') — opening your email client instead.');
-    window.location.href = `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    rqLogSentOffers([c], 'email');
-  }
+  rqOpenEmailModal(`Email offer — ${c.trade_name}`, [{
+    id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
+    body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName),
+    fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
+  }]);
 }
 
 async function sendOfferWhatsAppTo(customerId){
@@ -1518,122 +1626,45 @@ async function sendOfferWhatsAppTo(customerId){
   if (!c) return;
   const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
   if (!phone) return;
-  const body = buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name));
-  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(body), '_blank');
-  rqLogSentOffers([c], 'whatsapp');
+  rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
+    id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)),
+    onOpened: () => rqLogSentOffers([c], 'whatsapp'),
+  }]);
 }
 
-// Opens one pre-filled draft per customer/plant at once — still nothing gets sent until you
-// press send in each opened window/app. Every window.open() fires synchronously, in the same
-// tick as the click — a setTimeout delay (even 0ms) between calls, which this used to do, breaks
-// the browser's "this came directly from a user gesture" check and gets every call after the
-// first one silently blocked. Firing them all back-to-back in one go is what actually lets
-// multiple tabs open. If the browser still only opens one, click the popup-blocked icon in the
-// address bar and choose "Always allow pop-ups from this site" — a one-time setting.
-// Opens sends ONE AT A TIME with a confirm() pause in between, instead of firing every
-// window.open() in one burst. Browsers (and the OS mail-client handoff behind mailto:) won't
-// reliably open more than one window per click no matter how the calls are timed — the old
-// "fire them all synchronously" approach still only opened 1 of N in practice, but logged
-// every one as sent regardless, so the offer history recorded windows that never opened.
-// confirm()'s own OK click is itself a user gesture, so the next window.open() right after
-// it still counts as user-initiated and isn't blocked. Only what the trader confirms actually
-// opened gets logged — Cancel stops the run right there, nothing after it is touched.
-// Whether an item gets logged is decided by the browser's OWN signal — window.open()'s return
-// value (null when the popup was actually blocked) — never by asking the trader to self-report
-// "did it open?". A yes/no dialog fired once per item, several in a row, is trivial to misclick —
-// that's exactly how a customer whose window never opened ended up logged as sent while two that
-// did open weren't. The trader still paces the run (one Continue/Stop prompt between items,
-// which only reports what already, provably happened), but that click no longer decides what
-// gets recorded — it can't get inverted anymore because it isn't the source of truth anymore.
-function rqSendOneByOne(items, i, failed){
-  i = i || 0;
-  failed = failed || [];
-  if (i >= items.length){
-    if (failed.length) alert(`Done. These did NOT open (blocked) and were not logged — use the individual button next to their name instead:\n\n${failed.join('\n')}`);
-    return;
-  }
-  const item = items[i];
-  const win = window.open(item.url, '_blank');
-  const opened = !!win;
-  if (opened){
-    if (item.onConfirmed) item.onConfirmed(true);
-    // window.open() hands focus to the new WhatsApp tab, so the "Continue?" confirm() below would
-    // otherwise fire on a background tab the trader isn't looking at — easy to miss, and looks
-    // exactly like "only the first one sent" when it was really just waiting unseen. Pulling focus
-    // back before asking makes sure the prompt is actually visible.
-    window.focus();
-  } else {
-    failed.push(item.label);
-  }
-  const isLast = i + 1 >= items.length;
-  if (isLast){
-    rqSendOneByOne(items, i + 1, failed);
-    return;
-  }
-  const status = opened ? `✓ Opened for ${item.label}.` : `✗ Blocked for ${item.label} — not logged.`;
-  const cont = confirm(`${status}\n\n${i + 1} of ${items.length} done. Continue to ${items[i + 1].label}?`);
-  if (cont) rqSendOneByOne(items, i + 1, failed);
-  else if (failed.length) alert(`Stopped. These did NOT open and were not logged:\n\n${failed.join('\n')}`);
-}
-
-// Sends every customer through the API in a loop — no popup-blocking concern for server-side
-// sends, so no need for the confirm()-paced one-by-one dance that mailto: requires. Whatever
-// fails automatically still falls back to the old mailto: one-by-one flow, only for those.
+// Every matched customer's offer, shown at once as editable drafts in rqOpenEmailModal — sending
+// still goes through the Netlify function per card (Send or Send All), so a card that fails falls
+// back to mailto: on its own, same as before.
 async function rqOpenAllEmails(){
   if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const targets = rqMatchedCustomers.filter(c => c.email);
   if (!targets.length){ alert('No matched customer has an email on file.'); return; }
   const subject = 'Cotización — ' + (rqProductSpecEs || '');
-  const failed = [];
-  // Tracked separately from `failed` — a cancelled preview is a deliberate "don't send this one",
-  // not a technical failure, so it must never count as "sent" in the summary below (that's
-  // exactly the false "Sent to all N" that showed even after cancelling one in the preview).
-  let sentCount = 0;
-  let cancelledCount = 0;
-  for (const c of targets){
+  const items = targets.map(c => {
     const firstName = rqFirstName(c.contact_name || c.trade_name);
-    const body = buildCustomerOfferText(firstName);
-    const html = buildCustomerOfferHtml(firstName);
-    try {
-      await sendEmailApi('offers', c.email, subject, body, html);
-      rqLogSentOffers([c], 'email');
-      sentCount++;
-    } catch(e){
-      if (e.cancelled){ cancelledCount++; continue; }
-      failed.push({ c, body });
-    }
-  }
-  const cancelledNote = cancelledCount ? ` ${cancelledCount} skipped (cancelled in preview).` : '';
-  if (failed.length){
-    alert(`${sentCount} of ${targets.length} sent automatically. ${failed.length} failed — opening those now, one at a time.${cancelledNote}`);
-    const items = failed.map(({ c, body }) => ({
-      url: `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-      label: c.trade_name,
-      onConfirmed: ok => { if (ok) rqLogSentOffers([c], 'email'); },
-    }));
-    rqSendOneByOne(items);
-  } else if (cancelledCount){
-    alert(`Sent to ${sentCount} of ${targets.length} customers.${cancelledNote}`);
-  } else {
-    alert(`Sent to all ${targets.length} customers.`);
-  }
+    return {
+      id: c.id, label: c.trade_name, to: c.email, subject,
+      body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName),
+      fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
+    };
+  });
+  rqOpenEmailModal(`Email offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items);
 }
 
-// WhatsApp opens as its own desktop app on most computers (confirmed: not a browser tab), which
-// steals focus from the whole browser window, not just the tab. That makes a confirm()-paced
-// auto-chain unreliable here — the "continue to next?" prompt ends up waiting, unseen, behind
-// WhatsApp.app, which looks exactly like "only the first one sent." No JS can force focus back
-// from a native app, so instead of pretending to automate the rest, this opens the first one for
-// real and points the trader at the individual WhatsApp button next to each customer below —
-// those always work since each click is its own fresh, direct gesture.
+// Every matched customer's WhatsApp draft, shown at once in rqOpenWaModal — each still needs its
+// own "Open WhatsApp" click (a real user gesture per contact), but now the trader can read and
+// edit all of them before clicking through, instead of getting only the first one opened and an
+// alert pointing at individual buttons elsewhere on the page for the rest.
 async function rqOpenAllWhatsApp(){
   if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   if (!targets.length){ alert('No matched customer has a phone/WhatsApp on file.'); return; }
-  sendOfferWhatsAppTo(targets[0].id);
-  if (targets.length > 1){
-    alert(`Opened WhatsApp for ${targets[0].trade_name}. WhatsApp opens as a separate app, so the other ${targets.length - 1} need their own click — use the WhatsApp button next to each customer's name below.`);
-  }
+  const items = targets.map(c => ({
+    id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
+    body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)),
+    onOpened: () => rqLogSentOffers([c], 'whatsapp'),
+  }));
+  rqOpenWaModal(`WhatsApp offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items);
 }
 
 function rqFmtDate(val){
@@ -1726,38 +1757,27 @@ async function rqAskAllEmails(){
   if (!rqProductSpec || !rqRequireDeliveryDay()) return;
   const targets = rqSelectedPlants.filter(p => !p.rqPrice && p.email);
   if (!targets.length) return;
-  const failed = [];
-  for (const p of targets){
+  const items = targets.map(p => {
     const template = rqPickTemplate(RQ_EMAIL_TEMPLATES, i => rqLastEmailTemplate = i, rqLastEmailTemplate);
     const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
-    const subject = `${rqProductSpec} — quote request`;
-    try {
-      await sendEmailApi('purchasing', p.email, subject, body);
-    } catch(e){
-      if (e.cancelled) continue;
-      failed.push({ url: `mailto:${p.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, label: p.name });
-    }
-  }
-  if (failed.length){
-    alert(`${targets.length - failed.length} of ${targets.length} sent automatically. ${failed.length} failed — opening those now, one at a time.`);
-    rqSendOneByOne(failed);
-  } else {
-    alert(`Asked all ${targets.length} plants.`);
-  }
+    return { id: p.id, label: p.name, to: p.email, subject: `${rqProductSpec} — quote request`, body, fromAlias: 'purchasing' };
+  });
+  rqOpenEmailModal(`Ask plants for a price — ${items.length}`, items);
 }
 
-// Same one-real-send-then-hand-off pattern as rqOpenAllWhatsApp above, and for the same reason:
-// WhatsApp opening as a native app steals focus from the browser, so a confirm()-chained "send
-// to the rest" can't reliably show its prompts. askPlantWhatsApp (below) is the individual
-// button rendered next to each plant — that's what covers the remaining ones.
+// Every not-yet-priced plant's WhatsApp draft, shown at once in rqOpenWaModal — each still needs
+// its own "Open WhatsApp" click, same reason as rqOpenAllWhatsApp above (native app, steals
+// focus, no reliable way to chain window.open() calls across it).
 function rqAskAllWhatsApp(){
   if (!rqProductSpec || !rqRequireDeliveryDay()) return;
   const targets = rqSelectedPlants.filter(p => !p.rqPrice && (p.whatsapp || p.phone));
   if (!targets.length) return;
-  askPlantWhatsApp(targets[0].id);
-  if (targets.length > 1){
-    alert(`Opened WhatsApp for ${targets[0].name}. WhatsApp opens as a separate app, so the other ${targets.length - 1} plant(s) need their own click — use the WhatsApp button next to each plant's name below.`);
-  }
+  const items = targets.map(p => {
+    const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
+    const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
+    return { id: p.id, label: p.name, phone: (p.whatsapp || p.phone || '').replace(/\D/g, ''), body };
+  });
+  rqOpenWaModal(`Ask plants via WhatsApp — ${items.length}`, items);
 }
 
 function askPlantWhatsApp(plantId){
@@ -1767,8 +1787,8 @@ function askPlantWhatsApp(plantId){
   const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
   if (!phone) return;
   const template = rqPickTemplate(RQ_WHATSAPP_TEMPLATES, i => rqLastWaTemplate = i, rqLastWaTemplate);
-  const msg = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
-  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+  const body = template(rqProductSpec, rqLoadsPhrase()).replace('{name}', rqFirstName(p.contact_name || p.name)) + rqSpecAskLine(p);
+  rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body }]);
 }
 
 function escapeHtml(str){
