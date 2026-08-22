@@ -620,22 +620,24 @@ if (FIREBASE_READY) {
 
     <!-- ================= PRODUCTS ================= -->
     <div class="card" id="productsCard">
-      <div class="card-head collapsible" onclick="toggleCard(this)">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <h2>Product(s)</h2>
-          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
-          <span id="targetProfitRow" style="display:none;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);" onclick="event.stopPropagation();">
-            🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:2px 4px;" oninput="applyProfitTarget(null);calc();">%
-            <span style="display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;">
-              <span id="liveSolveSellChip" class="chip on" style="font-size:10px;padding:2px 6px;border-radius:0;" onclick="setLiveSolveFor('sell')" title="Typing a selling price rebalances the OTHER products' selling prices">🏷️ Sell</span>
-              <span id="liveSolveBuyChip" class="chip" style="font-size:10px;padding:2px 6px;border-radius:0;" onclick="setLiveSolveFor('purchase')" title="Typing a selling price (the customer's bid) instead solves what you can pay THIS product's plant">💰 Buy</span>
-            </span>
-          </span>
+      <div class="card-head collapsible" onclick="toggleCard(this)" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <h2>Product(s)</h2>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="add-btn-sm" id="rmProdBtn" title="Remove last product" onclick="event.stopPropagation();removeProduct(products.length-1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+            <button class="add-btn-sm" id="addProdBtn" title="Add Product" onclick="event.stopPropagation();addProduct()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+            <span class="card-chevron open">▾</span>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button class="add-btn-sm" id="rmProdBtn" title="Remove last product" onclick="event.stopPropagation();removeProduct(products.length-1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-          <button class="add-btn-sm" id="addProdBtn" title="Add Product" onclick="event.stopPropagation();addProduct()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-          <span class="card-chevron open">▾</span>
+        <div id="targetProfitRow" style="display:none;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);padding-top:2px;border-top:1px dashed var(--line);" onclick="event.stopPropagation();">
+          🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:3px 5px;" oninput="applyProfitTarget(null);calc();">%
+          <span style="display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-left:auto;">
+            <span id="liveSolveSellChip" class="chip on" style="font-size:10.5px;padding:4px 9px;border-radius:0;" onclick="setLiveSolveFor('sell')" title="Typing a selling price rebalances the OTHER products' selling prices">🏷️ Sell</span>
+            <span id="liveSolveBuyChip" class="chip" style="font-size:10.5px;padding:4px 9px;border-radius:0;" onclick="setLiveSolveFor('purchase')" title="Typing a selling price (the customer's bid) instead solves what you can pay THIS product's plant">💰 Buy</span>
+          </span>
         </div>
       </div>
       <div class="card-body" id="productsBody"></div>
@@ -911,7 +913,7 @@ function buildProductRows(){
   document.getElementById('addProdBtn').disabled = products.length>=MAX_PRODUCTS;
   document.getElementById('rmProdBtn').disabled = products.length<=1;
   const tpRow = document.getElementById('targetProfitRow');
-  if(tpRow) tpRow.style.display = products.length>1 ? 'inline-flex' : 'none';
+  if(tpRow) tpRow.style.display = products.length>1 ? 'flex' : 'none';
 }
 
 function updateProductOutputs(){
