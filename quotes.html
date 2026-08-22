@@ -934,6 +934,7 @@ function rqToggleCalculator(id){
     rqCloseCalculator(id);
   } else {
     if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
+    if (!rqRequireDeliveryDay()) return;
     // Accordion: only one plant's Trading Tool open at a time — opening another closes
     // whichever was open, instead of stacking several heavy iframes on screen at once.
     rqSelectedPlants.forEach(other => { if (other.id !== id && other.rqCalculatorOpen) rqCloseCalculator(other.id); });
@@ -1128,7 +1129,7 @@ function rqSwitchVariant(plantId, productId){
 
 function rqAutoOpenCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p || !p.rqPrice || p.rqCalculatorOpen) return;
+  if (!p || !p.rqPrice || p.rqCalculatorOpen || !rqDeliveryDates.length) return;
   rqToggleCalculator(id);
 }
 
@@ -1666,11 +1667,24 @@ function rqAddDeliveryDate(val){
   }
   document.getElementById('rq_newdate').value = '';
   rqRenderDateChips();
+  // Every plant row's price/calculator visibility depends on rqDeliveryDates.length — without
+  // this, a row already built before the first date existed (or, worse, one whose calculator
+  // auto-opened on load before any date was set) just sat there stale and out of sync with the
+  // chip that now shows above it.
+  renderRqPlants();
+  rqSelectedPlants.forEach(p => { if (p.rqPrice) rqAutoOpenCalculator(p.id); });
 }
 
 function rqRemoveDeliveryDate(idx){
   rqDeliveryDates.splice(idx, 1);
   rqRenderDateChips();
+  // Pulling the last date out removes the thing that justified any calculator already open —
+  // close them so the gate stays meaningful instead of leaving a revealed price with no date
+  // backing it, same failure mode as the stale-row bug above just in reverse.
+  if (!rqDeliveryDates.length){
+    rqSelectedPlants.forEach(p => { if (p.rqCalculatorOpen) rqCloseCalculator(p.id); });
+  }
+  renderRqPlants();
 }
 
 function rqRenderDateChips(){
