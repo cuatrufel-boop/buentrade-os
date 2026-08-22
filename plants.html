@@ -606,7 +606,10 @@ async function loadPlantProducts(){
   // like before, just sourced from the right row now.
   plantProducts = (data || [])
     .filter(r => r.products)
-    .map(r => ({ ...r.products, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date }));
+    .map(r => ({ ...r.products, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date }))
+    // Most recently priced first, stale/never-priced ones sinking to the bottom — the trader
+    // wants to see what just got loaded, not scroll past it to find it alphabetically.
+    .sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
   renderPlantProducts();
 }
 
