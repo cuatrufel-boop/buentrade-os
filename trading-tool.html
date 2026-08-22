@@ -792,54 +792,6 @@ if (FIREBASE_READY) {
     </div>
   </div>
 
-  <details class="advanced-tools">
-    <summary>🎯 Find Your Price (advanced) — click to expand</summary>
-  <div class="solver">
-    <div class="solver-top">
-      <h3>🎯 Find Your Price</h3>
-    </div>
-    <p class="solver-sub">Fix one price, set your target margin, and get the price you need for the other side.</p>
-    <div class="solver-row">
-      <div class="field">
-        <label>Scenario</label>
-        <div class="radio-group">
-          <span class="chip on" id="solveScenBorderChip" onclick="setSolveScenario('border')">Border (USD)</span>
-          <span class="chip" id="solveScenMxChip" onclick="setSolveScenario('mexico')">Mexico (MXN)</span>
-        </div>
-      </div>
-      <div class="field">
-        <label>I want to solve for</label>
-        <div class="radio-group">
-          <span class="chip on" id="solveForPurchase" onclick="setSolveFor('purchase')">Purchase Price</span>
-          <span class="chip" id="solveForSell" onclick="setSolveFor('sell')">Selling Price</span>
-        </div>
-      </div>
-      <div class="field">
-        <label>Target Net Margin</label>
-        <div class="inputwrap"><input type="number" id="targetMargin" value="4" step="0.1"><span class="sfx">%</span></div>
-      </div>
-      <button class="solve-btn" onclick="solve()">Calculate</button>
-    </div>
-    <div class="solver-row" id="solveProductRow" style="display:none;">
-      <div class="field" style="flex:1;">
-        <label>For product — leaves every other product's price exactly as it is now</label>
-        <div class="radio-group" id="solveProductChips"></div>
-      </div>
-    </div>
-    <div class="solver-result" id="solverResult">
-      <div class="r-txt" id="solverText"></div>
-      <button class="apply-btn" onclick="applySolve()">Apply to products</button>
-    </div>
-  </div>
-
-  <div class="footnote">
-    <b>How it works:</b> Border (USD) and Mexico (MXN) are two independent, always-saved calculations sharing the same Weight, Purchase Price, US Freight, Inspection, and Payment Days.
-    Border uses your Selling Price (USD/lb) and Direct Costs = US Freight + Inspection. Mexico appears once you enter an Exchange Rate — it adds Mexican Freight (already MXN) + Import Cost (USD, converted with the Exchange Rate)
-    and uses your Selling Price Mexico (MXN/kg), converting your USD purchase cost and shared US costs to MXN. Both results show at once — nothing is ever cleared, no toggle needed.
-    Net Margin/Gross Margin formulas: Net = Profit / Sale · Gross = (Sale − Cost − Direct Costs) / Sale.
-  </div>
-  </details>
-
 </div>
 
 <script>
@@ -862,7 +814,7 @@ let products = [
 const MAX_PRODUCTS = 6;
 const TARGET_WEIGHT = 40000;
 const LB_PER_KG = 2.20462;
-let state = { solveFor:'purchase', solveScenario:'border', qqLastEdited:'purchase', solveProduct:'all', liveSolveFor:'sell' };
+let state = { qqLastEdited:'purchase', liveSolveFor:'sell' };
 
 function setLiveSolveFor(mode){
   state.liveSolveFor = mode;
@@ -948,55 +900,44 @@ function buildProductRows(){
         <div class="o">Sale (Border)<b id="prodSaleOut${i}">$0</b></div>
         ${showMx ? `<div class="o">Sale (Mexico)<b id="prodSaleMxOut${i}">MX$0</b></div>` : ''}
         <div class="o">Markup %<b id="prodMarkupPctOut${i}">0%</b></div>
+        <div class="o">Net Margin<b id="prodNetMarginPctOut${i}">0%</b></div>
       </div>
     `;
     body.appendChild(div);
   });
   document.getElementById('addProdBtn').disabled = products.length>=MAX_PRODUCTS;
-  buildSolveProductChips();
   const tpRow = document.getElementById('targetProfitRow');
   if(tpRow) tpRow.style.display = products.length>1 ? 'inline-flex' : 'none';
 }
 
-// The Solver's default ("All") re-derives ONE blended price and overwrites every product with
-// it — fine with a single product, but wrong the moment prices are meant to differ (e.g. one
-// product priced at cost to win the deal, the other carrying the margin). These per-product
-// chips let the trader pin every OTHER product's price as-is and solve for just one, so the
-// blend still hits the target margin without erasing intentional price differences.
-function buildSolveProductChips(){
-  const row = document.getElementById('solveProductRow');
-  const wrap = document.getElementById('solveProductChips');
-  if(!row || !wrap) return;
-  if(products.length<=1){ row.style.display='none'; state.solveProduct='all'; return; }
-  row.style.display='flex';
-  if(state.solveProduct!=='all' && (state.solveProduct>=products.length)) state.solveProduct='all';
-  let html = `<span class="chip${state.solveProduct==='all'?' on':''}" onclick="setSolveProduct('all')">All (blended)</span>`;
-  products.forEach((p,i)=>{
-    html += `<span class="chip${state.solveProduct===i?' on':''}" onclick="setSolveProduct(${i})">${p.name}</span>`;
-  });
-  wrap.innerHTML = html;
-}
-
-function setSolveProduct(which){
-  state.solveProduct = which;
-  buildSolveProductChips();
-  document.getElementById('solverResult').classList.remove('show');
-}
-
 function updateProductOutputs(){
+  const inp = getInputs();
+  const fixedCosts = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
+  const k = inp.payDays*(inp.financeRate/100);
+  const totalSaleBorder = products.reduce((s,p)=>s+p.weight*p.sellBorder,0);
   products.forEach((p,i)=>{
     const cost = p.weight*p.cost, saleBorder = p.weight*p.sellBorder;
     const weightKg = p.weight/LB_PER_KG;
     const saleMx = weightKg*p.sellMx;
     const markupPct = p.cost>0 ? ((p.sellBorder-p.cost)/p.cost) : 0;
+    // This product's own share of Net Margin — the load's shared costs (US Freight, Inspection,
+    // etc.) and Finance Cost get allocated to it proportional to how much of the total sale it
+    // represents (the same basis Finance Cost itself already uses: totalSale * financeRate).
+    // Summing every product's profit this way always reproduces the load's own Profit exactly —
+    // this is a breakdown of that same number, not a separate calculation.
+    const saleShare = totalSaleBorder>0 ? saleBorder/totalSaleBorder : 0;
+    const productProfit = (saleBorder-cost) - fixedCosts*saleShare - saleBorder*k;
+    const netMarginPct = saleBorder>0 ? productProfit/saleBorder : 0;
     const elCost = document.getElementById('prodCostOut'+i);
     const elSale = document.getElementById('prodSaleOut'+i);
     const elSaleMx = document.getElementById('prodSaleMxOut'+i);
     const elMarkupPct = document.getElementById('prodMarkupPctOut'+i);
+    const elNetMarginPct = document.getElementById('prodNetMarginPctOut'+i);
     if(elCost) elCost.textContent = fmt$(cost);
     if(elSale) elSale.textContent = fmt$(saleBorder);
     if(elSaleMx) elSaleMx.textContent = fmtMx(saleMx);
     if(elMarkupPct) elMarkupPct.textContent = fmtPct(markupPct);
+    if(elNetMarginPct) elNetMarginPct.textContent = fmtPct(netMarginPct);
   });
 }
 
@@ -1126,20 +1067,6 @@ function removeProduct(i){
   if(products.length>1) applyProfitTarget(null);
   buildProductRows();
   calc();
-}
-
-function setSolveFor(which){
-  state.solveFor = which;
-  document.getElementById('solveForPurchase').classList.toggle('on', which==='purchase');
-  document.getElementById('solveForSell').classList.toggle('on', which==='sell');
-  document.getElementById('solverResult').classList.remove('show');
-}
-
-function setSolveScenario(scen){
-  state.solveScenario = scen;
-  document.getElementById('solveScenBorderChip').classList.toggle('on', scen==='border');
-  document.getElementById('solveScenMxChip').classList.toggle('on', scen==='mexico');
-  document.getElementById('solverResult').classList.remove('show');
 }
 
 function onFxRateInput(manual){
@@ -1373,80 +1300,6 @@ function calc(){
     totalSaleMx: products.reduce((s,p)=>s+(p.weight/LB_PER_KG)*p.sellMx,0),
     directCostsBorder, directCostsMx, inp
   };
-  document.getElementById('solverResult').classList.remove('show');
-}
-
-function solve(){
-  const c = window.__calc;
-  const target = (parseFloat(document.getElementById('targetMargin').value)||0)/100;
-  const isMx = state.solveScenario==='mexico';
-  const resultBox = document.getElementById('solverResult');
-  const txt = document.getElementById('solverText');
-  const fmtFn = isMx ? fmtMx : fmt$;
-  const unitSfx = isMx ? '/kg' : '/lb';
-  const weightForRatio = isMx ? c.totalWeightKg : c.totalWeight;
-
-  const fixedCosts = isMx ? c.directCostsMx : c.directCostsBorder;
-  const k = c.inp.payDays * (c.inp.financeRate/100);
-
-  const solveProduct = state.solveProduct;
-  const target1 = solveProduct!=='all' ? products[solveProduct] : null;
-  const target1Weight = target1 ? (isMx ? target1.weight/LB_PER_KG : target1.weight) : 0;
-
-  if(state.solveFor==='purchase'){
-    const sale = isMx ? c.totalSaleMx : c.totalSaleBorder;
-    const purchaseNeeded = sale - fixedCosts - sale*k - target*sale; // in the scenario's currency, total across ALL products
-    const purchaseNeededUSD = isMx ? (c.inp.fxRate>0 ? purchaseNeeded/c.inp.fxRate : 0) : purchaseNeeded;
-    if(!target1){
-      const pricePerLbUSD = c.totalWeight>0 ? purchaseNeededUSD/c.totalWeight : 0;
-      window.__solveResult = {mode:'purchase', productIdx:'all', pricePerLbUSD};
-      txt.innerHTML = `To hit <b>${(target*100).toFixed(1)}%</b> Net Margin at the current sale (${fmtFn(sale)}),
-        Purchase Price must be <b>$${pricePerLbUSD.toFixed(4)}/lb</b> (USD — shared across both).`;
-    } else {
-      const otherCostUSD = c.totalCostUSD - target1.weight*target1.cost;
-      const thisCostNeededUSD = purchaseNeededUSD - otherCostUSD;
-      const pricePerLbUSD = target1.weight>0 ? thisCostNeededUSD/target1.weight : 0;
-      window.__solveResult = {mode:'purchase', productIdx:solveProduct, pricePerLbUSD};
-      txt.innerHTML = `To hit <b>${(target*100).toFixed(1)}%</b> Net Margin for the whole load, with every other product's price unchanged,
-        <b>${target1.name}</b>'s Purchase Price must be <b>$${pricePerLbUSD.toFixed(4)}/lb</b>.`;
-    }
-  } else {
-    const purchase = isMx ? c.totalCostUSD*c.inp.fxRate : c.totalCostUSD;
-    const denom = (1 - k - target);
-    const saleNeeded = denom!==0 ? (purchase + fixedCosts)/denom : NaN; // total sale $ needed across ALL products
-    if(!target1){
-      const pricePerUnit = weightForRatio>0 ? saleNeeded/weightForRatio : 0;
-      window.__solveResult = {mode:'sell', productIdx:'all', pricePerUnit, scenario: state.solveScenario};
-      txt.innerHTML = `To hit <b>${(target*100).toFixed(1)}%</b> Net Margin at the current cost (${fmtFn(purchase)}),
-        Selling Price (${isMx?'Mexico':'Border'}) must be <b>${fmtFn(pricePerUnit)}${unitSfx}</b> (weighted average).`;
-    } else {
-      const otherSale = (isMx ? c.totalSaleMx : c.totalSaleBorder) - (isMx ? (target1.weight/LB_PER_KG)*target1.sellMx : target1.weight*target1.sellBorder);
-      const thisSaleNeeded = saleNeeded - otherSale;
-      const pricePerUnit = target1Weight>0 ? thisSaleNeeded/target1Weight : 0;
-      window.__solveResult = {mode:'sell', productIdx:solveProduct, pricePerUnit, scenario: state.solveScenario};
-      txt.innerHTML = `To hit <b>${(target*100).toFixed(1)}%</b> Net Margin for the whole load, with every other product's price unchanged,
-        <b>${target1.name}</b>'s Selling Price (${isMx?'Mexico':'Border'}) must be <b>${fmtFn(pricePerUnit)}${unitSfx}</b>.`;
-    }
-  }
-  resultBox.classList.add('show');
-}
-
-function applySolve(){
-  const r = window.__solveResult;
-  if(!r) return;
-  const single = r.productIdx!=='all' ? products[r.productIdx] : null;
-  if(r.mode==='purchase'){
-    if(single) single.cost = r.pricePerLbUSD;
-    else products.forEach(p=>{ p.cost = r.pricePerLbUSD; });
-  } else if(r.scenario==='border'){
-    if(single) single.sellBorder = r.pricePerUnit;
-    else products.forEach(p=>{ p.sellBorder = r.pricePerUnit; });
-  } else {
-    if(single){ single.sellMx = r.pricePerUnit; single.sellMxManual = true; }
-    else products.forEach(p=>{ p.sellMx = r.pricePerUnit; p.sellMxManual = true; });
-  }
-  buildProductRows();
-  calc();
 }
 
 document.addEventListener('focusin', function(e){
