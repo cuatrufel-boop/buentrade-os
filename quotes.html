@@ -518,8 +518,7 @@ async function autoPopulateRqPlants(productName){
   // A plant can carry more than one variant of the exact same-named cut (confirmed real data:
   // Tyson has both a Fresh and a Frozen "Cushion de Cerdo", each its own price) — grouped by plant
   // here so EVERY variant is kept (rqVariantLinks), never silently dropped. One is picked as the
-  // active default (whichever actually has a price, most recent if more than one does); the
-  // trader can switch between the others via the variant selector in renderRqPlants.
+  // active default; the trader can switch between the others via the variant chips in renderRqPlants.
   const linksByPlant = new Map();
   (data || []).forEach(link => {
     if (!linksByPlant.has(link.plant_id)) linksByPlant.set(link.plant_id, []);
@@ -528,9 +527,14 @@ async function autoPopulateRqPlants(productName){
   rqSelectedPlants = [...linksByPlant.entries()].map(([plantId, links]) => {
     const plant = rqAllPlants.find(p => p.id === plantId);
     if (!plant) return null;
-    // A specific-variant suggestion click wins when this plant actually carries it; otherwise
-    // fall back to whichever variant has the most recent price on file.
-    const preferred = rqPreferredVariantId && links.find(l => l.product_id === rqPreferredVariantId);
+    // rqMatchedProductId is the exact product onRqProductInput just resolved and put in the spec
+    // line above (e.g. "Fresh Pork Boneless Picnic, Combo") — a plant that carries it must default
+    // to THAT one, full stop. Falling back to "whichever variant priced most recently" (the old
+    // rule) silently swapped in a different temp/pack than what the trader searched for and the
+    // spec line claimed — confirmed real case: searching the Combo product still defaulted a plant
+    // to its Frozen/Box price because that happened to be the more recently loaded number. Only a
+    // plant that doesn't carry the searched variant at all falls back to its most recent price.
+    const preferred = links.find(l => l.product_id === rqMatchedProductId);
     const priced = links.filter(l => l.current_price != null).sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
     const active = preferred || priced[0] || links[0];
     const hasPrice = active.current_price != null;
