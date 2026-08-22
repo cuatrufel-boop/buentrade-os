@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>BuenTrade Trading OS — Quotes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
@@ -1168,17 +1169,16 @@ function rqRevealPrice(id){
 // Deliberately no cross-plant fallback — a photo/spec on file for Tyson's cut doesn't represent
 // Indiana's, so showing it as if it did would misrepresent what a customer is actually buying.
 // If this specific plant has nothing on file, that just means no attachment goes out for them.
-function rqFindPhotoFor(plant){
+// photo_url and spec_url are two separate, single-value fields on the product — always a real
+// image and a real PDF respectively (see products.html's upload inputs: accept="image/*" and
+// accept="application/pdf") — no more guessing which one a file actually is from its extension.
+function rqFindProductFilesFor(plant){
   const name = document.getElementById('rq_product_name').value.trim().toLowerCase();
-  return (products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url) || {}).photo_url;
+  const prod = products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name);
+  return { photo_url: (prod && prod.photo_url) || null, spec_url: (prod && prod.spec_url) || null };
 }
-
-// The "photo" field often actually holds a spec-sheet document (PDF, sometimes even .docx)
-// rather than an image — label it accurately instead of always calling it "Foto". Checking
-// FOR an image extension (not just excluding .pdf) so any other document type — .docx, .xlsx,
-// whatever staff actually uploaded — still gets called "Spec sheet" instead of "Foto" by default.
-function rqPhotoLabel(url){
-  return /\.(jpe?g|png|gif|webp|heic)($|\?)/i.test(url || '') ? 'Foto' : 'Spec sheet';
+function rqFindPhotoFor(plant){
+  return rqFindProductFilesFor(plant).photo_url;
 }
 
 function rqPricedPlantsSorted(){
@@ -1209,18 +1209,17 @@ function rqRenderFinalList(){
     rqFindCustomers();
   }
   container.innerHTML = withCalc.map(({ plant, calc }) => {
-    const photo = rqFindPhotoFor(plant);
+    const files = rqFindProductFilesFor(plant);
     const delivery = rqDeliveryDatesText();
     return `<div class="offer-item">
-      ${photo
-        ? (rqPhotoLabel(photo) === 'Spec sheet'
-            ? `<a class="offer-thumb" href="${photo}" target="_blank" rel="noopener" title="Spec sheet" style="display:flex;align-items:center;justify-content:center;font-size:20px;text-decoration:none;">📄</a>`
-            : `<img class="offer-thumb" src="${photo}">`)
-        : `<div class="offer-thumb"></div>`}
+      ${files.photo_url ? `<img class="offer-thumb" src="${files.photo_url}">` : `<div class="offer-thumb"></div>`}
       <div style="flex:1;text-align:center;">
         <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
         <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</div>
-        ${photo && rqPhotoLabel(photo) === 'Foto' ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;margin-top:4px;" onclick="rqCopyPhotoToClipboard('${photo}', this)">📋 Descargar foto</button>` : ''}
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px;">
+          ${files.photo_url ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;" onclick="rqCopyPhotoToClipboard('${files.photo_url}','Foto-${plant.name.replace(/[^a-z0-9]+/gi,'-')}', this)">📋 Foto</button>` : ''}
+          ${files.spec_url ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;" onclick="rqCopyPhotoToClipboard('${files.spec_url}','Ficha-tecnica-${plant.name.replace(/[^a-z0-9]+/gi,'-')}.pdf', this)">📋 Ficha</button>` : ''}
+        </div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
@@ -1236,18 +1235,17 @@ function rqRenderFinalList(){
 // through that window in real use, so the copy silently failed. Confirmed broken, not
 // hypothetical — downloading the file instead has no such timing requirement and always works;
 // the trader drags/attaches it into WhatsApp themselves.
-async function rqCopyPhotoToClipboard(photoUrl, btn){
+async function rqCopyPhotoToClipboard(fileUrl, filename, btn){
   const originalLabel = btn ? btn.textContent : null;
   try {
     if (btn){ btn.disabled = true; btn.textContent = '…'; }
-    const res = await fetch(photoUrl);
-    if (!res.ok) throw new Error('Could not fetch the photo file.');
+    const res = await fetch(fileUrl);
+    if (!res.ok) throw new Error('Could not fetch the file.');
     const blob = await res.blob();
-    const ext = (photoUrl.split('.').pop() || 'jpg').split('?')[0];
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `foto.${ext}`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1255,46 +1253,133 @@ async function rqCopyPhotoToClipboard(photoUrl, btn){
     if (btn){ btn.textContent = '✓ Descargada'; setTimeout(() => { btn.disabled = false; btn.textContent = originalLabel; }, 1500); }
   } catch(e){
     if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
-    alert('No se pudo descargar la foto (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
-    window.open(photoUrl, '_blank');
+    alert('No se pudo descargar (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
+    window.open(fileUrl, '_blank');
   }
 }
 
-// Spanish label for the photo/spec-sheet line in customer-facing text — rqPhotoLabel itself
-// stays English ('Foto'/'Spec sheet') since it's also used for the trader's own internal list
-// (rqRenderFinalList), which is English like the rest of the app UI.
-function rqPhotoLabelEs(url){
-  return rqPhotoLabel(url) === 'Foto' ? 'Foto' : 'Ficha técnica';
-}
-
+// No bare URLs go to the customer on either channel — confirmed real recipients reporting broken
+// links on some of the places these get forwarded to, and a raw Supabase storage URL read poorly
+// next to a real business offer anyway. Whatever photo/spec is on file goes out instead as one
+// real, combined PDF per plant (see rqPrepareOfferFiles/rqBuildCombinedPdf) — attached in email,
+// downloaded-then-dragged-in for WhatsApp — a format that opens the same way everywhere, on any
+// device, instead of two separate files in whatever format happened to get uploaded.
 function buildCustomerOfferText(customerFirstName){
   const withCalc = rqPricedPlantsSorted();
   const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
   const lines = withCalc.map(({ plant, calc }) => {
-    const photo = rqFindPhotoFor(plant);
     const delivery = rqDeliveryDatesText();
-    return `${plant.name} — ${rqProductSpecEs || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + delivery : ''}${photo ? '\n' + rqPhotoLabelEs(photo) + ': ' + photo : ''}`;
+    return `${plant.name} — ${rqProductSpecEs || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + delivery : ''}`;
   }).join('\n\n');
   return greeting + lines;
 }
 
-// HTML twin of buildCustomerOfferText, sent alongside it so the Resend email actually shows the
-// product photo inline instead of a bare URL — a real photo (rqPhotoLabel === 'Foto') renders as
-// an <img>, a spec sheet/PDF stays a plain link since it can't be inlined as an image anyway.
+// HTML twin of buildCustomerOfferText — no inline image either now: the photo already ships
+// inside the combined PDF attachment (rqBuildCombinedPdf), so showing it twice (once inline, once
+// in the attachment) was redundant. Email clients list attachments on their own, no extra text needed.
 function buildCustomerOfferHtml(customerFirstName){
   const withCalc = rqPricedPlantsSorted();
   const greeting = customerFirstName ? `Hola ${escapeHtml(customerFirstName)},<br><br>` : '';
   const delivery = rqDeliveryDatesText();
-  const blocks = withCalc.map(({ plant, calc }) => {
-    const photo = rqFindPhotoFor(plant);
-    const line = `<div>${escapeHtml(plant.name)} — ${escapeHtml(rqProductSpecEs || '')} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + escapeHtml(delivery) : ''}</div>`;
-    if (!photo) return line;
-    const media = rqPhotoLabel(photo) === 'Foto'
-      ? `<div style="margin-top:6px;"><img src="${escapeHtml(photo)}" alt="${escapeHtml(plant.name)}" style="max-width:260px;border-radius:6px;"></div>`
-      : `<div style="margin-top:4px;"><a href="${escapeHtml(photo)}">Ficha técnica</a></div>`;
-    return line + media;
-  }).join('<div style="margin:14px 0;"></div>');
+  const blocks = withCalc.map(({ plant, calc }) =>
+    `<div>${escapeHtml(plant.name)} — ${escapeHtml(rqProductSpecEs || '')} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + escapeHtml(delivery) : ''}</div>`
+  ).join('<div style="margin:14px 0;"></div>');
   return greeting + blocks;
+}
+
+// Builds one combined PDF per priced plant — cover page with the offer details, the product photo
+// embedded as an image page, and the existing spec-sheet PDF's own pages copied in after it (real
+// PDF merge via pdf-lib, not a re-render — the spec keeps its original layout/tables/logos exactly
+// as uploaded). A plant with neither file on file contributes nothing; one plant's file failing to
+// fetch/merge only drops that plant's PDF, never blocks the rest of the offer.
+async function rqBuildCombinedPdf(plant, calc){
+  const { PDFDocument, rgb, StandardFonts } = PDFLib;
+  const out = await PDFDocument.create();
+  const bold = await out.embedFont(StandardFonts.HelveticaBold);
+  const reg = await out.embedFont(StandardFonts.Helvetica);
+
+  const cover = out.addPage([612, 792]);
+  cover.drawRectangle({ x: 0, y: 792 - 88, width: 612, height: 88, color: rgb(10 / 255, 37 / 255, 71 / 255) });
+  cover.drawText('BuenTrade', { x: 40, y: 792 - 54, size: 22, font: bold, color: rgb(1, 1, 1) });
+  let y = 792 - 130;
+  const delivery = rqDeliveryDatesText();
+  const rows = [
+    ['Planta', plant.name],
+    ['Producto', rqProductSpecEs || ''],
+    ['Precio', `$${calc.salePerLb.toFixed(4)} USD/lb frontera`],
+    ['Total', `$${calc.totalSale.toLocaleString('en-US', { maximumFractionDigits: 0 })}`],
+  ];
+  if (delivery) rows.push(['Entrega estimada', delivery]);
+  rows.forEach(([label, value]) => {
+    cover.drawText(label.toUpperCase(), { x: 40, y, size: 9, font: bold, color: rgb(0.4, 0.45, 0.55) });
+    cover.drawText(String(value), { x: 40, y: y - 16, size: 13, font: reg, color: rgb(0.06, 0.12, 0.2) });
+    y -= 46;
+  });
+
+  const files = rqFindProductFilesFor(plant);
+  if (files.photo_url){
+    try {
+      const bytes = await (await fetch(files.photo_url)).arrayBuffer();
+      const img = /\.png(\?|$)/i.test(files.photo_url) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+      const page = out.addPage([612, 792]);
+      const maxW = 532, maxH = 700;
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      const w = img.width * scale, h = img.height * scale;
+      page.drawImage(img, { x: (612 - w) / 2, y: (792 - h) / 2, width: w, height: h });
+    } catch(e){ /* photo failed to embed — cover page still ships on its own */ }
+  }
+  if (files.spec_url){
+    try {
+      const specBytes = await (await fetch(files.spec_url)).arrayBuffer();
+      const specDoc = await PDFDocument.load(specBytes);
+      const copied = await out.copyPages(specDoc, specDoc.getPageIndices());
+      copied.forEach(p => out.addPage(p));
+    } catch(e){ /* spec sheet failed to merge — everything else still ships */ }
+  }
+
+  const bytes = await out.save();
+  const filename = `${plant.name.replace(/[^a-z0-9]+/gi, '-')}-${(rqProductSpecEs || 'oferta').replace(/[^a-z0-9]+/gi, '-')}.pdf`;
+  return { bytes, filename };
+}
+
+function rqBytesToBase64(bytes){
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+// Runs once per send action (not once per customer/plant pairing) — every priced plant's combined
+// PDF is the same regardless of which customer it's going to, so this builds each one exactly once
+// and both channels reuse the same bytes: attachments for email, downloadFiles for WhatsApp.
+async function rqPrepareOfferFiles(){
+  const withCalc = rqPricedPlantsSorted();
+  const attachments = [];
+  const downloadFiles = [];
+  for (const { plant, calc } of withCalc){
+    const files = rqFindProductFilesFor(plant);
+    if (!files.photo_url && !files.spec_url) continue;
+    try {
+      const built = await rqBuildCombinedPdf(plant, calc);
+      attachments.push({ filename: built.filename, content: rqBytesToBase64(built.bytes) });
+      downloadFiles.push(built);
+    } catch(e){ /* one plant's PDF failing to build shouldn't block the rest of the offer */ }
+  }
+  return { attachments, downloadFiles };
+}
+
+// Same download-then-drag-in pattern as offers.html's WhatsApp cards — a wa.me link can only
+// pre-fill text, never attach a real file, for anyone, ever. This is the closest a browser can
+// get: the actual combined PDF lands in Downloads right as the chat opens, ready to drag in.
+function rqDownloadBytes(bytes, filename){
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const objUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objUrl), 4000);
 }
 
 let rqMatchedCustomers = [];
@@ -1490,11 +1575,11 @@ async function rqLogSentOffers(customers, channel){
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
 // sender automatically. Falls back to mailto: if the API call fails, so a send is never fully
 // blocked by an API/network hiccup.
-async function sendEmailApiRaw(fromAlias, to, subject, text, html){
+async function sendEmailApiRaw(fromAlias, to, subject, text, html, attachments){
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, subject, text, html }),
+    body: JSON.stringify({ from: fromAlias, to, subject, text, html, attachments }),
   });
   if (!res.ok){
     const err = await res.json().catch(() => ({}));
@@ -1533,6 +1618,7 @@ function rqRenderEmailModal(){
       <div class="rq-email-field"><label>To</label><input type="text" value="${escapeHtml(it.to)}" readonly autocomplete="off"></div>
       <div class="rq-email-field"><label>Subject</label><input type="text" ${it.sent ? 'disabled' : ''} value="${escapeHtml(it.subject)}" oninput="rqEmailModalItems[${i}].subject=this.value" autocomplete="off" name="bt-subj-${i}"></div>
       <div class="rq-email-field"><label>Message</label><textarea ${it.sent ? 'disabled' : ''} oninput="rqEmailModalItems[${i}].body=this.value" autocomplete="off">${escapeHtml(it.body)}</textarea></div>
+      ${it.attachments && it.attachments.length ? `<div class="rq-email-field"><label>Attachments</label><div style="display:flex;flex-wrap:wrap;gap:6px;">${it.attachments.map(a => `<span class="chip" style="cursor:default;">📎 ${escapeHtml(a.filename)}</span>`).join('')}</div></div>` : ''}
       ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>` : ''}
     </div>`).join('');
   const sendAllBtn = document.getElementById('rq_email_modal_sendall');
@@ -1548,7 +1634,7 @@ async function rqEmailModalSendOne(i){
   const it = rqEmailModalItems[i];
   if (!it || it.sent) return;
   try {
-    await sendEmailApiRaw(it.fromAlias, it.to, it.subject, it.body, it.html);
+    await sendEmailApiRaw(it.fromAlias, it.to, it.subject, it.body, it.html, it.attachments);
   } catch(e){
     alert(`Automatic send to ${it.label} failed (${e.message}) — opening your email client instead.`);
     window.open(`mailto:${it.to}?subject=${encodeURIComponent(it.subject)}&body=${encodeURIComponent(it.body)}`, '_blank');
@@ -1595,12 +1681,14 @@ function rqRenderWaModal(){
       <div class="rq-wa-bubble-wrap">
         <div class="rq-wa-bubble"><textarea oninput="rqWaModalItems[${i}].body=this.value">${escapeHtml(it.body)}</textarea></div>
       </div>
+      ${it.downloadFiles && it.downloadFiles.length ? `<div class="loc-hint" style="margin-top:4px;">📎 ${it.downloadFiles.length} file${it.downloadFiles.length > 1 ? 's' : ''} will download automatically — drag ${it.downloadFiles.length > 1 ? 'them' : 'it'} into the chat that opens</div>` : ''}
       <div class="rq-wa-card-actions"><button type="button" class="wa-btn" style="padding:7px 14px;" onclick="rqWaModalOpenOne(${i})">${it.opened ? reopenLabel : openLabel}</button></div>
     </div>`).join('');
 }
 function rqWaModalOpenOne(i){
   const it = rqWaModalItems[i];
   if (!it) return;
+  (it.downloadFiles || []).forEach(f => rqDownloadBytes(f.bytes, f.filename));
   window.open('https://wa.me/' + it.phone + '?text=' + encodeURIComponent(it.body), '_blank');
   it.opened = true;
   if (it.onOpened) it.onOpened();
@@ -1615,9 +1703,10 @@ async function sendOfferEmailTo(customerId){
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
   const firstName = rqFirstName(c.contact_name || c.trade_name);
+  const { attachments } = await rqPrepareOfferFiles();
   rqOpenEmailModal(`Email offer — ${c.trade_name}`, [{
     id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
-    body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName),
+    body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName), attachments,
     fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
   }], true);
 }
@@ -1628,25 +1717,28 @@ async function sendOfferWhatsAppTo(customerId){
   if (!c) return;
   const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
   if (!phone) return;
+  const { downloadFiles } = await rqPrepareOfferFiles();
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
-    id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)),
+    id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
     onOpened: () => rqLogSentOffers([c], 'whatsapp'),
   }], true);
 }
 
 // Every matched customer's offer, shown at once as editable drafts in rqOpenEmailModal — sending
 // still goes through the Netlify function per card (Send or Send All), so a card that fails falls
-// back to mailto: on its own, same as before.
+// back to mailto: on its own, same as before. rqPrepareOfferFiles runs once for the whole batch —
+// the combined PDF per plant is the same regardless of which customer it's going to.
 async function rqOpenAllEmails(){
   if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const targets = rqMatchedCustomers.filter(c => c.email);
   if (!targets.length){ alert('No matched customer has an email on file.'); return; }
   const subject = 'Cotización — ' + (rqProductSpecEs || '');
+  const { attachments } = await rqPrepareOfferFiles();
   const items = targets.map(c => {
     const firstName = rqFirstName(c.contact_name || c.trade_name);
     return {
       id: c.id, label: c.trade_name, to: c.email, subject,
-      body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName),
+      body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName), attachments,
       fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
     };
   });
@@ -1661,9 +1753,10 @@ async function rqOpenAllWhatsApp(){
   if (!rqRequireDeliveryDay() || !(await rqBlockIfStalePrices())) return;
   const targets = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   if (!targets.length){ alert('No matched customer has a phone/WhatsApp on file.'); return; }
+  const { downloadFiles } = await rqPrepareOfferFiles();
   const items = targets.map(c => ({
     id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
-    body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)),
+    body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
     onOpened: () => rqLogSentOffers([c], 'whatsapp'),
   }));
   rqOpenWaModal(`WhatsApp offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items, true);
