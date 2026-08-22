@@ -451,8 +451,10 @@ function renderOffers(){
       // negotiation bar (negoSaveDefinitive in trading-tool.html).
       action = `
         <button class="tt-btn" onclick="toggleTT('${o.id}')">⚙ TT</button>
-        <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Create Order</button>
-        <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>`;
+        <span id="quickActions_${o.id}" style="display:inline-flex;gap:6px;">
+          <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Create Order</button>
+          <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>
+        </span>`;
     } else if (o.status === 'won'){
       // A single "⋯" replaces what used to be three separate pill buttons (Documents / Real
       // Costs / History) crowding this cell and squeezing the customer name column next to it —
@@ -552,13 +554,21 @@ function toggleTT(id){
   if (ttOpenId && ttOpenId !== id){
     const prev = document.getElementById('tt_row_' + ttOpenId);
     if (prev) prev.style.display = 'none';
+    // Restore the collapsed row's own quick Create Order/Lost — only the row actually open in TT
+    // hides them, since its own copy inside the negotiation bar takes over at that point.
+    const prevActions = document.getElementById('quickActions_' + ttOpenId);
+    if (prevActions) prevActions.style.display = 'inline-flex';
   }
   if (row.style.display === 'table-row'){
     row.style.display = 'none';
+    const actions = document.getElementById('quickActions_' + id);
+    if (actions) actions.style.display = 'inline-flex';
     ttOpenId = null;
     return;
   }
   row.style.display = 'table-row';
+  const actions = document.getElementById('quickActions_' + id);
+  if (actions) actions.style.display = 'none';
   ttOpenId = id;
   loadTTPanel(id);
 }
