@@ -681,8 +681,12 @@ if (FIREBASE_READY) {
         <div style="display:flex;align-items:center;gap:10px;">
           <h2>Product(s)</h2>
           <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
-          <span id="targetProfitRow" style="display:none;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);" onclick="event.stopPropagation();">
+          <span id="targetProfitRow" style="display:none;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);" onclick="event.stopPropagation();">
             🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:2px 4px;" oninput="applyProfitTarget(null);calc();">%
+            <span style="display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;">
+              <span id="liveSolveSellChip" class="chip on" style="font-size:10px;padding:2px 6px;border-radius:0;" onclick="setLiveSolveFor('sell')" title="Typing a selling price rebalances the OTHER products' selling prices">🏷️ Sell</span>
+              <span id="liveSolveBuyChip" class="chip" style="font-size:10px;padding:2px 6px;border-radius:0;" onclick="setLiveSolveFor('purchase')" title="Typing a selling price (the customer's bid) instead solves what you can pay THIS product's plant">💰 Buy</span>
+            </span>
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -858,7 +862,15 @@ let products = [
 const MAX_PRODUCTS = 6;
 const TARGET_WEIGHT = 40000;
 const LB_PER_KG = 2.20462;
-let state = { solveFor:'purchase', solveScenario:'border', qqLastEdited:'purchase', solveProduct:'all' };
+let state = { solveFor:'purchase', solveScenario:'border', qqLastEdited:'purchase', solveProduct:'all', liveSolveFor:'sell' };
+
+function setLiveSolveFor(mode){
+  state.liveSolveFor = mode;
+  const sellChip = document.getElementById('liveSolveSellChip');
+  const buyChip = document.getElementById('liveSolveBuyChip');
+  if(sellChip) sellChip.classList.toggle('on', mode==='sell');
+  if(buyChip) buyChip.classList.toggle('on', mode==='purchase');
+}
 let fxRateManuallySet = false;
 
 // Collapse/expand one of the three grid cards (Direct Costs, Products, Profitability) by
@@ -1001,12 +1013,35 @@ function updateProd(i, field, val){
     if(products.length>1) applyProfitTarget(null);
   }
   // Cost is a fact the plant hands you, not a price being negotiated — re-split every product's
-  // selling price evenly toward the Target Profit. Selling price IS the price being negotiated,
-  // so keep exactly what was typed and only redistribute the rest onto the other product(s) —
-  // the "give this one a good price, make it up on the other" move.
+  // selling price evenly toward the Target Margin.
   if(field==='cost' && products.length>1) applyProfitTarget(null);
-  if(field==='sellBorder' && products.length>1) applyProfitTarget(i);
+  if(field==='sellBorder' && products.length>1){
+    // Sell mode: selling price IS the price being negotiated with the customer, so keep exactly
+    // what was typed and redistribute the rest onto the other product(s) — "give this one a good
+    // price, make it up on the other." Buy mode: the customer just gave a bid — that selling
+    // price is now a fact too, so instead solve what THIS product's plant purchase price needs
+    // to be (every other product's cost/sell left untouched) to still hit the target margin.
+    if(state.liveSolveFor==='purchase') applyPurchaseTarget(i);
+    else applyProfitTarget(i);
+  }
   calc();
+}
+
+function applyPurchaseTarget(i){
+  const targetEl = document.getElementById('targetMarginPct');
+  const targetPct = (parseFloat(targetEl && targetEl.value)||0)/100;
+  const inp = getInputs();
+  const fixedCosts = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
+  const k = inp.payDays*(inp.financeRate/100);
+  const totalSaleBorder = products.reduce((s,p)=>s+p.weight*p.sellBorder,0); // every sell price is already fixed at this point, including this product's just-typed bid
+  const totalCostNeeded = totalSaleBorder*(1-k-targetPct) - fixedCosts;
+  const otherCostUSD = products.reduce((s,p,j)=> j===i ? s : s+p.weight*p.cost, 0);
+  const costNeeded = Math.max(0, totalCostNeeded - otherCostUSD);
+  const p = products[i];
+  const newCost = p.weight>0 ? costNeeded/p.weight : 0;
+  p.cost = newCost;
+  const el = document.getElementById('prodCost'+i);
+  if(el) el.value = newCost.toFixed(4);
 }
 
 function applyProfitTarget(excludeIdx){
