@@ -331,7 +331,11 @@ async function loadQuotesPage(){
   rqAllProviders = provRes.data || [];
   rqAllProviderRates = rateRes.data || [];
 
-  rqProductNames = [...new Set(products.map(p => p.name).filter(Boolean))].sort();
+  // Both languages — the exact-match below (onRqProductInput) already accepts either the Spanish
+  // or the English catalog name, but the suggestion list itself only offered Spanish, so typing
+  // in English (e.g. "belly") surfaced no suggestions at all and silently fell through to "not in
+  // catalog", even though the exact English name would have matched.
+  rqProductNames = [...new Set(products.flatMap(p => [p.name, p.name_en]).filter(Boolean))].sort();
 
   document.getElementById('rq_newdate').min = rqTodayStr();
   rqFetchExchangeRate(); // kicked off early, not awaited — usually ready well before Imported Load gets toggled
