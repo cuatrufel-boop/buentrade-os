@@ -644,9 +644,9 @@ function renderRqPlants(){
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
           ${(p.rqVariantLinks && p.rqVariantLinks.length > 1) ? `
-          <select style="font-size:11.5px;padding:2px 4px;color:var(--ink-soft);border:1px solid var(--line);border-radius:4px;" onchange="rqSwitchVariant('${p.id}', this.value)" title="This plant carries more than one variant of this cut">
-            ${p.rqVariantLinks.map(l => `<option value="${l.product_id}" ${l.product_id === p.rqProductId ? 'selected' : ''}>${escapeHtml(rqVariantSpec(l.product_id))}${l.current_price != null ? ' — $' + l.current_price : ' — no price'}</option>`).join('')}
-          </select>` : (rqVariantSpec(p.rqProductId) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqVariantSpec(p.rqProductId))}</span>` : '')}
+          <span style="display:inline-flex;gap:4px;flex-wrap:wrap;" title="This plant carries more than one variant of this cut">
+            ${p.rqVariantLinks.map(l => `<button type="button" class="chip${l.product_id === p.rqProductId ? ' on' : ''}" style="padding:3px 8px;font-size:10.5px;" onclick="rqSwitchVariant('${p.id}', '${l.product_id}')">${escapeHtml(rqVariantSpec(l.product_id))}${l.current_price != null ? ' — $' + l.current_price : ' — no price'}</button>`).join('')}
+          </span>` : (rqVariantSpec(p.rqProductId) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqVariantSpec(p.rqProductId))}</span>` : '')}
           ${!showPriceRow ? (
             !hasDeliveryDate && (p.rqPrice || p.rqPriceRevealed)
               ? `<span style="font-size:11.5px;color:#c0392b;font-weight:600;">Set a Delivery day above to see pricing</span>`
