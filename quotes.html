@@ -1528,14 +1528,17 @@ async function sendEmailApiRaw(fromAlias, to, subject, text, html){
 // A card that already sent stays visible (greyed out, fields locked) so the trader can see the
 // whole batch's status at a glance instead of it vanishing the moment it goes out.
 let rqEmailModalItems = [];
-function rqOpenEmailModal(title, items){
+let rqEmailModalIsOffer = false;
+function rqOpenEmailModal(title, items, isOffer){
   rqEmailModalItems = items.map(it => ({ ...it, sent: false }));
+  rqEmailModalIsOffer = !!isOffer;
   document.getElementById('rq_email_modal_title').textContent = title;
   rqRenderEmailModal();
   document.getElementById('rq_email_modal_overlay').style.display = 'flex';
 }
 function rqRenderEmailModal(){
   const list = document.getElementById('rq_email_modal_list');
+  const sendLabel = rqEmailModalIsOffer ? 'Send Offer' : 'Send';
   list.innerHTML = rqEmailModalItems.map((it, i) => `
     <div class="rq-email-card${it.sent ? ' sent' : ''}">
       <div class="rq-email-card-head">
@@ -1545,11 +1548,12 @@ function rqRenderEmailModal(){
       <div class="rq-email-field"><label>To</label><input type="text" value="${escapeHtml(it.to)}" readonly></div>
       <div class="rq-email-field"><label>Subject</label><input type="text" ${it.sent ? 'disabled' : ''} value="${escapeHtml(it.subject)}" oninput="rqEmailModalItems[${i}].subject=this.value"></div>
       <div class="rq-email-field"><label>Message</label><textarea ${it.sent ? 'disabled' : ''} oninput="rqEmailModalItems[${i}].body=this.value">${escapeHtml(it.body)}</textarea></div>
-      ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" onclick="rqEmailModalSendOne(${i})">Send</button></div>` : ''}
+      ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>` : ''}
     </div>`).join('');
   const sendAllBtn = document.getElementById('rq_email_modal_sendall');
   sendAllBtn.style.display = rqEmailModalItems.every(it => it.sent) ? 'none' : '';
-  sendAllBtn.textContent = rqEmailModalItems.length > 1 ? `Send All (${rqEmailModalItems.filter(it => !it.sent).length})` : 'Send';
+  const remaining = rqEmailModalItems.filter(it => !it.sent).length;
+  sendAllBtn.textContent = rqEmailModalItems.length > 1 ? `${sendLabel} All (${remaining})` : sendLabel;
 }
 async function rqEmailModalSendOne(i){
   const it = rqEmailModalItems[i];
@@ -1579,22 +1583,30 @@ function rqEmailModalClose(){
 // a browser tab) and steals focus, so nothing after the first window.open() in a chain can ever
 // be relied on to fire. Showing every conversation at once, each with its own real click, is the
 // closest this can get to "send all" without silently dropping messages the trader thinks went out.
+const RQ_WA_ICON = `<svg viewBox="0 0 24 24" fill="#fff" style="width:12px;height:12px;flex-shrink:0;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>`;
 let rqWaModalItems = [];
-function rqOpenWaModal(title, items){
+let rqWaModalIsOffer = false;
+function rqOpenWaModal(title, items, isOffer){
   rqWaModalItems = items.map(it => ({ ...it, opened: false }));
+  rqWaModalIsOffer = !!isOffer;
   document.getElementById('rq_wa_modal_title').textContent = title;
   rqRenderWaModal();
   document.getElementById('rq_wa_modal_overlay').style.display = 'flex';
 }
 function rqRenderWaModal(){
   const list = document.getElementById('rq_wa_modal_list');
+  // "Make an Offer" only labels the button when this batch actually logs to sent_offers on open
+  // (customer offers) — asking a plant for a price isn't an offer, so that flow keeps the plain
+  // "Open WhatsApp" label instead of implying it creates something trackable in Offers.
+  const openLabel = rqWaModalIsOffer ? `${RQ_WA_ICON} Make an Offer` : `${RQ_WA_ICON} Open WhatsApp`;
+  const reopenLabel = `${RQ_WA_ICON} Reopen WhatsApp`;
   list.innerHTML = rqWaModalItems.map((it, i) => `
     <div class="rq-wa-card">
       <div class="rq-wa-card-head">${escapeHtml(it.label)}${it.opened ? ' <span class="rq-email-card-status">✓ Opened</span>' : ''}</div>
       <div class="rq-wa-bubble-wrap">
         <div class="rq-wa-bubble"><textarea oninput="rqWaModalItems[${i}].body=this.value">${escapeHtml(it.body)}</textarea></div>
       </div>
-      <div class="rq-wa-card-actions"><button type="button" class="wa-btn" style="padding:7px 14px;" onclick="rqWaModalOpenOne(${i})">${it.opened ? 'Reopen WhatsApp' : 'Open WhatsApp'}</button></div>
+      <div class="rq-wa-card-actions"><button type="button" class="wa-btn" style="padding:7px 14px;" onclick="rqWaModalOpenOne(${i})">${it.opened ? reopenLabel : openLabel}</button></div>
     </div>`).join('');
 }
 function rqWaModalOpenOne(i){
@@ -1618,7 +1630,7 @@ async function sendOfferEmailTo(customerId){
     id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
     body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName),
     fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
-  }]);
+  }], true);
 }
 
 async function sendOfferWhatsAppTo(customerId){
@@ -1630,7 +1642,7 @@ async function sendOfferWhatsAppTo(customerId){
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
     id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)),
     onOpened: () => rqLogSentOffers([c], 'whatsapp'),
-  }]);
+  }], true);
 }
 
 // Every matched customer's offer, shown at once as editable drafts in rqOpenEmailModal — sending
@@ -1649,7 +1661,7 @@ async function rqOpenAllEmails(){
       fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
     };
   });
-  rqOpenEmailModal(`Email offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items);
+  rqOpenEmailModal(`Email offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items, true);
 }
 
 // Every matched customer's WhatsApp draft, shown at once in rqOpenWaModal — each still needs its
@@ -1665,7 +1677,7 @@ async function rqOpenAllWhatsApp(){
     body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)),
     onOpened: () => rqLogSentOffers([c], 'whatsapp'),
   }));
-  rqOpenWaModal(`WhatsApp offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items);
+  rqOpenWaModal(`WhatsApp offers — ${items.length} customer${items.length > 1 ? 's' : ''}`, items, true);
 }
 
 function rqFmtDate(val){
