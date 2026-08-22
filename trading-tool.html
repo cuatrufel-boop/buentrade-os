@@ -633,12 +633,8 @@ if (FIREBASE_READY) {
           </div>
         </div>
         <div id="targetProfitRow" style="display:none;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);padding-top:2px;border-top:1px dashed var(--line);flex-wrap:wrap;" onclick="event.stopPropagation();">
-          🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:3px 5px;" oninput="applyProfitTarget(null);calc();">%
-          <span style="display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-left:auto;">
-            <span id="liveSolveSellChip" class="chip on" style="font-size:10.5px;padding:4px 9px;border-radius:0;" onclick="setLiveSolveFor('sell')" title="Typing a selling price rebalances the OTHER products' selling prices">🏷️ Sell</span>
-            <span id="liveSolveBuyChip" class="chip" style="font-size:10.5px;padding:4px 9px;border-radius:0;" onclick="setLiveSolveFor('purchase')" title="Typing a selling price (the customer's bid) instead solves what you can pay THIS product's plant">💰 Buy</span>
-          </span>
-          <span id="liveSolveHint" style="display:none;flex-basis:100%;color:var(--teal);font-size:10.5px;"></span>
+          🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:3px 5px;" oninput="applyProfitTarget();calc();">%
+          <span style="color:var(--ink-soft);opacity:.75;">— starting suggestion only, split evenly by markup %. Edit any Selling Price by hand and it stops touching anything.</span>
         </div>
       </div>
       <div class="card-body" id="productsBody"></div>
@@ -814,31 +810,17 @@ let products = [
     // treat it as manually locked so adding a 2nd product never silently rewrites it.
     weightManual: __qp.has('weight'),
     cost: __qp.has('cost') ? Number(__qp.get('cost')) || 0 : 0,
-    sellBorder: __qp.has('sell') ? Number(__qp.get('sell')) || 0 : 0, sellMx: 0, sellMxManual: false
+    sellBorder: __qp.has('sell') ? Number(__qp.get('sell')) || 0 : 0,
+    // Same reasoning as weightManual — a Selling Price that arrived from a real negotiation
+    // re-open is a fact, not the Target Margin's starting suggestion to overwrite.
+    sellManual: __qp.has('sell'),
+    sellMx: 0, sellMxManual: false
   }
 ];
 const MAX_PRODUCTS = 6;
 const TARGET_WEIGHT = 40000;
 const LB_PER_KG = 2.20462;
-let state = { qqLastEdited:'purchase', liveSolveFor:'sell' };
-
-function setLiveSolveFor(mode){
-  state.liveSolveFor = mode;
-  const sellChip = document.getElementById('liveSolveSellChip');
-  const buyChip = document.getElementById('liveSolveBuyChip');
-  if(sellChip) sellChip.classList.toggle('on', mode==='sell');
-  if(buyChip) buyChip.classList.toggle('on', mode==='purchase');
-  // Buy/Sell only change what happens the NEXT time a Selling Price is typed — nothing recalculates
-  // just from clicking the chip itself, so this hint makes clear what to do next instead of it
-  // looking like the click "did nothing."
-  const hint = document.getElementById('liveSolveHint');
-  if(hint){
-    hint.style.display = 'block';
-    hint.textContent = mode==='purchase'
-      ? '→ Type the customer\'s bid into that product\'s Selling Price — the Purchase Price you need will show up there.'
-      : '→ Type a Selling Price on any product — the others adjust to hold the Target Margin.';
-  }
-}
+let state = { qqLastEdited:'purchase' };
 let fxRateManuallySet = false;
 
 // Collapse/expand one of the three grid cards (Direct Costs, Products, Profitability) by
@@ -962,73 +944,48 @@ function updateProd(i, field, val){
   if(field==='name'){ products[i].name = val; calc(); return; }
   if(field==='sellMx'){ products[i].sellMxManual = true; }
   if(field==='weight'){ products[i].weightManual = true; }
+  if(field==='sellBorder'){ products[i].sellManual = true; } // once any Selling Price is typed by hand, the Target Margin stops touching anything — see applyProfitTarget()
   products[i][field] = parseFloat(val)||0;
   if(field==='weight'){
     rebalanceWeights();
     // Weight changing (typed directly, or cascading from rebalanceWeights) shifts how much sale
-    // $ each product needs to contribute — without this, a product priced before its real weight
-    // was in place stays stuck at whatever sell price its old (often 0) weight implied.
-    if(products.length>1) applyProfitTarget(null);
+    // $ each product needs to contribute — keeps the starting suggestion in sync, same guard as
+    // every other caller (does nothing once a Selling Price has been typed by hand).
+    applyProfitTarget();
   }
   // Cost is a fact the plant hands you, not a price being negotiated — re-split every product's
-  // selling price evenly toward the Target Margin.
-  if(field==='cost' && products.length>1) applyProfitTarget(null);
-  if(field==='sellBorder' && products.length>1){
-    // Sell mode: selling price IS the price being negotiated with the customer, so keep exactly
-    // what was typed and redistribute the rest onto the other product(s) — "give this one a good
-    // price, make it up on the other." Buy mode: the customer just gave a bid — that selling
-    // price is now a fact too, so instead solve what THIS product's plant purchase price needs
-    // to be (every other product's cost/sell left untouched) to still hit the target margin.
-    if(state.liveSolveFor==='purchase') applyPurchaseTarget(i);
-    else applyProfitTarget(i);
-  }
+  // selling price evenly toward the Target Margin, but ONLY while it's still the starting
+  // suggestion (see applyProfitTarget's guard). A manually-typed Selling Price is never touched.
+  if(field==='cost') applyProfitTarget();
   calc();
 }
 
-function applyPurchaseTarget(i){
-  const targetEl = document.getElementById('targetMarginPct');
-  const targetPct = (parseFloat(targetEl && targetEl.value)||0)/100;
-  const inp = getInputs();
-  const fixedCosts = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
-  const k = inp.payDays*(inp.financeRate/100);
-  const totalSaleBorder = products.reduce((s,p)=>s+p.weight*p.sellBorder,0); // every sell price is already fixed at this point, including this product's just-typed bid
-  const totalCostNeeded = totalSaleBorder*(1-k-targetPct) - fixedCosts;
-  const otherCostUSD = products.reduce((s,p,j)=> j===i ? s : s+p.weight*p.cost, 0);
-  const costNeeded = Math.max(0, totalCostNeeded - otherCostUSD);
-  const p = products[i];
-  const newCost = p.weight>0 ? costNeeded/p.weight : 0;
-  p.cost = newCost;
-  const el = document.getElementById('prodCost'+i);
-  if(el) el.value = newCost.toFixed(4);
-}
-
-function applyProfitTarget(excludeIdx){
+function applyProfitTarget(){
   if(products.length<=1) return;
+  // The Target Margin is a STARTING reference to make the first offer, not a rule to keep
+  // enforcing forever — the trader must be free to push margin up (or give one product away and
+  // make it up on another) without the system silently pulling everything back to this number.
+  // So this only ever runs the fresh, even-by-%-markup split; the moment ANY product's Selling
+  // Price has been typed by hand, it does nothing at all, on every caller, permanently (until
+  // a fresh page load / all products removed and re-added).
+  if(products.some(p=>p.sellManual)) return;
   const targetEl = document.getElementById('targetMarginPct');
   const targetPct = (parseFloat(targetEl && targetEl.value)||0)/100;
   const inp = getInputs();
   const totalCostUSD = products.reduce((s,p)=>s+p.weight*p.cost,0);
   const fixedCosts = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
   const k = inp.payDays*(inp.financeRate/100);
-  // Same Net Margin % formula as the Solver's own "sell" mode (target*saleNeeded = saleNeeded -
-  // cost - fixedCosts - saleNeeded*k, solved for saleNeeded) — reused here instead of a flat $
-  // figure, so the whole load's net margin is what's being held, same concept as the Solver.
   const denom = 1-k-targetPct;
   if(denom<=0) return;
   const totalSaleNeeded = (totalCostUSD+fixedCosts)/denom;
 
-  let fixedSale = 0; const floatIdxs = [];
-  products.forEach((p,j)=>{
-    if(j===excludeIdx) fixedSale += p.weight*p.sellBorder;
-    else floatIdxs.push(j);
-  });
-  if(!floatIdxs.length) return;
-  const floatSaleNeeded = Math.max(0, totalSaleNeeded - fixedSale);
-  const floatCostUSD = floatIdxs.reduce((s,j)=>s+products[j].weight*products[j].cost,0);
-  // Same % markup over cost for every floating product — NOT the same flat selling price.
-  // A flat price makes the cheaper-cost product look overpriced to the customer (e.g. two
-  // products at the same $/lb even though one cost 20% less) — a consistent margin % keeps
-  // the cheaper one looking cheaper and the pricier one looking pricier, like a real quote.
+  const floatIdxs = products.map((p,j)=>j);
+  const floatSaleNeeded = Math.max(0, totalSaleNeeded);
+  const floatCostUSD = totalCostUSD;
+  // Same % markup over cost for every product — NOT the same flat selling price. A flat price
+  // makes the cheaper-cost product look overpriced to the customer (e.g. two products at the
+  // same $/lb even though one cost 20% less) — a consistent margin % keeps the cheaper one
+  // looking cheaper and the pricier one looking pricier, like a real quote.
   const markupPct = floatCostUSD>0 ? (floatSaleNeeded/floatCostUSD - 1) : 0;
   const fallbackShare = floatSaleNeeded/floatIdxs.length; // only used while cost is still $0
   floatIdxs.forEach(j=>{
@@ -1072,16 +1029,16 @@ function addProduct(){
   // Even split of the 40,000 lb target on add — safe now that applyProfitTarget() keeps every
   // selling price in sync with whatever the weight split is, so total profit never dips or
   // "goes crazy" just from adding a product, even before its own cost/sell get typed in.
-  products.push({name:'Product '+(products.length+1), weight:0, weightManual:false, cost:0, sellBorder:0, sellMx:0, sellMxManual:false});
+  products.push({name:'Product '+(products.length+1), weight:0, weightManual:false, cost:0, sellBorder:0, sellManual:false, sellMx:0, sellMxManual:false});
   rebalanceWeights();
-  if(products.length>1) applyProfitTarget(null);
+  applyProfitTarget();
   buildProductRows();
   calc();
 }
 function removeProduct(i){
   products.splice(i,1);
   rebalanceWeights();
-  if(products.length>1) applyProfitTarget(null);
+  applyProfitTarget();
   buildProductRows();
   calc();
 }
