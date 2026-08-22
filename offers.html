@@ -42,9 +42,9 @@
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
-  .btn.win{background:#fff;color:var(--green);border:1.5px solid var(--green);padding:5px 10px;font-size:12px;font-weight:700;}
-  .btn.win:hover{background:var(--green);color:#fff;}
-  .btn.lose{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);padding:5px 10px;font-size:12px;}
+  .btn.win{background:var(--green);color:#fff;border:none;padding:6px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(15,138,95,.3);transition:transform .1s,box-shadow .1s;}
+  .btn.win:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,138,95,.35);}
+  .btn.lose{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);padding:6px 12px;font-size:12px;}
   .tt-btn{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 2px 6px rgba(10,37,71,.25);}
   .tt-btn:hover{filter:brightness(1.15);}
   .doc-split{display:inline-flex;margin-right:4px;}
@@ -427,14 +427,17 @@ function renderOffers(){
       : `<span class="status-pill status-${o.status}">${STATUS_LABEL[o.status] || o.status}${o.status === 'won' && o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`;
     let action = '';
     if (o.status === 'sent'){
-      // "Win" here is only the fast path — price closed exactly as quoted, nothing to
+      // "Create Order" here is only the fast path — price closed exactly as quoted, nothing to
       // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
       // goes through "TT", which has the full calculator, can message either side any number
       // of times, and is the only place that writes the final numbers once actually confirmed.
-      // Opens inline (see toggleTT) instead of a new tab — same page the whole time.
+      // Opens inline (see toggleTT) instead of a new tab — same page the whole time. Renamed from
+      // the bare "Win" label — didn't say what actually happens when you click it (a PO/SO/FO
+      // get generated right after), same rename applied to its twin inside the Trading Tool's own
+      // negotiation bar (negoSaveDefinitive in trading-tool.html).
       action = `
         <button class="tt-btn" onclick="toggleTT('${o.id}')">⚙ TT</button>
-        <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Win</button>
+        <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Create Order</button>
         <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>`;
     } else if (o.status === 'won'){
       // A single "⋯" replaces what used to be three separate pill buttons (Documents / Real
