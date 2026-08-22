@@ -839,6 +839,9 @@ let products = [
   {
     name: __qp.get('label') || 'Product 1',
     weight: __qp.has('weight') ? Number(__qp.get('weight')) || 40000 : 40000,
+    // A weight that arrived via query params came from a real, already-agreed negotiation —
+    // treat it as manually locked so adding a 2nd product never silently rewrites it.
+    weightManual: __qp.has('weight'),
     cost: __qp.has('cost') ? Number(__qp.get('cost')) || 0 : 0,
     sellBorder: __qp.has('sell') ? Number(__qp.get('sell')) || 0 : 0, sellMx: 0, sellMxManual: false
   }
@@ -951,8 +954,30 @@ function updateProductOutputs(){
 function updateProd(i, field, val){
   if(field==='name'){ products[i].name = val; calc(); return; }
   if(field==='sellMx'){ products[i].sellMxManual = true; }
+  if(field==='weight'){ products[i].weightManual = true; }
   products[i][field] = parseFloat(val)||0;
+  if(field==='weight') rebalanceWeights();
   calc();
+}
+
+// The truck is always a full 40,000 lb load. Products the trader hasn't typed a weight into
+// by hand ("auto") split whatever's left over TARGET_WEIGHT evenly among themselves, so typing
+// e.g. 10,000 lb into one product automatically pushes the rest onto the others — matching how
+// a plant actually fills a mixed load (normally half/half, but not always). A product the trader
+// has typed into directly is never touched again by this. Updates sibling <input> values in
+// place (not a full re-render) so it never steals focus from the field being typed into.
+function rebalanceWeights(){
+  const manualTotal = products.reduce((s,p)=> s + (p.weightManual ? p.weight : 0), 0);
+  const autoIdxs = products.map((p,i)=>i).filter(i=>!products[i].weightManual);
+  if(autoIdxs.length===0) return;
+  const remaining = Math.max(0, TARGET_WEIGHT - manualTotal);
+  const share = Math.floor(remaining / autoIdxs.length);
+  autoIdxs.forEach((i, idx) => {
+    const w = (idx === autoIdxs.length - 1) ? (remaining - share*(autoIdxs.length-1)) : share;
+    products[i].weight = w;
+    const el = document.getElementById('prodWeight'+i);
+    if(el) el.value = w;
+  });
 }
 
 // Selling Price Mexico (MXN/kg) = Selling Price Border (USD/lb) × 2.20462 × Exchange Rate
@@ -964,12 +989,17 @@ function autoCalcMxSell(i){
 
 function addProduct(){
   if(products.length>=MAX_PRODUCTS) return;
-  products.push({name:'Product '+(products.length+1), weight:0, cost:0, sellBorder:0, sellMx:0, sellMxManual:false});
+  // Starts at 0 lb, not an even split — a brand-new product has no cost/sell yet, so pulling
+  // weight off an already-priced product before any real numbers exist here would tank the
+  // total for no reason. The moment the trader types a real weight into it, updateProd()'s
+  // rebalanceWeights() call redistributes the 40,000 lb properly.
+  products.push({name:'Product '+(products.length+1), weight:0, weightManual:false, cost:0, sellBorder:0, sellMx:0, sellMxManual:false});
   buildProductRows();
   calc();
 }
 function removeProduct(i){
   products.splice(i,1);
+  rebalanceWeights();
   buildProductRows();
   calc();
 }
