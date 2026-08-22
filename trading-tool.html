@@ -1028,10 +1028,17 @@ function applyProfitTarget(excludeIdx){
   });
   if(!floatIdxs.length) return;
   const floatSaleNeeded = Math.max(0, totalSaleNeeded - fixedSale);
-  const share = floatSaleNeeded/floatIdxs.length;
+  const floatCostUSD = floatIdxs.reduce((s,j)=>s+products[j].weight*products[j].cost,0);
+  // Same % markup over cost for every floating product — NOT the same flat selling price.
+  // A flat price makes the cheaper-cost product look overpriced to the customer (e.g. two
+  // products at the same $/lb even though one cost 20% less) — a consistent margin % keeps
+  // the cheaper one looking cheaper and the pricier one looking pricier, like a real quote.
+  const markupPct = floatCostUSD>0 ? (floatSaleNeeded/floatCostUSD - 1) : 0;
+  const fallbackShare = floatSaleNeeded/floatIdxs.length; // only used while cost is still $0
   floatIdxs.forEach(j=>{
-    const newSell = products[j].weight>0 ? share/products[j].weight : 0;
-    products[j].sellBorder = newSell;
+    const p = products[j];
+    const newSell = p.cost>0 ? p.cost*(1+markupPct) : (p.weight>0 ? fallbackShare/p.weight : 0);
+    p.sellBorder = newSell;
     const el = document.getElementById('prodSellBorder'+j);
     if(el) el.value = newSell.toFixed(4);
   });
