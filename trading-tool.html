@@ -962,12 +962,14 @@ function updateProd(i, field, val){
 function applyProfitTarget(){
   if(products.length<=1) return;
   // The Target Margin is a STARTING reference to make the first offer, not a rule to keep
-  // enforcing forever — the trader must be free to push margin up (or give one product away and
-  // make it up on another) without the system silently pulling everything back to this number.
-  // So this only ever runs the fresh, even-by-%-markup split; the moment ANY product's Selling
-  // Price has been typed by hand, it does nothing at all, on every caller, permanently (until
-  // a fresh page load / all products removed and re-added).
-  if(products.some(p=>p.sellManual)) return;
+  // enforcing forever. The guard is PER PRODUCT, not global: once a product's own Selling Price
+  // has been typed by hand, THAT product is permanently protected — nothing here ever touches it
+  // again, no matter what else changes. A product that's never been manually priced (a fresh one
+  // you just added, or one whose cost you're still dialing in) keeps getting a live suggestion,
+  // even if some other product in the same load is already manual — otherwise a brand-new
+  // product sits stuck at $0 forever just because a sibling was already priced by hand.
+  const floatIdxs = products.map((p,j)=>j).filter(j=>!products[j].sellManual);
+  if(!floatIdxs.length) return;
   const targetEl = document.getElementById('targetMarginPct');
   const targetPct = (parseFloat(targetEl && targetEl.value)||0)/100;
   const inp = getInputs();
@@ -978,12 +980,13 @@ function applyProfitTarget(){
   if(denom<=0) return;
   const totalSaleNeeded = (totalCostUSD+fixedCosts)/denom;
 
-  const floatIdxs = products.map((p,j)=>j);
-  const floatSaleNeeded = Math.max(0, totalSaleNeeded);
-  const floatCostUSD = totalCostUSD;
-  // Same % markup over cost for every product — NOT the same flat selling price. A flat price
-  // makes the cheaper-cost product look overpriced to the customer (e.g. two products at the
-  // same $/lb even though one cost 20% less) — a consistent margin % keeps the cheaper one
+  let fixedSale = 0;
+  products.forEach((p,j)=>{ if(!floatIdxs.includes(j)) fixedSale += p.weight*p.sellBorder; });
+  const floatSaleNeeded = Math.max(0, totalSaleNeeded - fixedSale);
+  const floatCostUSD = floatIdxs.reduce((s,j)=>s+products[j].weight*products[j].cost,0);
+  // Same % markup over cost for every floating product — NOT the same flat selling price. A flat
+  // price makes the cheaper-cost product look overpriced to the customer (e.g. two products at
+  // the same $/lb even though one cost 20% less) — a consistent margin % keeps the cheaper one
   // looking cheaper and the pricier one looking pricier, like a real quote.
   const markupPct = floatCostUSD>0 ? (floatSaleNeeded/floatCostUSD - 1) : 0;
   const fallbackShare = floatSaleNeeded/floatIdxs.length; // only used while cost is still $0
