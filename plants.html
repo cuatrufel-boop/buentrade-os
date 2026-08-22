@@ -1140,6 +1140,26 @@ async function processPriceListText(){
     }
   }
 
+  // A brand-new plant has no prior products to infer its protein from, but its price list might
+  // still match existing catalog entries by name (a cut like "wings" or "breast trim" likely
+  // already exists from some other poultry plant) — if every row that DID match just now points
+  // to the same category, use that. Grounded in the real matched products, never a guess from
+  // scanning the pasted text for protein-sounding keywords.
+  if (!priceListCategoryFilter){
+    const matchedCategories = new Set(
+      priceListRows
+        .map(r => r.matchedProductId && allCatalogProducts.find(p => p.id === r.matchedProductId))
+        .filter(Boolean)
+        .map(p => p.category)
+        .filter(Boolean)
+    );
+    if (matchedCategories.size === 1){
+      priceListCategoryFilter = [...matchedCategories][0];
+      const filterSelect = document.querySelector('#priceListCategoryNote select');
+      if (filterSelect) filterSelect.value = priceListCategoryFilter;
+    }
+  }
+
   renderPriceListReview();
   document.getElementById('priceListMsg').textContent = priceListRows.length
     ? ''
