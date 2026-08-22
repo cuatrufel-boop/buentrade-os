@@ -501,6 +501,13 @@ if (FIREBASE_READY) {
       const badge = document.getElementById('userBadge');
       if (badge) badge.textContent = user.email;
       negoInit();
+      // Firebase restores a persisted session asynchronously — calling this at the bottom of the
+      // script (alongside buildProductRows()/calc()) fired it before auth.currentUser existed
+      // yet, so the accessToken callback below sent the request with no token at all and Supabase
+      // rejected it outright (401), not merely an empty/RLS-filtered result. Confirmed live via
+      // the browser console. onAuthStateChanged is the one place that's actually guaranteed to
+      // run only once a real user is loaded.
+      fetchStandardCostSuggestions();
     } else {
       gate.style.display = 'flex';
       app.style.display = 'none';
@@ -1378,7 +1385,6 @@ applyEmbedParams(__qp);
 buildProductRows();
 calc();
 fetchExchangeRate();
-fetchStandardCostSuggestions();
 
 // Quotes pushes freight/docs/destination/extra-cost changes here live once this Trading Tool is
 // already open, instead of reloading the iframe (which would wipe out any negotiation already
