@@ -979,9 +979,11 @@ function rqToggleCalculator(id){
   } else {
     if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
     if (!rqRequireDeliveryDay()) return;
-    // Accordion: only one plant's Trading Tool open at a time — opening another closes
-    // whichever was open, instead of stacking several heavy iframes on screen at once.
-    rqSelectedPlants.forEach(other => { if (other.id !== id && other.rqCalculatorOpen) rqCloseCalculator(other.id); });
+    // Every priced plant needs its own Selling Price calculated so the customer offer can
+    // include all of them, highest to lowest — closing plant B's Trading Tool the instant plant
+    // A's opened (the old "accordion", one at a time) meant only whichever plant was opened LAST
+    // ever finished calculating; every other one got closed before its iframe even loaded, so
+    // rqCalcRow never had a result to cache and that plant silently never made it into an offer.
     p.rqCalculatorOpen = true;
     document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
     document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
