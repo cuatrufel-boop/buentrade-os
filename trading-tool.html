@@ -682,7 +682,7 @@ if (FIREBASE_READY) {
           <h2>Product(s)</h2>
           <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
           <span id="targetProfitRow" style="display:none;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);" onclick="event.stopPropagation();">
-            🎯 Target Profit $<input type="number" id="targetProfitDollar" value="1000" step="50" style="width:64px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:2px 4px;" oninput="applyProfitTarget(null);calc();">
+            🎯 Target Margin <input type="number" id="targetMarginPct" value="4" step="0.5" style="width:48px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:2px 4px;" oninput="applyProfitTarget(null);calc();">%
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1011,15 +1011,18 @@ function updateProd(i, field, val){
 
 function applyProfitTarget(excludeIdx){
   if(products.length<=1) return;
-  const targetEl = document.getElementById('targetProfitDollar');
-  const target = parseFloat(targetEl && targetEl.value)||0;
+  const targetEl = document.getElementById('targetMarginPct');
+  const targetPct = (parseFloat(targetEl && targetEl.value)||0)/100;
   const inp = getInputs();
   const totalCostUSD = products.reduce((s,p)=>s+p.weight*p.cost,0);
   const fixedCosts = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
   const k = inp.payDays*(inp.financeRate/100);
-  const denom = 1-k;
+  // Same Net Margin % formula as the Solver's own "sell" mode (target*saleNeeded = saleNeeded -
+  // cost - fixedCosts - saleNeeded*k, solved for saleNeeded) — reused here instead of a flat $
+  // figure, so the whole load's net margin is what's being held, same concept as the Solver.
+  const denom = 1-k-targetPct;
   if(denom<=0) return;
-  const totalSaleNeeded = (target+totalCostUSD+fixedCosts)/denom;
+  const totalSaleNeeded = (totalCostUSD+fixedCosts)/denom;
 
   let fixedSale = 0; const floatIdxs = [];
   products.forEach((p,j)=>{
