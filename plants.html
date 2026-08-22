@@ -342,11 +342,16 @@ auth.onAuthStateChanged(user => {
     <input type="hidden" id="prodId">
     <div id="priceListRefBanner" style="display:none;margin-top:10px;padding:8px 12px;background:#EEF3FF;border-radius:7px;font-size:12.5px;"></div>
 
-    <div class="section-title">Photo / Attachment</div>
+    <div class="section-title">Photo</div>
     <img id="photoPreview" class="photo-preview" style="display:none;">
     <div id="filePreview" style="display:none;margin-bottom:8px;"></div>
-    <input type="file" id="photoFile">
+    <input type="file" id="photoFile" accept="image/*">
     <div id="photoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+
+    <div class="section-title" style="margin-top:14px;">Spec Sheet (PDF)</div>
+    <div id="specPreview" style="display:none;margin-bottom:8px;"></div>
+    <input type="file" id="specFile" accept="application/pdf">
+    <div id="specMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
 
     <div class="grid2" style="margin-top:14px;">
       <div class="field"><label>Name (Spanish) *</label><input id="name" required></div>
@@ -394,6 +399,7 @@ let packagings = [];
 let plantProducts = []; // products linked to the currently selected plant
 let currentPlantId = null;
 let pendingPhotoFile = null;
+let pendingSpecFile = null;
 
 let plantProteins = {};
 
@@ -1457,11 +1463,12 @@ function renderPlantProducts(){
     const thumb = p.photo_url
       ? (isImg ? `<img class="thumb" src="${p.photo_url}">` : `<a href="${p.photo_url}" target="_blank" rel="noopener">📄</a>`)
       : '';
+    const specLink = p.spec_url ? `<a href="${p.spec_url}" target="_blank" rel="noopener" title="Spec sheet">📋</a>` : '';
     const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
     const tr = document.createElement('tr');
     tr.style.verticalAlign = 'middle';
     tr.innerHTML = `
-      <td style="vertical-align:middle;text-align:center;">${thumb}</td>
+      <td style="vertical-align:middle;text-align:center;">${thumb}${specLink}</td>
       <td style="vertical-align:middle;text-align:center;"><strong>${escapeHtml(p.name_en || p.name || '')}</strong></td>
       <td style="vertical-align:middle;text-align:center;">${escapeHtml(CATEGORY_EN[p.category] || p.category || '')}</td>
       <td style="vertical-align:middle;text-align:center;">${escapeHtml(tp)}</td>
@@ -1484,19 +1491,30 @@ function openProductForm(product){
   const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','presentation','commercial_notes'];
   fields.forEach(f => document.getElementById(f).value = '');
   pendingPhotoFile = null;
+  pendingSpecFile = null;
   document.getElementById('photoFile').value = '';
+  document.getElementById('specFile').value = '';
   const preview = document.getElementById('photoPreview');
   const filePrev = document.getElementById('filePreview');
   preview.style.display = 'none';
   filePrev.style.display = 'none';
   filePrev.innerHTML = '';
   document.getElementById('photoMsg').textContent = '';
+  const specPrev = document.getElementById('specPreview');
+  specPrev.style.display = 'none';
+  specPrev.innerHTML = '';
+  document.getElementById('specMsg').textContent = '';
   if (product){
     document.getElementById('prodId').value = product.id;
     fields.slice(1).forEach(f => {
       if (product[f] !== undefined && product[f] !== null) document.getElementById(f).value = product[f];
     });
     if (product.photo_url) showFilePreview(product.photo_url, preview, filePrev);
+    if (product.spec_url){
+      const filename = decodeURIComponent(product.spec_url.split('/').pop());
+      specPrev.innerHTML = `<a href="${product.spec_url}" target="_blank" rel="noopener">📄 ${escapeHtml(filename)}</a>`;
+      specPrev.style.display = 'block';
+    }
   }
   document.getElementById('formMsg').textContent = '';
   document.getElementById('priceListRefBanner').style.display = 'none';
@@ -1538,6 +1556,15 @@ document.getElementById('photoFile').addEventListener('change', (e) => {
   }
 });
 
+document.getElementById('specFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  pendingSpecFile = file;
+  const specPrev = document.getElementById('specPreview');
+  specPrev.innerHTML = `📄 ${escapeHtml(file.name)}`;
+  specPrev.style.display = 'block';
+});
+
 async function saveProduct(){
   const id = document.getElementById('prodId').value;
   const payload = {
@@ -1568,6 +1595,16 @@ async function saveProduct(){
     const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
     payload.photo_url = pub.publicUrl;
     document.getElementById('photoMsg').textContent = '';
+  }
+  if (pendingSpecFile){
+    document.getElementById('specMsg').textContent = 'Uploading…';
+    const ext = pendingSpecFile.name.split('.').pop();
+    const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: upErr } = await db.storage.from('product-photos').upload(path, pendingSpecFile);
+    if (upErr){ document.getElementById('specMsg').textContent = 'Upload failed: ' + upErr.message; return; }
+    const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
+    payload.spec_url = pub.publicUrl;
+    document.getElementById('specMsg').textContent = '';
   }
 
   let productId = id;
