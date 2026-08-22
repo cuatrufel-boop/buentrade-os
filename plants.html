@@ -969,10 +969,14 @@ function detectDocsNote(text){
 // lines becomes one entry, not five.
 function detectPickupLocations(text){
   const found = new Map(); // normalized -> display text
-  const re = /\bFOB\s+([A-Z][A-Za-z.]*(?:\s+[A-Z][A-Za-z.]*)*,\s*[A-Za-z]{2,})/g;
+  // Case-insensitive "fob" (confirmed against a real Sanderson list using lowercase "fob") and a
+  // comma between city/state is optional (Sanderson: "fob Palestine TX", no comma — vs Smithfield's
+  // "FOB Denison, IA", with one). The separator only matches spaces/tabs, never newlines, so this
+  // can never bleed into the next line's capitalized product name once the city/state ends.
+  const re = /\bfob[ \t]+([A-Z][A-Za-z.]*(?:,?[ \t]+[A-Z][A-Za-z.]*)*)/gi;
   let m;
   while ((m = re.exec(text))){
-    const name = m[1].trim().replace(/[.\s]+$/, '');
+    const name = m[1].trim().replace(/[.\s,]+$/, '');
     const key = normalizeForMatch(name);
     if (!found.has(key)) found.set(key, name);
   }
