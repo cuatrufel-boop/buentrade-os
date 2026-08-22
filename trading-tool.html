@@ -993,7 +993,13 @@ function updateProd(i, field, val){
   if(field==='sellMx'){ products[i].sellMxManual = true; }
   if(field==='weight'){ products[i].weightManual = true; }
   products[i][field] = parseFloat(val)||0;
-  if(field==='weight') rebalanceWeights();
+  if(field==='weight'){
+    rebalanceWeights();
+    // Weight changing (typed directly, or cascading from rebalanceWeights) shifts how much sale
+    // $ each product needs to contribute — without this, a product priced before its real weight
+    // was in place stays stuck at whatever sell price its old (often 0) weight implied.
+    if(products.length>1) applyProfitTarget(null);
+  }
   // Cost is a fact the plant hands you, not a price being negotiated — re-split every product's
   // selling price evenly toward the Target Profit. Selling price IS the price being negotiated,
   // so keep exactly what was typed and only redistribute the rest onto the other product(s) —
@@ -1060,17 +1066,19 @@ function autoCalcMxSell(i){
 
 function addProduct(){
   if(products.length>=MAX_PRODUCTS) return;
-  // Starts at 0 lb, not an even split — a brand-new product has no cost/sell yet, so pulling
-  // weight off an already-priced product before any real numbers exist here would tank the
-  // total for no reason. The moment the trader types a real weight into it, updateProd()'s
-  // rebalanceWeights() call redistributes the 40,000 lb properly.
+  // Even split of the 40,000 lb target on add — safe now that applyProfitTarget() keeps every
+  // selling price in sync with whatever the weight split is, so total profit never dips or
+  // "goes crazy" just from adding a product, even before its own cost/sell get typed in.
   products.push({name:'Product '+(products.length+1), weight:0, weightManual:false, cost:0, sellBorder:0, sellMx:0, sellMxManual:false});
+  rebalanceWeights();
+  if(products.length>1) applyProfitTarget(null);
   buildProductRows();
   calc();
 }
 function removeProduct(i){
   products.splice(i,1);
   rebalanceWeights();
+  if(products.length>1) applyProfitTarget(null);
   buildProductRows();
   calc();
 }
