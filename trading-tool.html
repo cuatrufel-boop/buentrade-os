@@ -681,6 +681,9 @@ if (FIREBASE_READY) {
         <div style="display:flex;align-items:center;gap:10px;">
           <h2>Product(s)</h2>
           <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);" id="weightVsTarget"></span>
+          <span id="targetProfitRow" style="display:none;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);" onclick="event.stopPropagation();">
+            🎯 Target Profit $<input type="number" id="targetProfitDollar" value="1000" step="50" style="width:64px;font-family:inherit;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:2px 4px;" oninput="applyProfitTarget(null);calc();">
+          </span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <button class="add-btn-sm" id="addProdBtn" title="Add Product" onclick="event.stopPropagation();addProduct()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
@@ -939,6 +942,8 @@ function buildProductRows(){
   });
   document.getElementById('addProdBtn').disabled = products.length>=MAX_PRODUCTS;
   buildSolveProductChips();
+  const tpRow = document.getElementById('targetProfitRow');
+  if(tpRow) tpRow.style.display = products.length>1 ? 'inline-flex' : 'none';
 }
 
 // The Solver's default ("All") re-derives ONE blended price and overwrites every product with
@@ -989,7 +994,41 @@ function updateProd(i, field, val){
   if(field==='weight'){ products[i].weightManual = true; }
   products[i][field] = parseFloat(val)||0;
   if(field==='weight') rebalanceWeights();
+  // Cost is a fact the plant hands you, not a price being negotiated — re-split every product's
+  // selling price evenly toward the Target Profit. Selling price IS the price being negotiated,
+  // so keep exactly what was typed and only redistribute the rest onto the other product(s) —
+  // the "give this one a good price, make it up on the other" move.
+  if(field==='cost' && products.length>1) applyProfitTarget(null);
+  if(field==='sellBorder' && products.length>1) applyProfitTarget(i);
   calc();
+}
+
+function applyProfitTarget(excludeIdx){
+  if(products.length<=1) return;
+  const targetEl = document.getElementById('targetProfitDollar');
+  const target = parseFloat(targetEl && targetEl.value)||0;
+  const inp = getInputs();
+  const totalCostUSD = products.reduce((s,p)=>s+p.weight*p.cost,0);
+  const fixedCosts = inp.freight+inp.inspection+inp.importCost+inp.extraCosts;
+  const k = inp.payDays*(inp.financeRate/100);
+  const denom = 1-k;
+  if(denom<=0) return;
+  const totalSaleNeeded = (target+totalCostUSD+fixedCosts)/denom;
+
+  let fixedSale = 0; const floatIdxs = [];
+  products.forEach((p,j)=>{
+    if(j===excludeIdx) fixedSale += p.weight*p.sellBorder;
+    else floatIdxs.push(j);
+  });
+  if(!floatIdxs.length) return;
+  const floatSaleNeeded = Math.max(0, totalSaleNeeded - fixedSale);
+  const share = floatSaleNeeded/floatIdxs.length;
+  floatIdxs.forEach(j=>{
+    const newSell = products[j].weight>0 ? share/products[j].weight : 0;
+    products[j].sellBorder = newSell;
+    const el = document.getElementById('prodSellBorder'+j);
+    if(el) el.value = newSell.toFixed(4);
+  });
 }
 
 // The truck is always a full 40,000 lb load. Products the trader hasn't typed a weight into
