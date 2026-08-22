@@ -1251,7 +1251,12 @@ function renderPriceListReview(){
     // English leads (this screen is plant-facing) — Spanish name only as a secondary reference
     // in parens, since a few teammates may still recognize a cut faster in Spanish.
     const options = allCatalogProducts.map(p => {
-      const spec = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(', ');
+      // Subcategory is exactly what distinguishes two products that would otherwise share the
+      // same name AND the same temp/pack (confirmed real case: "Chicken Breast Trim" at 5% vs
+      // 15%, both Frozen/Bulk) — leaving it out of the label made them look identical here even
+      // though they're genuinely different products, real risk of picking the wrong one or
+      // creating a duplicate for a variant that already exists.
+      const spec = [tempName(p.temperature_id), packName(p.packaging_id), p.subcategory_en || p.subcategory].filter(Boolean).join(', ');
       const label = p.name_en || p.name;
       return `<option value="${p.id}" data-category="${escapeHtml(p.category || '')}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
