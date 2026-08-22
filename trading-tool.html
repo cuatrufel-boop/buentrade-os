@@ -634,10 +634,13 @@ if (FIREBASE_READY) {
             <div class="inputwrap"><span class="pfx">MX$</span><input type="number" id="freightMx" value="" placeholder="0" oninput="buildProductRows();calc();"></div>
           </div>
           <div id="freightMxUsdHint" style="font-size:10.5px;color:var(--ink-soft);text-align:right;margin:-4px 0 8px;"></div>
-          <div class="field" id="inspectionField">
-            <label>Inspection (USD)</label>
-            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspection" value="0" oninput="calc()"></div>
-            <div id="inspectionHint" style="font-size:9px;color:var(--ink-soft);text-align:right;margin-top:-2px;"></div>
+          <div class="field" id="inspectionCasesField">
+            <label>Inspection — Cases (USD)</label>
+            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspectionCases" value="" placeholder="0" oninput="calc()"></div>
+          </div>
+          <div class="field" id="inspectionCombosField">
+            <label>Inspection — Combos (USD)</label>
+            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="inspectionCombos" value="" placeholder="0" oninput="calc()"></div>
           </div>
           <div class="field" id="importCostField">
             <label>Import Cost (USD)</label>
@@ -1067,7 +1070,10 @@ const EXTRA_COST_FIELD_IDS = [
 function getInputs(){
   return {
     freight: parseFloat(document.getElementById('freight').value)||0,
-    inspection: parseFloat(document.getElementById('inspection').value)||0,
+    // Split into two real fields (Cases vs Combos each have their own true rate — $350/$200 —
+    // and a load can genuinely carry both) but summed into the same single "inspection" cost
+    // every downstream formula already expects — nothing below this line changed.
+    inspection: (parseFloat(document.getElementById('inspectionCases').value)||0) + (parseFloat(document.getElementById('inspectionCombos').value)||0),
     freightMx: parseFloat(document.getElementById('freightMx').value)||0,
     importCost: parseFloat(document.getElementById('importCost').value)||0,
     extraCosts: EXTRA_COST_FIELD_IDS.reduce((s,id) => s + (parseFloat(document.getElementById(id).value)||0), 0),
@@ -1290,8 +1296,12 @@ function applyEmbedParams(qp){
   // Quotes hides this field when the plant delivers to the border itself — there's no US Freight
   // for the trader to pay or edit in that case. Pure visibility toggle, same as Inspection.
   rqShow('freightField', qp.get('hideFreight') !== '1');
-  if (qp.has('inspection')) document.getElementById('inspection').value = Number(qp.get('inspection')) || 0;
-  rqShow('inspectionField', qp.get('hideInspection') !== '1');
+  // Re-opening an existing offer's negotiation only has one historical total on file
+  // (inspection_amount predates the Cases/Combos split) — lands it in Cases rather than silently
+  // dropping it; the trader can move it to Combos if that's what the load actually was.
+  if (qp.has('inspection')) document.getElementById('inspectionCases').value = Number(qp.get('inspection')) || 0;
+  rqShow('inspectionCasesField', qp.get('hideInspection') !== '1');
+  rqShow('inspectionCombosField', qp.get('hideInspection') !== '1');
   // Import Cost's emptiness (not "0") is what gates whether Mexico pricing shows at all, so only
   // set a value when there actually is one — never force "0" as a side effect of some other
   // prefill. forceImportCostZero is the one deliberate exception: Quotes sends it only when the
@@ -1334,7 +1344,7 @@ function applyEmbedParams(qp){
   // Mexican Freight is stored in USD in Master Data; Quotes converts it to MXN itself before
   // sending it here, since this field has always been MXN-denominated.
   if (qp.has('freightMx')) document.getElementById('freightMx').value = Number(qp.get('freightMx')) || 0;
-  rqShow('sharedCostsSection', !['freightField','mexicanFreightField','inspectionField','importCostField'].every(id => document.getElementById(id).style.display === 'none'));
+  rqShow('sharedCostsSection', !['freightField','mexicanFreightField','inspectionCasesField','inspectionCombosField','importCostField'].every(id => document.getElementById(id).style.display === 'none'));
 }
 
 // Standard, non-freight cost fields (Customs brokerage + Cold storage & USDA) come from a real,
@@ -1346,9 +1356,19 @@ const RQ_STANDARD_COST_FIELDS = {
   plasticWrap: 'plastic_wrap', inLieu: 'in_lieu', freshToFrozen: 'fresh_to_frozen',
   storageOvernight: 'storage_overnight', storageWeekend: 'storage_weekend', storageShortTerm: 'storage_short_term',
   storageMidTerm: 'storage_mid_term', storageLongTerm: 'storage_long_term', storageExtraLong: 'storage_extra_long',
+  // Split into its own two real fields (see the Direct Costs HTML above) instead of one field
+  // guessing between two different real rates ($350 cases vs $200 combos) — a load can genuinely
+  // carry both, and calc() already sums them back into one inspection cost either way.
+  inspectionCases: 'inspection_cases', inspectionCombos: 'inspection_combos',
 };
+// A load is typically ~100 cases — Labels prices per case ($0.14), so this multiplies the real
+// per-case rate by that typical count to land on a usable per-load default. Explicitly an
+// assumption, not a fact the way every other suggested rate here is — the hint under the field
+// says so, and the trader edits the field directly if a specific load's case count differs.
+const RQ_LABELS_TYPICAL_CASES = 100;
+
 async function fetchStandardCostSuggestions(){
-  const types = [...Object.values(RQ_STANDARD_COST_FIELDS), 'inspection_cases', 'inspection_combos', 'labels'];
+  const types = [...Object.values(RQ_STANDARD_COST_FIELDS), 'labels'];
   const { data, error } = await db.from('provider_rates').select('service_type,rate').in('service_type', types);
   if (error || !data) return;
   const byType = {};
@@ -1366,18 +1386,18 @@ async function fetchStandardCostSuggestions(){
     });
   });
 
-  // Inspection and Labels don't get auto-filled on focus — Inspection's real rate depends on
-  // packaging (Cases vs Combo), which nothing in this calculator tracks, and Labels is priced per
-  // case, not per load, so a single auto-filled number would only be right by accident. Showing
-  // both as a reference hint still saves the trip to go look them up, without risking a silently
-  // wrong total.
-  const inspHint = document.getElementById('inspectionHint');
-  if (inspHint && byType.inspection_cases != null && byType.inspection_combos != null){
-    inspHint.textContent = `Reference: $${byType.inspection_cases} cases · $${byType.inspection_combos} combos`;
-  }
-  const labelsHint = document.getElementById('labelsHint');
-  if (labelsHint && byType.labels != null){
-    labelsHint.textContent = `Reference: $${byType.labels}/case`;
+  if (byType.labels != null){
+    const labelsInput = document.getElementById('labelsCost');
+    const labelsHint = document.getElementById('labelsHint');
+    const perLoad = Math.round(byType.labels * RQ_LABELS_TYPICAL_CASES * 100) / 100;
+    if (labelsHint) labelsHint.textContent = `Based on ${RQ_LABELS_TYPICAL_CASES} cases ($${byType.labels}/case) — edit if this load differs`;
+    if (labelsInput){
+      labelsInput.addEventListener('focus', () => {
+        if (labelsInput.value.trim() !== '') return;
+        labelsInput.value = perLoad;
+        labelsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
   }
 }
 
