@@ -50,6 +50,8 @@
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
   .date-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:13.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;text-align:left;}
   .date-btn:hover{border-color:var(--blue);}
+  @keyframes rqDatePulse{0%,100%{box-shadow:0 0 0 0 rgba(196,67,46,.4);}50%{box-shadow:0 0 0 6px rgba(196,67,46,0);}}
+  .date-btn.needs-date{border-color:#C4432E;animation:rqDatePulse 1.1s ease-in-out 3;}
   .date-btn .cal-icon{font-size:15px;line-height:1;flex-shrink:0;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
@@ -235,7 +237,7 @@ auth.onAuthStateChanged(user => {
         <label style="text-align:center;">Delivery day <span style="color:#c0392b;">*</span></label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;">
           <div id="rq_date_chips" style="display:contents;"></div>
-          <button type="button" class="date-btn" style="width:160px;height:32px;padding:0 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
+          <button type="button" id="rq_add_date_btn" class="date-btn" style="width:160px;height:32px;padding:0 10px;font-size:12.5px;" onclick="document.getElementById('rq_newdate').showPicker ? document.getElementById('rq_newdate').showPicker() : document.getElementById('rq_newdate').focus()">
             <span class="cal-icon" style="font-size:13px;">📅</span>+ Add date
           </button>
           <input type="date" id="rq_newdate" oninput="rqAddDeliveryDate(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
@@ -468,14 +470,15 @@ async function onRqProductInput(){
   rqStopPolling();
   if (match){
     // Delivery day only ever announced itself as required by refusing to show a price later —
-    // the trader had no reason to notice it until they hit that wall. Opening the date picker
-    // itself the moment a product is actually picked (not on every keystroke — only the first
-    // time this exact product resolves) puts the ask right where their attention already is.
-    // Has to happen before the awaits below: showPicker() only works within the same synchronous
-    // stretch as the triggering keystroke, a browser rule that stops it firing after an await.
+    // the trader had no reason to notice it until they hit that wall. Auto-opening the native
+    // date picker here used to be the fix, but the underlying <input type="date"> has to stay
+    // absolutely positioned off-screen to keep it invisible (see #rq_newdate), so the browser's
+    // own popup opened wherever THAT landed — the page's top-left corner, on top of the nav bar,
+    // nowhere near the actual "+ Add date" button. Highlighting that real button instead (only
+    // the first time this exact product resolves, not on every keystroke) points at the one true
+    // date control on screen rather than conjuring a second, badly-placed one.
     if (rqMatchedProductId !== match.id && !rqDeliveryDates.length){
-      const dateInput = document.getElementById('rq_newdate');
-      if (dateInput.showPicker){ try { dateInput.showPicker(); } catch(e){} }
+      document.getElementById('rq_add_date_btn').classList.add('needs-date');
     }
     rqMatchedProductId = match.id;
     const nameEn = match.name_en || match.name;
@@ -1699,6 +1702,7 @@ function rqAddDeliveryDate(val){
     rqDeliveryDates.sort();
   }
   document.getElementById('rq_newdate').value = '';
+  document.getElementById('rq_add_date_btn').classList.remove('needs-date');
   rqRenderDateChips();
   // Every plant row's price/calculator visibility depends on rqDeliveryDates.length — without
   // this, a row already built before the first date existed (or, worse, one whose calculator
