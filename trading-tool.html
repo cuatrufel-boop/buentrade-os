@@ -559,6 +559,7 @@ if (FIREBASE_READY) {
 
     <div class="qb-divider"></div>
 
+    <div id="qbMxFxWrap" style="display:contents;">
     <div class="qb-group">
       <div class="qb-group-label">Transit (FX exposure)</div>
       <div class="qb-group-row">
@@ -587,6 +588,7 @@ if (FIREBASE_READY) {
     </div>
 
     <div class="qb-divider"></div>
+    </div>
 
     <div class="qb-group">
       <div class="qb-group-label">Finance Cost</div>
@@ -862,6 +864,13 @@ function buildProductRows(){
   const importCostFilled = document.getElementById('importCost').value.trim() !== '';
   const freightMxFilled = document.getElementById('freightMx').value.trim() !== '';
   const showMx = fxRate>0 && importCostFilled && freightMxFilled;
+  // Transit (FX exposure) + Exchange Rate only mean anything once this load actually has a
+  // Mexican-peso leg — same condition Mexico pricing itself already waits on (showMx above).
+  // Only hidden when embedded inside Offers/Quotes though: the standalone Trading Tool tab is
+  // the general-purpose calculator, where hiding a section the moment inputs are still empty
+  // would be more confusing than useful — that one always shows everything.
+  const qbMxFxWrap = document.getElementById('qbMxFxWrap');
+  if (qbMxFxWrap) qbMxFxWrap.style.display = (window.self === window.top || showMx) ? 'contents' : 'none';
   products.forEach((p,i)=>{
     const div = document.createElement('div');
     div.className='prod-row';
