@@ -225,7 +225,7 @@ auth.onAuthStateChanged(user => {
 <div class="wrap">
   <h1 id="rq_page_title">Request Quote</h1>
 
-  <div class="card">
+  <div class="card" id="rq_card">
     <div style="display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:wrap;gap:14px;">
       <div class="field" style="position:relative;margin-bottom:0;width:480px;max-width:100%;">
         <label>Product</label>
@@ -646,7 +646,7 @@ function renderRqPlants(){
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
           ${rqVariantSpec(p.rqProductId) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqVariantSpec(p.rqProductId))}</span>` : ''}
-          ${!showPriceRow ? `<button type="button" class="rq-price-btn" onclick="rqRevealPrice('${p.id}')">Price?</button>` : ''}
+          ${(!showPriceRow && hasDeliveryDate) ? `<button type="button" class="rq-price-btn" onclick="rqRevealPrice('${p.id}')">Price?</button>` : ''}
           ${rqPriceRequestControl(p)}
         </div>
         <button class="btn danger" onclick="removeRqPlant('${p.id}')">×</button>
@@ -1378,6 +1378,7 @@ function rqPriceRequestControl(p){
 }
 
 async function rqRequestPlantPrice(plantId, channel){
+  if (!rqRequireDeliveryDay()) return;
   const p = rqSelectedPlants.find(x => x.id === plantId);
   if (!p) return;
   const contact = rqFirstName(p.contact_name || p.name);
