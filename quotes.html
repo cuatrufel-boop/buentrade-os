@@ -335,7 +335,21 @@ async function loadQuotesPage(){
   // or the English catalog name, but the suggestion list itself only offered Spanish, so typing
   // in English (e.g. "belly") surfaced no suggestions at all and silently fell through to "not in
   // catalog", even though the exact English name would have matched.
-  rqProductNames = [...new Set(products.flatMap(p => [p.name, p.name_en]).filter(Boolean))].sort();
+  //
+  // Deduped case-INsensitively, not just by exact string: two real catalog rows can carry the
+  // literal same name with only a casing slip ("Cabeza de lomo de Cerdo con hueso" vs "...de
+  // cerdo con hueso") — every match in this file already compares names lowercased, so both rows
+  // are found regardless of which casing gets typed; showing both as separate suggestions was
+  // pure visual noise, never a sign of two different products.
+  const seenLower = new Set();
+  rqProductNames = [];
+  products.flatMap(p => [p.name, p.name_en]).filter(Boolean).forEach(n => {
+    const key = n.toLowerCase();
+    if (seenLower.has(key)) return;
+    seenLower.add(key);
+    rqProductNames.push(n);
+  });
+  rqProductNames.sort();
 
   document.getElementById('rq_newdate').min = rqTodayStr();
   rqFetchExchangeRate(); // kicked off early, not awaited — usually ready well before Imported Load gets toggled
