@@ -492,7 +492,7 @@ async function onRqProductInput(){
     // Freight "Customer" picker needs this list right away, well before any Trading Tool opens.
     rqCustomersFetchedFor = name;
     rqFindCustomers();
-    await autoPopulateRqPlants(name);
+    await autoPopulateRqPlants();
   } else {
     rqMatchedProductId = null;
     rqProductSpec = name || null;
@@ -505,46 +505,31 @@ async function onRqProductInput(){
   }
 }
 
-async function autoPopulateRqPlants(productName){
-  const nameLower = productName.toLowerCase();
-  const matchingProducts = products.filter(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
-  if (!matchingProducts.length) return;
-  const matchingProductIds = matchingProducts.map(p => p.id);
+async function autoPopulateRqPlants(){
+  if (!rqMatchedProductId) return;
   // Price lives on the plant_products link (plant + product), not on the product itself — the
   // same fixed/shared product can be carried by several plants at different prices. This is the
   // whole point of the price-list intake in plants.html: a price loaded there shows up here
   // automatically, so the trader isn't retyping a number from memory every time.
-  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').in('product_id', matchingProductIds);
-  // A plant can carry more than one variant of the exact same-named cut (confirmed real data:
-  // Tyson has both a Fresh and a Frozen "Cushion de Cerdo", each its own price) — grouped by plant
-  // here so EVERY variant is kept (rqVariantLinks), never silently dropped. One is picked as the
-  // active default; the trader can switch between the others via the variant chips in renderRqPlants.
-  const linksByPlant = new Map();
-  (data || []).forEach(link => {
-    if (!linksByPlant.has(link.plant_id)) linksByPlant.set(link.plant_id, []);
-    linksByPlant.get(link.plant_id).push(link);
-  });
-  rqSelectedPlants = [...linksByPlant.entries()].map(([plantId, links]) => {
-    const plant = rqAllPlants.find(p => p.id === plantId);
+  //
+  // Scoped to the EXACT product just resolved above (rqMatchedProductId) — a plant that only
+  // carries a different temp/pack variant of the same-named cut (e.g. Frozen/Box when the trader
+  // searched Fresh/Combo) is a different product for pricing purposes. Confirmed explicit ask:
+  // one search = one product, across every brand that carries THAT one — a different variant is
+  // its own separate search, never shown mixed in here (this used to surface it as a switchable
+  // alternative, which read as "mixing products" and was more confusing than useful).
+  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').eq('product_id', rqMatchedProductId);
+  rqSelectedPlants = (data || []).map(link => {
+    const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
-    // rqMatchedProductId is the exact product onRqProductInput just resolved and put in the spec
-    // line above (e.g. "Fresh Pork Boneless Picnic, Combo") — a plant that carries it must default
-    // to THAT one, full stop. Falling back to "whichever variant priced most recently" (the old
-    // rule) silently swapped in a different temp/pack than what the trader searched for and the
-    // spec line claimed — confirmed real case: searching the Combo product still defaulted a plant
-    // to its Frozen/Box price because that happened to be the more recently loaded number. Only a
-    // plant that doesn't carry the searched variant at all falls back to its most recent price.
-    const preferred = links.find(l => l.product_id === rqMatchedProductId);
-    const priced = links.filter(l => l.current_price != null).sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
-    const active = preferred || priced[0] || links[0];
-    const hasPrice = active.current_price != null;
+    const hasPrice = link.current_price != null;
     // Whether this plant's prices include export docs is a per-plant fact — a given price list is
     // uniformly one or the other ("*all prices FOB no docs" applies to everything on that sheet),
     // captured once in plants.html's Cargar precios from that list's own note and reused here so
     // the trader isn't re-deciding it by memory on every single quote. A later price list from the
     // same plant can carry a different note next time, which simply updates this default the next
     // time it's loaded. Still a toggle they can flip if a specific deal differs.
-    return { ...plant, rqProductId: active.product_id, rqVariantLinks: links, rqPrice: hasPrice ? active.current_price : undefined, rqPriceDate: hasPrice ? active.price_date : null, rqLastRequestedAt: active.last_requested_at || null, rqDocsOn: plant.docs_included === true };
+    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true };
   }).filter(Boolean);
   // A loaded price list (plants.html "Cargar precios") never carries a pick-up location — that's
   // a separate concept (freight lanes by origin city). Rather than quote with no freight at all
@@ -647,10 +632,7 @@ function renderRqPlants(){
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
-          ${(p.rqVariantLinks && p.rqVariantLinks.length > 1) ? `
-          <span style="display:inline-flex;gap:4px;flex-wrap:wrap;" title="This plant carries more than one variant of this cut">
-            ${p.rqVariantLinks.map(l => `<button type="button" class="chip${l.product_id === p.rqProductId ? ' on' : ''}" style="padding:3px 8px;font-size:10.5px;" onclick="rqSwitchVariant('${p.id}', '${l.product_id}')">${escapeHtml(rqVariantSpec(l.product_id))}${l.current_price != null ? ' — $' + l.current_price : ' — no price'}</button>`).join('')}
-          </span>` : (rqVariantSpec(p.rqProductId) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqVariantSpec(p.rqProductId))}</span>` : '')}
+          ${rqVariantSpec(p.rqProductId) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqVariantSpec(p.rqProductId))}</span>` : ''}
           ${!showPriceRow ? (
             !hasDeliveryDate && (p.rqPrice || p.rqPriceRevealed)
               ? `<span style="font-size:11.5px;color:#c0392b;font-weight:600;">Set a Delivery day above to see pricing</span>`
@@ -1159,24 +1141,6 @@ function rqUpdatePlantField(id, field, val){
 // automatically — no separate click needed. Defaults (No Docs, Delivered) already mean $0 in
 // extra costs, so this just shows the trader the resulting margin right away; the toggles are
 // still right there to flip if this plant's terms are actually different.
-// Switches which variant of a same-named cut this plant's row is quoting (e.g. Fresh vs Frozen
-// "Cushion de Cerdo", each its own price) — the plant carries more than one, all kept in
-// rqVariantLinks (see autoPopulateRqPlants), this just changes which one is currently active.
-function rqSwitchVariant(plantId, productId){
-  const p = rqSelectedPlants.find(x => x.id === plantId);
-  if (!p) return;
-  const link = (p.rqVariantLinks || []).find(l => l.product_id === productId);
-  if (!link) return;
-  p.rqProductId = productId;
-  const hasPrice = link.current_price != null;
-  p.rqPrice = hasPrice ? link.current_price : undefined;
-  p.rqPriceDate = hasPrice ? link.price_date : null;
-  p.rqLastRequestedAt = link.last_requested_at || null;
-  rqInvalidateCalc(p);
-  renderRqPlants();
-  if (p.rqPrice) rqAutoOpenCalculator(p.id);
-}
-
 function rqAutoOpenCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p || !p.rqPrice || p.rqCalculatorOpen || !rqDeliveryDates.length) return;
