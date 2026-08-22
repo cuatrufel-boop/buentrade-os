@@ -566,22 +566,6 @@ if (FIREBASE_READY) {
 
     <div id="qbMxFxWrap" style="display:contents;">
     <div class="qb-group">
-      <div class="qb-group-label">Transit (FX exposure)</div>
-      <div class="qb-group-row">
-        <div class="qb-item">
-          <label>To Border</label>
-          <div class="inputwrap"><input type="number" id="transitBorder" value="4" oninput="roundFxRateUp()"><span class="sfx">days</span></div>
-        </div>
-        <div class="qb-item">
-          <label>To MX Destino</label>
-          <div class="inputwrap"><input type="number" id="transitMx" value="3" oninput="roundFxRateUp()"><span class="sfx">days</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="qb-divider"></div>
-
-    <div class="qb-group">
       <div class="qb-group-label">Exchange Rate</div>
       <div class="qb-group-row">
         <div class="qb-item">
@@ -1051,13 +1035,15 @@ function onFxRateInput(manual){
   calc();
 }
 
-// Cushion scales with real transit time (Border + Mexico destino), not payment terms —
-// that's the actual window the FX rate needs to hold. Based on typical USD/MXN movement
-// (~$0.03/day), with a $0.10 floor so short transits still get some protection.
+// Cushion scales with real transit time (Border + Mexico destino), not payment terms — that's
+// the actual window the FX rate needs to hold. US -> border and border -> Mexico destino are
+// always ~2 days each (never a per-load variable, no reason to expose it as an editable field)
+// — 4 days total, fixed. Based on typical USD/MXN movement (~$0.03/day), with a $0.10 floor so
+// short transits still get some protection.
+const TRANSIT_DAYS_TO_BORDER = 2;
+const TRANSIT_DAYS_TO_MX_DESTINO = 2;
 function fxCushionIncrement(){
-  const toBorder = parseFloat(document.getElementById('transitBorder').value) || 0;
-  const toMx = parseFloat(document.getElementById('transitMx').value) || 0;
-  const totalDays = toBorder + toMx;
+  const totalDays = TRANSIT_DAYS_TO_BORDER + TRANSIT_DAYS_TO_MX_DESTINO;
   const dynamic = Math.round(totalDays * 0.03 * 100) / 100;
   return Math.max(0.10, dynamic);
 }
