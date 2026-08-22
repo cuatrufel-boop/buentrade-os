@@ -426,7 +426,8 @@ async function onRqProductInput(){
 }
 
 async function autoPopulateRqPlants(productName){
-  const matchingProducts = products.filter(p => (p.name || '').toLowerCase() === productName.toLowerCase());
+  const nameLower = productName.toLowerCase();
+  const matchingProducts = products.filter(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
   if (!matchingProducts.length) return;
   const matchingProductIds = matchingProducts.map(p => p.id);
   // Price lives on the plant_products link (plant + product), not on the product itself — the
@@ -434,17 +435,29 @@ async function autoPopulateRqPlants(productName){
   // whole point of the price-list intake in plants.html: a price loaded there shows up here
   // automatically, so the trader isn't retyping a number from memory every time.
   const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').in('product_id', matchingProductIds);
-  rqSelectedPlants = (data || []).map(link => {
-    const plant = rqAllPlants.find(p => p.id === link.plant_id);
+  // A plant can carry more than one variant of the exact same-named cut (confirmed real data:
+  // Tyson has both a Fresh and a Frozen "Cushion de Cerdo", each its own price) — grouped by plant
+  // here so EVERY variant is kept (rqVariantLinks), never silently dropped. One is picked as the
+  // active default (whichever actually has a price, most recent if more than one does); the
+  // trader can switch between the others via the variant selector in renderRqPlants.
+  const linksByPlant = new Map();
+  (data || []).forEach(link => {
+    if (!linksByPlant.has(link.plant_id)) linksByPlant.set(link.plant_id, []);
+    linksByPlant.get(link.plant_id).push(link);
+  });
+  rqSelectedPlants = [...linksByPlant.entries()].map(([plantId, links]) => {
+    const plant = rqAllPlants.find(p => p.id === plantId);
     if (!plant) return null;
-    const hasPrice = link.current_price != null;
+    const priced = links.filter(l => l.current_price != null).sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
+    const active = priced[0] || links[0];
+    const hasPrice = active.current_price != null;
     // Whether this plant's prices include export docs is a per-plant fact — a given price list is
     // uniformly one or the other ("*all prices FOB no docs" applies to everything on that sheet),
     // captured once in plants.html's Cargar precios from that list's own note and reused here so
     // the trader isn't re-deciding it by memory on every single quote. A later price list from the
     // same plant can carry a different note next time, which simply updates this default the next
     // time it's loaded. Still a toggle they can flip if a specific deal differs.
-    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true };
+    return { ...plant, rqProductId: active.product_id, rqVariantLinks: links, rqPrice: hasPrice ? active.current_price : undefined, rqPriceDate: hasPrice ? active.price_date : null, rqLastRequestedAt: active.last_requested_at || null, rqDocsOn: plant.docs_included === true };
   }).filter(Boolean);
   // A loaded price list (plants.html "Cargar precios") never carries a pick-up location — that's
   // a separate concept (freight lanes by origin city). Rather than quote with no freight at all
@@ -498,6 +511,18 @@ function rqToggleExtraField(plantId, key){
   rqSyncOpenCalculator(p);
 }
 
+// A name like "Cabeza de lomo de cerdo con hueso" can point to several real catalog products —
+// Fresh/Combo, Frozen/Box, etc. — and a plant's price is always for ONE specific variant
+// (p.rqProductId, set in autoPopulateRqPlants). Never shown before now, which meant there was no
+// way to tell which variant a given plant's price actually was for.
+function rqVariantSpec(productId){
+  const prod = products.find(pr => pr.id === productId);
+  if (!prod) return '';
+  const t = temperatures.find(x => x.id === prod.temperature_id);
+  const pk = packagings.find(x => x.id === prod.packaging_id);
+  return [t ? (t.name_en || t.name) : null, pk ? (pk.name_en || pk.name) : null].filter(Boolean).join(' / ');
+}
+
 function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
   const hasProduct = !!document.getElementById('rq_product_name').value.trim();
@@ -530,6 +555,10 @@ function renderRqPlants(){
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="display:flex;align-items:center;gap:14px;min-width:0;">
           <span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="font-size:13.5px;font-weight:600;" onclick="rqOnPlantNameClick('${p.id}')" title="Double-click to open/close the Trading Tool">${escapeHtml(p.name)}</span>
+          ${(p.rqVariantLinks && p.rqVariantLinks.length > 1) ? `
+          <select style="font-size:11.5px;padding:2px 4px;color:var(--ink-soft);border:1px solid var(--line);border-radius:4px;" onchange="rqSwitchVariant('${p.id}', this.value)" title="This plant carries more than one variant of this cut">
+            ${p.rqVariantLinks.map(l => `<option value="${l.product_id}" ${l.product_id === p.rqProductId ? 'selected' : ''}>${escapeHtml(rqVariantSpec(l.product_id))}${l.current_price != null ? ' — $' + l.current_price : ' — no price'}</option>`).join('')}
+          </select>` : (rqVariantSpec(p.rqProductId) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqVariantSpec(p.rqProductId))}</span>` : '')}
           ${!showPriceRow ? `<button type="button" class="rq-price-btn" onclick="rqRevealPrice('${p.id}')">Price?</button>` : ''}
           ${rqPriceRequestControl(p)}
           ${(p.whatsapp || p.phone) ? `<button type="button" class="wa-btn" style="padding:4px 8px;" onclick="askPlantWhatsApp('${p.id}')" title="WhatsApp ${escapeHtml(p.name)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : ''}
@@ -1032,6 +1061,24 @@ function rqUpdatePlantField(id, field, val){
 // automatically — no separate click needed. Defaults (No Docs, Delivered) already mean $0 in
 // extra costs, so this just shows the trader the resulting margin right away; the toggles are
 // still right there to flip if this plant's terms are actually different.
+// Switches which variant of a same-named cut this plant's row is quoting (e.g. Fresh vs Frozen
+// "Cushion de Cerdo", each its own price) — the plant carries more than one, all kept in
+// rqVariantLinks (see autoPopulateRqPlants), this just changes which one is currently active.
+function rqSwitchVariant(plantId, productId){
+  const p = rqSelectedPlants.find(x => x.id === plantId);
+  if (!p) return;
+  const link = (p.rqVariantLinks || []).find(l => l.product_id === productId);
+  if (!link) return;
+  p.rqProductId = productId;
+  const hasPrice = link.current_price != null;
+  p.rqPrice = hasPrice ? link.current_price : undefined;
+  p.rqPriceDate = hasPrice ? link.price_date : null;
+  p.rqLastRequestedAt = link.last_requested_at || null;
+  rqInvalidateCalc(p);
+  renderRqPlants();
+  if (p.rqPrice) rqAutoOpenCalculator(p.id);
+}
+
 function rqAutoOpenCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p || !p.rqPrice || p.rqCalculatorOpen) return;
@@ -1193,7 +1240,8 @@ async function rqFindCustomers(){
   container.innerHTML = '<div class="empty">Searching…</div>';
 
   const productName = document.getElementById('rq_product_name').value.trim();
-  const matchingProductIds = products.filter(p => (p.name || '').toLowerCase() === productName.toLowerCase()).map(p => p.id);
+  const productNameLower = productName.toLowerCase();
+  const matchingProductIds = products.filter(p => (p.name || '').toLowerCase() === productNameLower || (p.name_en || '').toLowerCase() === productNameLower).map(p => p.id);
   if (!matchingProductIds.length){
     container.innerHTML = '<div class="empty">Product not in catalog yet.</div>';
     return;
