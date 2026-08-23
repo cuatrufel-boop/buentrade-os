@@ -28,7 +28,7 @@
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
-  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
@@ -199,22 +199,32 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Name (Spanish) *</label><input id="name" required oninput="checkNameDuplicate()">
         <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
       </div>
-      <div class="field"><label>Name (English)</label><input id="name_en"></div>
+      <div class="field"><label>Name (English) *</label><input id="name_en" required></div>
     </div>
-    <div class="grid2">
+    <div class="grid3">
       <div class="field"><label>Category *</label><select id="category" required><option value="">—</option></select></div>
-      <div class="field"><label>Subcategory</label><input id="subcategory"></div>
+      <div class="field"><label>Subcategory (ES)</label><input id="subcategory"></div>
+      <div class="field"><label>Subcategory (EN)</label><input id="subcategory_en"></div>
     </div>
 
     <div class="section-title">Attributes</div>
     <div class="grid3">
-      <div class="field"><label>Temperature</label>
-        <select id="temperature_id"><option value="">—</option></select>
+      <div class="field"><label>Brand *</label><input id="brand" required></div>
+      <div class="field"><label>Temperature *</label>
+        <select id="temperature_id" required><option value="">—</option></select>
       </div>
-      <div class="field"><label>Packaging</label>
-        <select id="packaging_id"><option value="">—</option></select>
+      <div class="field"><label>Packaging *</label>
+        <select id="packaging_id" required><option value="">—</option></select>
       </div>
+    </div>
+    <div class="grid3">
       <div class="field"><label>Presentation detail</label><input id="presentation" placeholder="e.g. poly, encerada, al vacío"></div>
+    </div>
+
+    <div class="section-title">Full name (PO / FO / SO)</div>
+    <div class="grid2">
+      <div class="field"><label>Full name EN (PO / FO) *</label><input id="full_name_en" required placeholder="e.g. Frozen Pork Bone in Butt, Box"></div>
+      <div class="field"><label>Full name ES (SO) *</label><input id="full_name_es" required placeholder="e.g. Cabeza de lomo con hueso Congelado, Caja"></div>
     </div>
     <div class="grid3">
       <div class="field"><label>Unit of measure</label><input id="unit_of_measure"></div>
@@ -270,8 +280,8 @@ function openForm(product){
   if (!product) editingProductId = null;
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product';
-  const fields = ['prodId','name','name_en','category','subcategory','temperature_id','packaging_id',
-    'presentation','unit_of_measure','standard_weight','origin','commercial_notes'];
+  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id',
+    'presentation','unit_of_measure','standard_weight','origin','commercial_notes','full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
   pendingPhotoFile = null;
   pendingSpecFile = null;
@@ -449,12 +459,17 @@ function checkNameDuplicate(){
     const pFirstWord = pn.split(/\s+/)[0];
     return firstWord.length >= 3 && pFirstWord === firstWord;
   });
-  const uniqueNames = [...new Set(matches.map(m => m.name))];
-  if (!uniqueNames.length){ warningEl.style.display = 'none'; return; }
+  if (!matches.length){ warningEl.style.display = 'none'; return; }
   warningEl.style.display = 'block';
-  warningEl.innerHTML = '⚠️ Posible duplicado, ya existe: ' + uniqueNames.map(n =>
-    `<a href="#" onclick="event.preventDefault();document.getElementById('name').value=this.dataset.n;checkNameDuplicate();" data-n="${escapeHtml(n)}" style="color:#8a5a00;font-weight:600;">${escapeHtml(n)}</a>`
-  ).join(', ');
+  // Full spec per match, not just the bare name — "Pork Bone in Butt" alone can't be judged as a
+  // real duplicate or a legitimate different packaging/temperature variant of the same cut.
+  const specFor = p => {
+    const bits = [CATEGORY_EN[p.category] || p.category, p.subcategory_en, tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean);
+    return `${escapeHtml(p.name_en || p.name)} — ${escapeHtml(bits.join(', '))}`;
+  };
+  warningEl.innerHTML = '⚠️ Possible duplicate — matches: ' + matches.map(p =>
+    `<a href="#" onclick="event.preventDefault();document.getElementById('name').value='${escapeHtml(p.name).replace(/'/g, "\\'")}';checkNameDuplicate();" style="color:#8a5a00;font-weight:600;">${specFor(p)}</a>`
+  ).join('; ');
 }
 
 function editProduct(id){
@@ -487,6 +502,8 @@ async function saveProduct(){
     name_en: document.getElementById('name_en').value || null,
     category: document.getElementById('category').value,
     subcategory: document.getElementById('subcategory').value || null,
+    subcategory_en: document.getElementById('subcategory_en').value || null,
+    brand: document.getElementById('brand').value || null,
     temperature_id: document.getElementById('temperature_id').value || null,
     packaging_id: document.getElementById('packaging_id').value || null,
     presentation: document.getElementById('presentation').value || null,
@@ -494,23 +511,27 @@ async function saveProduct(){
     standard_weight: document.getElementById('standard_weight').value ? Number(document.getElementById('standard_weight').value) : null,
     origin: document.getElementById('origin').value || null,
     commercial_notes: document.getElementById('commercial_notes').value || null,
+    full_name_en: document.getElementById('full_name_en').value || null,
+    full_name_es: document.getElementById('full_name_es').value || null,
   };
-  if (!payload.name || !payload.category){
-    document.getElementById('formMsg').textContent = 'Name and category are required.';
+  // Same required set as plants.html's "New product for this plant" form — a product created from
+  // here must meet the exact same bar as one created from a plant page or the price-list review,
+  // never a looser version of the same table. Full name EN/ES included — the real PO/FO/SO text
+  // is written by hand, never auto-composed, so it must exist before the product can be saved.
+  if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
+    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature, packaging, full name EN and full name ES.';
     return;
   }
   // Confirmed real catalog errors: a grade/size/percentage detail present in one language's name
   // and silently missing from the other ("#2 Pork Backribs" whose Spanish name never got the
   // "#2") — never caught until someone happened to compare them side by side. Blocks save so it's
   // caught right here instead.
-  if (payload.name_en){
-    const markersEn = new Set(extractMarkers(payload.name_en));
-    const markersEs = new Set(extractMarkers(payload.name));
-    const sameMarkers = markersEn.size === markersEs.size && [...markersEn].every(m => markersEs.has(m));
-    if (!sameMarkers){
-      document.getElementById('formMsg').textContent = `The Spanish and English names don't carry the same detail (a #, %, or size like 13/15) — found [${[...markersEn].join(', ') || '—'}] in English vs [${[...markersEs].join(', ') || '—'}] in Spanish. Make sure both say the same thing before saving.`;
-      return;
-    }
+  const markersEn = new Set([...extractMarkers(payload.name_en), ...extractMarkers(payload.subcategory_en)]);
+  const markersEs = new Set([...extractMarkers(payload.name), ...extractMarkers(payload.subcategory)]);
+  const sameMarkers = markersEn.size === markersEs.size && [...markersEn].every(m => markersEs.has(m));
+  if (!sameMarkers){
+    document.getElementById('formMsg').textContent = `The Spanish and English text don't carry the same detail (a #, %, or size like 13/15) — found [${[...markersEn].join(', ') || '—'}] in English vs [${[...markersEs].join(', ') || '—'}] in Spanish. Make sure both say the same thing before saving.`;
+    return;
   }
 
   if (pendingPhotoFile){

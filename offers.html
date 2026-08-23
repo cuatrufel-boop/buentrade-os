@@ -44,16 +44,15 @@
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
   .btn.win{background:var(--green);color:#fff;border:none;padding:6px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(15,138,95,.3);transition:transform .1s,box-shadow .1s;}
   .btn.win:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,138,95,.35);}
-  .btn.lose{background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);padding:6px 12px;font-size:12px;}
   .tt-btn{
-    background:linear-gradient(135deg,#0F2A52 0%,#123A6B 100%); color:#fff;
-    border:1px solid rgba(95,209,201,.45); border-radius:999px;
+    background:linear-gradient(135deg,#0E3D8F 0%,#0F8A82 130%); color:#fff;
+    border:none; border-radius:999px;
     padding:7px 16px 7px 12px; font-weight:700; font-size:12px; cursor:pointer;
-    box-shadow:0 3px 10px rgba(15,42,82,.35);
+    box-shadow:0 3px 10px rgba(15,42,82,.4);
     display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
     transition:transform .12s ease, box-shadow .12s ease;
   }
-  .tt-btn:hover{transform:translateY(-1px); box-shadow:0 5px 14px rgba(15,42,82,.5);}
+  .tt-btn:hover{transform:translateY(-1px); box-shadow:0 5px 16px rgba(15,138,130,.45);}
   .tt-btn svg{flex-shrink:0;}
   .doc-split{display:inline-flex;margin-right:4px;}
   .doc-split > .btn:first-child{border-radius:8px 0 0 8px;border-right:none;}
@@ -131,6 +130,29 @@
   .status-lost{background:var(--bg);color:var(--ink-soft);}
   .status-hot{background:#E3F6EC;color:var(--green);animation:hotPulse 1.4s ease-in-out infinite;}
   @keyframes hotPulse{0%,100%{box-shadow:0 0 0 0 rgba(15,138,95,.45);}50%{box-shadow:0 0 0 5px rgba(15,138,95,0);}}
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
+  .stat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stat-accent,var(--blue));}
+  .stat-icon{width:38px;height:38px;border-radius:10px;background:var(--stat-accent-soft,var(--blue-light));color:var(--stat-accent,var(--blue));display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;color:var(--ink);line-height:1.15;font-variant-numeric:tabular-nums;}
+  .stat-label{font-size:11.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;}
+  .row-actions{display:inline-flex;align-items:center;gap:8px;}
+  .icon-btn.lose{
+    background:#FFF5F2; color:#C4432E; border:1.5px solid rgba(196,67,46,.3);
+    width:30px;height:30px;border-radius:50%;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+    transition:background .12s ease,border-color .12s ease,transform .12s ease,color .12s ease;
+  }
+  .icon-btn.lose:hover{background:#C4432E;border-color:#C4432E;color:#fff;transform:translateY(-1px);}
+  .icon-btn.lose svg{width:13px;height:13px;}
+  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
+  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
+  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-body{flex:1;min-height:0;}
+  .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
   .edit-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:90px;transition:border-color .3s;}
   .edit-input:focus{outline:none;border-color:var(--blue);}
@@ -295,6 +317,7 @@ auth.onAuthStateChanged(user => {
   </div>
 
   <div id="offerPanel_pipeline">
+    <div class="stats-row" id="pipelineStats"></div>
     <div class="card">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
         <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="Search…"></div>
@@ -315,7 +338,7 @@ auth.onAuthStateChanged(user => {
       <table>
         <thead>
           <tr>
-            <th></th>
+            <th>Actions</th>
             <th>Product</th>
             <th>Customer</th>
             <th>Plant</th>
@@ -365,6 +388,13 @@ auth.onAuthStateChanged(user => {
       <button class="btn win" id="confirmOkBtn" onclick="confirmResolve(true)"></button>
     </div>
   </div>
+</div>
+<div id="ttOverlay" class="tt-overlay">
+  <div class="tt-overlay-head">
+    <div class="tt-overlay-title" id="ttOverlayTitle"></div>
+    <button class="tt-overlay-close" onclick="closeTTOverlay()" title="Close">✕</button>
+  </div>
+  <div class="tt-overlay-body" id="ttOverlayBody"></div>
 </div>
 <div id="toastStack" class="toast-stack"></div>
 
@@ -418,7 +448,37 @@ async function loadOffers(){
   renderOffers();
 }
 
+// Reads straight off the loaded (date-filtered) `offers` array, not the search/status-filtered
+// list — the point is a fixed read of the whole pipeline in range, so it doesn't jump around
+// as you type into the search box.
+function renderStats(){
+  const money = n => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const pending = offers.filter(o => o.status === 'sent');
+  const hot = pending.filter(o => (o.negotiation_log || []).length > 0);
+  const won = offers.filter(o => o.status === 'won');
+  const lost = offers.filter(o => o.status === 'lost');
+  const pipelineValue = pending.reduce((s, o) => s + (o.total_sale || 0), 0);
+  const closedCount = won.length + lost.length;
+  const winRate = closedCount ? Math.round((won.length / closedCount) * 100) : null;
+  const stats = [
+    { accent: '#1E6ADB', accentSoft: '#EAF3FC', value: money(pipelineValue), label: 'Pipeline value',
+      icon: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
+    { accent: '#C4432E', accentSoft: '#FFF5F2', value: String(hot.length), label: 'Negotiating now',
+      icon: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.4 0 2.5-1 2.5-2.3 0-1.4-1.5-2-1.2-3.7.3-1.6 2-2.7 2-2.7s.5 2 .3 3.3c1.5-.7 2.4-2.5 2.4-4.1 0-2.3-1.6-4-3.2-5C13 4.4 12 6.6 10 8c-2 1.4-3.5 3.5-3.5 6.5"/>' },
+    { accent: '#1E6ADB', accentSoft: '#EAF3FC', value: String(pending.length), label: 'Pending offers',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+    { accent: '#0F8A5F', accentSoft: '#E3F6EC', value: winRate === null ? '—' : winRate + '%', label: 'Win rate',
+      icon: '<path d="M20 6 9 17l-5-5"/>' },
+  ];
+  document.getElementById('pipelineStats').innerHTML = stats.map(s => `
+    <div class="stat-card" style="--stat-accent:${s.accent};--stat-accent-soft:${s.accentSoft};">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
+      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
+    </div>`).join('');
+}
+
 function renderOffers(){
+  renderStats();
   const term = (document.getElementById('f_search').value || '').trim().toLowerCase();
   const status = document.getElementById('f_status').value;
   const filtered = offers.filter(o => {
@@ -451,17 +511,14 @@ function renderOffers(){
     if (o.status === 'sent'){
       // "Create Order" here is only the fast path — price closed exactly as quoted, nothing to
       // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
-      // goes through "TT", which has the full calculator, can message either side any number
-      // of times, and is the only place that writes the final numbers once actually confirmed.
-      // Opens inline (see toggleTT) instead of a new tab — same page the whole time. Renamed from
-      // the bare "Win" label — didn't say what actually happens when you click it (a PO/SO/FO
-      // get generated right after), same rename applied to its twin inside the Trading Tool's own
-      // negotiation bar (negoSaveDefinitive in trading-tool.html).
+      // goes through "Negotiate", which has the full calculator, can message either side any
+      // number of times, and is the ONLY place that creates the order (negoSaveDefinitive in
+      // trading-tool.html) — no separate "Create Order" shortcut out here anymore, having both
+      // was a duplicate of the same action ("ya lo tenemos dentro").
       action = `
-        <button class="tt-btn" onclick="toggleTT('${o.id}')" title="Open the calculator to negotiate and close this offer"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
-        <span id="quickActions_${o.id}" style="display:inline-flex;gap:6px;">
-          <button class="btn win" onclick="markOffer('${o.id}','won')">✓ Create Order</button>
-          <button class="btn lose" onclick="markOffer('${o.id}','lost')">✗ Lost</button>
+        <span class="row-actions">
+          <button class="tt-btn" onclick="toggleTT('${o.id}')" title="Open the calculator to negotiate and close this offer"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
+          <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </span>`;
     } else if (o.status === 'won'){
       // A single "⋯" replaces what used to be three separate pill buttons (Documents / Real
@@ -480,7 +537,6 @@ function renderOffers(){
       <td>$${(o.sale_per_lb || 0).toFixed(4)}</td>
       <td>${statusPill}</td>
     </tr>
-    <tr id="tt_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);padding:0;"><div id="tt_panel_${o.id}"></div></td></tr>
     <tr id="history_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="history_panel_${o.id}"></div></td></tr>`;
   }).join('');
 }
@@ -551,39 +607,32 @@ function renderHistoryPanel(offerId){
 // already builds for the Trading Tool) plus offerId/plantId so the TT can message the plant,
 // message the customer, and — once a number is actually confirmed — save it back here and
 // generate the order, all without the trader re-entering anything from scratch.
-// Embeds the calculator right in this row (iframe) instead of a new tab — same page the whole
-// time, so negotiating a bid never means "leaving" Offers. Same Trading Tool file either way,
-// nothing duplicated; only how it's presented changed. Auth carries over automatically since
-// the iframe shares this page's origin/localStorage — no second login.
+// Opens the calculator full-screen (overlay, not embedded in the row) — the row's own width and
+// the page's scroll position were cutting off the negotiation bar and its own Create Order
+// confirm modal ("me toca scroll y se corta"). Full screen means whatever the Trading Tool
+// renders is always inside the visible viewport. Same Trading Tool file either way, nothing
+// duplicated; only how it's presented changed. Auth carries over automatically since the iframe
+// shares this page's origin/localStorage — no second login.
 let ttOpenId = null;
 
 function toggleTT(id){
-  const row = document.getElementById('tt_row_' + id);
-  if (ttOpenId && ttOpenId !== id){
-    const prev = document.getElementById('tt_row_' + ttOpenId);
-    if (prev) prev.style.display = 'none';
-    // Restore the collapsed row's own quick Create Order/Lost — only the row actually open in TT
-    // hides them, since its own copy inside the negotiation bar takes over at that point.
-    const prevActions = document.getElementById('quickActions_' + ttOpenId);
-    if (prevActions) prevActions.style.display = 'inline-flex';
-  }
-  if (row.style.display === 'table-row'){
-    row.style.display = 'none';
-    const actions = document.getElementById('quickActions_' + id);
-    if (actions) actions.style.display = 'inline-flex';
-    ttOpenId = null;
-    return;
-  }
-  row.style.display = 'table-row';
-  const actions = document.getElementById('quickActions_' + id);
-  if (actions) actions.style.display = 'none';
+  if (ttOpenId === id){ closeTTOverlay(); return; }
   ttOpenId = id;
+  const o = offers.find(x => x.id === id);
+  document.getElementById('ttOverlayTitle').textContent = o
+    ? `${o.product_name || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : 'Negotiate';
   loadTTPanel(id);
+  document.getElementById('ttOverlay').style.display = 'flex';
+}
+
+function closeTTOverlay(){
+  document.getElementById('ttOverlay').style.display = 'none';
+  document.getElementById('ttOverlayBody').innerHTML = '';
+  ttOpenId = null;
 }
 
 function loadTTPanel(id){
-  const panel = document.getElementById('tt_panel_' + id);
-  if (panel.dataset.loaded) return; // don't reload/reset an already-open negotiation
+  const panel = document.getElementById('ttOverlayBody');
   const o = offers.find(x => x.id === id);
   if (!o) return;
   const imported = !!o.mexican_dest_rate_id;
@@ -600,17 +649,14 @@ function loadTTPanel(id){
     offerId: o.id, plantId: o.plant_id || '',
     v: String(Date.now()),
   });
-  panel.innerHTML = `<iframe src="trading-tool.html?${params.toString()}" style="width:100%;height:780px;border:none;display:block;"></iframe>`;
-  panel.dataset.loaded = '1';
+  panel.innerHTML = `<iframe src="trading-tool.html?${params.toString()}"></iframe>`;
 }
 
 // The Trading Tool posts this the moment "Save as Final — Win" succeeds inside the iframe, so
-// this row updates in place (no manual refresh, no leaving the embedded panel to go check).
+// the overlay closes and the pipeline refreshes in place (no manual refresh needed).
 window.addEventListener('message', (e) => {
   if (!e.data || e.data.type !== 'buentrade:offerWon') return;
-  const row = document.getElementById('tt_row_' + e.data.offerId);
-  if (row) row.style.display = 'none';
-  if (ttOpenId === e.data.offerId) ttOpenId = null;
+  if (ttOpenId === e.data.offerId) closeTTOverlay();
   loadOffers();
 });
 

@@ -26,7 +26,7 @@
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;letter-spacing:.2px;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
-  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
@@ -172,7 +172,10 @@ auth.onAuthStateChanged(user => {
 
   <div class="card" id="plantCard" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <strong id="plantTitle" style="font-size:16px;"></strong>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;">
+        <img id="pv_logo" style="width:88px;height:88px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--line);padding:6px;display:none;" alt="">
+        <strong id="plantTitle" style="font-size:16px;"></strong>
+      </div>
     </div>
 
     <div class="tab-row">
@@ -354,7 +357,9 @@ auth.onAuthStateChanged(user => {
     <div id="specMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
 
     <div class="grid2" style="margin-top:14px;">
-      <div class="field"><label>Name (Spanish) *</label><input id="name" required></div>
+      <div class="field"><label>Name (Spanish) *</label><input id="name" required oninput="checkNameDuplicate()">
+        <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
+      </div>
       <div class="field"><label>Name (English) *</label><input id="name_en" required></div>
     </div>
     <div class="grid3">
@@ -367,8 +372,19 @@ auth.onAuthStateChanged(user => {
       <div class="field"><label>Temperature *</label><select id="temperature_id"><option value="">—</option></select></div>
       <div class="field"><label>Packaging *</label><select id="packaging_id"><option value="">—</option></select></div>
     </div>
-    <div class="field"><label>Presentation detail</label><input id="presentation"></div>
+    <div class="grid3">
+      <div class="field"><label>Presentation detail</label><input id="presentation"></div>
+      <div class="field"><label>Unit of measure</label><input id="unit_of_measure"></div>
+      <div class="field"><label>Standard weight</label><input type="number" id="standard_weight"></div>
+    </div>
+    <div class="field"><label>Origin</label><input id="origin"></div>
     <div class="field"><label>Notes</label><textarea id="commercial_notes" rows="2"></textarea></div>
+
+    <div class="section-title">Full name (PO / FO / SO)</div>
+    <div class="grid2">
+      <div class="field"><label>Full name EN (PO / FO) *</label><input id="full_name_en" required placeholder="e.g. Frozen Pork Bone in Butt, Box"></div>
+      <div class="field"><label>Full name ES (SO) *</label><input id="full_name_es" required placeholder="e.g. Cabeza de lomo con hueso Congelado, Caja"></div>
+    </div>
 
     <div style="display:flex;gap:10px;margin-top:8px;">
       <button class="btn" onclick="saveProduct()">Save</button>
@@ -452,7 +468,7 @@ function renderPlants(){
     const proteins = plantProteins[p.id] ? [...plantProteins[p.id]].sort().join(', ') : '—';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><a class="name-link" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a></td>
+      <td style="display:flex;align-items:center;gap:8px;">${p.logo_url ? `<img src="${escapeHtml(p.logo_url)}" style="width:20px;height:20px;border-radius:4px;object-fit:contain;" alt="">` : ''}<a class="name-link" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a></td>
       <td>${escapeHtml(proteins)}</td>
       <td>${p.contact_name && p.email ? `<a href="mailto:${escapeHtml(p.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.contact_name)}</a>` : escapeHtml(p.contact_name || '—')}</td>
       <td>${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : '—'}</td>`;
@@ -505,6 +521,9 @@ async function selectPlant(id){
   }
   const plant = plants.find(p => p.id === currentPlantId);
   document.getElementById('plantTitle').textContent = plant.name;
+  const pvLogo = document.getElementById('pv_logo');
+  pvLogo.src = plant.logo_url || '';
+  pvLogo.style.display = plant.logo_url ? 'block' : 'none';
   plantCard.style.display = 'block';
   renderProfileView(plant);
   document.getElementById('profileView').style.display = 'block';
@@ -1390,7 +1409,19 @@ async function applyPriceList(){
   } else {
     closePriceListPanel();
   }
+  // Never blocks a price from saving — a plant's price sheet can't wait on paperwork — but every
+  // product priced without a full name (new-to-the-catalog, or an older row that predates the
+  // field) surfaces here so it doesn't just quietly stay incomplete forever.
+  const missingFullName = applied
+    .map(r => allCatalogProducts && allCatalogProducts.find(p => p.id === r.matchedProductId))
+    .filter(p => p && (!p.full_name_en || !p.full_name_es));
+  const uniqueMissing = [...new Map(missingFullName.map(p => [p.id, p])).values()];
   alert(`${applied.length} price(s) updated.${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}`);
+  if (uniqueMissing.length){
+    const names = uniqueMissing.map(p => `• ${p.name_en || p.name}`).join('\n');
+    const goEdit = confirm(`${uniqueMissing.length} priced product(s) still have no full name (PO/FO/SO text):\n\n${names}\n\nOpen the first one now to fill it in?`);
+    if (goEdit) openProductForm(uniqueMissing[0]);
+  }
 }
 
 let plantLocations = [];
@@ -1551,6 +1582,44 @@ function renderPlantProducts(){
   });
 }
 
+function normalizeProductName(s){
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+}
+
+// Same fuzzy check as products.html's catalog screen, ported here because this is actually the
+// more common place a brand-new product gets created (mid price-list review) — never blocks
+// saving, just flags a possible duplicate so it can be caught before it becomes a second row for
+// the same real-world cut.
+async function checkNameDuplicate(){
+  const raw = document.getElementById('name').value.trim();
+  const warningEl = document.getElementById('nameDupWarning');
+  if (!raw){ warningEl.style.display = 'none'; return; }
+  await fetchAllCatalogProducts();
+  const norm = normalizeProductName(raw);
+  const currentId = document.getElementById('prodId').value;
+  const firstWord = norm.split(/\s+/)[0];
+  const matches = allCatalogProducts.filter(p => {
+    if (p.id === currentId) return false;
+    const pn = normalizeProductName(p.name);
+    if (!pn) return false;
+    if (pn === norm) return true;
+    if (pn.startsWith(norm) || norm.startsWith(pn)) return true;
+    const pFirstWord = pn.split(/\s+/)[0];
+    return firstWord.length >= 3 && pFirstWord === firstWord;
+  });
+  if (!matches.length){ warningEl.style.display = 'none'; return; }
+  warningEl.style.display = 'block';
+  // Full spec per match, not just the bare name — "Pork Bone in Butt" alone can't be judged as a
+  // real duplicate or a legitimate different packaging/temperature variant of the same cut.
+  const specFor = p => {
+    const bits = [CATEGORY_EN[p.category] || p.category, p.subcategory_en, tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean);
+    return `${escapeHtml(p.name_en || p.name)} — ${escapeHtml(bits.join(', '))}`;
+  };
+  warningEl.innerHTML = '⚠️ Possible duplicate — matches: ' + matches.map(p =>
+    `<a href="#" onclick="event.preventDefault();document.getElementById('name').value='${escapeHtml(p.name).replace(/'/g, "\\'")}';checkNameDuplicate();" style="color:#8a5a00;font-weight:600;">${specFor(p)}</a>`
+  ).join('; ');
+}
+
 function editProduct(id){
   const p = plantProducts.find(x => x.id === id);
   if (p) openProductForm(p);
@@ -1559,7 +1628,7 @@ function editProduct(id){
 function openProductForm(product){
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
-  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','presentation','commercial_notes'];
+  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','presentation','unit_of_measure','standard_weight','origin','commercial_notes','full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
   pendingPhotoFile = null;
   pendingSpecFile = null;
@@ -1657,13 +1726,19 @@ async function saveProduct(){
     temperature_id: document.getElementById('temperature_id').value || null,
     packaging_id: document.getElementById('packaging_id').value || null,
     presentation: document.getElementById('presentation').value || null,
+    unit_of_measure: document.getElementById('unit_of_measure').value || null,
+    standard_weight: document.getElementById('standard_weight').value ? Number(document.getElementById('standard_weight').value) : null,
+    origin: document.getElementById('origin').value || null,
     commercial_notes: document.getElementById('commercial_notes').value || null,
+    full_name_en: document.getElementById('full_name_en').value || null,
+    full_name_es: document.getElementById('full_name_es').value || null,
   };
   // Every product on record must be fully specified — a row missing temperature or packaging is
   // exactly the ambiguity that later silently misapplies a price to the wrong variant of a
-  // shared name. No partial products, ever, however this form was opened.
-  if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id){
-    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature and packaging.';
+  // shared name. No partial products, ever, however this form was opened. Full name EN/ES included
+  // — the real PO/FO/SO text is written by hand, never auto-composed, so it must exist too.
+  if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
+    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature, packaging, full name EN and full name ES.';
     return;
   }
   // Confirmed real, pre-existing catalog errors: a grade/size/percentage detail present in one

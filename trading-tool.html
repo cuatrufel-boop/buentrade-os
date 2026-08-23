@@ -54,7 +54,7 @@
   }
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
-  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
 
@@ -266,12 +266,6 @@
   .profit-col .section-label{margin-bottom:2px;}
   #borderHeroKpi .k-val{font-size:24px; transition:font-size .15s;}
   .profit-cols.split #borderHeroKpi .k-val{font-size:20px;}
-  #mxNeedsCostsWarning{
-    display:flex; align-items:center; gap:8px; margin-top:12px; padding:9px 12px;
-    background:var(--blue-pale); border:1px dashed #B9D3F0; border-radius:8px;
-    font-size:11px; color:var(--ink-soft); line-height:1.4;
-  }
-  #mxNeedsCostsWarning .mx-note-icon{font-size:16px; flex-shrink:0;}
   @media (max-width:1100px){
     .profit-cols.split{grid-template-columns:1fr; gap:6px;}
     .profit-cols.split .profit-col-divider{display:none !important;}
@@ -286,6 +280,7 @@
   .advanced-tools[open] summary{border-radius:10px 10px 0 0; margin-bottom:0;}
 
   .profit-details{margin-top:4px;}
+  .kpi-grid{display:grid; grid-template-columns:1fr 1fr; gap:0 10px;}
 
   .scenario-toggle{display:flex; gap:6px;}
   .scenario-toggle .chip{flex:1; text-align:center; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.25); color:#BBD4EE;}
@@ -682,20 +677,18 @@ if (FIREBASE_READY) {
             <div class="t"><span>Product Cost</span><b id="outProdCost">$0</b></div>
           </div>
           <div class="profit-details">
-            <div class="kpi"><span class="k-label">Profit / Lb</span><span class="k-val" id="outProfitLb">$0</span></div>
-            <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMargin">0%</span></div>
-            <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkup">$0</span></div>
-            <div class="kpi"><span class="k-label">Markup %</span><span class="k-val" id="outMarkupPct">0%</span></div>
+            <div class="kpi-grid">
+              <div class="kpi"><span class="k-label">Profit / Lb</span><span class="k-val" id="outProfitLb">$0</span></div>
+              <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMargin">0%</span></div>
+              <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkup">$0</span></div>
+              <div class="kpi"><span class="k-label">Markup %</span><span class="k-val" id="outMarkupPct">0%</span></div>
+            </div>
             <div class="totals-mini">
               <div class="t"><span>Selling Price</span><b id="outSellTotal">$0</b></div>
               <div class="t"><span>Product Profit</span><b id="outProdProfit">$0</b></div>
               <div class="t"><span>Total Weight</span><b id="outWeight">0 lb</b></div>
               <div class="t"><span>Direct Costs</span><b id="outDirect">$0</b></div>
               <div class="t"><span>Finance Cost</span><b id="outAdditional">$0</b></div>
-            </div>
-            <div id="mxNeedsCostsWarning" style="display:none;">
-              <span class="mx-note-icon">🇲🇽</span>
-              <span>Add <b>Import Cost</b> + <b>Mexican Freight</b> in Direct Costs to also see your Mexico (MXN) price here.</span>
             </div>
           </div>
         </div>
@@ -710,11 +703,13 @@ if (FIREBASE_READY) {
             <div class="t"><span>Product Cost</span><b id="outProdCostMx">MX$0</b></div>
           </div>
           <div class="profit-details">
-            <div class="kpi"><span class="k-label">Profit (MXN)</span><span class="k-val" id="outProfitMx">MX$0</span></div>
-            <div class="kpi"><span class="k-label">Profit / Kg</span><span class="k-val" id="outProfitKgMx">MX$0</span></div>
-            <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMarginMx">0%</span></div>
-            <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkupMx">MX$0</span></div>
-            <div class="kpi"><span class="k-label">Markup %</span><span class="k-val" id="outMarkupPctMx">0%</span></div>
+            <div class="kpi-grid">
+              <div class="kpi"><span class="k-label">Profit (MXN)</span><span class="k-val" id="outProfitMx">MX$0</span></div>
+              <div class="kpi"><span class="k-label">Profit / Kg</span><span class="k-val" id="outProfitKgMx">MX$0</span></div>
+              <div class="kpi"><span class="k-label">Gross Margin</span><span class="k-val" id="outGrossMarginMx">0%</span></div>
+              <div class="kpi"><span class="k-label">Markup</span><span class="k-val" id="outMarkupMx">MX$0</span></div>
+              <div class="kpi" style="grid-column:1 / -1;"><span class="k-label">Markup %</span><span class="k-val" id="outMarkupPctMx">0%</span></div>
+            </div>
             <div class="totals-mini">
               <div class="t"><span>Selling Price</span><b id="outSellTotalMx">MX$0</b></div>
               <div class="t"><span>Product Profit</span><b id="outProdProfitMx">MX$0</b></div>
