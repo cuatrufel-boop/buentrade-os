@@ -12,6 +12,7 @@ const UPDATABLE_FIELDS = [
   "contact_name", "email", "email_cc", "phone", "whatsapp", "whatsapp_cc", "business_hours",
   "avg_loading_time", "avg_response_time", "document_cost", "avg_freight_to_border",
   "docs_included", "payment_terms", "required_documentation", "website", "notes", "internal_notes",
+  "logo_url", "logo_url_dark",
 ];
 
 Deno.serve(async (req) => {
@@ -61,6 +62,7 @@ Deno.serve(async (req) => {
           avg_freight_to_border = ${merged.avg_freight_to_border}, docs_included = ${merged.docs_included},
           payment_terms = ${merged.payment_terms}, required_documentation = ${merged.required_documentation},
           website = ${merged.website}, notes = ${merged.notes}, internal_notes = ${merged.internal_notes},
+          logo_url = ${merged.logo_url}, logo_url_dark = ${merged.logo_url_dark},
           updated_at = now()
         where id = ${id} returning *
       `;

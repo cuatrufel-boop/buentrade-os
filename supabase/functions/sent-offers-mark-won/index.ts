@@ -17,12 +17,39 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const missing = ["actor", "sent_offer_id"].filter((k) => !body[k]);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-    const { actor, sent_offer_id } = body;
+    const { actor, sent_offer_id, override_credit_check = false } = body;
 
     const [offer] = await sql`select * from sent_offers where id = ${sent_offer_id}`;
     if (!offer) return jsonResponse({ error: "unknown sent_offer_id" }, 404);
     if (offer.status !== "sent") {
       return jsonResponse({ error: "not_pending", message: `This offer is already '${offer.status}', not 'sent' — can't mark it won again.`, current_status: offer.status }, 409);
+    }
+
+    // Credit-limit check — "si productos neza es hasta 100.000 usd no me puedo pasar de ese monto
+    // hasta que pague." Never a block (same rule as everything else): the outstanding balance
+    // (delivered-or-not, unpaid shipments) plus this new sale is compared against the customer's
+    // credit_limit, and if it would exceed it, this returns a real number to confirm against
+    // instead of refusing outright — override_credit_check proceeds anyway, same shape as every
+    // other duplicate/limit check in this API.
+    if (offer.customer_id && offer.total_sale != null && !override_credit_check) {
+      const [customer] = await sql`select credit_limit from customers where id = ${offer.customer_id}`;
+      if (customer?.credit_limit != null) {
+        const [{ outstanding }] = await sql`
+          select coalesce(sum(sale_amount), 0) as outstanding from shipments
+          where customer_id = ${offer.customer_id} and paid_at is null
+        `;
+        const projected = Number(outstanding) + Number(offer.total_sale);
+        if (projected > Number(customer.credit_limit)) {
+          return jsonResponse({
+            error: "credit_limit_exceeded",
+            message: `This customer's outstanding balance ($${Number(outstanding).toLocaleString()}) plus this order ($${Number(offer.total_sale).toLocaleString()}) would exceed their credit limit ($${Number(customer.credit_limit).toLocaleString()}). Confirm to proceed anyway or wait for payment to free up credit.`,
+            outstanding_balance: outstanding,
+            order_amount: offer.total_sale,
+            credit_limit: customer.credit_limit,
+            projected_total: projected,
+          }, 409);
+        }
+      }
     }
 
     const result = await sql.begin(async (tx) => {

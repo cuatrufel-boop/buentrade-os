@@ -13,7 +13,7 @@ const UPDATABLE_FIELDS = [
   "preferred_currency_id", "usual_delivery_type", "usual_destination",
   "payment_days", "payment_method", "preferred_exchange_rate_mode",
   "payments_contact_name", "payments_contact_email", "payments_contact_phone", "payments_contact_whatsapp",
-  "customs_agency_provider_id",
+  "customs_agency_provider_id", "credit_limit",
 ];
 
 Deno.serve(async (req) => {
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
           payment_method = ${merged.payment_method}, preferred_exchange_rate_mode = ${merged.preferred_exchange_rate_mode},
           payments_contact_name = ${merged.payments_contact_name}, payments_contact_email = ${merged.payments_contact_email},
           payments_contact_phone = ${merged.payments_contact_phone}, payments_contact_whatsapp = ${merged.payments_contact_whatsapp},
-          customs_agency_provider_id = ${merged.customs_agency_provider_id},
+          customs_agency_provider_id = ${merged.customs_agency_provider_id}, credit_limit = ${merged.credit_limit},
           updated_at = now()
         where id = ${id} returning *
       `;

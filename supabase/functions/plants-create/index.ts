@@ -32,6 +32,7 @@ Deno.serve(async (req) => {
       avg_loading_time = null, avg_response_time = null, document_cost = null,
       avg_freight_to_border = null, docs_included = null, payment_terms = null,
       required_documentation = null, website = null, notes = null, internal_notes = null,
+      logo_url = null, logo_url_dark = null,
       override_duplicate_check = false,
     } = body;
 
@@ -71,12 +72,14 @@ Deno.serve(async (req) => {
           supplier_id, name, category_id, country_id, city_id, address, internal_code,
           contact_name, email, email_cc, phone, whatsapp, whatsapp_cc, business_hours,
           avg_loading_time, avg_response_time, document_cost, avg_freight_to_border,
-          docs_included, payment_terms, required_documentation, website, notes, internal_notes
+          docs_included, payment_terms, required_documentation, website, notes, internal_notes,
+          logo_url, logo_url_dark
         ) values (
           ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${address}, ${internal_code},
           ${contact_name}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${business_hours},
           ${avg_loading_time}, ${avg_response_time}, ${document_cost}, ${avg_freight_to_border},
-          ${docs_included}, ${payment_terms}, ${required_documentation}, ${website}, ${notes}, ${internal_notes}
+          ${docs_included}, ${payment_terms}, ${required_documentation}, ${website}, ${notes}, ${internal_notes},
+          ${logo_url}, ${logo_url_dark}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plants", record_id: plant.id, after: plant });

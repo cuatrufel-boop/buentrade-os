@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
       preferred_currency_id = null, usual_delivery_type = null, usual_destination = null,
       payment_days = null, payment_method = null, preferred_exchange_rate_mode = null,
       payments_contact_name = null, payments_contact_email = null, payments_contact_phone = null,
-      payments_contact_whatsapp = null, customs_agency_provider_id = null,
+      payments_contact_whatsapp = null, customs_agency_provider_id = null, credit_limit = null,
       override_duplicate_check = false,
     } = body;
 
@@ -61,14 +61,14 @@ Deno.serve(async (req) => {
           preferred_currency_id, usual_delivery_type, usual_destination,
           payment_days, payment_method, preferred_exchange_rate_mode,
           payments_contact_name, payments_contact_email, payments_contact_phone, payments_contact_whatsapp,
-          customs_agency_provider_id
+          customs_agency_provider_id, credit_limit
         ) values (
           ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state}, ${address},
           ${contact_name}, ${contact_role}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${website}, ${notes},
           ${preferred_currency_id}, ${usual_delivery_type}, ${usual_destination},
           ${payment_days}, ${payment_method}, ${preferred_exchange_rate_mode},
           ${payments_contact_name}, ${payments_contact_email}, ${payments_contact_phone}, ${payments_contact_whatsapp},
-          ${customs_agency_provider_id}
+          ${customs_agency_provider_id}, ${credit_limit}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customers", record_id: customer.id, after: customer });

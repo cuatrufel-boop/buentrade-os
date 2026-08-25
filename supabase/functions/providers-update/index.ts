@@ -8,7 +8,7 @@ const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require" });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const UPDATABLE_FIELDS = [
-  "name", "country", "city", "phone", "contact_name", "email", "email_cc", "whatsapp_cc", "notes",
+  "name", "country", "city", "country_id", "city_id", "phone", "contact_name", "email", "email_cc", "whatsapp_cc", "notes",
   "mc_number", "dot_number",
 ];
 
@@ -44,7 +44,8 @@ Deno.serve(async (req) => {
     const provider = await sql.begin(async (tx) => {
       const [provider] = await tx`
         update providers set
-          name = ${merged.name}, country = ${merged.country}, city = ${merged.city}, phone = ${merged.phone},
+          name = ${merged.name}, country = ${merged.country}, city = ${merged.city},
+          country_id = ${merged.country_id}, city_id = ${merged.city_id}, phone = ${merged.phone},
           contact_name = ${merged.contact_name}, email = ${merged.email}, email_cc = ${merged.email_cc},
           whatsapp_cc = ${merged.whatsapp_cc}, notes = ${merged.notes},
           mc_number = ${merged.mc_number}, dot_number = ${merged.dot_number},
