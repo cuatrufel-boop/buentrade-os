@@ -53,6 +53,17 @@
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
+  /* Same card-row language as Quotes/Pending/Offers — bordered rounded row, avatar/logo, compact
+     actions — instead of a plain table. */
+  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
+  .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:4px;}
+  .pkg-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
+  .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
+  .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
+  .pkg-plant-info{display:flex;flex-direction:column;gap:1px;flex:1;min-width:120px;}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   #formCard{display:none;}
   .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
@@ -326,10 +337,7 @@ auth.onAuthStateChanged(user => {
       <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openNewPlant()">+ New Plant</button>
     </div>
-    <table>
-      <thead><tr><th>Name</th><th>Protein</th><th>Contact Name</th><th>Phone</th></tr></thead>
-      <tbody id="plantRows"></tbody>
-    </table>
+    <div id="plantRows" class="pkg-table-wrap"></div>
     <div id="plantEmptyMsg" class="empty" style="display:none;">No plants found.</div>
   </div>
 
@@ -395,6 +403,29 @@ auth.onAuthStateChanged(user => {
 </div>
 </div>
 
+<div id="plNoticeOverlay" class="email-modal-overlay" style="display:none;" onclick="if(event.target===this) plCloseNotice()">
+  <div class="email-modal-box" style="max-width:420px;">
+    <div id="plNoticeText" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:18px;"></div>
+    <div style="text-align:right;">
+      <button class="btn" onclick="plCloseNotice()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- A real confirmation, not a bare OK/Cancel — always names the existing product(s) it might be
+     the same as, and both buttons say exactly what they do. Replaces a native confirm() call the
+     trader read as just another block, even though it technically wasn't one. -->
+<div id="plDupModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:480px;">
+    <h3>This might already exist</h3>
+    <div id="plDupModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:16px;"></div>
+    <div class="email-modal-actions">
+      <button onclick="plDupModalResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Use the existing product instead</button>
+      <button onclick="plDupModalResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">This is genuinely different — save it</button>
+    </div>
+  </div>
+</div>
+
 <div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
   <div class="email-modal-box">
     <h3>Review before sending</h3>
@@ -409,6 +440,33 @@ auth.onAuthStateChanged(user => {
 </div>
 
 <script>
+function plShowNotice(message){
+  document.getElementById('plNoticeText').textContent = message;
+  document.getElementById('plNoticeOverlay').style.display = 'flex';
+}
+function plCloseNotice(){
+  document.getElementById('plNoticeOverlay').style.display = 'none';
+}
+
+// Always shows what already exists (real products to compare against, never a bare yes/no) and
+// both buttons say exactly what happens — never framed as a block, since saving genuinely
+// different products stays one click away.
+let plDupModalResolver = null;
+function plShowDupConfirm(sameSpec, newSubcategory){
+  return new Promise(resolve => {
+    plDupModalResolver = resolve;
+    const list = sameSpec.map(p => `• "${p.subcategory_en || '(no subcategory)'}"${p.brand ? ' — ' + p.brand : ''}`).join('<br>');
+    document.getElementById('plDupModalText').innerHTML =
+      `${sameSpec.length} product(s) already exist with this exact name, temperature, packaging and category:<br><br>${list}<br><br>You're about to save subcategory: "${newSubcategory || '(none)'}"`;
+    document.getElementById('plDupModalOverlay').style.display = 'flex';
+  });
+}
+function plDupModalResolve(saveAsNew){
+  document.getElementById('plDupModalOverlay').style.display = 'none';
+  if (plDupModalResolver) plDupModalResolver(saveAsNew);
+  plDupModalResolver = null;
+}
+
 let plants = [];
 let temperatures = [];
 let packagings = [];
@@ -461,19 +519,23 @@ function renderPlants(){
     (p.city || '').toLowerCase().includes(term) ||
     (p.country || '').toLowerCase().includes(term)
   ) : plants;
-  const tbody = document.getElementById('plantRows');
-  tbody.innerHTML = '';
+  const wrap = document.getElementById('plantRows');
   document.getElementById('plantEmptyMsg').style.display = filtered.length ? 'none' : 'block';
-  filtered.forEach(p => {
+  wrap.innerHTML = filtered.map(p => {
     const proteins = plantProteins[p.id] ? [...plantProteins[p.id]].sort().join(', ') : '—';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="display:flex;align-items:center;gap:8px;">${p.logo_url ? `<img src="${escapeHtml(p.logo_url)}" style="width:20px;height:20px;border-radius:4px;object-fit:contain;" alt="">` : ''}<a class="name-link" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a></td>
-      <td>${escapeHtml(proteins)}</td>
-      <td>${p.contact_name && p.email ? `<a href="mailto:${escapeHtml(p.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.contact_name)}</a>` : escapeHtml(p.contact_name || '—')}</td>
-      <td>${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : '—'}</td>`;
-    tbody.appendChild(tr);
-  });
+    const avatarHtml = p.logo_url
+      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(p.logo_url)}" alt=""></div>`
+      : `<div class="pkg-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+    return `<div class="pkg-row">
+      ${avatarHtml}
+      <div class="pkg-plant-info">
+        <a class="name-link pkg-plant-name" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a>
+        <span class="pkg-plant-sub">${escapeHtml(proteins)}</span>
+      </div>
+      <div style="min-width:160px;font-size:12.5px;">${p.contact_name && p.email ? `<a href="mailto:${escapeHtml(p.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.contact_name)}</a>` : escapeHtml(p.contact_name || '—')}</div>
+      <div style="margin-left:auto;flex-shrink:0;">${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 function openNewPlant(){
@@ -674,6 +736,10 @@ function startCreateProductForRow(i){
   openProductForm(null);
   const plant = plants.find(p => p.id === currentPlantId);
   if (plant) document.getElementById('brand').value = plant.name;
+  // Same grounding as the category filter above the review table — this plant's known protein
+  // (from its existing products, or from what else matched in this very paste), never a guess
+  // from scanning the new row's own text.
+  if (priceListCategoryFilter) document.getElementById('category').value = priceListCategoryFilter;
   // Temperature/Packaging aren't a judgment call here — if the row's own wording already reads
   // as Frozen/Combo/etc. (the same detection used to match against the catalog), it's already
   // "explicit" in the plant's own text, just not typed into the form yet. Only pre-filled when
@@ -755,6 +821,14 @@ function closePriceListPanel(){
 
 function normalizeForMatch(s){
   return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Same as normalizeForMatch, plus ignoring the species word — a plant's own price-list wording is
+// inconsistent about including "Pork/Beef/Chicken/Lamb" ("Boneless Loin" vs the catalog's own
+// "Pork Boneless loin"), and category already disambiguates species, so this alone was reading as
+// "no match, create a new product" instead of finding the one that already exists.
+function normalizeForMatchLoose(s){
+  return normalizeForMatch(s).replace(/\b(pork|beef|chicken|lamb)\b/g, '').replace(/\s+/g, ' ').trim();
 }
 
 // Finds the price on the line, and separately what precedes it (the name, if any). Real price
@@ -1203,12 +1277,44 @@ async function processPriceListText(){
 function matchCatalogProduct(rawText, nameEn, nameEs){
   const key = normalizeForMatch(rawText);
   const matchedProductId = currentAliasMap.get(key) || null;
-  if (matchedProductId) return { matchedProductId, candidateIds: null };
-  const nameMatches = (nameEn || nameEs)
-    ? allCatalogProducts.filter(p =>
-        (nameEn && normalizeForMatch(p.name_en) === normalizeForMatch(nameEn)) ||
-        (nameEs && normalizeForMatch(p.name) === normalizeForMatch(nameEs)))
-    : allCatalogProducts.filter(p => normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key);
+  if (matchedProductId){
+    // An alias is a cached decision, not permanent truth — re-check it against what THIS line's
+    // own wording says, every single time, not just the first time it was taught. Real incident:
+    // a Fresh-section Tyson price matched, once, to the closest Frozen product that existed at the
+    // time (no Fresh option existed yet) — that pick then applied silently on every list since,
+    // never re-questioned, even though the text kept saying Fresh. Never silent, never a hard
+    // block: if this line's own temperature/packaging signal conflicts with what the alias points
+    // to, don't trust the cache — fall through to the normal matching below, which surfaces a real
+    // dropdown to re-confirm (or "no match, create new") exactly like a brand-new row. Whatever
+    // gets picked there is saved as the alias going forward, same as any other row.
+    const product = allCatalogProducts.find(p => p.id === matchedProductId);
+    const { tempId, packagingId } = detectTempPackFromLine(rawText);
+    const tempConflict = product && tempId && product.temperature_id && tempId !== product.temperature_id;
+    const packConflict = product && packagingId && product.packaging_id && packagingId !== product.packaging_id;
+    if (!tempConflict && !packConflict) return { matchedProductId, candidateIds: null };
+  }
+  // The trader's own standing protein filter for this whole plant/list (a plant is virtually
+  // always one species) — never let matching cross Cerdo/Pollo/Res, in the species-insensitive
+  // fallback below most of all, since stripping "pork/beef/chicken/lamb" out of the name makes an
+  // accidental cross-category collision easier, not harder.
+  const inCategory = p => !priceListCategoryFilter || p.category === priceListCategoryFilter;
+  let nameMatches = (nameEn || nameEs)
+    ? allCatalogProducts.filter(p => inCategory(p) &&
+        ((nameEn && normalizeForMatch(p.name_en) === normalizeForMatch(nameEn)) ||
+        (nameEs && normalizeForMatch(p.name) === normalizeForMatch(nameEs))))
+    : allCatalogProducts.filter(p => inCategory(p) && (normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key));
+  // Real incident this closes: Smithfield's price list said "Boneless Loin" (no "Pork"); the
+  // catalog's own entry is "Pork Boneless loin" — the exact compare above found nothing, so this
+  // read as a brand-new product and "+ Crear producto nuevo" spun up a duplicate row instead of
+  // linking Smithfield to the one that already exists. Only tried when the exact compare truly
+  // found nothing, so it never overrides a real exact match.
+  if (!nameMatches.length){
+    nameMatches = (nameEn || nameEs)
+      ? allCatalogProducts.filter(p => inCategory(p) &&
+          ((nameEn && normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(nameEn)) ||
+          (nameEs && normalizeForMatchLoose(p.name) === normalizeForMatchLoose(nameEs))))
+      : allCatalogProducts.filter(p => inCategory(p) && (normalizeForMatchLoose(p.name) === normalizeForMatchLoose(rawText) || normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(rawText)));
+  }
   if (!nameMatches.length) return { matchedProductId: null, candidateIds: null };
   // rawText (not a bare line) so a section header carried into it — "Frozen Boxed Muscles — Bone
   // in Loins" — still counts as a frozen signal for items that don't repeat the word themselves.
@@ -1353,10 +1459,50 @@ async function applyPriceList(){
     document.getElementById('priceListMsg').textContent = 'Select Docs or No Docs above before applying.';
     return;
   }
+  // Fixed once, right here — never re-read currentPlantId later in this function. The save loop
+  // below awaits a network round-trip per row, and nothing on screen stops the trader from
+  // clicking a different plant in the list while that's still running; currentPlantId is a plain
+  // mutable global, so without this, whichever rows hadn't saved yet by the time that click
+  // happened would silently write under the NEW plant instead of the one this whole list is
+  // actually for. Real risk this closes: one plant's price landing on another plant's product row.
+  const applyPlantId = currentPlantId;
   const today = new Date().toISOString().slice(0, 10);
   const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null);
   const pending = priceListRows.filter(r => !(r.matchedProductId && r.price != null));
   if (!toApply.length){ document.getElementById('priceListMsg').textContent = 'No row has a product and price selected.'; return; }
+
+  // Two rows in the SAME paste pointing at the same catalog product is never legitimate — a real
+  // price list states each SKU once. It almost always means a Fresh-section line got mapped to a
+  // Frozen product (or vice versa) because that's the only variant on file, or a plain wrong pick
+  // in the dropdown — and applying both would silently let the second one overwrite the first's
+  // price with no record either price ever existed. Confirmed real case: a Tyson list where 5
+  // Fresh-section prices got clobbered by their Frozen counterparts this exact way. Blocked here,
+  // before anything saves, rather than after — a save that quietly drops a real number is worse
+  // than one more click to fix it first.
+  const byProduct = {};
+  toApply.forEach((r, idx) => {
+    const realIdx = priceListRows.indexOf(r);
+    (byProduct[r.matchedProductId] = byProduct[r.matchedProductId] || []).push(realIdx);
+  });
+  const collisions = Object.values(byProduct).filter(idxs => idxs.length > 1);
+  document.querySelectorAll('#priceListReviewRows select[id^="prodSelect_"]').forEach(s => { s.style.borderColor = ''; });
+  if (collisions.length){
+    const productName = pid => {
+      const p = allCatalogProducts.find(x => x.id === pid);
+      return p ? (p.name_en || p.name) : pid;
+    };
+    const lines = collisions.map(idxs => {
+      idxs.forEach(i => {
+        const sel = document.getElementById(`prodSelect_${i}`);
+        if (sel) sel.style.borderColor = '#C4432E';
+      });
+      const pid = priceListRows[idxs[0]].matchedProductId;
+      const rows = idxs.map(i => `"${priceListRows[i].rawText}" ($${priceListRows[i].price})`).join(' and ');
+      return `${productName(pid)}: ${rows}`;
+    });
+    document.getElementById('priceListMsg').innerHTML = `<span style="color:#C4432E;font-weight:600;">Stop — ${collisions.length} product(s) matched by two different rows in this paste (highlighted below in red). Fix one of each pair before applying, or the second will silently overwrite the first:</span><br>${lines.map(l => '• ' + escapeHtml(l)).join('<br>')}`;
+    return;
+  }
 
   document.getElementById('priceListMsg').textContent = 'Saving…';
   const applied = [];
@@ -1367,7 +1513,7 @@ async function applyPriceList(){
     // the link the first time this plant carries that product, so a brand-new plant/product
     // pairing needs no separate "link it" step.
     const { error: priceErr } = await db.from('plant_products').upsert({
-      plant_id: currentPlantId,
+      plant_id: applyPlantId,
       product_id: row.matchedProductId,
       current_price: row.price,
       price_currency: 'USD',
@@ -1377,7 +1523,7 @@ async function applyPriceList(){
     // Remember this plant's exact wording (normalized) for next time — upsert so re-confirming
     // an already-known alias just refreshes it instead of erroring on the unique index.
     await db.from('plant_product_aliases').upsert({
-      plant_id: currentPlantId,
+      plant_id: applyPlantId,
       raw_text: normalizeForMatch(row.rawText),
       product_id: row.matchedProductId,
     }, { onConflict: 'plant_id,raw_text' });
@@ -1387,7 +1533,7 @@ async function applyPriceList(){
   // Save the plant-level docs default once per apply, not once per row — it's the same fact for
   // every product on this plant's sheet.
   if (detectedDocsIncluded !== null){
-    await db.from('plants').update({ docs_included: detectedDocsIncluded }).eq('id', currentPlantId);
+    await db.from('plants').update({ docs_included: detectedDocsIncluded }).eq('id', applyPlantId);
   }
 
   // Any abbreviation the trader taught mid-review (see teachTermAlias) only lived in memory until
@@ -1416,7 +1562,7 @@ async function applyPriceList(){
     .map(r => allCatalogProducts && allCatalogProducts.find(p => p.id === r.matchedProductId))
     .filter(p => p && (!p.full_name_en || !p.full_name_es));
   const uniqueMissing = [...new Map(missingFullName.map(p => [p.id, p])).values()];
-  alert(`${applied.length} price(s) updated.${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}`);
+  plShowNotice(`${applied.length} price(s) updated.${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}`);
   if (uniqueMissing.length){
     const names = uniqueMissing.map(p => `• ${p.name_en || p.name}`).join('\n');
     const goEdit = confirm(`${uniqueMissing.length} priced product(s) still have no full name (PO/FO/SO text):\n\n${names}\n\nOpen the first one now to fill it in?`);
@@ -1737,9 +1883,45 @@ async function saveProduct(){
   // exactly the ambiguity that later silently misapplies a price to the wrong variant of a
   // shared name. No partial products, ever, however this form was opened. Full name EN/ES included
   // — the real PO/FO/SO text is written by hand, never auto-composed, so it must exist too.
-  if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
-    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature, packaging, full name EN and full name ES.';
+  // Brand is deliberately NOT required — a new product is created brand-agnostic on purpose (the
+  // whole point of the shared-product model), so it can be linked to whichever plant(s) actually
+  // carry it later. Real bug this closes: this check used to require brand, which would have
+  // outright blocked saving any correctly-built shared product with no brand set.
+  if (!payload.name || !payload.name_en || !payload.category || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
+    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, temperature, packaging, full name EN and full name ES.';
     return;
+  }
+  // Real incident this closes: two catalog rows for the exact same cut/temp/packaging/subcategory
+  // ("Pork Boneless loin" and "Boneless Loin", both Fresh/VAC, both no subcategory) existed at once
+  // because "+ Crear producto nuevo" let a name get typed and saved with no check against what
+  // already existed — one had no customers linked (invisible everywhere) while the price sat on
+  // the wrong row. Subcategory alone does NOT clear this automatically — a typo'd subcategory
+  // ("Strap Off" vs "Strap-Off") would read as "different" and duplicate right past a plain
+  // subcategory compare, so ANY match on name+temp+packaging+category always confirms, listing
+  // every subcategory already on file so there's something real to compare the new one against
+  // (not a bare Cancel/OK with nothing to judge it by). This is a confirmation, never a hard block
+  // — the trader always has the final word; it just can't be a silent, unquestioned save.
+  // Runs on every save, not just a brand-new product — editing an EXISTING row's name/temperature/
+  // packaging to match another existing row is exactly as real a duplication risk as creating one
+  // from scratch, and was completely unguarded (this whole check used to be wrapped in `if (!id)`,
+  // so an edit went straight to the database with zero comparison). The row being edited is
+  // excluded from its own comparison, or it would always "match itself."
+  {
+    await fetchAllCatalogProducts();
+    const sameSpec = (allCatalogProducts || []).filter(p =>
+      p.id !== id &&
+      normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(payload.name_en) &&
+      p.temperature_id === payload.temperature_id &&
+      p.packaging_id === payload.packaging_id &&
+      (p.category || '') === (payload.category || '')
+    );
+    if (sameSpec.length){
+      const saveAsNew = await plShowDupConfirm(sameSpec, payload.subcategory_en);
+      if (!saveAsNew){
+        document.getElementById('formMsg').textContent = `Go back and pick the matching existing product from the row's dropdown instead of ${id ? 'saving this as a duplicate' : 'creating a new one'}.`;
+        return;
+      }
+    }
   }
   // Confirmed real, pre-existing catalog errors: a grade/size/percentage detail present in one
   // language's text and silently missing from the other ("#2 Pork Backribs" whose Spanish name

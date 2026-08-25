@@ -55,6 +55,15 @@
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
+  /* Same card-row language as Quotes/Pending/Offers/Meat Packers/Providers — bordered rounded
+     row with an avatar instead of a plain table row. */
+  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
+  .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
+  .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
+  .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:160px;}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   #formCard{display:none;}
   .tab-row{display:flex;gap:6px;margin:14px 0 18px;border-bottom:1.5px solid var(--line);}
@@ -326,20 +335,7 @@ auth.onAuthStateChanged(user => {
       <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openForm()">+ Add Customer</button>
     </div>
-    <table id="customerTable">
-      <thead>
-        <tr>
-          <th>Trade name</th>
-          <th>Country / City</th>
-          <th>Currency</th>
-          <th>Delivery type</th>
-          <th>Payment days</th>
-          <th>Contact Name</th>
-          <th>Phone</th>
-        </tr>
-      </thead>
-      <tbody id="customerRows"></tbody>
-    </table>
+    <div id="customerRows" class="pkg-table-wrap"></div>
     <div id="emptyState" class="empty" style="display:none;">No customers yet. Click "+ Add Customer" to create the first one.</div>
   </div>
 </div>
@@ -479,8 +475,7 @@ function setCustomerTab(tab){
 }
 
 function renderCustomers(){
-  const tbody = document.getElementById('customerRows');
-  tbody.innerHTML = '';
+  const wrap = document.getElementById('customerRows');
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
   const filtered = term ? customers.filter(c =>
     [c.trade_name, c.city, c.contact_name, c.email].some(v => (v || '').toLowerCase().includes(term))
@@ -489,18 +484,23 @@ function renderCustomers(){
   document.getElementById('emptyState').textContent = customers.length && !filtered.length
     ? 'No customers match your search.'
     : 'No customers yet. Click "+ Add Customer" to create the first one.';
-  filtered.forEach(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><a class="name-link" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a></td>
-      <td>${escapeHtml([c.city, c.country].filter(Boolean).join(', '))}</td>
-      <td>${escapeHtml(c.preferred_currency || '—')}</td>
-      <td>${escapeHtml(c.usual_delivery_type || '—')}</td>
-      <td>${c.payment_days ?? '—'}</td>
-      <td>${c.contact_name && c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</td>
-      <td>${c.phone ? `<a class="wa-btn" href="https://wa.me/${escapeHtml(c.phone.replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : '—'}</td>`;
-    tbody.appendChild(tr);
-  });
+  wrap.innerHTML = filtered.map(c => {
+    const sub = [
+      [c.city, c.country].filter(Boolean).join(', '),
+      c.preferred_currency,
+      c.usual_delivery_type,
+      c.payment_days != null ? `${c.payment_days}d payment` : null,
+    ].filter(Boolean).join(' · ');
+    return `<div class="pkg-row">
+      <div class="pkg-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="pkg-plant-info">
+        <a class="name-link pkg-plant-name" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a>
+        <span class="pkg-plant-sub">${escapeHtml(sub || '—')}</span>
+      </div>
+      <div style="min-width:160px;font-size:12.5px;">${c.contact_name && c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</div>
+      <div style="margin-left:auto;flex-shrink:0;">${c.phone ? `<a class="wa-btn" href="https://wa.me/${escapeHtml(c.phone.replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 function editCustomer(id){

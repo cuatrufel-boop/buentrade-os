@@ -57,6 +57,16 @@
   .name-link:hover{text-decoration:underline;}
   #formCard{display:none;}
   .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
+  /* Same card-row language as Quotes/Pending/Offers/Meat Packers/Providers/Customers — bordered
+     rounded row instead of a plain table row. */
+  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
+  .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-avatar img{width:100%;height:100%;object-fit:cover;}
+  .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
+  .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
+  .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:160px;}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
 </style>
 </head>
@@ -250,20 +260,7 @@ auth.onAuthStateChanged(user => {
         <option value="">All categories</option>
       </select>
     </div>
-    <div style="overflow-x:auto;">
-      <table id="productTable" style="table-layout:fixed;width:100%;min-width:680px;">
-        <thead>
-          <tr>
-            <th style="width:60px;text-align:center;">Photo</th>
-            <th style="width:14%;text-align:center;">Category</th>
-            <th style="width:40%;text-align:center;">Product</th>
-            <th style="width:20%;text-align:center;">Temp / Pack</th>
-            <th style="width:80px;text-align:center;"></th>
-          </tr>
-        </thead>
-        <tbody id="productRows"></tbody>
-      </table>
-    </div>
+    <div id="productRows" class="pkg-table-wrap"></div>
     <div id="emptyState" class="empty" style="display:none;">No products yet. Click "+ Add Product" to create the first one.</div>
   </div>
 </div>
@@ -405,8 +402,7 @@ function tempName(id){ const t = temperatures.find(x => x.id === id); return t ?
 function packName(id){ const p = packagings.find(x => x.id === id); return p ? (p.name_en || p.name) : null; }
 
 function renderProducts(){
-  const tbody = document.getElementById('productRows');
-  tbody.innerHTML = '';
+  const wrap = document.getElementById('productRows');
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
   const cat = document.getElementById('categoryFilter').value;
   let filtered = products;
@@ -416,25 +412,28 @@ function renderProducts(){
   document.getElementById('emptyState').textContent = products.length && !filtered.length
     ? 'No products match your search/filter.'
     : 'No products yet. Click "+ Add Product" to create the first one.';
-  filtered.forEach(p => {
-    const tr = document.createElement('tr');
-    tr.style.verticalAlign = 'middle';
+  wrap.innerHTML = filtered.map(p => {
     const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
     const isImg = p.photo_url && /\.(png|jpe?g|gif|webp)(\?|$)/i.test(p.photo_url);
-    const thumbCell = p.photo_url
-      ? (isImg ? `<img class="thumb" src="${p.photo_url}">` : `<a href="${p.photo_url}" target="_blank" rel="noopener" title="View attachment">📄</a>`)
-      : '';
-    const specCell = p.spec_url ? `<a href="${p.spec_url}" target="_blank" rel="noopener" title="Spec sheet">📋</a>` : '';
-    tr.innerHTML = `
-      <td style="text-align:center;vertical-align:middle;">${thumbCell}${specCell}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(CATEGORY_EN[p.category] || p.category || '')}</td>
-      <td style="text-align:center;vertical-align:middle;"><a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.name_en || p.name || '')}</a></td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(tp)}</td>
-      <td class="row-actions" style="text-align:center;vertical-align:middle;justify-content:center;">
+    const avatarHtml = (p.photo_url && isImg)
+      ? `<div class="pkg-plant-avatar"><img src="${escapeHtml(p.photo_url)}" alt=""></div>`
+      : `<div class="pkg-plant-avatar">${escapeHtml((p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+    const attachments = [
+      (p.photo_url && !isImg) ? `<a href="${p.photo_url}" target="_blank" rel="noopener" title="View attachment">📄</a>` : '',
+      p.spec_url ? `<a href="${p.spec_url}" target="_blank" rel="noopener" title="Spec sheet">📋</a>` : '',
+    ].filter(Boolean).join(' ');
+    return `<div class="pkg-row">
+      ${avatarHtml}
+      <div class="pkg-plant-info">
+        <a class="name-link pkg-plant-name" onclick="editProduct('${p.id}')">${escapeHtml(p.name_en || p.name || '')}</a>
+        <span class="pkg-plant-sub">${escapeHtml(CATEGORY_EN[p.category] || p.category || '')} · ${escapeHtml(tp)}</span>
+      </div>
+      <div style="min-width:50px;font-size:15px;">${attachments}</div>
+      <div style="margin-left:auto;flex-shrink:0;">
         <button class="btn danger" onclick="deleteProduct('${p.id}')">Delete</button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
+      </div>
+    </div>`;
+  }).join('');
 }
 
 let editingProductId = null;

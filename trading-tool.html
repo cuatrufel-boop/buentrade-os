@@ -174,6 +174,29 @@
   .card-chevron.open{transform:rotate(180deg);}
   .card.collapsed .card-body{display:none;}
 
+  /* Negotiation timeline — a horizontal strip of steps with a small price sparkline above it,
+     instead of a tall vertical list. The card spans the full page width (#negoCard below) and
+     steps divide that width evenly, so the whole flow is visible with no scrolling in either
+     direction, no matter how many rounds a negotiation goes through. */
+  .nego-track{display:flex; align-items:flex-end; gap:0; padding:4px 2px 8px;}
+  .nego-step{display:flex; flex-direction:column; align-items:center; flex:1 1 0; min-width:0; position:relative;}
+  .nego-step:not(:last-child)::after{
+    content:''; position:absolute; top:15px; left:calc(50% + 17px); width:calc(100% - 34px); height:2px;
+    background:linear-gradient(90deg, var(--line), var(--line));
+  }
+  .nego-dot{
+    width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800; color:#fff; flex-shrink:0; z-index:1;
+    box-shadow:0 2px 6px rgba(15,31,51,.18);
+  }
+  .nego-dot.in{background:linear-gradient(160deg,#22C17B,#0F8A5F);}
+  .nego-dot.out{background:linear-gradient(160deg,#4C8FEE,var(--blue));}
+  .nego-price{font-family:'IBM Plex Mono',monospace; font-weight:800; font-size:13px; color:var(--navy); margin-top:6px; white-space:nowrap;}
+  .nego-label{font-size:10px; color:var(--ink-soft); text-align:center; margin-top:2px; line-height:1.3; max-width:100%; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+  .nego-date{font-size:9.5px; color:var(--ink-soft); opacity:.75; margin-top:2px; white-space:nowrap;}
+  .nego-chart-wrap{padding:2px 2px 0;}
+  #negoCard{grid-column:1 / -1;}
+
   .field{display:flex; align-items:center; gap:8px; margin-bottom:7px;}
   .field label{flex:0 0 132px; color:var(--ink-soft); font-size:12px;}
   .inputwrap{
@@ -787,10 +810,12 @@ if (FIREBASE_READY) {
           <span><span style="color:var(--blue);font-weight:700;">→</span> Sent (your number)</span>
           <span id="negoSaveStatus" style="font-weight:700;"></span>
         </div>
-        <!-- Capped height, not the whole card moved — a long back-and-forth history was pushing
-             the Profit card (right below this one) far down the page, out of view without
-             scrolling. This keeps the log fully visible while never growing past a few rounds. -->
-        <div id="negoLog" style="font-size:12.5px;max-height:170px;overflow-y:auto;padding-right:4px;"></div>
+        <!-- Horizontal timeline instead of a tall vertical list that pushed the Profit card below
+             it out of view — a sparkline shows the price arc at a glance, and the steps scroll
+             sideways (not down) if a round runs long, so this card's own height never grows past
+             a couple of lines no matter how many rounds happened. -->
+        <div id="negoChart"></div>
+        <div id="negoLog"></div>
         <!-- "Win" itself lives as a small button in the top bar now, next to Email Plant/Customer
              — this just shows the result (or an error) after it's clicked. -->
         <div id="negoMsg" style="font-size:12.5px;margin-top:10px;"></div>
@@ -1642,24 +1667,51 @@ const NEGO_STEP_META = {
 
 function negoRenderLog(){
   const el = document.getElementById('negoLog');
-  if (!negoOffer){ el.innerHTML = ''; return; }
+  const chartEl = document.getElementById('negoChart');
+  if (!negoOffer){ el.innerHTML = ''; if (chartEl) chartEl.innerHTML = ''; return; }
   const steps = [
     { to: 'plant_original', price: negoOffer.purchase_price, at: negoOffer.sent_at },
     { to: 'customer_original', price: negoOffer.sale_per_lb, at: negoOffer.sent_at },
     ...(negoOffer.negotiation_log || []),
   ];
+  el.className = 'nego-track';
   el.innerHTML = steps.map((e, i) => {
     const meta = NEGO_STEP_META[e.to] || { dir: 'out', label: () => e.to };
-    const arrow = meta.dir === 'in' ? '←' : '→';
-    const color = meta.dir === 'in' ? '#0F8A5F' : 'var(--blue)';
     const when = new Date(e.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    return `<div style="display:flex;align-items:baseline;gap:8px;padding:5px 0;">
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);width:16px;">${i + 1}</span>
-      <span style="color:${color};font-weight:700;">${arrow}</span>
-      <span>${meta.label()} — <b>$${Number(e.price).toFixed(4)}/lb</b></span>
-      <span style="color:var(--ink-soft);font-size:11.5px;">${when}</span>
+    return `<div class="nego-step">
+      <div class="nego-dot ${meta.dir}" title="${meta.dir === 'in' ? 'Received' : 'Sent'}">${meta.dir === 'in' ? '↓' : '↑'}</div>
+      <div class="nego-price">$${Number(e.price).toFixed(4)}</div>
+      <div class="nego-label">${meta.label()}</div>
+      <div class="nego-date">${when}</div>
     </div>`;
   }).join('');
+  if (chartEl) chartEl.innerHTML = negoSparklineSvg(steps);
+}
+
+// A small line chart of the price arc across every step — in green, out in blue, same palette as
+// the dots below it — so the shape of the negotiation (closing in, or stuck apart) reads in one
+// glance instead of having to read every number in the row underneath.
+function negoSparklineSvg(steps){
+  if (steps.length < 2) return '';
+  const w = 1000, h = 46, padY = 8, n = steps.length;
+  const prices = steps.map(s => Number(s.price));
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const range = (max - min) || 1;
+  // Each step below takes an equal 1/n slice of the full track width (flex:1 1 0), centered at
+  // (i+0.5)/n — matching that here, rather than spacing dots edge-to-edge, keeps every dot lined
+  // up with its step regardless of how many rounds there are or how wide the card renders.
+  const x = i => ((i + 0.5) / n) * w;
+  const y = p => h - padY - ((p - min) / range) * (h - padY * 2);
+  const points = prices.map((p, i) => `${x(i)},${y(p)}`).join(' ');
+  const dots = steps.map((s, i) => {
+    const meta = NEGO_STEP_META[s.to] || { dir: 'out' };
+    const color = meta.dir === 'in' ? '#0F8A5F' : '#1E6ADB';
+    return `<circle cx="${x(i)}" cy="${y(prices[i])}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+  }).join('');
+  return `<div class="nego-chart-wrap"><svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" style="display:block;overflow:visible;">
+    <polyline points="${points}" fill="none" stroke="#C7D6EA" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+  </svg></div>`;
 }
 
 let negoSaveStatusTimer = null;

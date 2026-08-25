@@ -66,7 +66,7 @@
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-toggle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
   .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
-  .rq-plant-name{cursor:pointer;user-select:none;}
+  .rq-plant-name{cursor:pointer;user-select:none;display:inline-block;text-align:left;font-size:13px;font-weight:700;color:var(--ink);letter-spacing:.02em;}
   .rq-plant-name.tt-open{color:var(--blue);}
   .rq-price-btn{display:inline-flex;align-items:center;gap:5px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;background:var(--blue);color:#fff;white-space:nowrap;box-shadow:0 2px 6px rgba(30,106,219,.35);transition:transform .1s,box-shadow .1s;}
   .rq-price-btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,106,219,.4);}
@@ -91,24 +91,40 @@
   .cov-plant-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue);}
   .cov-plant-date{font-size:11px;color:var(--ink-soft);}
   .cov-no-plants{font-size:12.5px;color:var(--ink-soft);font-style:italic;padding:6px 4px;}
-  .pending-group{padding:16px 0;border-bottom:1px solid var(--line);}
+  .pending-group{padding:18px 0;border-bottom:1px solid var(--line);}
   .pending-group:last-child{border-bottom:none;}
-  .pending-group-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:2px;}
-  .pending-group-title{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;color:var(--ink);}
+  /* The product is the section-level thing being quoted — bigger, a small accent mark, an
+     amber "waiting" badge. Plants underneath are the individual rows answering it, so they need
+     to read as visually subordinate, not a peer heading of the same weight. */
+  .pending-group-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+  .pending-group-title{font-family:'Space Grotesk',sans-serif;font-size:15.5px;font-weight:800;color:var(--navy);letter-spacing:.01em;display:flex;align-items:center;gap:9px;}
+  .pending-group-title::before{content:'';width:7px;height:7px;border-radius:2px;background:var(--blue);flex-shrink:0;}
   .pending-group-title-link{cursor:pointer;}
-  .pending-group-title-link:hover{color:var(--blue);text-decoration:underline;}
-  .pending-group-count{font-size:12px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
-  /* One consistent grid for every pending plant row, so the list reads clean and uniform. */
-  .pkg-table-wrap{margin-top:10px;overflow-x:auto;}
-  .pkg-head-row{display:grid;grid-template-columns:1.5fr 1.4fr 1.1fr 1.8fr;gap:10px;padding:0 6px 6px;font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--line);min-width:560px;}
-  .pkg-row{display:grid;grid-template-columns:1.5fr 1.4fr 1.1fr 1.8fr;gap:10px;align-items:center;padding:9px 6px;border-bottom:1px dashed var(--line);font-size:13px;min-width:560px;}
-  .pkg-row:last-child{border-bottom:none;}
-  .pkg-plant{font-weight:600;color:var(--ink);}
-  .pkg-price-cell{font-family:'IBM Plex Mono',monospace;display:flex;align-items:center;}
+  .pending-group-title-link:hover{color:var(--blue);}
+  .pending-group-count{font-size:11px;font-weight:700;color:#B7791F;background:#FFF8E8;padding:4px 11px;border-radius:20px;white-space:nowrap;}
+  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
+  .pkg-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-plant-avatar{width:32px;height:32px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:4px;}
+  .pkg-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
+  .pkg-plant-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:1;min-width:0;}
+  .pkg-plant{font-weight:600;color:var(--ink);font-size:13.5px;}
   .pkg-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
   .pkg-tag.missing{background:#FFF5F2;color:#C4432E;}
   .pkg-tag.stale{background:#FFF8E8;color:#B7791F;}
-  .pkg-asof{font-size:10.5px;color:var(--ink-soft);margin-top:2px;}
+  .pkg-tag.price{background:var(--blue-light);color:var(--blue);}
+  /* The Purchase/Location/Documents/Delivery controls used to sit in the closed list row itself —
+     moved into the full-screen overlay (see rqToggleCalculator) so the row reads clean like every
+     other list in the app, with the actual editing happening centered above the calculator where
+     there's real room for it. Same fields, same onchange handlers, just relocated. */
+  .rq-tt-overlay-fields{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-end;padding:14px 20px;background:var(--bg);}
+  .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
+  .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
+  .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
+  .pkg-trigger-btn:active{transform:translateY(0);}
+  .pkg-trigger-btn.hot{background:linear-gradient(180deg,#E3F6EC,#D2F0E1);color:#0F8A5F;border-color:rgba(15,138,95,.35);}
+  .pkg-trigger-btn.hot:hover{background:linear-gradient(180deg,#0F8A5F,#0B6B48);color:#fff;border-color:#0B6B48;}
   .pkg-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   /* ---- Request Quote hero: dark command banner + light KPI strip ---- */
   /* overflow stays visible — the suggestions dropdown (position:absolute, inside this banner)
@@ -176,21 +192,36 @@
   .rq-suggest-item:hover{background:rgba(90,170,255,.16);color:#fff;}
   .rq-suggest-item:first-child{border-radius:13px 13px 0 0;}
   .rq-suggest-item:last-child{border-radius:0 0 13px 13px;}
-  .tt-card{border-radius:16px;overflow:hidden;margin-top:10px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
-  .tt-frame{width:100%;border:none;display:block;}
+  .tt-card{border-radius:16px;overflow:hidden;margin-top:8px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
+  /* Same full-screen Trading Tool viewer as Offers — one shared overlay, not one per plant row. */
+  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
+  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
+  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-body{flex:1;min-height:0;position:relative;}
+  .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   .tt-brand-header{text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;}
-  .rq-update-price-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;background:#FFF6EC;color:#B84A1E;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.07em;padding:14px 16px;border:none;border-bottom:2px solid #E8871E;cursor:pointer;animation:rq-urgent-glow 1.8s ease-in-out infinite;}
-  .rq-update-price-btn:hover{background:#FFEEDC;}
-  .rq-update-price-btn:active{opacity:.9;}
-  @keyframes rq-urgent-glow{0%,100%{box-shadow:inset 0 0 0 1px rgba(232,135,30,0);}50%{box-shadow:inset 0 0 0 2px rgba(232,135,30,.55);}}
+  .rq-tt-action-bar{display:flex;gap:8px;flex:0 0 auto;}
+  .rq-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .rq-customer-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;margin-top:8px;transition:border-color .15s,box-shadow .15s;}
+  .rq-customer-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .rq-customer-row:first-child{margin-top:0;}
+  .rq-customer-name{font-weight:600;color:var(--ink);font-size:13.5px;flex:1;min-width:0;}
+  .rq-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:4px;}
+  .rq-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
+  .rq-update-price-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(180deg,#F7943D,#E8871E);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;padding:12px 18px;border:none;border-radius:11px;cursor:pointer;box-shadow:0 2px 8px rgba(232,135,30,.32);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;animation:rq-urgent-glow 2s ease-in-out infinite;}
+  .rq-update-price-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 16px rgba(232,135,30,.4);}
+  .rq-update-price-btn:active{transform:translateY(0);filter:brightness(.98);}
+  @keyframes rq-urgent-glow{0%,100%{box-shadow:0 2px 8px rgba(232,135,30,.32);}50%{box-shadow:0 2px 8px rgba(232,135,30,.32),0 0 0 4px rgba(232,135,30,.16);}}
   @media (prefers-reduced-motion:reduce){.rq-update-price-btn{animation:none;}}
-  /* Same card/font language as Update Purchase Price (light fill, bold uppercase Space Grotesk,
-     colored bottom border, emoji) so the two read as one matched pair of actions — just green
-     instead of orange, since this one is "ready," not "needs attention." */
-  .rq-send-offer-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;background:#EAF9F1;color:#0F8A5F;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.07em;padding:14px 16px;border:none;border-bottom:2px solid #22C17B;cursor:pointer;}
-  .rq-send-offer-btn:hover{background:#DCF5E7;}
+  /* Same shape/motion language as Update Purchase Price (solid gradient fill, rounded, soft glow
+     shadow, emoji) so the two read as one matched pair of actions — just green instead of orange,
+     since this one is "ready," not "needs attention." */
+  .rq-send-offer-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(180deg,#28C583,#17A76A);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;padding:12px 18px;border:none;border-radius:11px;cursor:pointer;box-shadow:0 2px 8px rgba(23,167,106,.32);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;}
+  .rq-send-offer-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 16px rgba(23,167,106,.38);}
+  .rq-send-offer-btn:active{transform:translateY(0);filter:brightness(.98);}
   .rq-send-offer-btn:active{opacity:.9;}
-  .rq-tt-frame-wrap{position:relative;}
   .rq-tt-logo{position:absolute;display:none;object-fit:contain;pointer-events:none;z-index:2;filter:drop-shadow(0 2px 6px rgba(0,0,0,.45));}
 
   .rq-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -367,10 +398,10 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1 id="rq_page_title">Request Quote</h1>
+  <h1 id="rq_page_title">Quotes</h1>
 
   <div class="tab-row">
-    <button type="button" class="tab-btn active" id="qTabBtn_request" onclick="setQuoteTab('request')">Request Quote</button>
+    <button type="button" class="tab-btn active" id="qTabBtn_request" onclick="setQuoteTab('request')">Quotes</button>
     <button type="button" class="tab-btn" id="qTabBtn_pending" onclick="setQuoteTab('pending')">Pending Quotes<span id="qPendingCount" class="tab-count" style="display:none;"></span></button>
     <button type="button" class="tab-btn" id="qTabBtn_coverage" onclick="setQuoteTab('coverage')">Product Coverage</button>
   </div>
@@ -393,22 +424,27 @@ auth.onAuthStateChanged(user => {
   </div>
 
   <div class="card" id="rq_card">
-    <div id="rq_summary_strip" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;">
-      <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
-        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-          <div id="rq_date_chips" style="display:contents;"></div>
-          <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
+    <div id="rq_summary_strip" style="display:none;border-bottom:1px solid var(--line);padding:0 0 12px;margin-bottom:14px;">
+      <div class="pending-group-head" style="margin-bottom:0;">
+        <div id="rq_spec_line" class="pending-group-title"></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+          <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <div id="rq_date_chips" style="display:contents;"></div>
+              <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
+            </div>
+          </div>
+          <span id="rq_spec_count" class="pending-group-count" style="display:none;"></span>
         </div>
       </div>
-      <div id="rq_spec_line" style="font-size:13px;font-weight:600;color:var(--ink);margin-top:8px;"></div>
     </div>
 
-    <div id="rq_plant_rows" style="margin-top:16px;"></div>
+    <div id="rq_plant_rows" class="pkg-table-wrap" style="margin-top:10px;"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
     <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
       <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
-      <div id="rq_final_list"></div>
+      <div id="rq_final_list" class="pkg-table-wrap"></div>
     </div>
 
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
@@ -464,6 +500,28 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<div id="rq_notice_overlay" class="rq-modal-overlay" style="display:none;" onclick="if(event.target===this) rqCloseNotice()">
+  <div class="rq-modal-box" style="max-width:420px;padding:22px 24px;">
+    <div id="rq_notice_text" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:18px;"></div>
+    <div style="text-align:right;display:flex;justify-content:flex-end;gap:10px;">
+      <button type="button" class="btn secondary" id="rq_notice_action" style="display:none;"></button>
+      <button type="button" class="btn" onclick="rqCloseNotice()">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="rq_tt_overlay" class="tt-overlay">
+  <div class="tt-overlay-head">
+    <div class="tt-overlay-title" id="rq_tt_overlay_title"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div id="rq_tt_overlay_action"></div>
+      <button class="tt-overlay-close" onclick="rqCloseCalculator()" title="Close">✕</button>
+    </div>
+  </div>
+  <div class="rq-tt-overlay-fields" id="rq_tt_overlay_fields"></div>
+  <div class="tt-overlay-body" id="rq_tt_overlay_body"></div>
+</div>
+
 <div id="rq_cal_modal_overlay" class="rq-modal-overlay" style="display:none;" onclick="if(event.target===this) rqCloseCalendarModal()">
   <div class="rq-cal-box">
     <div class="rq-cal-head">
@@ -480,7 +538,6 @@ auth.onAuthStateChanged(user => {
     </div>
     <div class="rq-cal-foot">
       <span class="rq-cal-count" id="rq_cal_count"></span>
-      <button class="btn" style="padding:7px 16px;font-size:12.5px;" onclick="rqCloseCalendarModal()">Done</button>
     </div>
   </div>
 </div>
@@ -627,6 +684,18 @@ function rqQuickPick(name, productId){
 }
 
 function setQuoteTab(tab){
+  // Request Quote's rows and a Pending Quotes inline panel share the same plant.id-keyed element
+  // ids (rq_price_ID, rq_action_ID, ...) — real bug, confirmed: the same plant open in both at
+  // once (e.g. Tyson searched in Quotes earlier, then a different Tyson row expanded in Pending)
+  // left two elements with the same id in the DOM, hidden tab or not. getElementById always
+  // returns the FIRST one in source order regardless of visibility, so typing a price or clicking
+  // "View Offer" in the visible Pending row silently updated the hidden Quotes-tab copy instead —
+  // the row on screen never reacted to anything. Clearing whichever tab's dynamic content is
+  // being left removes the stale duplicate before it can collide with the next one.
+  if (tab !== 'request') document.getElementById('rq_plant_rows').innerHTML = '';
+  if (tab !== 'pending'){
+    document.querySelectorAll('.q-pending-inline-slot').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; el.dataset.open = '0'; });
+  }
   document.getElementById('qTabBtn_request').classList.toggle('active', tab === 'request');
   document.getElementById('qTabBtn_pending').classList.toggle('active', tab === 'pending');
   document.getElementById('qTabBtn_coverage').classList.toggle('active', tab === 'coverage');
@@ -705,14 +774,10 @@ async function loadPendingPrices(){
   const { data, error } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at');
   if (error){ list.innerHTML = `<div class="empty">Error: ${escapeHtml(error.message)}</div>`; return; }
   const raw = data || [];
-  // "Active" is a PRODUCT-level fact, not a per-plant one — the trader asked Tyson for Picnic
-  // Combo, so Picnic Combo is what they're working, and every OTHER plant that also carries it
-  // (Smithfield, Wholestone, Sanderson…) belongs in the same package view even if nobody has
-  // clicked Ask Price on that specific plant yet. Scoping row-by-row was hiding exactly the
-  // plants the trader most needed to see: the rest of the same offer, not yet chased.
-  const activeProductIds = new Set(raw.filter(r => r.last_requested_at).map(r => r.product_id));
+  // Every plant missing or stale on price lives here now, whether or not it's ever been asked —
+  // Request Quote only shows plants actually ready to send (see autoPopulateRqPlants), so this is
+  // the one place left for "needs a price," not just the ones already chased once before.
   qPendingRows = raw.map(r => {
-    if (!activeProductIds.has(r.product_id)) return null; // this product was never touched — not "being worked", just an unpriced catalog gap
     const plant = rqAllPlants.find(p => p.id === r.plant_id);
     const prod = products.find(p => p.id === r.product_id);
     if (!plant || !prod) return null;
@@ -749,41 +814,38 @@ async function loadPendingPrices(){
     const spec = rqVariantSpec(g.productId);
     const name = (prod.name_en || prod.name) + (spec ? ' — ' + spec : '');
     const pendingRowsHtml = g.rows.map(r => {
-      const i = qPendingRows.indexOf(r);
       const missing = r.current_price == null;
       const reqAge = rqPriceAgeDays(r.last_requested_at);
-      const alreadyAsked = reqAge != null && reqAge <= RQ_REQUEST_COOLDOWN_DAYS;
-      // "requested today" next to a button labeled the same as a first-time ask read as
-      // contradictory — as if the row didn't know it already sent something. "Ask Again" makes
-      // the button an explicit, deliberate override instead of looking like stale/broken state.
-      const label = alreadyAsked ? 'Ask Again' : 'Ask Price';
-      const hasEmail = !!r.plant.email;
-      const hasPhone = !!(r.plant.whatsapp || r.plant.phone);
+      // The trigger only ever opens the panel — it never sends anything itself (that's the real
+      // Update Price button inside). But its label still tells the truth about this row's state:
+      // never asked yet vs already asked and just waiting on a number to come back and get typed
+      // in — so a row nobody ever asked doesn't blend in as "just needs entering."
+      const neverAsked = reqAge == null;
+      const triggerLabel = neverAsked ? 'Update Price →' : 'Enter Price →';
+      const initial = (r.plant.name || '?').trim().charAt(0).toUpperCase();
+      const logo = r.plant.logo_url || r.plant.logo_url_dark;
+      const avatarHtml = logo
+        ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
+        : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
       return `<div class="pkg-row">
-        <div class="pkg-plant">${escapeHtml(r.plant.name)}</div>
-        <div class="pkg-price-cell"><button type="button" class="btn secondary" style="padding:6px 10px;font-size:11px;" onclick="qOpenProductInRequest('${g.productId}')" title="Enter the price in this plant's own Trading Tool row — same place freight/location/docs get set">Enter in TT →</button></div>
-        <div>
+        ${avatarHtml}
+        <div class="pkg-plant-info">
+          <span class="pkg-plant">${escapeHtml(r.plant.name)}</span>
           <span class="pkg-tag ${missing ? 'missing' : 'stale'}">${missing ? 'Missing' : 'Stale · ' + rqFmtDate(r.price_date)}</span>
-          ${reqAge != null ? `<div class="pkg-asof">asked ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</div>` : ''}
+          ${reqAge != null ? `<span class="pkg-asof">asked ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>` : `<span class="pkg-asof">never asked</span>`}
         </div>
-        <div class="pkg-actions">
-          ${hasEmail ? `<button type="button" class="rq-price-btn" style="padding:6px 10px;font-size:11px;" onclick="pendingAskPrice(${i},'email')">${RQ_EMAIL_ICON} ${label}</button>` : ''}
-          ${hasPhone ? `<button type="button" class="rq-price-btn" style="padding:6px 10px;font-size:11px;background:#25D366;box-shadow:0 2px 6px rgba(37,211,102,.35);" onclick="pendingAskPrice(${i},'whatsapp')">${RQ_WA_ICON} ${label}</button>` : ''}
-        </div>
-      </div>`;
+        <button type="button" class="pkg-trigger-btn" id="q_pending_trigger_${r.plant_id}_${g.productId}" data-label="${escapeHtml(triggerLabel)}" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">${triggerLabel}</button>
+      </div>
+      <div class="q-pending-inline-slot" id="q_pending_inline_${r.plant_id}_${g.productId}" style="display:none;padding:0 0 12px;"></div>`;
     }).join('');
-    const groupLabel = g.rows.every(r => { const a = rqPriceAgeDays(r.last_requested_at); return a != null && a <= RQ_REQUEST_COOLDOWN_DAYS; })
-      ? `Ask Again — All (${g.rows.length})` : `Ask All Pending (${g.rows.length})`;
     return `<div class="pending-group">
       <div class="pending-group-head">
-        <span class="pending-group-title pending-group-title-link" onclick="qOpenProductInRequest('${g.productId}')" title="Open this product in Request Quote">${escapeHtml(name)}</span>
+        <span class="pending-group-title pending-group-title-link" onclick="qOpenProductInRequest('${g.productId}')" title="Open this product in Quotes">${escapeHtml(name)}</span>
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="pending-group-count">${g.rows.length} pending</span>
-          <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="qAskAllForProduct('${g.productId}')">${groupLabel}</button>
         </div>
       </div>
       <div class="pkg-table-wrap">
-        <div class="pkg-head-row"><div>Plant</div><div>Price</div><div>Status</div><div>Action</div></div>
         ${pendingRowsHtml}
       </div>
     </div>`;
@@ -815,77 +877,88 @@ async function qOpenProductInRequest(productId){
   rqQuickPick(prod.name_en || prod.name, productId);
 }
 
-function qPendingBody(r){
-  const contact = rqFirstName(r.plant.contact_name || r.plant.name);
-  const spec = rqVariantSpec(r.product_id);
-  const label = (r.prod.name_en || r.prod.name) + (spec ? ' — ' + spec : '');
-  const missing = r.current_price == null;
-  return missing
-    ? `Hi ${contact},\n\nWe don't have a current price on file for ${label} — could you send your current price?`
-    : `Hi ${contact},\n\nOur price on file for ${label} is from ${rqFmtDate(r.price_date)} and needs updating — could you send your current price?`;
-}
+// The actual "enter the price and send it" work, without ever leaving Pending Quotes — same
+// price/freight/docs/calculator block as Request Quote (rqPlantRowHtml), reused as-is so there's
+// only ever one implementation of the pricing math to trust. Accordion-style: opening one row's
+// TT closes whichever other one was open, and it collapses (without losing anything — nothing
+// was saved yet) if clicked again.
+async function qOpenPendingPlantInline(productId, plantId){
+  const slotId = `q_pending_inline_${plantId}_${productId}`;
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  const alreadyOpen = slot.dataset.open === '1';
+  document.querySelectorAll('.q-pending-inline-slot').forEach(el => {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    el.dataset.open = '0';
+  });
+  // The trigger button is the same "❌ Update Price" bar the card itself will show once expanded
+  // — swap it back in on close (or on failure below) so the row never ends up with neither one
+  // visible.
+  document.querySelectorAll('[id^="q_pending_trigger_"]').forEach(btn => {
+    btn.style.display = '';
+    btn.textContent = btn.dataset.label;
+  });
+  if (alreadyOpen) return; // was open — just closed it above, nothing more to do
 
-async function pendingAskPrice(i, channel){
-  const r = qPendingRows[i];
-  if (!r) return;
-  const spec = rqVariantSpec(r.product_id);
-  const label = (r.prod.name_en || r.prod.name) + (spec ? ' — ' + spec : '');
-  const missing = r.current_price == null;
-  const body = qPendingBody(r);
-  const onSent = async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    r.last_requested_at = today;
-    // Errors here used to be silent — the local flag flipped, then loadPendingPrices()'s next
-    // reload pulled the OLD un-saved value straight back from the DB, quietly undoing the ask
-    // with no sign anything went wrong. An alert here is the whole point: the ask itself already
-    // went out, so this can't block the send, but the trader needs to know the tracking didn't
-    // stick, or "requested" will keep reverting for no visible reason.
-    const { error: reqErr } = await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', r.plant_id).eq('product_id', r.product_id);
-    if (reqErr) alert(`Sent, but couldn't save the "asked" tracking for ${r.plant.name}: ${reqErr.message}`);
-    loadPendingPrices();
-  };
-  if (channel === 'whatsapp'){
-    const phone = (r.plant.whatsapp || r.plant.phone || '').replace(/\D/g, '');
-    if (!phone) return;
-    rqOpenWaModal(`WhatsApp — ${r.plant.name}`, [{ id: r.plant.id, label: r.plant.name, phone, body, onOpened: onSent }]);
-  } else {
-    if (!r.plant.email) return;
-    rqOpenEmailModal(`Ask ${r.plant.name} for a price`, [{ id: r.plant.id, label: r.plant.name, to: r.plant.email, subject: `${label} — ${missing ? 'price request' : 'updated price request'}`, body, fromAlias: 'purchasing', onSent }]);
-  }
-}
+  const plant = rqAllPlants.find(p => p.id === plantId);
+  const prod = products.find(p => p.id === productId);
+  if (!plant || !prod) return;
 
-// One click chases every still-actionable plant for this product at once — email batch and
-// WhatsApp batch, same editable-preview modals as everywhere else, instead of clicking Ask Price
-// per row when there are 3-4 of them for the same hot product.
-function qAskAllForProduct(productId){
-  const rows = qPendingRows.filter(r => r.product_id === productId);
-  if (!rows.length) return;
-  const withEmail = rows.filter(r => r.plant.email);
-  const waOnly = rows.filter(r => !r.plant.email && (r.plant.whatsapp || r.plant.phone));
-  const onSentFor = r => async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    r.last_requested_at = today;
-    // Errors here used to be silent — the local flag flipped, then loadPendingPrices()'s next
-    // reload pulled the OLD un-saved value straight back from the DB, quietly undoing the ask
-    // with no sign anything went wrong. An alert here is the whole point: the ask itself already
-    // went out, so this can't block the send, but the trader needs to know the tracking didn't
-    // stick, or "requested" will keep reverting for no visible reason.
-    const { error: reqErr } = await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', r.plant_id).eq('product_id', r.product_id);
-    if (reqErr) alert(`Sent, but couldn't save the "asked" tracking for ${r.plant.name}: ${reqErr.message}`);
-    loadPendingPrices();
+  rqMatchedProductId = productId;
+  rqProductSpec = prod.full_name_en || prod.name_en || prod.name;
+  rqProductSpecEs = prod.full_name_es || prod.name || prod.name_en;
+  const packEn = packagings.find(pk => pk.id === prod.packaging_id);
+  rqProductIsCombo = /combo/i.test((packEn && (packEn.name_en || packEn.name)) || '');
+  // Request Quote's own search populates rqMatchedCustomers via rqFindCustomers — this panel is
+  // opened from Pending Quotes instead, which never goes through that path, so Send Offer here
+  // was silently finding nobody to send to (real bug, not a data gap) until this ran too.
+  rqMatchedCustomers = await rqMatchCustomersForProductIds([productId]);
+
+  if (!rqDeliveryDates.length){
+    const { data: recent } = await db.from('sent_offers')
+      .select('delivery_dates')
+      .eq('product_id', productId).eq('status', 'sent')
+      .order('sent_at', { ascending: false }).limit(1);
+    const row = (recent || [])[0];
+    if (row && row.delivery_dates && row.delivery_dates.length) rqDeliveryDates = [...row.delivery_dates];
+  }
+
+  const { data: link } = await db.from('plant_products')
+    .select('plant_id, product_id, current_price, price_date, last_requested_at')
+    .eq('plant_id', plantId).eq('product_id', productId).maybeSingle();
+  const hasPrice = link && link.current_price != null;
+  const plantObj = {
+    ...plant, rqProductId: productId,
+    rqPrice: hasPrice ? link.current_price : undefined,
+    rqPriceDate: hasPrice ? link.price_date : null,
+    rqLastRequestedAt: link ? link.last_requested_at : null,
+    rqDocsOn: plant.docs_included === true,
   };
-  if (withEmail.length){
-    rqOpenEmailModal(`Ask for updated prices — ${withEmail.length}`, withEmail.map(r => {
-      const spec = rqVariantSpec(r.product_id);
-      const label = (r.prod.name_en || r.prod.name) + (spec ? ' — ' + spec : '');
-      return { id: r.plant.id, label: r.plant.name, to: r.plant.email, subject: `${label} — ${r.current_price == null ? 'price request' : 'updated price request'}`, body: qPendingBody(r), fromAlias: 'purchasing', onSent: onSentFor(r) };
-    }));
+  const rates = rqUsFreightRatesForPlant(plantObj.id);
+  if (rates.length && !plantObj.rqUsFreightRateId){
+    const priciest = rates.reduce((max, r) => (r.rate > max.rate ? r : max), rates[0]);
+    plantObj.rqUsFreightRateId = priciest.id;
   }
-  if (waOnly.length){
-    rqOpenWaModal(`Ask for updated prices — ${waOnly.length}`, waOnly.map(r => ({
-      id: r.plant.id, label: r.plant.name, phone: (r.plant.whatsapp || r.plant.phone || '').replace(/\D/g, ''), body: qPendingBody(r), onOpened: onSentFor(r),
-    })));
-  }
+  // A fresh, single-plant list — this is a self-contained "work this one row" session, not meant
+  // to merge with whatever's separately active over on the Request Quote tab.
+  rqSelectedPlants = [plantObj];
+
+  // No delivery-date gate here on purpose — entering a price or asking the plant for one doesn't
+  // need it (rqPriceRequestBody never mentions it). The real requirement lives where it actually
+  // matters: rqSendPlantOffer blocks the customer-facing send until a date is on file.
+  slot.style.display = 'block';
+  slot.dataset.open = '1';
+  // Pending's own inline panel is the ONE place these fields still need to render outside the
+  // full-screen overlay — entering a price here is exactly what unlocks opening that overlay
+  // (rqToggleCalculator refuses to open with no price yet), so the field that sets it can't live
+  // only inside the thing it's a precondition for.
+  slot.innerHTML = rqPlantRowHtml(plantObj, true) + `<div class="pkg-row" style="margin-top:8px;justify-content:center;">${rqPlantFieldsHtml(plantObj)}</div>`;
+  // Same spot the trader just clicked becomes the close action — no separate button floating
+  // elsewhere on the card to hunt for.
+  const trigger = document.getElementById(`q_pending_trigger_${plantId}_${productId}`);
+  if (trigger) trigger.textContent = '✕ Close';
+  if (plantObj.rqPrice) rqAutoOpenCalculator(plantObj.id);
 }
 
 // Local YYYY-MM-DD for "today" — used as the floor for delivery dates so a trader can't
@@ -1072,7 +1145,15 @@ async function autoPopulateRqPlants(){
   // one search = one product, across every brand that carries THAT one — a different variant is
   // its own separate search, never shown mixed in here (this used to surface it as a switchable
   // alternative, which read as "mixing products" and was more confusing than useful).
-  const { data } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').eq('product_id', rqMatchedProductId);
+  const { data, error } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').eq('product_id', rqMatchedProductId);
+  // A failed fetch used to fall through to `data || []` completely silently — the whole plant list
+  // just came back empty with no clue anything went wrong, indistinguishable from "no plant on
+  // file yet." Surfacing the real error is the whole difference between "reload the page" and
+  // "why does this product suddenly have no plants."
+  if (error){
+    alert(`Couldn't load plants for this product: ${error.message}\n\nTry reloading the page.`);
+    return;
+  }
   // Request Quote is only ever a to-do list — a plant sitting here either hasn't been asked for a
   // price yet, or has a price nobody's acted on. The moment it's asked (→ Pending Quotes) or sent
   // as an offer (→ Offers), it's done its job here and shouldn't come back on a later search/
@@ -1080,7 +1161,11 @@ async function autoPopulateRqPlants(){
   // in-memory-only removeRqPlant the trader already saw disappear-then-reappear on them:
   //   1. Asked and no newer price has landed since → already belongs in Pending Quotes.
   //   2. This exact price was already sent as an offer (to anyone) → already belongs in Offers.
-  const { data: sentRows } = await db.from('sent_offers').select('plant_id, sent_at').eq('product_id', rqMatchedProductId);
+  const { data: sentRows, error: sentErr } = await db.from('sent_offers').select('plant_id, sent_at').eq('product_id', rqMatchedProductId);
+  if (sentErr){
+    alert(`Couldn't check which plants were already offered: ${sentErr.message}\n\nTry reloading the page.`);
+    return;
+  }
   const lastSentAtByPlant = {};
   (sentRows || []).forEach(r => {
     const prev = lastSentAtByPlant[r.plant_id];
@@ -1095,6 +1180,11 @@ async function autoPopulateRqPlants(){
     const alreadyOffered = lastSentAt && link.price_date && lastSentAt.slice(0, 10) >= link.price_date;
     if (alreadyOffered) return null;
     const hasPrice = link.current_price != null;
+    // Request Quote only ever shows a plant that's actually ready to send — missing or stale
+    // belongs in Pending Quotes now (see loadPendingPrices), whether or not it's ever been asked
+    // before. No more "Update Price" plants sitting here with a bare button and no calculator.
+    const isStale = hasPrice && (rqPriceAgeDays(link.price_date) || 0) > RQ_PRICE_STALE_DAYS;
+    if (!hasPrice || isStale) return null;
     // Whether this plant's prices include export docs is a per-plant fact — a given price list is
     // uniformly one or the other ("*all prices FOB no docs" applies to everything on that sheet),
     // captured once in plants.html's Cargar precios from that list's own note and reused here so
@@ -1116,17 +1206,32 @@ async function autoPopulateRqPlants(){
     }
   });
   renderRqPlants();
-  // Manually typing a price auto-opens the Trading Tool a beat after typing stops (see
-  // rqUpdatePlantField) — a price that arrives pre-filled from the catalog never went through
-  // that path, so it silently never opened. Same result here, just immediate since there's no
-  // keystroke to debounce against.
-  rqSelectedPlants.forEach(p => { if (p.rqPrice) rqAutoOpenCalculator(p.id); });
+  // Every calculator starts closed on a fresh search, priced or not — same "closed by default,
+  // open the ones you actually want to look at" pattern as Pending Quotes' inline panel (View
+  // Offer →), not every priced plant's Trading Tool auto-expanding the instant a product resolves.
 }
 
 
 function removeRqPlant(plantId){
+  // A just-sent (or otherwise removed) plant can't be left sitting full-screen behind — its own
+  // entry in rqSelectedPlants is about to disappear below.
+  if (document.getElementById('rq_tt_overlay').style.display !== 'none') rqCloseCalculator(plantId);
   rqSelectedPlants = rqSelectedPlants.filter(p => p.id !== plantId);
-  renderRqPlants();
+  // Tab-aware on purpose — sent (or asked) from an inline Pending Quotes row, rqSelectedPlants
+  // holds only that one plant, and rendering it into Request Quote's own (hidden) rq_plant_rows
+  // was harmless but wasteful: it also re-triggered rqRenderFinalList's customer refetch reading
+  // Request Quote's own (empty, in this context) search box for no reason. Refresh whichever
+  // screen is actually showing, not always both.
+  const onPending = document.getElementById('qPanel_pending') && document.getElementById('qPanel_pending').style.display !== 'none';
+  if (onPending){
+    // That row's own inline slot never rebuilds on its own the way rq_plant_rows does — without
+    // this it would keep showing a calculator for a price that was just actioned. Reloading the
+    // whole pending list both clears the now-stale inline slot and drops the row itself once it
+    // no longer qualifies.
+    loadPendingPrices();
+  } else {
+    renderRqPlants();
+  }
 }
 
 
@@ -1142,49 +1247,24 @@ function rqVariantSpec(productId){
   return [t ? (t.name_en || t.name) : null, pk ? (pk.name_en || pk.name) : null].filter(Boolean).join(' / ');
 }
 
-function renderRqPlants(){
-  const container = document.getElementById('rq_plant_rows');
-  const hasProduct = !!document.getElementById('rq_product_name').value.trim();
-  document.getElementById('rq_empty').style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
-  rqUpdateActionButtons();
-  // A plant whose Trading Tool is open keeps its DOM node completely untouched across this
-  // rebuild — not just "not rebuilt", genuinely never removed or moved. Browsers reload an
-  // <iframe> the moment it's detached and reinserted, even into the exact same spot (e.g. via
-  // appendChild on a node that's already in the document) — that was still happening even after
-  // switching to a "reuse the node" fragment approach, since building the fragment itself moves
-  // every node into it. Only rows that need rebuilding get touched now; an open row is found by
-  // its existing position and simply left alone, with new/updated rows inserted around it.
-  Array.from(container.children).forEach(el => {
-    const id = el.dataset.plantRow;
-    if (id && !rqSelectedPlants.some(p => p.id === id)) el.remove();
-  });
-  let anchor = null;
-  rqSelectedPlants.forEach(p => {
-    const existing = container.querySelector(`[data-plant-row="${p.id}"]`);
-    if (p.rqCalculatorOpen && existing){
-      anchor = existing;
-      return;
-    }
-    const row = document.createElement('div');
-    row.dataset.plantRow = p.id;
-    row.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line);';
-    // The whole package (every plant that carries this product) shows up "pre-hecho" the moment
-    // there's a Delivery day — Purchase $/lb, Location, Documents, Delivery location all sitting
-    // there ready, whether or not this specific plant has a price yet. The old design hid all of
-    // that behind a "Price?" click per plant — fine for one plant, but the point of a package of
-    // several is that when a price finally comes in for whichever one is still missing, there's
-    // nothing left to set up: type the number, the calculator (and a real sale price) follows in
-    // the same beat, ready to send. Nothing to reveal first.
-    const hasDeliveryDate = rqDeliveryDates.length > 0;
-    const showPriceRow = hasDeliveryDate;
-    const docsOn = p.rqDocsOn === true;
-    row.innerHTML = `
-      <div class="plant-calc-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};margin-top:8px;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+// The whole price+freight+docs+calculator block for one plant — shared between Request Quote's
+// own list (renderRqPlants) and a Pending Quotes row opened inline (qOpenPendingPlantInline), so
+// there's exactly one implementation of this, never a second copy that could drift from it. The
+// View/Send Offer/✕ Close states all live on the one button rqTtActionLabel builds — no separate
+// toggle here to keep in sync with it.
+// Purchase $/lb, Location, Documents, Delivery location — same fields, same onchange handlers,
+// used to render inline in the closed list row; now only rendered inside the full-screen
+// overlay's own controls bar (see rqToggleCalculator), since rqSetUsFreightRate/rqSetMexicanDest/
+// rqToggleDocs already push live updates into an open calculator via rqSyncOpenCalculator — they
+// were always meant to be adjusted while the Trading Tool is on screen, not before opening it.
+function rqPlantFieldsHtml(p){
+  const docsOn = p.rqDocsOn === true;
+  return `
         <div class="mini-field" style="width:130px;flex:0 0 auto;">
           <label>Purchase $/lb</label>
           <input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')">
         </div>
-        <div class="mini-field" style="flex:1;min-width:170px;">
+        <div class="mini-field" style="width:200px;flex:0 0 auto;">
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
             <option value="">Del Border — $0</option>
@@ -1197,7 +1277,7 @@ function renderRqPlants(){
           <label>Documents</label>
           <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'Docs' : 'No Docs'}</button>
         </div>`}
-        <div class="mini-field" style="flex:1;min-width:220px;">
+        <div class="mini-field" style="width:220px;flex:0 0 auto;">
           <label>Delivery location</label>
           <select onchange="rqSetMexicanDest('${p.id}', this.value)">
             <option value="">Border — $0</option>
@@ -1214,30 +1294,70 @@ function renderRqPlants(){
               : `<span class="loc-hint">No customs agency on file for this customer — using default rate.</span>`;
             return `<span class="loc-hint" style="color:var(--blue);font-weight:600;">Customer: ${matches.map(c => escapeHtml(c.trade_name)).join(', ')}</span>${agencyLine}`;
           })() : ''}
+        </div>`;
+}
+
+function rqPlantRowHtml(p, hasDeliveryDate){
+  const showPriceRow = hasDeliveryDate;
+  const avatarHtml = (p.logo_url || p.logo_url_dark)
+    ? `<div class="rq-plant-avatar rq-plant-avatar-logo"><img src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt=""></div>`
+    : `<div class="rq-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+  return `
+      <div class="pkg-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};">
+        ${avatarHtml}
+        <div class="pkg-plant-info">
+          <div class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" onclick="rqToggleCalculator('${p.id}')">${escapeHtml(p.name)}</div>
+          ${p.rqPrice ? `<span class="pkg-tag price">$${Number(p.rqPrice).toFixed(4)}/lb</span>` : ''}
         </div>
-      </div>
-      <div id="rq_iframe_wrap_${p.id}" class="tt-card" style="display:none;">
-        ${rqTtActionLabel(p)}
-        <div class="rq-tt-frame-wrap">
-          ${(p.logo_url_dark || p.logo_url) ? `<img class="rq-tt-logo" id="rq_tt_logo_${p.id}" src="${escapeHtml(p.logo_url_dark || p.logo_url)}" alt="">` : ''}
-          <iframe id="rq_iframe_${p.id}" class="tt-frame" src="about:blank" onload="rqOnIframeLoaded('${p.id}')"></iframe>
-        </div>
+        <div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div>
       </div>
       `;
+}
+
+function renderRqPlants(){
+  const container = document.getElementById('rq_plant_rows');
+  const hasProduct = !!document.getElementById('rq_product_name').value.trim();
+  const emptyEl = document.getElementById('rq_empty');
+  emptyEl.textContent = 'No plants added yet.';
+  emptyEl.style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
+  const specCount = document.getElementById('rq_spec_count');
+  if (hasProduct && rqSelectedPlants.length){
+    specCount.style.display = '';
+    specCount.textContent = `${rqSelectedPlants.length} plant${rqSelectedPlants.length === 1 ? '' : 's'}`;
+  } else {
+    specCount.style.display = 'none';
+  }
+  rqUpdateActionButtons();
+  // The Trading Tool itself lives in the one shared full-screen overlay now (see
+  // rqToggleCalculator), never inside a per-plant row — so rebuilding a row here can no longer
+  // detach/reload a live iframe. A plain rebuild-every-row diff is safe.
+  Array.from(container.children).forEach(el => {
+    const id = el.dataset.plantRow;
+    if (id && !rqSelectedPlants.some(p => p.id === id)) el.remove();
+  });
+  let anchor = null;
+  rqSelectedPlants.forEach(p => {
+    const existing = container.querySelector(`[data-plant-row="${p.id}"]`);
+    const row = document.createElement('div');
+    row.dataset.plantRow = p.id;
+    row.style.cssText = '';
+    // The whole package (every plant that carries this product) shows up "pre-hecho" the moment
+    // there's a Delivery day — Purchase $/lb, Location, Documents, Delivery location all sitting
+    // there ready, whether or not this specific plant has a price yet. The old design hid all of
+    // that behind a "Price?" click per plant — fine for one plant, but the point of a package of
+    // several is that when a price finally comes in for whichever one is still missing, there's
+    // nothing left to set up: type the number, the calculator (and a real sale price) follows in
+    // the same beat, ready to send. Nothing to reveal first.
+    const hasDeliveryDate = rqDeliveryDates.length > 0;
+    row.innerHTML = rqPlantRowHtml(p, hasDeliveryDate);
     if (existing){
-      existing.replaceWith(row); // rebuilding a row that was never open — nothing live to lose
+      existing.replaceWith(row);
     } else if (anchor){
       anchor.after(row);
     } else {
       container.insertBefore(row, container.firstChild);
     }
     anchor = row;
-    // Only a freshly-built row needs its iframe (re)started — a preserved open row (handled
-    // above) already has a live one and must not be touched.
-    if (p.rqCalculatorOpen){
-      row.querySelector('.tt-card').style.display = 'block';
-      row.querySelector('.tt-frame').src = rqBuildToolUrl(p);
-    }
   });
   rqRenderFinalList();
 }
@@ -1489,6 +1609,10 @@ function rqOnPlantNameClick(id){
 
 // Opens/closes a plant's Trading Tool. Triggered by entering a Purchase $/lb (auto-open) or by
 // double-clicking the plant name — no dedicated button needed for either.
+// Full-screen overlay — same one Offers uses (see offers.html's toggleTT/closeTTOverlay) — so
+// the Trading Tool always gets the whole viewport instead of being cramped inside a plant row.
+// Same trading-tool.html file, same rqBuildToolUrl params either way; only where the iframe
+// gets mounted changed. Only one plant's calculator can be on screen at a time.
 function rqToggleCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
@@ -1496,74 +1620,86 @@ function rqToggleCalculator(id){
     rqCloseCalculator(id);
   } else {
     if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
-    if (!rqRequireDeliveryDay()) return;
-    // Every priced plant needs its own Selling Price calculated so the customer offer can
-    // include all of them, highest to lowest — closing plant B's Trading Tool the instant plant
-    // A's opened (the old "accordion", one at a time) meant only whichever plant was opened LAST
-    // ever finished calculating; every other one got closed before its iframe even loaded, so
-    // rqCalcRow never had a result to cache and that plant silently never made it into an offer.
+    // No delivery-day gate here — opening the calculator is just reviewing the price build-up,
+    // not sending anything. Pending Quotes items for a product that's never been sent before have
+    // no prior offer to inherit a date from, so rqDeliveryDates is genuinely empty at this point;
+    // gating the open on it silently blocked those (and only those) rows from ever opening, while
+    // identical-looking rows for a previously-sent product opened fine — "some TT open, some
+    // don't" with no visible reason. rqSendPlantOffer below still requires a real date before
+    // anything actually goes out to a customer.
+    const prevOpen = rqSelectedPlants.find(x => x.rqCalculatorOpen);
+    if (prevOpen) rqCloseCalculator(prevOpen.id);
     p.rqCalculatorOpen = true;
-    document.getElementById('rq_iframe_wrap_' + id).style.display = 'block';
-    document.getElementById('rq_iframe_' + id).src = rqBuildToolUrl(p);
+    document.getElementById('rq_tt_overlay_title').textContent = `${p.name}${rqProductSpec ? ' — ' + rqProductSpec : ''}`;
+    document.getElementById('rq_tt_overlay_fields').innerHTML = rqPlantFieldsHtml(p);
+    document.getElementById('rq_tt_overlay_body').innerHTML = `
+      ${(p.logo_url_dark || p.logo_url) ? `<img class="rq-tt-logo" id="rq_tt_logo_${id}" src="${escapeHtml(p.logo_url_dark || p.logo_url)}" alt="">` : ''}
+      <iframe id="rq_iframe_${id}" src="${rqBuildToolUrl(p)}" onload="rqOnIframeLoaded('${id}')"></iframe>
+    `;
+    // Full screen covers the row's own Send Offer button along with everything else on the page
+    // — Offers doesn't hit this because Negotiate lives inside the Trading Tool itself, but
+    // Quotes' send (email/WhatsApp compose) is this page's own code, not the frozen calculator's.
+    // A matching action lives in the overlay's own header so there's still a way to send without
+    // leaving full screen.
+    document.getElementById('rq_tt_overlay_action').innerHTML =
+      `<button type="button" class="rq-send-offer-btn" style="width:auto;padding:8px 16px;font-size:12.5px;border-radius:9px;" onclick="rqSendPlantOffer('${id}')">✅ Send Offer</button>`;
+    document.getElementById('rq_tt_overlay').style.display = 'flex';
     rqStartPolling();
     const nameEl = document.getElementById('rq_plant_name_' + id);
     if (nameEl) nameEl.classList.add('tt-open');
+    rqUpdateTtActionButton(id);
   }
   rqRenderFinalList();
 }
 
+// No id when called from the overlay's own ✕ — closes whichever plant is currently open.
 function rqCloseCalculator(id){
-  const p = rqSelectedPlants.find(x => x.id === id);
+  const p = id ? rqSelectedPlants.find(x => x.id === id) : rqSelectedPlants.find(x => x.rqCalculatorOpen);
   if (!p || !p.rqCalculatorOpen) return;
   p.rqCalculatorOpen = false;
-  const wrap = document.getElementById('rq_iframe_wrap_' + id);
-  if (wrap) wrap.style.display = 'none';
-  const iframe = document.getElementById('rq_iframe_' + id);
-  if (iframe) iframe.src = 'about:blank';
-  const nameEl = document.getElementById('rq_plant_name_' + id);
+  document.getElementById('rq_tt_overlay').style.display = 'none';
+  document.getElementById('rq_tt_overlay_body').innerHTML = '';
+  document.getElementById('rq_tt_overlay_action').innerHTML = '';
+  document.getElementById('rq_tt_overlay_fields').innerHTML = '';
+  const nameEl = document.getElementById('rq_plant_name_' + p.id);
   if (nameEl) nameEl.classList.remove('tt-open');
   if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
+  rqUpdateTtActionButton(p.id);
+  rqRenderFinalList();
 }
 
 let rqPollTimer = null;
 function rqStartPolling(){
   if (rqPollTimer) return;
-  rqPollTimer = setInterval(() => { rqRenderFinalList(); rqResizeIframes(); rqPositionTtLogos(); }, 1000);
+  rqPollTimer = setInterval(rqRenderFinalList, 1000);
+  rqLogoTrackLoop();
 }
 function rqStopPolling(){
   if (rqPollTimer){ clearInterval(rqPollTimer); rqPollTimer = null; }
+  rqLogoTrackRunning = false;
 }
 
-// The embedded Trading Tool's height changes (e.g. the Mexico block appears once an Exchange
-// Rate + Import Cost + Mexican Freight are filled in), so this keeps resizing the iframe to fit
-// its content — no nested scrollbar, no cut-off Profitability card hiding the real numbers.
-function rqResizeIframes(){
-  rqSelectedPlants.forEach(p => {
-    if (!p.rqCalculatorOpen) return;
-    const iframe = document.getElementById('rq_iframe_' + p.id);
-    if (!iframe || !iframe.contentDocument) return;
-    const doc = iframe.contentDocument;
-    // documentElement.scrollHeight can stay inflated after collapsing cards inside the embedded
-    // Trading Tool (closed <details> content can still contribute to it in some browsers), which
-    // left a tall blank gap below the real content. Measuring the actual bottom of the visible
-    // grid + the "Find Your Price" bar is reliable regardless of that.
-    const grid = doc.querySelector('.grid');
-    const adv = doc.querySelector('.advanced-tools');
-    // When "Find Your Price" is expanded, its bottom-most content is the footnote, not the
-    // summary bar — measure whichever is actually showing.
-    const advBottomEl = adv && adv.open ? doc.querySelector('.footnote') : doc.querySelector('.advanced-tools summary');
-    const gridBottom = grid ? grid.getBoundingClientRect().bottom : 0;
-    const advBottom = advBottomEl ? advBottomEl.getBoundingClientRect().bottom : 0;
-    const h = Math.max(gridBottom, advBottom) + 24;
-    if (h > 0 && Math.abs(h - iframe.offsetHeight) > 4) iframe.style.height = (h + 20) + 'px';
-  });
+// The Trading Tool's own .quickbar is a normal element that scrolls with the rest of its page
+// (never touched — trading-tool.html is frozen), not something fixed in place — a once-a-second
+// setInterval snapshot of its position left the overlaid logo visibly lagging/detached the moment
+// the trader scrolled inside the Trading Tool. requestAnimationFrame instead re-measures every
+// frame, so the logo tracks the bar with zero perceptible lag no matter how fast that scroll is.
+let rqLogoTrackRunning = false;
+function rqLogoTrackLoop(){
+  if (rqLogoTrackRunning) return;
+  rqLogoTrackRunning = true;
+  const step = () => {
+    if (!rqLogoTrackRunning) return;
+    rqPositionTtLogos();
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 const RQ_TARGET_PROFIT_USD = 1000;
 
 function rqOnIframeLoaded(id){
   setTimeout(() => {
-    rqResizeIframes();
     rqPositionTtLogos();
     rqPrefillSellingPrice(id);
   }, 300);
@@ -1572,8 +1708,7 @@ function rqOnIframeLoaded(id){
 // Real placement, not a guessed offset — the frozen calculator (trading-tool.html) is never
 // touched, so the plant's logo is measured against the live position/height of its own
 // TERMS/FINANCE COST bar (same-origin iframe, safe to read) and overlaid from out here. Reruns on
-// every resize poll tick (see rqResizeIframes' caller) since that bar wraps to a taller shape on
-// narrower widths.
+// every poll tick (see rqStartPolling) since that bar wraps to a taller shape on narrower widths.
 function rqPositionTtLogos(){
   rqSelectedPlants.forEach(p => {
     if (!p.rqCalculatorOpen || !(p.logo_url_dark || p.logo_url)) return;
@@ -1662,8 +1797,19 @@ function rqInvalidateCalc(p){
 
 function rqUpdateActionButtons(){
   const anyPriced = rqSelectedPlants.some(p => p.rqPrice > 0);
-  document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Request Quote';
+  document.getElementById('rq_page_title').textContent = anyPriced ? 'Send Quote' : 'Quotes';
   rqRenderDateChips();
+}
+
+// Typing a price by hand (phone call, WhatsApp reply typed in manually) has to flip "Update
+// Price" into "Send Offer" right there, live — without this the button just sat on "Update Price"
+// forever until the whole row happened to rebuild for some unrelated reason, with no way to tell
+// the trader they were actually ready to send.
+function rqUpdateTtActionButton(id){
+  const p = rqSelectedPlants.find(x => x.id === id);
+  const el = document.getElementById('rq_action_' + id);
+  if (!p || !el) return;
+  el.innerHTML = rqTtActionLabel(p);
 }
 
 const rqAutoOpenTimers = {};
@@ -1681,6 +1827,7 @@ function rqUpdatePlantField(id, field, val){
   // actively typing into and steal focus after every keystroke. Just update the bits that need
   // to react live.
   rqUpdateActionButtons();
+  if (field === 'rqPrice') rqUpdateTtActionButton(id);
   // Auto-open the Trading Tool a beat after typing stops — not on blur, which only fired once
   // the trader happened to click somewhere else (usually the freight dropdown next to it), so
   // it looked like "setting freight" was what opened it rather than the price itself.
@@ -1697,7 +1844,7 @@ function rqUpdatePlantField(id, field, val){
 // still right there to flip if this plant's terms are actually different.
 function rqAutoOpenCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p || !p.rqPrice || p.rqCalculatorOpen || !rqDeliveryDates.length) return;
+  if (!p || !p.rqPrice || p.rqCalculatorOpen) return;
   rqToggleCalculator(id);
 }
 
@@ -1707,8 +1854,13 @@ function rqAutoOpenCalculator(id){
 // photo_url and spec_url are two separate, single-value fields on the product — always a real
 // image and a real PDF respectively (see products.html's upload inputs: accept="image/*" and
 // accept="application/pdf") — no more guessing which one a file actually is from its extension.
+// Reads the currently-resolved product (rqMatchedProductId) rather than the search box text —
+// that box is Request Quote's own, empty/irrelevant whenever this runs from Pending Quotes'
+// inline panel instead, which silently meant every offer sent from there went out with no photo/
+// spec PDF attached at all.
 function rqFindProductFilesFor(plant){
-  const name = document.getElementById('rq_product_name').value.trim().toLowerCase();
+  const matched = products.find(pr => pr.id === rqMatchedProductId);
+  const name = (matched && matched.name || '').toLowerCase();
   const prod = products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name);
   return { photo_url: (prod && prod.photo_url) || null, spec_url: (prod && prod.spec_url) || null };
 }
@@ -1749,17 +1901,23 @@ function rqRenderFinalList(){
   container.innerHTML = withCalc.map(({ plant, calc }) => {
     const files = rqFindProductFilesFor(plant);
     const delivery = rqDeliveryDatesText();
-    return `<div class="offer-item">
-      ${files.photo_url ? `<img class="offer-thumb" src="${files.photo_url}">` : `<div class="offer-thumb"></div>`}
-      <div style="flex:1;text-align:center;">
-        <div style="font-size:17px;font-weight:800;color:var(--navy);">${escapeHtml(plant.name)}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);">${escapeHtml(rqProductSpec || '')} — Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</div>
-        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px;">
-          ${files.photo_url ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;" onclick="rqCopyPhotoToClipboard('${files.photo_url}','Foto-${plant.name.replace(/[^a-z0-9]+/gi,'-')}', this)">📋 Foto</button>` : ''}
-          ${files.spec_url ? `<button type="button" class="btn secondary" style="padding:3px 9px;font-size:10.5px;" onclick="rqCopyPhotoToClipboard('${files.spec_url}','Ficha-tecnica-${plant.name.replace(/[^a-z0-9]+/gi,'-')}.pdf', this)">📋 Ficha</button>` : ''}
-        </div>
+    // Product name/spec already sits in the header above (rq_spec_line) — repeating it on every
+    // row here was the duplicated info; each row only needs to add what's specific to IT: cost,
+    // delivery, sale price.
+    const avatarHtml = files.photo_url
+      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(files.photo_url)}" alt=""></div>`
+      : `<div class="pkg-plant-avatar">${escapeHtml((plant.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+    return `<div class="pkg-row">
+      ${avatarHtml}
+      <div class="pkg-plant-info">
+        <span class="pkg-plant-name">${escapeHtml(plant.name)}</span>
+        <span class="pkg-plant-sub">Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</span>
       </div>
-      <div style="text-align:right;">
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        ${files.photo_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.photo_url}','Foto-${plant.name.replace(/[^a-z0-9]+/gi,'-')}', this)">📋 Foto</button>` : ''}
+        ${files.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.spec_url}','Ficha-tecnica-${plant.name.replace(/[^a-z0-9]+/gi,'-')}.pdf', this)">📋 Ficha</button>` : ''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:8px;">
         <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
         <div style="font-size:11px;color:var(--ink-soft);">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
       </div>
@@ -1951,12 +2109,25 @@ async function rqPrepareOfferFilesFor(plant, calc){
 // of Request Quote the same way removeRqPlant always has, its trail now living in sent_offers.
 async function rqSendPlantOffer(id){
   if (!rqRequireDeliveryDay()) return;
-  const entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
+  let entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
+  if (!entry){
+    // The calculator is closed by default now (View Offer →) — Send Offer can get clicked before
+    // it's ever been opened, so there's no __calc to read yet. Open it here and give it a moment
+    // to actually compute instead of just telling the trader to go click View Offer themselves.
+    const p = rqSelectedPlants.find(x => x.id === id);
+    if (p && !p.rqCalculatorOpen){
+      rqToggleCalculator(id);
+      for (let i = 0; i < 10 && !entry; i++){
+        await new Promise(r => setTimeout(r, 300));
+        entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
+      }
+    }
+  }
   if (!entry){ alert('Still calculating the sale price for this plant — give it a second and try again.'); return; }
   const { plant, calc } = entry;
   const withEmail = rqMatchedCustomers.filter(c => c.email);
   const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
-  if (!withEmail.length && !withWa.length){ alert('No matched customer has an email or WhatsApp on file.'); return; }
+  if (!withEmail.length && !withWa.length){ rqShowNotice('No matched customer has an email or WhatsApp on file.'); return; }
   const onSentOnce = () => removeRqPlant(id);
   const { attachments, downloadFiles } = await rqPrepareOfferFilesFor(plant, calc);
   // Same "both windows open at once" pattern as Update Purchase Price — the trader doesn't pick a
@@ -2005,6 +2176,19 @@ function rqDownloadBytes(bytes, filename){
 let rqMatchedCustomers = [];
 let rqCustomersFetchedFor = null;
 
+// Shared by Request Quote's own search (which also renders the "Customers who buy this" list)
+// and Pending Quotes' inline panel (which has no such list to render, just needs
+// rqMatchedCustomers populated so Send Offer has someone real to send to) — one lookup, not two
+// copies that could drift.
+async function rqMatchCustomersForProductIds(matchingProductIds){
+  if (!matchingProductIds.length) return [];
+  const { data: links } = await db.from('customer_products').select('customer_id').in('product_id', matchingProductIds);
+  const customerIds = [...new Set((links || []).map(l => l.customer_id))];
+  if (!customerIds.length) return [];
+  const { data: customers } = await db.from('customers').select('id,trade_name,contact_name,email,phone,whatsapp,usual_delivery_type,usual_destination,customs_agency_provider_id').in('id', customerIds).order('trade_name');
+  return customers || [];
+}
+
 async function rqFindCustomers(){
   const wrap = document.getElementById('rq_customers_wrap');
   const container = document.getElementById('rq_customers_list');
@@ -2018,19 +2202,16 @@ async function rqFindCustomers(){
     container.innerHTML = '<div class="empty">Product not in catalog yet.</div>';
     return;
   }
-  const { data: links } = await db.from('customer_products').select('customer_id').in('product_id', matchingProductIds);
-  const customerIds = [...new Set((links || []).map(l => l.customer_id))];
-  if (!customerIds.length){
+  rqMatchedCustomers = await rqMatchCustomersForProductIds(matchingProductIds);
+  if (!rqMatchedCustomers.length){
     container.innerHTML = '<div class="empty">No customers linked to this product yet.</div>';
-    rqMatchedCustomers = [];
     return;
   }
-  const { data: customers } = await db.from('customers').select('id,trade_name,contact_name,email,phone,whatsapp,usual_delivery_type,usual_destination,customs_agency_provider_id').in('id', customerIds).order('trade_name');
-  rqMatchedCustomers = customers || [];
   container.innerHTML = rqMatchedCustomers.map(c => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
-      <span style="font-size:13.5px;">${escapeHtml(c.trade_name)}</span>
-      <div style="display:flex;gap:8px;">
+    <div class="rq-customer-row">
+      <div class="rq-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="rq-customer-name">${escapeHtml(c.trade_name)}</div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
         <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="sendOfferEmailTo('${c.id}')" ${c.email ? '' : 'disabled title="No email on file"'}>Email</button>
         <button class="wa-btn" onclick="sendOfferWhatsAppTo('${c.id}')" ${(c.whatsapp || c.phone) ? '' : 'disabled title="No phone on file"'}><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
       </div>
@@ -2044,8 +2225,19 @@ async function rqFindCustomers(){
 // Delivery day set first. Every send/ask trigger below calls this before doing anything.
 function rqRequireDeliveryDay(){
   if (rqDeliveryDates.length) return true;
-  alert('Set at least one Delivery day before sending or asking.');
-  document.getElementById('rq_dates_wrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Only Request Quote's own summary strip has the date chips visible — from Pending Quotes'
+  // inline panel there's nothing on screen to scroll to, which used to leave the trader stuck:
+  // told to set a date with no way to actually do it without abandoning what they were doing to
+  // go find it on another tab. The calendar itself (rqOpenCalendarModal) is a page-level modal,
+  // not tied to either tab's own markup, so it opens fine from here too — the notice's own button
+  // is the real fix, the scroll-to is just the nicer path when the field is already on screen.
+  const datesWrap = document.getElementById('rq_dates_wrap');
+  if (datesWrap && datesWrap.offsetParent !== null){
+    rqShowNotice('Set at least one Delivery day before sending or asking.');
+    datesWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    rqShowNotice('Set at least one Delivery day before sending or asking.', 'Set a date', rqOpenCalendarModal);
+  }
   return false;
 }
 
@@ -2065,7 +2257,7 @@ function rqTtActionLabel(p){
   const isReady = rqPricedPlantsSorted().some(x => x.plant.id === p.id);
   const hasPhone = !!(p.whatsapp || p.phone);
   if ((missing || stale) && (p.email || hasPhone)){
-    return `<button type="button" class="rq-update-price-btn" onclick="rqUpdatePlantPrice('${p.id}')">❌ Update Price</button>`;
+    return `<button type="button" class="rq-update-price-btn" style="width:auto;min-width:auto;padding:7px 14px;font-size:12px;border-radius:9px;margin-left:auto;" onclick="rqUpdatePlantPrice('${p.id}')">❌ Update Price</button>`;
   }
   if (!missing && !stale){
     // Always a live button once the price itself is fresh — no longer gated on a customer already
@@ -2074,7 +2266,18 @@ function rqTtActionLabel(p){
     // which used to leave the button-less "Up to date" text sitting there with nothing to click
     // until the trader happened to notice it had quietly become a button). rqSendPlantOffer itself
     // gives a clear, specific reason if either isn't ready yet instead of the button just vanishing.
-    return `<button type="button" class="rq-send-offer-btn" onclick="rqSendPlantOffer('${p.id}')">✅ Send Offer</button>`;
+    // The Trading Tool now always opens full-screen (see rqToggleCalculator), which builds its
+    // own Send Offer button in the overlay header — so this open-state branch is effectively
+    // unreachable in the UI (the row sits hidden behind the overlay whenever it'd show). Left in
+    // place rather than deleted since it's still the technically-correct state for this button
+    // if something ever renders the row while open.
+    if (p.rqCalculatorOpen){
+      return `<div style="display:flex;gap:8px;margin-left:auto;">
+        <button type="button" class="pkg-trigger-btn hot" style="margin-left:0;" onclick="rqSendPlantOffer('${p.id}')">✅ Send Offer</button>
+        <button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="rqToggleCalculator('${p.id}')">✕ Close</button>
+      </div>`;
+    }
+    return `<button type="button" class="pkg-trigger-btn hot" onclick="rqToggleCalculator('${p.id}')">View Offer →</button>`;
   }
   return '';
 }
@@ -2083,7 +2286,9 @@ function rqTtActionLabel(p){
 // actually has on file) — the trader doesn't pick a channel first, both are ready to fire, and
 // whichever one they actually send from marks this plant as asked (rqOnAskSent), same as before.
 function rqUpdatePlantPrice(id){
-  if (!rqRequireDeliveryDay()) return;
+  // Asking a plant "what's your current price" never mentions a delivery date (see
+  // rqPriceRequestBody) — requiring one here just blocked a simple price ask for no functional
+  // reason. That gate belongs on the actual customer-facing send (rqSendPlantOffer), not this one.
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   const subject = `${rqProductSpec || ''} — ${p.rqPrice == null ? 'price request' : 'updated price request'}`;
@@ -2456,12 +2661,11 @@ function rqAddDeliveryDate(val){
   }
   document.getElementById('rq_add_date_btn').classList.remove('needs-date');
   rqRenderDateChips();
-  // Every plant row's price/calculator visibility depends on rqDeliveryDates.length — without
-  // this, a row already built before the first date existed (or, worse, one whose calculator
-  // auto-opened on load before any date was set) just sat there stale and out of sync with the
-  // chip that now shows above it.
+  // Every plant row's price row/button visibility depends on rqDeliveryDates.length — without
+  // this, a row already built before the first date existed just sat there stale and out of sync
+  // with the chip that now shows above it. Calculators themselves stay closed either way — picking
+  // a date isn't "open every priced plant's TT."
   renderRqPlants();
-  rqSelectedPlants.forEach(p => { if (p.rqPrice) rqAutoOpenCalculator(p.id); });
 }
 
 function rqRemoveDeliveryDate(idx){
@@ -2494,6 +2698,30 @@ function rqOpenCalendarModal(){
   rqRenderCalendarGrid();
   document.getElementById('rq_cal_modal_overlay').style.display = 'flex';
 }
+// Our own small notice box instead of the browser's native alert() — same overlay/box style as
+// every other modal in Quotes, so a plain informational message doesn't suddenly look like it
+// came from a different, uglier app.
+// actionLabel/actionFn: an optional second button for when the notice names something to do
+// that isn't reachable from wherever the trader is right now (see rqRequireDeliveryDay) — closing
+// the notice on click first so the action's own UI (e.g. the calendar modal) isn't left stacked
+// underneath it.
+function rqShowNotice(message, actionLabel, actionFn){
+  document.getElementById('rq_notice_text').textContent = message;
+  const actionBtn = document.getElementById('rq_notice_action');
+  if (actionLabel && actionFn){
+    actionBtn.textContent = actionLabel;
+    actionBtn.style.display = '';
+    actionBtn.onclick = () => { rqCloseNotice(); actionFn(); };
+  } else {
+    actionBtn.style.display = 'none';
+    actionBtn.onclick = null;
+  }
+  document.getElementById('rq_notice_overlay').style.display = 'flex';
+}
+function rqCloseNotice(){
+  document.getElementById('rq_notice_overlay').style.display = 'none';
+}
+
 function rqCloseCalendarModal(){
   document.getElementById('rq_cal_modal_overlay').style.display = 'none';
 }
@@ -2505,8 +2733,14 @@ function rqCalendarShiftMonth(delta){
 }
 function rqCalendarToggleDay(dateStr){
   const idx = rqDeliveryDates.indexOf(dateStr);
-  if (idx === -1) rqAddDeliveryDate(dateStr);
-  else rqRemoveDeliveryDate(idx);
+  if (idx === -1){
+    rqAddDeliveryDate(dateStr);
+    // Picking a day is the whole action — no separate confirm step. Removing one (below) is a
+    // correction, not a selection, so that still leaves the calendar open.
+    rqCloseCalendarModal();
+    return;
+  }
+  rqRemoveDeliveryDate(idx);
   rqRenderCalendarGrid();
 }
 const RQ_CAL_MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2559,20 +2793,6 @@ function rqLoadsPhrase(){
   const dateStr = rqDeliveryDatesText();
   const loadWord = rqDeliveryDates.length === 1 ? 'load' : 'loads';
   return `need ${rqDeliveryDates.length} ${loadWord} delivered to the border (McAllen/Laredo) on ${dateStr}`;
-}
-
-// One click asks every not-yet-priced plant at once — each still gets its own rotated template
-// (rqPickTemplate cycles through RQ_EMAIL_TEMPLATES/RQ_WHATSAPP_TEMPLATES) so consecutive
-// messages don't read as an obvious copy-paste blast.
-// No photo on file from THIS specific plant usually means we're also missing their official
-// spec sheet — asking for the price is already a message in their inbox, so piggyback the spec
-// ask onto it instead of sending a separate message later. Deliberately not rqFindPhotoFor,
-// which falls back to any other plant's photo for the same product — that's fine for display,
-// but useless here since another plant's spec doesn't cover this one.
-function rqSpecAskLine(plant){
-  const name = document.getElementById('rq_product_name').value.trim().toLowerCase();
-  const hasOwnPhoto = products.some(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name && pr.photo_url);
-  return hasOwnPhoto ? '' : " Also, I don't have your spec sheet for this — could you send it over?";
 }
 
 // Shared by both bulk-ask buttons — same "missing OR stale, and not already asked within the

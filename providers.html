@@ -42,6 +42,15 @@
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
   .role-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;background:var(--blue-light);color:var(--blue);margin-right:4px;white-space:nowrap;}
+  /* Same card-row language as Quotes/Pending/Offers/Meat Packers — bordered rounded row with an
+     avatar instead of a plain table row. */
+  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
+  .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
+  .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
+  .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:140px;}
   .role-check{display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;cursor:pointer;font-size:13px;}
   .role-check input{width:auto;}
   .tab-row{display:flex;justify-content:center;gap:6px;margin-bottom:14px;border-bottom:1.5px solid var(--line);}
@@ -212,10 +221,7 @@ auth.onAuthStateChanged(user => {
   </div>
 
   <div class="card">
-    <table>
-      <thead><tr><th>Name</th><th>Roles</th><th>City</th><th>Contact</th><th></th></tr></thead>
-      <tbody id="providerRows"></tbody>
-    </table>
+    <div id="providerRows" class="pkg-table-wrap"></div>
     <div id="emptyMsg" class="empty" style="display:none;">No providers found.</div>
   </div>
 
@@ -332,23 +338,24 @@ function renderProviders(){
       (p.city || '').toLowerCase().includes(q) ||
       roles.includes(q);
   });
-  const tbody = document.getElementById('providerRows');
-  tbody.innerHTML = '';
+  const wrap = document.getElementById('providerRows');
   document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
-  filtered.forEach(p => {
+  wrap.innerHTML = filtered.map(p => {
     const roles = providerRolesMap[p.id] || [];
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><a class="name-link" onclick="openRates('${p.id}')">${escapeHtml(p.name || '')}</a></td>
-      <td>${roles.map(r => `<span class="role-badge">${ROLE_LABELS[r] || r}</span>`).join('') || '—'}</td>
-      <td>${escapeHtml([p.city, p.country].filter(Boolean).join(', ') || '—')}</td>
-      <td>${escapeHtml(p.contact_name || '—')}</td>
-      <td style="text-align:right;white-space:nowrap;">
+    const city = [p.city, p.country].filter(Boolean).join(', ');
+    return `<div class="pkg-row">
+      <div class="pkg-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="pkg-plant-info">
+        <a class="name-link pkg-plant-name" onclick="openRates('${p.id}')">${escapeHtml(p.name || '')}</a>
+        <span class="pkg-plant-sub">${escapeHtml(city || '—')}${p.contact_name ? ' · ' + escapeHtml(p.contact_name) : ''}</span>
+      </div>
+      <div>${roles.map(r => `<span class="role-badge">${ROLE_LABELS[r] || r}</span>`).join('') || ''}</div>
+      <div style="margin-left:auto;flex-shrink:0;white-space:nowrap;display:flex;gap:6px;">
         <button class="btn secondary small" onclick="editProvider('${p.id}')">Edit</button>
         <button class="btn danger" onclick="deleteProvider('${p.id}')">Delete</button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openForm(){

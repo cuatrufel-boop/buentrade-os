@@ -130,6 +130,37 @@
   .status-lost{background:var(--bg);color:var(--ink-soft);}
   .status-hot{background:#E3F6EC;color:var(--green);animation:hotPulse 1.4s ease-in-out infinite;}
   @keyframes hotPulse{0%,100%{box-shadow:0 0 0 0 rgba(15,138,95,.45);}50%{box-shadow:0 0 0 5px rgba(15,138,95,0);}}
+  /* Offers grouped by customer, same card language as Pending Quotes: a section header per
+     customer, one compact row per offer with a plant avatar, and the action on the right living
+     inside the row's own bordered card instead of a stretched table cell. */
+  .pending-group{padding:18px 0;border-bottom:1px solid var(--line);}
+  .pending-group:last-child{border-bottom:none;}
+  .pending-group-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+  .pending-group-title{font-family:'Space Grotesk',sans-serif;font-size:15.5px;font-weight:800;color:var(--navy);letter-spacing:.01em;display:flex;align-items:center;gap:9px;}
+  .pending-group-title::before{content:'';width:7px;height:7px;border-radius:2px;background:var(--blue);flex-shrink:0;}
+  .pending-group-count{font-size:11px;font-weight:700;color:var(--blue);background:var(--blue-light);padding:4px 11px;border-radius:20px;white-space:nowrap;}
+  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
+  .pkg-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-plant-avatar{width:32px;height:32px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:4px;}
+  .pkg-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
+  .pkg-plant-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:1;min-width:0;}
+  .pkg-plant{font-weight:600;color:var(--ink);font-size:13.5px;}
+  .pkg-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
+  .pkg-tag.price{background:var(--blue-light);color:var(--blue);}
+  .pkg-tag.won{background:#E3F6EC;color:var(--green);}
+  .pkg-tag.lost{background:var(--bg);color:var(--ink-soft);}
+  .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
+  /* One button, two states — no separate "🔥 negotiating" pill anymore. Calm blue when it's just
+     a sent offer waiting; the same slot switches to a pulsing green the moment a real bid/counter
+     lands (negotiation_log gets its first entry), so the urgency lives on the one thing you'd
+     click anyway instead of a second element next to it. */
+  .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
+  .pkg-trigger-btn svg{flex-shrink:0;}
+  .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
+  .pkg-trigger-btn.hot{background:linear-gradient(180deg,#E3F6EC,#D2F0E1);color:#0F8A5F;border-color:rgba(15,138,95,.35);animation:hotPulse 1.4s ease-in-out infinite;}
+  .pkg-trigger-btn.hot:hover{background:linear-gradient(180deg,#0F8A5F,#0B6B48);color:#fff;border-color:#0B6B48;}
   .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
   .stat-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
   .stat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stat-accent,var(--blue));}
@@ -151,8 +182,14 @@
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
   .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
-  .tt-overlay-body{flex:1;min-height:0;}
+  .tt-overlay-body{flex:1;min-height:0;position:relative;}
   .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
+  /* Plant logo sits in the overlay's own title bar, not floating over the iframe — the quickbar
+     inside trading-tool.html (frozen, never touched) has only 18px of internal padding and close
+     to zero margin outside it at normal window widths, nowhere near enough room for a logo badge
+     without either overlapping "PLANT"/Email/WhatsApp or getting clipped off the viewport edge.
+     The title bar has real open space and doesn't scroll, so no position-tracking is needed either. */
+  .tt-logo-inline{width:32px;height:32px;object-fit:contain;background:#fff;border-radius:7px;padding:4px;box-sizing:border-box;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
   .edit-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:90px;transition:border-color .3s;}
   .edit-input:focus{outline:none;border-color:var(--blue);}
@@ -335,20 +372,7 @@ auth.onAuthStateChanged(user => {
     </div>
 
     <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Actions</th>
-            <th>Product</th>
-            <th>Customer</th>
-            <th>Plant</th>
-            <th>Purchase</th>
-            <th>Sale</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="offerRows"></tbody>
-      </table>
+      <div id="offerRows"></div>
       <div id="emptyState" class="empty" style="display:none;">No offers in this range yet.</div>
     </div>
   </div>
@@ -391,7 +415,10 @@ auth.onAuthStateChanged(user => {
 </div>
 <div id="ttOverlay" class="tt-overlay">
   <div class="tt-overlay-head">
-    <div class="tt-overlay-title" id="ttOverlayTitle"></div>
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+      <img id="ttOverlayLogo" class="tt-logo-inline" alt="" style="display:none;">
+      <div class="tt-overlay-title" id="ttOverlayTitle"></div>
+    </div>
     <button class="tt-overlay-close" onclick="closeTTOverlay()" title="Close">✕</button>
   </div>
   <div class="tt-overlay-body" id="ttOverlayBody"></div>
@@ -419,6 +446,7 @@ auth.onAuthStateChanged(user => {
 
 <script>
 let offers = [];
+let offerPlantsById = {};
 
 // Default view: last 30 days, so the list stays light — older sent-but-never-confirmed
 // offers aren't deleted, just not shown unless you widen the date range or search.
@@ -445,6 +473,12 @@ async function loadOffers(){
     return;
   }
   offers = data || [];
+  // Same plant-avatar logo used in Pending Quotes — fetched once here since sent_offers itself
+  // only stores the plant's name/id, not its logo.
+  if (!Object.keys(offerPlantsById).length){
+    const { data: plantRows } = await db.from('plants').select('id,logo_url,logo_url_dark');
+    (plantRows || []).forEach(p => { offerPlantsById[p.id] = p; });
+  }
   renderOffers();
 }
 
@@ -477,6 +511,11 @@ function renderStats(){
     </div>`).join('');
 }
 
+function offerAgeDays(dateStr){
+  if (!dateStr) return null;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
 function renderOffers(){
   renderStats();
   const term = (document.getElementById('f_search').value || '').trim().toLowerCase();
@@ -486,58 +525,84 @@ function renderOffers(){
     if (!term) return true;
     return [o.product_name, o.plant_name, o.customer_name].some(v => (v || '').toLowerCase().includes(term));
   });
-  // A live negotiation belongs at the top of the list, not wherever it happens to fall by date —
-  // that's the whole point of flagging it "hot": you should see it the moment you open this page,
-  // not have to scroll or scan for it.
-  filtered.sort((a, b) => {
-    const aHot = a.status === 'sent' && (a.negotiation_log || []).length > 0;
-    const bHot = b.status === 'sent' && (b.negotiation_log || []).length > 0;
-    if (aHot !== bHot) return aHot ? -1 : 1;
-    return 0;
-  });
-  const tbody = document.getElementById('offerRows');
+  const wrap = document.getElementById('offerRows');
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = 'No offers match.';
-  const STATUS_LABEL = { sent: 'pending', won: 'win', lost: 'lost' };
-  tbody.innerHTML = filtered.map(o => {
-    // A "pending" offer where a counter-number has actually gone to the plant (or a bid came
-    // back from the customer) is a live negotiation with a real chance of closing soon — flag it
-    // in the list itself so it doesn't read the same as an offer just sitting untouched.
-    const isHot = o.status === 'sent' && (o.negotiation_log || []).length > 0;
-    const statusPill = isHot
-      ? `<span class="status-pill status-hot">🔥 negotiating</span>`
-      : `<span class="status-pill status-${o.status}">${STATUS_LABEL[o.status] || o.status}${o.status === 'won' && o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`;
-    let action = '';
-    if (o.status === 'sent'){
-      // "Create Order" here is only the fast path — price closed exactly as quoted, nothing to
-      // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
-      // goes through "Negotiate", which has the full calculator, can message either side any
-      // number of times, and is the ONLY place that creates the order (negoSaveDefinitive in
-      // trading-tool.html) — no separate "Create Order" shortcut out here anymore, having both
-      // was a duplicate of the same action ("ya lo tenemos dentro").
-      action = `
-        <span class="row-actions">
-          <button class="tt-btn" onclick="toggleTT('${o.id}')" title="Open the calculator to negotiate and close this offer"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
-          <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        </span>`;
-    } else if (o.status === 'won'){
-      // A single "⋯" replaces what used to be three separate pill buttons (Documents / Real
-      // Costs / History) crowding this cell and squeezing the customer name column next to it —
-      // everything now lives in one dropdown, opened the same way as the old Documents menu.
-      action = `<button class="row-menu-btn" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`;
-    }
-    // Numbers are read-only here on purpose — editing a price without seeing the rest of the
-    // build-up (customs, inspection, freight) isn't safe. Any change goes through "TT" above.
-    return `<tr>
-      <td>${action}</td>
-      <td>${escapeHtml(o.product_name)}</td>
-      <td>${escapeHtml(o.customer_name)}</td>
-      <td>${escapeHtml(o.plant_name)}</td>
-      <td>$${(o.purchase_price || 0).toFixed(4)}</td>
-      <td>$${(o.sale_per_lb || 0).toFixed(4)}</td>
-      <td>${statusPill}</td>
-    </tr>
-    <tr id="history_row_${o.id}" style="display:none;"><td colspan="7" style="background:var(--bg);"><div id="history_panel_${o.id}"></div></td></tr>`;
+
+  // Grouped by customer, same shape as Pending Quotes — one section per customer, one compact
+  // row per offer inside it.
+  const groupsByCustomer = {};
+  filtered.forEach(o => {
+    const key = o.customer_name || '—';
+    if (!groupsByCustomer[key]) groupsByCustomer[key] = [];
+    groupsByCustomer[key].push(o);
+  });
+  const isHot = o => o.status === 'sent' && (o.negotiation_log || []).length > 0;
+  const groupList = Object.entries(groupsByCustomer).map(([customerName, rows]) => ({
+    customerName, rows, hasHot: rows.some(isHot),
+  }));
+  // A live negotiation belongs at the top, not wherever it happens to fall alphabetically — that's
+  // the whole point of flagging it hot: you should see it the moment you open this page.
+  groupList.sort((a, b) => {
+    if (a.hasHot !== b.hasHot) return a.hasHot ? -1 : 1;
+    return a.customerName.localeCompare(b.customerName);
+  });
+  groupList.forEach(g => g.rows.sort((a, b) => (isHot(b) - isHot(a))));
+
+  wrap.innerHTML = groupList.map(g => {
+    const rowsHtml = g.rows.map(o => {
+      const hot = isHot(o);
+      const plant = o.plant_id ? offerPlantsById[o.plant_id] : null;
+      const logo = plant && (plant.logo_url || plant.logo_url_dark);
+      const initial = (o.plant_name || '?').trim().charAt(0).toUpperCase();
+      const avatarHtml = logo
+        ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
+        : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
+      const ageDays = offerAgeDays(o.sent_at);
+      const statusTag = o.status === 'won'
+        ? `<span class="pkg-tag won">Win${o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`
+        : o.status === 'lost' ? `<span class="pkg-tag lost">Lost</span>` : '';
+      let actionsHtml = '';
+      if (o.status === 'sent'){
+        // "Create Order" here is only the fast path — price closed exactly as quoted, nothing to
+        // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
+        // goes through "Negotiate", which has the full calculator, can message either side any
+        // number of times, and is the ONLY place that creates the order (negoSaveDefinitive in
+        // trading-tool.html) — no separate "Create Order" shortcut out here anymore, having both
+        // was a duplicate of the same action ("ya lo tenemos dentro"). The button itself is now
+        // the only "hot" signal — calm blue at rest, pulsing green the moment a bid lands — so
+        // there's no separate pill duplicating what the button already says.
+        actionsHtml = `
+          <button class="pkg-trigger-btn${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
+          <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+      } else if (o.status === 'won'){
+        // A single "⋯" replaces what used to be three separate pill buttons (Documents / Real
+        // Costs / History) crowding this cell — everything now lives in one dropdown, opened the
+        // same way as the old Documents menu.
+        actionsHtml = `<button class="row-menu-btn" style="margin-left:auto;" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`;
+      }
+      // Numbers are read-only here on purpose — editing a price without seeing the rest of the
+      // build-up (customs, inspection, freight) isn't safe. Any change goes through "TT" above.
+      return `<div class="pkg-row">
+        ${avatarHtml}
+        <div class="pkg-plant-info">
+          <span class="pkg-plant">${escapeHtml(o.product_name)}</span>
+          <span class="pkg-asof">${escapeHtml(o.plant_name)}</span>
+          <span class="pkg-tag price">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</span>
+          ${statusTag}
+          ${ageDays != null ? `<span class="pkg-asof">sent ${ageDays === 0 ? 'today' : ageDays + 'd ago'}</span>` : ''}
+        </div>
+        ${actionsHtml}
+      </div>
+      <div id="history_row_${o.id}" style="display:none;padding:0 0 8px;"><div id="history_panel_${o.id}"></div></div>`;
+    }).join('');
+    return `<div class="pending-group">
+      <div class="pending-group-head">
+        <span class="pending-group-title">${escapeHtml(g.customerName)}</span>
+        <span class="pending-group-count">${g.rows.length} offer${g.rows.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="pkg-table-wrap">${rowsHtml}</div>
+    </div>`;
   }).join('');
 }
 
@@ -553,12 +618,12 @@ function toggleHistory(offerId){
     const prev = document.getElementById('history_row_' + historyOpenId);
     if (prev) prev.style.display = 'none';
   }
-  if (row.style.display === 'table-row'){
+  if (row.style.display === 'block'){
     row.style.display = 'none';
     historyOpenId = null;
     return;
   }
-  row.style.display = 'table-row';
+  row.style.display = 'block';
   historyOpenId = offerId;
   renderHistoryPanel(offerId);
 }
@@ -621,6 +686,11 @@ function toggleTT(id){
   const o = offers.find(x => x.id === id);
   document.getElementById('ttOverlayTitle').textContent = o
     ? `${o.product_name || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : 'Negotiate';
+  const plant = o && o.plant_id ? offerPlantsById[o.plant_id] : null;
+  const logo = plant && (plant.logo_url || plant.logo_url_dark);
+  const logoEl = document.getElementById('ttOverlayLogo');
+  if (logo){ logoEl.src = logo; logoEl.style.display = 'block'; }
+  else { logoEl.style.display = 'none'; logoEl.src = ''; }
   loadTTPanel(id);
   document.getElementById('ttOverlay').style.display = 'flex';
 }
@@ -649,7 +719,7 @@ function loadTTPanel(id){
     offerId: o.id, plantId: o.plant_id || '',
     v: String(Date.now()),
   });
-  panel.innerHTML = `<iframe src="trading-tool.html?${params.toString()}"></iframe>`;
+  panel.innerHTML = `<iframe id="ttIframe" src="trading-tool.html?${params.toString()}"></iframe>`;
 }
 
 // The Trading Tool posts this the moment "Save as Final — Win" succeeds inside the iframe, so
