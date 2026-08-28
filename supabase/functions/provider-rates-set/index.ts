@@ -10,7 +10,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require" });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const VALID_SERVICE_TYPES = [
@@ -39,13 +39,22 @@ Deno.serve(async (req) => {
     const [provider] = await sql`select id from providers where id = ${provider_id}`;
     if (!provider) return jsonResponse({ error: "unknown provider_id" }, 400);
 
+    // currency_id is the real FK; `currency` is the older text column every other read path
+    // (provider-rates-search included) still displays — keep both in sync.
+    let currencyCode = null;
+    if (currency_id) {
+      const [c] = await sql`select code from currencies where id = ${currency_id}`;
+      currencyCode = c?.code ?? null;
+    }
+
     const providerRate = await sql.begin(async (tx) => {
       const [providerRate] = await tx`
-        insert into provider_rates (provider_id, plant_id, service_type, origin, destination, rate, currency_id, notes)
-        values (${provider_id}, ${plant_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currency_id}, ${notes})
+        insert into provider_rates (provider_id, plant_id, service_type, origin, destination, rate, currency, currency_id, notes)
+        values (${provider_id}, ${plant_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currencyCode ?? 'USD'}, ${currency_id}, ${notes})
         on conflict (provider_id, service_type, origin, destination) do update set
           rate = excluded.rate,
-          currency_id = excluded.currency_id,
+          currency = case when excluded.currency_id is not null then excluded.currency else provider_rates.currency end,
+          currency_id = coalesce(excluded.currency_id, provider_rates.currency_id),
           plant_id = coalesce(excluded.plant_id, provider_rates.plant_id),
           notes = excluded.notes,
           updated_at = now()

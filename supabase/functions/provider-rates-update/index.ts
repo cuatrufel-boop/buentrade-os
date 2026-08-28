@@ -6,9 +6,9 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require" });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
-const UPDATABLE_FIELDS = ["service_type", "origin", "destination", "rate", "currency_id", "plant_id", "notes"];
+const UPDATABLE_FIELDS = ["service_type", "origin", "destination", "rate", "currency_id", "currency", "plant_id", "notes"];
 const VALID_SERVICE_TYPES = ["us_freight", "mexican_freight", "customs", "tramite_aduanal", "bodega_americana", "lumper_fee", "inbond_release"];
 
 Deno.serve(async (req) => {
@@ -28,12 +28,19 @@ Deno.serve(async (req) => {
 
     const merged: any = { ...existing };
     for (const f of UPDATABLE_FIELDS) if (f in body) merged[f] = body[f];
+    // currency_id changing without an explicit currency override — resolve the text code from the
+    // FK so the legacy `currency` column (every other read path still displays it) doesn't go
+    // stale relative to the real reference.
+    if ("currency_id" in body && !("currency" in body)) {
+      const [c] = await sql`select code from currencies where id = ${merged.currency_id}`;
+      merged.currency = c?.code ?? merged.currency;
+    }
 
     const rate = await sql.begin(async (tx) => {
       const [rate] = await tx`
         update provider_rates set
           service_type = ${merged.service_type}, origin = ${merged.origin}, destination = ${merged.destination},
-          rate = ${merged.rate}, currency_id = ${merged.currency_id}, plant_id = ${merged.plant_id}, notes = ${merged.notes},
+          rate = ${merged.rate}, currency = ${merged.currency}, currency_id = ${merged.currency_id}, plant_id = ${merged.plant_id}, notes = ${merged.notes},
           updated_at = now()
         where id = ${id} returning *
       `;

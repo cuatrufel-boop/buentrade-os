@@ -1,13 +1,18 @@
 // sent_offers.markWon — the moment a quote becomes a real deal. One transaction: assigns the next
-// order number (BT-0001…), flips the offer to 'won', and creates the purchase_order + sales_order
-// (and a freight_order, when a US freight rate was actually part of the offer) that carry that
-// same order number forward. All four writes happen together or none do — a "won" offer with no
-// resulting orders, or an order with no offer behind it, would both be real data corruption.
+// order number (BT-0001…), flips the offer to 'won', and creates the purchase_order + sales_order,
+// a freight_order for the US leg (when a US freight rate was part of the offer), a SECOND
+// freight_order for the Mexican leg (when a Mexican destination rate was part of the offer — both
+// legs, matching production's full markWon(), not just the US-only leg trading-tool.html used to
+// do on its own), and order_extra_costs rows for tramite aduanal / bodega americana when either
+// was actually charged. Every write happens together or none do — a "won" offer with missing
+// downstream orders/costs, or an order with no offer behind it, would both be real data corruption.
+// Re-calling this on an already-won offer is rejected below (not_pending, 409) rather than
+// re-running the cascade — that 409 is this endpoint's idempotency guard, not a separate key.
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require" });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 Deno.serve(async (req) => {
@@ -80,8 +85,8 @@ Deno.serve(async (req) => {
         const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;
         if (rate) {
           const [fo] = await tx`
-            insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency_id, status)
-            values (${orderNumber}, ${sent_offer_id}, ${rate.provider_id}, ${rate.origin}, ${rate.destination}, ${rate.rate}, ${rate.currency_id}, 'open')
+            insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency, currency_id, status)
+            values (${orderNumber}, ${sent_offer_id}, ${rate.provider_id}, ${rate.origin}, ${rate.destination}, ${rate.rate}, ${rate.currency}, ${rate.currency_id}, 'open')
             returning *
           `;
           freightOrder = fo;
@@ -89,7 +94,51 @@ Deno.serve(async (req) => {
         }
       }
 
-      return { offer: updatedOffer, purchaseOrder, salesOrder, freightOrder };
+      // The Mexican leg (border → destino) — a second, separate freight_orders row on the same
+      // order_number. Production's markWon() always carried both legs; this used to be the one
+      // place trading-tool.html's own local implementation quietly diverged from it by only ever
+      // handling the US leg.
+      let mexicanFreightOrder = null;
+      if (offer.mexican_dest_rate_id) {
+        const [mxRate] = await tx`select * from provider_rates where id = ${offer.mexican_dest_rate_id}`;
+        if (mxRate) {
+          const [mfo] = await tx`
+            insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency, currency_id, status)
+            values (${orderNumber}, ${sent_offer_id}, ${mxRate.provider_id}, ${mxRate.origin}, ${mxRate.destination}, ${offer.mexican_freight_mxn ?? mxRate.rate}, ${mxRate.currency}, ${mxRate.currency_id}, 'open')
+            returning *
+          `;
+          mexicanFreightOrder = mfo;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "freight_orders", record_id: mfo.id, after: mfo });
+        }
+      }
+
+      // Customs costs actually charged on this offer — carried forward into order_extra_costs so
+      // Real Costs (trading-tool.html) shows them from the moment the order is won, not only once
+      // someone remembers to add them by hand afterward.
+      const agencyName = offer.customs_agency_provider_id
+        ? (await tx`select name from providers where id = ${offer.customs_agency_provider_id}`)[0]?.name
+        : null;
+      const extraCosts = [];
+      if (offer.tramite_aduanal_amount > 0) {
+        const [c] = await tx`
+          insert into order_extra_costs (order_number, sent_offer_id, cost_type, amount, notes)
+          values (${orderNumber}, ${sent_offer_id}, 'tramite_aduanal', ${offer.tramite_aduanal_amount}, ${agencyName ? `Customs agency: ${agencyName}` : null})
+          returning *
+        `;
+        extraCosts.push(c);
+        await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "order_extra_costs", record_id: c.id, after: c });
+      }
+      if (offer.bodega_americana_amount > 0) {
+        const [c] = await tx`
+          insert into order_extra_costs (order_number, sent_offer_id, cost_type, amount, notes)
+          values (${orderNumber}, ${sent_offer_id}, 'bodega_americana', ${offer.bodega_americana_amount}, ${agencyName ? `Customs agency: ${agencyName}` : null})
+          returning *
+        `;
+        extraCosts.push(c);
+        await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "order_extra_costs", record_id: c.id, after: c });
+      }
+
+      return { offer: updatedOffer, purchaseOrder, salesOrder, freightOrder, mexicanFreightOrder, extraCosts };
     });
 
     return jsonResponse({
@@ -99,6 +148,8 @@ Deno.serve(async (req) => {
       purchase_order: result.purchaseOrder,
       sales_order: result.salesOrder,
       freight_order: result.freightOrder,
+      mexican_freight_order: result.mexicanFreightOrder,
+      extra_costs: result.extraCosts,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);

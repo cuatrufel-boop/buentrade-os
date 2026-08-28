@@ -6,7 +6,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require" });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 const VALID_SERVICE_TYPES = ["us_freight", "mexican_freight", "customs", "tramite_aduanal", "bodega_americana", "lumper_fee", "inbond_release"];
 
@@ -22,10 +22,19 @@ Deno.serve(async (req) => {
     const [provider] = await sql`select id from providers where id = ${provider_id}`;
     if (!provider) return jsonResponse({ error: "unknown provider_id" }, 400);
 
+    // currency_id is the real FK; `currency` is the older text column every other read path
+    // (provider-rates-search included) still displays — keep both in sync rather than letting
+    // the text column silently freeze at its 'USD' default while currency_id says otherwise.
+    let currencyCode = null;
+    if (currency_id) {
+      const [c] = await sql`select code from currencies where id = ${currency_id}`;
+      currencyCode = c?.code ?? null;
+    }
+
     const rateRow = await sql.begin(async (tx) => {
       const [rateRow] = await tx`
-        insert into provider_rates (provider_id, service_type, origin, destination, rate, currency_id, plant_id, notes)
-        values (${provider_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currency_id}, ${plant_id}, ${notes})
+        insert into provider_rates (provider_id, service_type, origin, destination, rate, currency, currency_id, plant_id, notes)
+        values (${provider_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currencyCode ?? 'USD'}, ${currency_id}, ${plant_id}, ${notes})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "provider_rates", record_id: rateRow.id, after: rateRow });

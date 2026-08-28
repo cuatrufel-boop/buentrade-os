@@ -1,6 +1,8 @@
-// order_extra_costs.delete — matches production's no-confirm-dialog delete exactly (worth noting:
-// production has zero confirm() here, unlike every other delete in the app — replicated as-is,
-// not hardened, since that's the existing real behavior, not a bug this rebuild should silently fix).
+// sent_offers.delete — removes a single sent-offer record. Exists so a test/garbage row (or a
+// genuine mis-send) can be cleared without it blocking products.delete's foreign key, since
+// sent_offers.product_id has no ON DELETE CASCADE (a real historical send should never silently
+// vanish just because the product it referenced got deleted — deleting the offer itself has to be
+// its own explicit, audited action).
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
@@ -16,12 +18,12 @@ Deno.serve(async (req) => {
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
     const { actor, id } = body;
 
-    const [existing] = await sql`select * from order_extra_costs where id = ${id}`;
-    if (!existing) return jsonResponse({ error: "unknown order_extra_cost id" }, 404);
+    const [existing] = await sql`select * from sent_offers where id = ${id}`;
+    if (!existing) return jsonResponse({ error: "unknown sent_offers id" }, 404);
 
     await sql.begin(async (tx) => {
-      await tx`delete from order_extra_costs where id = ${id}`;
-      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "delete", table_name: "order_extra_costs", record_id: id, before: existing });
+      await tx`delete from sent_offers where id = ${id}`;
+      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "delete", table_name: "sent_offers", record_id: id, before: existing });
     });
 
     return jsonResponse({ deleted: true, id });
