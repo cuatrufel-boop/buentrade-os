@@ -318,7 +318,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -329,14 +328,22 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  accessToken: async () => {
-    const user = auth.currentUser;
-    return user ? await user.getIdToken(false) : null;
-  }
-});
+// STAGING Trading OS API — see providers.html/plants.html for the full note. Every read/write
+// goes through an Edge Function; there is no direct table access from this page anymore.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
 
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
@@ -593,30 +600,32 @@ let rqAllProviderRates = [];
 
 async function fetchQuotesLookups(){
   return Promise.all([
-    db.from('temperature').select('*').order('name'),
-    db.from('packaging').select('*').order('name'),
-    db.from('products').select('*').order('name'),
-    db.from('plants').select('id,name,contact_name,email,phone,whatsapp,docs_included,logo_url,logo_url_dark').order('name'),
-    db.from('plant_locations').select('id,plant_id,location_name,freight_to_border_usd,delivered_by_plant'),
-    db.from('providers').select('*').order('name'),
-    db.from('provider_rates').select('*'),
+    callApi('temperature-search', {}),
+    callApi('packaging-search', {}),
+    callApi('products-search', { limit: 500 }),
+    callApi('plants-search', {}),
+    callApi('plant-locations-search', {}),
+    callApi('providers-search', {}),
+    callApi('provider-rates-search', {}),
   ]);
 }
 
 async function loadQuotesPage(){
-  let [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
-  if (tempRes.error || packRes.error || prodRes.error || plantRes.error || locRes.error || provRes.error || rateRes.error){
+  let tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes;
+  try {
+    [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
+  } catch (e) {
     // Firebase token can still be propagating right after sign-in — retry once.
     await new Promise(r => setTimeout(r, 800));
     [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
   }
-  temperatures = tempRes.data || [];
-  packagings = packRes.data || [];
-  products = prodRes.data || [];
-  rqAllPlants = plantRes.data || [];
-  rqAllLocations = locRes.data || [];
-  rqAllProviders = provRes.data || [];
-  rqAllProviderRates = rateRes.data || [];
+  temperatures = tempRes.results || [];
+  packagings = packRes.results || [];
+  products = prodRes.results || [];
+  rqAllPlants = plantRes.results || [];
+  rqAllLocations = locRes.results || [];
+  rqAllProviders = provRes.results || [];
+  rqAllProviderRates = rateRes.results || [];
 
   // A bare name is never enough to pick from — the same name can point to several real products
   // (Fresh vs Frozen, Combo vs Box), and picking blind meant no way to tell which one a click
@@ -645,8 +654,10 @@ async function loadQuotesPage(){
 // so "Most requested" means what it says. Counts by name (not product_id) since sent_offers
 // stores the name as text at send time, same as everywhere else offer history is read.
 async function rqMostRequestedProducts(limit){
-  const { data, error } = await db.from('sent_offers').select('product_name').order('sent_at', { ascending: false }).limit(500);
-  if (error || !data) return [];
+  let data;
+  try { data = (await callApi('sent-offers-search', { limit: 500 })).results || []; }
+  catch (e) { return []; }
+  data.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
   const counts = {};
   data.forEach(r => {
     const n = (r.product_name || '').trim();
@@ -716,9 +727,10 @@ let qCovLinks = [];
 let qCovLoaded = false;
 async function loadCoverage(){
   if (qCovLoaded) return;
-  const { data, error } = await db.from('plant_products').select('plant_id,product_id,current_price,price_date');
-  if (error){ document.getElementById('qCovResults').innerHTML = `<div class="empty">Error: ${escapeHtml(error.message)}</div>`; return; }
-  qCovLinks = data || [];
+  let data;
+  try { data = (await callApi('plant-products-search', {})).results || []; }
+  catch (e) { document.getElementById('qCovResults').innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`; return; }
+  qCovLinks = data;
   qCovLoaded = true;
   renderCoverage();
 }
@@ -771,9 +783,9 @@ async function loadPendingPrices(){
   const empty = document.getElementById('qPendingEmpty');
   list.innerHTML = '<div class="empty">Loading…</div>';
   empty.style.display = 'none';
-  const { data, error } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at');
-  if (error){ list.innerHTML = `<div class="empty">Error: ${escapeHtml(error.message)}</div>`; return; }
-  const raw = data || [];
+  let raw;
+  try { raw = (await callApi('plant-products-search', {})).results || []; }
+  catch (e) { list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`; return; }
   // Every plant missing or stale on price lives here now, whether or not it's ever been asked —
   // Request Quote only shows plants actually ready to send (see autoPopulateRqPlants), so this is
   // the one place left for "needs a price," not just the ones already chased once before.
@@ -867,11 +879,10 @@ async function loadPendingPrices(){
 async function qOpenProductInRequest(productId){
   const prod = products.find(p => p.id === productId);
   if (!prod) return;
-  const { data: recent } = await db.from('sent_offers')
-    .select('delivery_dates')
-    .eq('product_id', productId).eq('status', 'sent')
-    .order('sent_at', { ascending: false }).limit(1);
-  const row = (recent || [])[0];
+  let recent = [];
+  try { recent = (await callApi('sent-offers-search', { product_id: productId, status: 'sent', limit: 100 })).results || []; } catch (e) {}
+  recent.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+  const row = recent[0];
   if (row && row.delivery_dates && row.delivery_dates.length) rqDeliveryDates = [...row.delivery_dates];
   setQuoteTab('request');
   rqQuickPick(prod.name_en || prod.name, productId);
@@ -916,17 +927,15 @@ async function qOpenPendingPlantInline(productId, plantId){
   rqMatchedCustomers = await rqMatchCustomersForProductIds([productId]);
 
   if (!rqDeliveryDates.length){
-    const { data: recent } = await db.from('sent_offers')
-      .select('delivery_dates')
-      .eq('product_id', productId).eq('status', 'sent')
-      .order('sent_at', { ascending: false }).limit(1);
-    const row = (recent || [])[0];
+    let recent = [];
+    try { recent = (await callApi('sent-offers-search', { product_id: productId, status: 'sent', limit: 100 })).results || []; } catch (e) {}
+    recent.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+    const row = recent[0];
     if (row && row.delivery_dates && row.delivery_dates.length) rqDeliveryDates = [...row.delivery_dates];
   }
 
-  const { data: link } = await db.from('plant_products')
-    .select('plant_id, product_id, current_price, price_date, last_requested_at')
-    .eq('plant_id', plantId).eq('product_id', productId).maybeSingle();
+  let link = null;
+  try { link = ((await callApi('plant-products-search', { plant_id: plantId, product_id: productId })).results || [])[0] || null; } catch (e) {}
   const hasPrice = link && link.current_price != null;
   const plantObj = {
     ...plant, rqProductId: productId,
@@ -1145,13 +1154,14 @@ async function autoPopulateRqPlants(){
   // one search = one product, across every brand that carries THAT one — a different variant is
   // its own separate search, never shown mixed in here (this used to surface it as a switchable
   // alternative, which read as "mixing products" and was more confusing than useful).
-  const { data, error } = await db.from('plant_products').select('plant_id, product_id, current_price, price_date, last_requested_at').eq('product_id', rqMatchedProductId);
+  let data;
   // A failed fetch used to fall through to `data || []` completely silently — the whole plant list
   // just came back empty with no clue anything went wrong, indistinguishable from "no plant on
   // file yet." Surfacing the real error is the whole difference between "reload the page" and
   // "why does this product suddenly have no plants."
-  if (error){
-    alert(`Couldn't load plants for this product: ${error.message}\n\nTry reloading the page.`);
+  try { data = (await callApi('plant-products-search', { product_id: rqMatchedProductId })).results || []; }
+  catch (e) {
+    alert(`Couldn't load plants for this product: ${e.message}\n\nTry reloading the page.`);
     return;
   }
   // Request Quote is only ever a to-do list — a plant sitting here either hasn't been asked for a
@@ -1161,13 +1171,14 @@ async function autoPopulateRqPlants(){
   // in-memory-only removeRqPlant the trader already saw disappear-then-reappear on them:
   //   1. Asked and no newer price has landed since → already belongs in Pending Quotes.
   //   2. This exact price was already sent as an offer (to anyone) → already belongs in Offers.
-  const { data: sentRows, error: sentErr } = await db.from('sent_offers').select('plant_id, sent_at').eq('product_id', rqMatchedProductId);
-  if (sentErr){
-    alert(`Couldn't check which plants were already offered: ${sentErr.message}\n\nTry reloading the page.`);
+  let sentRows;
+  try { sentRows = (await callApi('sent-offers-search', { product_id: rqMatchedProductId, limit: 500 })).results || []; }
+  catch (e) {
+    alert(`Couldn't check which plants were already offered: ${e.message}\n\nTry reloading the page.`);
     return;
   }
   const lastSentAtByPlant = {};
-  (sentRows || []).forEach(r => {
+  sentRows.forEach(r => {
     const prev = lastSentAtByPlant[r.plant_id];
     if (!prev || r.sent_at > prev) lastSentAtByPlant[r.plant_id] = r.sent_at;
   });
@@ -2182,11 +2193,13 @@ let rqCustomersFetchedFor = null;
 // copies that could drift.
 async function rqMatchCustomersForProductIds(matchingProductIds){
   if (!matchingProductIds.length) return [];
-  const { data: links } = await db.from('customer_products').select('customer_id').in('product_id', matchingProductIds);
-  const customerIds = [...new Set((links || []).map(l => l.customer_id))];
+  let links = [];
+  try { links = (await callApi('customer-products-search', { product_ids: matchingProductIds })).results || []; } catch (e) {}
+  const customerIds = [...new Set(links.map(l => l.customer_id))];
   if (!customerIds.length) return [];
-  const { data: customers } = await db.from('customers').select('id,trade_name,contact_name,email,phone,whatsapp,usual_delivery_type,usual_destination,customs_agency_provider_id').in('id', customerIds).order('trade_name');
-  return customers || [];
+  let customers = [];
+  try { customers = (await callApi('customers-search', { ids: customerIds })).results || []; } catch (e) {}
+  return customers;
 }
 
 async function rqFindCustomers(){
@@ -2342,8 +2355,8 @@ function rqChasePendingPrices(plants){
     const today = new Date().toISOString().slice(0, 10);
     p.rqLastRequestedAt = today;
     if (p.rqProductId){
-      const { error: reqErr } = await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', p.id).eq('product_id', p.rqProductId);
-      if (reqErr) alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${reqErr.message}`);
+      try { await callApi('plant-products-request-price', { actor: currentActor(), plant_id: p.id, product_id: p.rqProductId }); }
+      catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); }
     }
     renderRqPlants();
   };
@@ -2409,17 +2422,15 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
     const agencyId = plant.rqMexicanDestRateId ? rqCustomsAgencyForPlant(plant) : null;
     customers.forEach(c => {
       rows.push({
-        sent_by: (auth.currentUser && auth.currentUser.email) || null,
+        actor: currentActor(),
         channel,
-        product_id: rqMatchedProductId,
+        product_id: rqMatchedProductId || null,
         product_name: loggedProductName,
         product_spec: rqProductSpec,
         product_name_es: loggedProductNameEs,
         product_spec_es: rqProductSpecEs,
         plant_id: plant.id,
-        plant_name: plant.name,
         customer_id: c.id,
-        customer_name: c.trade_name,
         purchase_price: plant.rqPrice || null,
         us_freight_rate_id: plant.rqUsFreightRateId || null,
         us_freight_amount: rqFreightForPlant(plant) || 0,
@@ -2441,8 +2452,13 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
     });
   });
   if (!rows.length) return;
-  const { error } = await db.from('sent_offers').insert(rows);
-  if (error) console.error('Failed to log sent offer(s):', error.message);
+  // sent_offers.create is single-row — no batch variant exists, so a multi-plant × multi-customer
+  // send logs one call per row. Kept sequential (not Promise.all) so one failure is attributable
+  // to a specific plant/customer pair in the console instead of an unordered Promise.all rejection.
+  for (const row of rows) {
+    try { await callApi('sent-offers-create', row); }
+    catch (e) { console.error('Failed to log sent offer:', e.message, row); }
+  }
 }
 
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
@@ -2804,8 +2820,8 @@ function rqOnAskSent(p){
     const today = new Date().toISOString().slice(0, 10);
     p.rqLastRequestedAt = today;
     if (p.rqProductId){
-      const { error: reqErr } = await db.from('plant_products').update({ last_requested_at: today }).eq('plant_id', p.id).eq('product_id', p.rqProductId);
-      if (reqErr){ alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${reqErr.message}`); renderRqPlants(); return; }
+      try { await callApi('plant-products-request-price', { actor: currentActor(), plant_id: p.id, product_id: p.rqProductId }); }
+      catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); renderRqPlants(); return; }
     }
     // Asked — this plant's job here is done until it comes back with a price; it leaves Request
     // Quote the same way removeRqPlant always has, now tracked in the Pending Prices tab instead

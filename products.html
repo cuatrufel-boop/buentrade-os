@@ -47,6 +47,7 @@
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;}
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);}
+  .field input[disabled]{background:var(--blue-light);color:var(--ink-soft);font-weight:600;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
   .section-title{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px;}
@@ -218,42 +219,54 @@ auth.onAuthStateChanged(user => {
     <input type="file" id="specFile" accept="application/pdf">
     <div id="specMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
 
-    <div class="section-title">Identity</div>
+    <div class="section-title">Category / Temperature / Packaging</div>
+    <div class="grid3">
+      <div class="field"><label>Category *</label><select id="category" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+      <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+      <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+    </div>
+
+    <!-- Product Profile — the 12 fields every product profile MUST carry (6 English, 6 Spanish).
+         Category/Temperature/Packaging are single dropdowns above (closed catalogs, one selection
+         drives both languages at once) — their EN/ES readouts below are derived, not separately
+         editable. Name/Variation/Full name are independently typed per language. -->
+    <div class="section-title">Product Profile</div>
     <div class="grid2">
-      <div class="field"><label>Name (Spanish) *</label><input id="name" required oninput="checkNameDuplicate()">
+      <div class="field"><label>Category English Product Name</label><input id="category_en_display" readonly disabled></div>
+      <div class="field"><label>Category Spanish Product Name</label><input id="category_es_display" readonly disabled></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Full English Product Name (for PO &amp; FO) *</label><input id="full_name_en" required placeholder="e.g. Frozen Pork Bone in Butt, Box"></div>
+      <div class="field"><label>Full Spanish Product Name (for SO) *</label><input id="full_name_es" required placeholder="e.g. Cabeza de lomo con hueso Congelado, Caja"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Product English Name *</label><input id="name_en" required></div>
+      <div class="field"><label>Product Spanish Name *</label><input id="name" required oninput="checkNameDuplicate()">
         <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
       </div>
-      <div class="field"><label>Name (English) *</label><input id="name_en" required></div>
     </div>
-    <div class="grid3">
-      <div class="field"><label>Category *</label><select id="category" required><option value="">—</option></select></div>
-      <div class="field"><label>Subcategory (ES)</label><input id="subcategory"></div>
-      <div class="field"><label>Subcategory (EN)</label><input id="subcategory_en"></div>
+    <div class="grid2">
+      <div class="field"><label>Variation English Product Name</label><input id="subcategory_en"></div>
+      <div class="field"><label>Variation Spanish Product Name</label><input id="subcategory"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Temperature English Product Name</label><input id="temperature_en_display" readonly disabled></div>
+      <div class="field"><label>Temperature Spanish Product Name</label><input id="temperature_es_display" readonly disabled></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Packing English Product Name</label><input id="packing_en_display" readonly disabled></div>
+      <div class="field"><label>Packing Spanish Product Name</label><input id="packing_es_display" readonly disabled></div>
     </div>
 
     <div class="section-title">Attributes</div>
     <div class="grid3">
       <div class="field"><label>Brand</label><input id="brand"></div>
-      <div class="field"><label>Temperature *</label>
-        <select id="temperature_id" required><option value="">—</option></select>
-      </div>
-      <div class="field"><label>Packaging *</label>
-        <select id="packaging_id" required><option value="">—</option></select>
-      </div>
-    </div>
-    <div class="grid3">
       <div class="field"><label>Presentation detail</label><input id="presentation" placeholder="e.g. poly, encerada, al vacío"></div>
-    </div>
-
-    <div class="section-title">Full name (PO / FO / SO)</div>
-    <div class="grid2">
-      <div class="field"><label>Full name EN (PO / FO) *</label><input id="full_name_en" required placeholder="e.g. Frozen Pork Bone in Butt, Box"></div>
-      <div class="field"><label>Full name ES (SO) *</label><input id="full_name_es" required placeholder="e.g. Cabeza de lomo con hueso Congelado, Caja"></div>
+      <div class="field"><label>Origin</label><input id="origin"></div>
     </div>
     <div class="grid3">
       <div class="field"><label>Unit of measure</label><input id="unit_of_measure"></div>
       <div class="field"><label>Standard weight</label><input type="number" id="standard_weight"></div>
-      <div class="field"><label>Origin</label><input id="origin"></div>
     </div>
 
     <div class="section-title">Notes</div>
@@ -326,6 +339,7 @@ function openForm(product){
       specPrev.style.display = 'block';
     }
   }
+  updateProfileDisplays();
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
 }
@@ -403,6 +417,21 @@ async function loadLookups(){
 function categoryEnById(id){ const c = categories.find(x => x.id === id); return c ? c.name_en : null; }
 function categoryEnByName(name){ const c = categories.find(x => x.name === name); return c ? c.name_en : name; }
 
+// Drives the 6 read-only "Product Profile" fields for Category/Temperature/Packaging — each is a
+// single closed-catalog dropdown that carries both languages on the same row, so picking one
+// selection fills both the English and Spanish labeled fields at once.
+function updateProfileDisplays(){
+  const cat = categories.find(c => c.id === document.getElementById('category').value);
+  const temp = temperatures.find(t => t.id === document.getElementById('temperature_id').value);
+  const pack = packagings.find(p => p.id === document.getElementById('packaging_id').value);
+  document.getElementById('category_en_display').value = cat ? cat.name_en : '';
+  document.getElementById('category_es_display').value = cat ? cat.name : '';
+  document.getElementById('temperature_en_display').value = temp ? (temp.name_en || temp.name) : '';
+  document.getElementById('temperature_es_display').value = temp ? (temp.name || temp.name_en) : '';
+  document.getElementById('packing_en_display').value = pack ? (pack.name_en || pack.name) : '';
+  document.getElementById('packing_es_display').value = pack ? (pack.name || pack.name_en) : '';
+}
+
 async function loadProducts(){
   try {
     await loadLookups();
@@ -418,9 +447,6 @@ async function loadProducts(){
   }
 }
 
-// English throughout this catalog screen, same rule as everywhere else in the app — falls back
-// to the Spanish catalog entry only if a temp/packaging/category row has no English name on file.
-const CATEGORY_EN = { Cerdo: 'Pork', Pollo: 'Chicken', Pavo: 'Turkey', Res: 'Beef', Vegetales: 'Vegetables', Marrana: 'Sow' };
 function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? (t.name_en || t.name) : null; }
 function packName(id){ const p = packagings.find(x => x.id === id); return p ? (p.name_en || p.name) : null; }
 
@@ -449,7 +475,7 @@ function renderProducts(){
       ${avatarHtml}
       <div class="pkg-plant-info">
         <a class="name-link pkg-plant-name" onclick="editProduct('${p.id}')">${escapeHtml(p.name_en || p.name || '')}</a>
-        <span class="pkg-plant-sub">${escapeHtml(CATEGORY_EN[p.category] || p.category || '')} · ${escapeHtml(tp)}</span>
+        <span class="pkg-plant-sub">${escapeHtml(categoryEnById(p.category_id) || p.category || '')} · ${escapeHtml(tp)}</span>
       </div>
       <div style="min-width:50px;font-size:15px;">${attachments}</div>
       <div style="margin-left:auto;flex-shrink:0;">
@@ -486,7 +512,7 @@ function checkNameDuplicate(){
   // Full spec per match, not just the bare name — "Pork Bone in Butt" alone can't be judged as a
   // real duplicate or a legitimate different packaging/temperature variant of the same cut.
   const specFor = p => {
-    const bits = [CATEGORY_EN[p.category] || p.category, p.subcategory_en, tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean);
+    const bits = [categoryEnById(p.category_id) || p.category, p.subcategory_en, tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean);
     return `${escapeHtml(p.name_en || p.name)} — ${escapeHtml(bits.join(', '))}`;
   };
   warningEl.innerHTML = '⚠️ Possible duplicate — matches: ' + matches.map(p =>
