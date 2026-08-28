@@ -436,7 +436,6 @@
 <!-- Firebase Auth (free tier) — handles real per-employee accounts + email verification -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -447,19 +446,26 @@ const firebaseConfig = {
 const FIREBASE_READY = firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY";
 
 let auth;
-let db; // Supabase — new for this page, only used by the negotiation panel below. calc() never touches it.
+// STAGING Trading OS API — see offers.html/quotes.html for the full note. The negotiation panel
+// below (and the Real Costs panel) go through Edge Functions now, never a direct table read/write.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth && auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
 if (FIREBASE_READY) {
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); // stays logged in on this browser/device
-  const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-  db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    accessToken: async () => {
-      const user = auth.currentUser;
-      return user ? await user.getIdToken(false) : null;
-    }
-  });
 } else {
   document.getElementById('authSetupNote').innerHTML =
     '⚠️ Login not configured yet. Ask Claude for the 5-minute Firebase setup steps, then paste your keys at the top of this file.';
@@ -1455,10 +1461,10 @@ const RQ_LABELS_TYPICAL_CASES = 1000;
 
 async function fetchStandardCostSuggestions(){
   const types = [...Object.values(RQ_STANDARD_COST_FIELDS), 'labels'];
-  const { data, error } = await db.from('provider_rates').select('service_type,rate').in('service_type', types);
-  if (error || !data) return;
+  let data;
+  try { data = (await callApi('provider-rates-search', {})).results || []; } catch (e) { return; }
   const byType = {};
-  data.forEach(r => { if (!(r.service_type in byType)) byType[r.service_type] = r.rate; });
+  data.forEach(r => { if (types.includes(r.service_type) && !(r.service_type in byType)) byType[r.service_type] = r.rate; });
 
   Object.entries(RQ_STANDARD_COST_FIELDS).forEach(([fieldId, serviceType]) => {
     const rate = byType[serviceType];
@@ -1519,22 +1525,22 @@ function negoFirstName(name){
 
 async function negoInit(){
   const offerId = __qp.get('offerId');
-  if (!offerId || !db) return;
+  if (!offerId) return;
   document.getElementById('negoCard').style.display = 'block';
-  const { data: offer, error } = await db.from('sent_offers').select('*').eq('id', offerId).single();
-  if (error || !offer){
-    document.getElementById('negoMsg').textContent = 'Could not load this offer: ' + (error ? error.message : 'not found');
+  let offer;
+  try { offer = ((await callApi('sent-offers-search', { id: offerId })).results || [])[0]; }
+  catch (e) { document.getElementById('negoMsg').textContent = 'Could not load this offer: ' + e.message; return; }
+  if (!offer){
+    document.getElementById('negoMsg').textContent = 'Could not load this offer: not found';
     return;
   }
   negoOffer = offer;
   const plantId = __qp.get('plantId') || offer.plant_id;
   if (plantId){
-    const { data: plant } = await db.from('plants').select('*').eq('id', plantId).single();
-    negoPlant = plant;
+    try { negoPlant = ((await callApi('plants-search', { id: plantId })).results || [])[0] || null; } catch (e) { negoPlant = null; }
   }
   if (offer.customer_id){
-    const { data: customer } = await db.from('customers').select('*').eq('id', offer.customer_id).single();
-    negoCustomer = customer;
+    try { negoCustomer = ((await callApi('customers-search', { ids: [offer.customer_id] })).results || [])[0] || null; } catch (e) { negoCustomer = null; }
   }
   negoRenderLog();
   if (offer.status === 'won'){
@@ -1558,11 +1564,8 @@ const REAL_COST_TYPES = ['Labels', 'Plastic wrap', 'IN-LIEU', 'Storage', 'Fresh 
 let realCostsCarriers = null;
 async function realCostsFetchCarriers(){
   if (realCostsCarriers) return realCostsCarriers;
-  const { data: roles } = await db.from('provider_roles').select('provider_id').eq('role', 'carrier');
-  const ids = [...new Set((roles || []).map(r => r.provider_id))];
-  if (!ids.length){ realCostsCarriers = []; return realCostsCarriers; }
-  const { data: providers } = await db.from('providers').select('id,name').in('id', ids).order('name');
-  realCostsCarriers = providers || [];
+  try { realCostsCarriers = (await callApi('providers-search', { role: 'carrier' })).results || []; }
+  catch (e) { realCostsCarriers = []; }
   return realCostsCarriers;
 }
 
@@ -1574,12 +1577,12 @@ async function realCostsInit(){
 
 async function realCostsLoad(){
   if (!negoOffer || !negoOffer.order_number) return;
-  const [foRes, costsRes] = await Promise.all([
-    db.from('freight_orders').select('*').eq('order_number', negoOffer.order_number),
-    db.from('order_extra_costs').select('*').eq('order_number', negoOffer.order_number).order('created_at'),
+  const [fos, costs] = await Promise.all([
+    callApi('freight-orders-search', { order_number: negoOffer.order_number }).then(r => r.results || []).catch(() => []),
+    callApi('order-extra-costs-search', { order_number: negoOffer.order_number }).then(r => r.results || []).catch(() => []),
     realCostsFetchCarriers(),
   ]);
-  realCostsRender(foRes.data || [], costsRes.data || []);
+  realCostsRender(fos, costs);
 }
 
 // This card lives in the same narrow 3-column grid as Direct Costs/Profitability (~280px),
@@ -1622,13 +1625,13 @@ function realCostsRender(freightOrders, costs){
 
 async function realCostSaveFreight(freightOrderId, value){
   const amount = value.trim() === '' ? null : Number(value);
-  const { error } = await db.from('freight_orders').update({ actual_rate: amount }).eq('id', freightOrderId);
-  if (error) alert('Error: ' + error.message);
+  try { await callApi('freight-orders-update', { actor: currentActor(), id: freightOrderId, actual_rate: amount }); }
+  catch (e) { alert('Error: ' + e.message); }
 }
 
 async function realCostSetCarrier(freightOrderId, providerId){
-  const { error } = await db.from('freight_orders').update({ carrier_provider_id: providerId || null }).eq('id', freightOrderId);
-  if (error) alert('Error: ' + error.message);
+  try { await callApi('freight-orders-update', { actor: currentActor(), id: freightOrderId, carrier_provider_id: providerId || null }); }
+  catch (e) { alert('Error: ' + e.message); }
 }
 
 async function realCostAdd(){
@@ -1637,17 +1640,18 @@ async function realCostAdd(){
   const amountInput = document.getElementById('realCostAmount');
   const amount = Number(amountInput.value);
   if (!amount || amount <= 0) return;
-  const { error } = await db.from('order_extra_costs').insert({
-    order_number: negoOffer.order_number, sent_offer_id: negoOffer.id, cost_type: type, amount,
-  });
-  if (error){ alert('Error: ' + error.message); return; }
+  try {
+    await callApi('order-extra-costs-add', {
+      actor: currentActor(), order_number: negoOffer.order_number, sent_offer_id: negoOffer.id, cost_type: type, amount,
+    });
+  } catch (e) { alert('Error: ' + e.message); return; }
   amountInput.value = '';
   await realCostsLoad();
 }
 
 async function realCostDelete(costId){
-  const { error } = await db.from('order_extra_costs').delete().eq('id', costId);
-  if (error){ alert('Error: ' + error.message); return; }
+  try { await callApi('order-extra-costs-delete', { actor: currentActor(), id: costId }); }
+  catch (e) { alert('Error: ' + e.message); return; }
   await realCostsLoad();
 }
 
@@ -1732,14 +1736,13 @@ function negoSetSaveStatus(state, msg){
 async function negoLogEvent(to, price){
   if (!negoOffer) return;
   negoSetSaveStatus('saving');
-  const log = [...(negoOffer.negotiation_log || []), { to, price, at: new Date().toISOString() }];
-  const { error } = await db.from('sent_offers').update({ negotiation_log: log }).eq('id', negoOffer.id);
-  if (!error){
-    negoOffer.negotiation_log = log;
+  try {
+    const result = await callApi('sent-offers-log-event', { actor: currentActor(), sent_offer_id: negoOffer.id, to, price });
+    negoOffer.negotiation_log = result.offer.negotiation_log;
     negoRenderLog();
     negoSetSaveStatus('saved');
-  } else {
-    negoSetSaveStatus('error', error.message);
+  } catch (e) {
+    negoSetSaveStatus('error', e.message);
   }
 }
 
@@ -1850,12 +1853,19 @@ async function negoSendToCustomer(channel){
 // Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
 // right now in the calculator (not the original quoted snapshot), and additionally pings the
 // customs agency on file — offers.html's quick "Ganada" doesn't need that since nothing changed.
-async function negoSaveDefinitive(){
+async function negoSaveDefinitive(overrideCreditCheck){
   if (!negoOffer) return;
-  const ok = await showTTConfirm('Create Order?', `${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
-  if (!ok) return;
+  if (!overrideCreditCheck){
+    const ok = await showTTConfirm('Create Order?', `${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
+    if (!ok) return;
+  }
   document.getElementById('negoMsg').innerHTML = '<span style="color:var(--ink-soft);">Saving — creating order and documents…</span>';
 
+  // Last-minute numbers straight off this panel's own live calculator — may never have been saved
+  // via sent_offers.negotiate, so markWon has to snapshot exactly what's on screen right now, not
+  // whatever was last saved. The API applies these atomically along with the whole win cascade
+  // (PO, SO, both freight legs, customs costs, shipment tracking) in one transaction — this used
+  // to be its own separate, US-freight-only copy of that cascade.
   const purchase_price = negoCurrentCost();
   const sale_per_lb = negoCurrentSale();
   const freightEl = document.getElementById('freight');
@@ -1864,51 +1874,29 @@ async function negoSaveDefinitive(){
   const total_cost = purchase_price * weight;
   const total_sale = sale_per_lb * weight;
 
-  const { data: numRes, error: numErr } = await db.rpc('next_order_number');
-  if (numErr){ alert('Error generating order number: ' + numErr.message); return; }
-  const orderNumber = numRes;
-  const who = (auth.currentUser && auth.currentUser.email) || null;
-
-  const { error: updErr } = await db.from('sent_offers').update({
-    status: 'won', order_number: orderNumber, won_at: new Date().toISOString(), won_by: who,
-    purchase_price, sale_per_lb, us_freight_amount, total_cost, total_sale, weight,
-  }).eq('id', negoOffer.id);
-  if (updErr){ alert('Error: ' + updErr.message); return; }
-
-  // The status update above is the one that must not fail silently — it already returns early
-  // on error. These secondary inserts can still fail independently, and the trader needs to
-  // know the order isn't fully built, not just see a blanket "created" message.
-  const warnings = [];
-
-  const { error: poErr } = await db.from('purchase_orders').insert({
-    order_number: orderNumber, sent_offer_id: negoOffer.id, plant_id: negoOffer.plant_id, plant_name: negoOffer.plant_name,
-    product_id: negoOffer.product_id, product_name: negoOffer.product_name, product_spec: negoOffer.product_spec, purchase_price,
-    weight, total_cost, docs_on: negoOffer.docs_on, delivery_dates: negoOffer.delivery_dates,
-  });
-  if (poErr) warnings.push('PO: ' + poErr.message);
-
-  const { error: soErr } = await db.from('sales_orders').insert({
-    order_number: orderNumber, sent_offer_id: negoOffer.id, customer_id: negoOffer.customer_id, customer_name: negoOffer.customer_name,
-    product_id: negoOffer.product_id, product_name: negoOffer.product_name, product_spec: negoOffer.product_spec,
-    product_name_es: negoOffer.product_name_es, product_spec_es: negoOffer.product_spec_es, sale_price: sale_per_lb,
-    weight, total_sale, delivery_dates: negoOffer.delivery_dates,
-  });
-  if (soErr) warnings.push('SO: ' + soErr.message);
-
-  if (negoOffer.us_freight_rate_id && us_freight_amount > 0){
-    const { data: rate } = await db.from('provider_rates').select('provider_id,origin').eq('id', negoOffer.us_freight_rate_id).single();
-    const { error: foErr } = await db.from('freight_orders').insert({
-      order_number: orderNumber, sent_offer_id: negoOffer.id, carrier_provider_id: rate ? rate.provider_id : null,
-      origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: us_freight_amount, currency: 'USD',
-      product_name_es: negoOffer.product_name_es, product_spec_es: negoOffer.product_spec_es,
+  let result;
+  try {
+    result = await callApi('sent-offers-mark-won', {
+      actor: currentActor(), sent_offer_id: negoOffer.id, override_credit_check: !!overrideCreditCheck,
+      purchase_price, sale_per_lb, us_freight_amount, total_cost, total_sale, weight,
     });
-    if (foErr) warnings.push('FO: ' + foErr.message);
+  } catch (e) {
+    if (e.data && e.data.error === 'credit_limit_exceeded'){
+      const proceed = await showTTConfirm('Credit limit exceeded', e.data.message, 'Create anyway');
+      if (proceed) return negoSaveDefinitive(true);
+      document.getElementById('negoMsg').textContent = '';
+      return;
+    }
+    alert('Error: ' + e.message);
+    return;
   }
+  const orderNumber = result.order_number;
 
   // Give the customs agency on file a heads-up that a new load is coming — no formal document
   // for this yet, just a message, same idea as PO/SO/FO but for the crossing broker.
   if (negoOffer.customs_agency_provider_id){
-    const { data: agency } = await db.from('providers').select('*').eq('id', negoOffer.customs_agency_provider_id).single();
+    let agency = null;
+    try { agency = ((await callApi('providers-search', { id: negoOffer.customs_agency_provider_id })).results || [])[0] || null; } catch (e) {}
     if (agency && (agency.email || agency.phone || agency.whatsapp)){
       const msg = `Nueva carga confirmada — Orden ${orderNumber}: ${negoOffer.product_name}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${(negoOffer.delivery_dates || []).join(', ') || 'por confirmar'}.`;
       if (agency.email){
@@ -1920,11 +1908,10 @@ async function negoSaveDefinitive(){
     }
   }
 
-  if (warnings.length){
-    document.getElementById('negoMsg').innerHTML = `<span style="color:var(--red);font-weight:700;">Order ${orderNumber} created, but with errors:</span><br>${warnings.map(negoEscapeHtml).join('<br>')}<br>Check this order in Offers.`;
-  } else {
-    document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Order ${orderNumber} created. Go to Offers to export PO/SO/FO.</span>`;
-  }
+  // The API call above is one atomic transaction — either the whole cascade (PO, SO, both
+  // freight legs, customs costs, shipment) succeeded, or the throw above already reported the
+  // error and returned before reaching here. No partial-failure state left to warn about.
+  document.getElementById('negoMsg').innerHTML = `<span style="color:#0F8A5F;font-weight:700;">Order ${orderNumber} created. Go to Offers to export PO/SO/FO.</span>`;
 
   // Lets Offers (when this TT is embedded in its inline panel, not a standalone tab) refresh
   // that row immediately instead of the trader having to leave the panel to go check.

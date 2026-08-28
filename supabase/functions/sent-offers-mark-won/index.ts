@@ -22,7 +22,14 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const missing = ["actor", "sent_offer_id"].filter((k) => !body[k]);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-    const { actor, sent_offer_id, override_credit_check = false } = body;
+    const {
+      actor, sent_offer_id, override_credit_check = false,
+      // Optional last-minute overrides — the Trading Tool's own negotiation/calculator panel can
+      // have edited these live without saving them via sent_offers.negotiate first; winning has to
+      // snapshot whatever's actually on screen at that moment, not the last-saved values.
+      purchase_price = null, sale_per_lb = null, total_cost = null, total_sale = null,
+      weight = null, us_freight_amount = null,
+    } = body;
 
     const [offer] = await sql`select * from sent_offers where id = ${sent_offer_id}`;
     if (!offer) return jsonResponse({ error: "unknown sent_offer_id" }, 404);
@@ -30,26 +37,33 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "not_pending", message: `This offer is already '${offer.status}', not 'sent' — can't mark it won again.`, current_status: offer.status }, 409);
     }
 
+    const finalPurchasePrice = purchase_price ?? offer.purchase_price;
+    const finalSalePerLb = sale_per_lb ?? offer.sale_per_lb;
+    const finalTotalCost = total_cost ?? offer.total_cost;
+    const finalTotalSale = total_sale ?? offer.total_sale;
+    const finalWeight = weight ?? offer.weight;
+    const finalUsFreightAmount = us_freight_amount ?? offer.us_freight_amount;
+
     // Credit-limit check — "si productos neza es hasta 100.000 usd no me puedo pasar de ese monto
     // hasta que pague." Never a block (same rule as everything else): the outstanding balance
     // (delivered-or-not, unpaid shipments) plus this new sale is compared against the customer's
     // credit_limit, and if it would exceed it, this returns a real number to confirm against
     // instead of refusing outright — override_credit_check proceeds anyway, same shape as every
-    // other duplicate/limit check in this API.
-    if (offer.customer_id && offer.total_sale != null && !override_credit_check) {
+    // other duplicate/limit check in this API. Uses the FINAL (possibly overridden) sale amount.
+    if (offer.customer_id && finalTotalSale != null && !override_credit_check) {
       const [customer] = await sql`select credit_limit from customers where id = ${offer.customer_id}`;
       if (customer?.credit_limit != null) {
         const [{ outstanding }] = await sql`
           select coalesce(sum(sale_amount), 0) as outstanding from shipments
           where customer_id = ${offer.customer_id} and paid_at is null
         `;
-        const projected = Number(outstanding) + Number(offer.total_sale);
+        const projected = Number(outstanding) + Number(finalTotalSale);
         if (projected > Number(customer.credit_limit)) {
           return jsonResponse({
             error: "credit_limit_exceeded",
-            message: `This customer's outstanding balance ($${Number(outstanding).toLocaleString()}) plus this order ($${Number(offer.total_sale).toLocaleString()}) would exceed their credit limit ($${Number(customer.credit_limit).toLocaleString()}). Confirm to proceed anyway or wait for payment to free up credit.`,
+            message: `This customer's outstanding balance ($${Number(outstanding).toLocaleString()}) plus this order ($${Number(finalTotalSale).toLocaleString()}) would exceed their credit limit ($${Number(customer.credit_limit).toLocaleString()}). Confirm to proceed anyway or wait for payment to free up credit.`,
             outstanding_balance: outstanding,
-            order_amount: offer.total_sale,
+            order_amount: finalTotalSale,
             credit_limit: customer.credit_limit,
             projected_total: projected,
           }, 409);
@@ -61,21 +75,25 @@ Deno.serve(async (req) => {
       const [{ next_order_number: orderNumber }] = await tx`select next_order_number()`;
 
       const [updatedOffer] = await tx`
-        update sent_offers set status = 'won', order_number = ${orderNumber}, won_at = now(), won_by = ${actor}
+        update sent_offers set
+          status = 'won', order_number = ${orderNumber}, won_at = now(), won_by = ${actor},
+          purchase_price = ${finalPurchasePrice}, sale_per_lb = ${finalSalePerLb},
+          total_cost = ${finalTotalCost}, total_sale = ${finalTotalSale},
+          weight = ${finalWeight}, us_freight_amount = ${finalUsFreightAmount}
         where id = ${sent_offer_id} returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "sent_offers", record_id: sent_offer_id, before: offer, after: updatedOffer });
 
       const [purchaseOrder] = await tx`
         insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${offer.purchase_price}, ${offer.weight}, ${offer.total_cost}, ${offer.docs_on}, ${tx.json(offer.delivery_dates)}, 'open')
+        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(offer.delivery_dates)}, 'open')
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "purchase_orders", record_id: purchaseOrder.id, after: purchaseOrder });
 
       const [salesOrder] = await tx`
         insert into sales_orders (order_number, sent_offer_id, customer_id, customer_name, product_id, product_name, product_spec, product_name_es, product_spec_es, sale_price, weight, total_sale, delivery_dates, status)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${offer.customer_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${offer.product_name_es}, ${offer.product_spec_es}, ${offer.sale_per_lb}, ${offer.weight}, ${offer.total_sale}, ${tx.json(offer.delivery_dates)}, 'open')
+        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${offer.customer_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${offer.product_name_es}, ${offer.product_spec_es}, ${finalSalePerLb}, ${finalWeight}, ${finalTotalSale}, ${tx.json(offer.delivery_dates)}, 'open')
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "sales_orders", record_id: salesOrder.id, after: salesOrder });
@@ -84,9 +102,12 @@ Deno.serve(async (req) => {
       if (offer.us_freight_rate_id) {
         const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;
         if (rate) {
+          // quoted_rate is what was actually quoted for THIS deal (finalUsFreightAmount — may
+          // have been negotiated away from the catalog's base rate.rate), not the generic lane
+          // rate; actual_rate (filled in later via Real Costs) is what the carrier really charges.
           const [fo] = await tx`
             insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency, currency_id, status)
-            values (${orderNumber}, ${sent_offer_id}, ${rate.provider_id}, ${rate.origin}, ${rate.destination}, ${rate.rate}, ${rate.currency}, ${rate.currency_id}, 'open')
+            values (${orderNumber}, ${sent_offer_id}, ${rate.provider_id}, ${rate.origin}, ${rate.destination}, ${finalUsFreightAmount ?? rate.rate}, ${rate.currency}, ${rate.currency_id}, 'open')
             returning *
           `;
           freightOrder = fo;
@@ -145,7 +166,7 @@ Deno.serve(async (req) => {
       // to whichever leg actually picks up from the plant (the US leg).
       const [shipment] = await tx`
         insert into shipments (order_number, sent_offer_id, customer_id, sale_amount, carrier_provider_id)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${offer.total_sale}, ${freightOrder ? freightOrder.carrier_provider_id : null})
+        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${finalTotalSale}, ${freightOrder ? freightOrder.carrier_provider_id : null})
         returning *
       `;
       await tx`insert into shipment_events (shipment_id, event_type) values (${shipment.id}, 'scheduled')`;

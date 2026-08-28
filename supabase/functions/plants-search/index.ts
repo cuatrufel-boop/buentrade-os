@@ -15,10 +15,13 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const q = (body.q || "").trim();
     const category_id = body.category_id || null;
+    const id = body.id || null;
     const limit = Math.min(Number(body.limit) || 200, 500);
     const like = `%${q}%`;
 
-    const results = category_id
+    const results = id
+      ? await sql`select p.*, s.name as supplier_name from plants p join suppliers s on s.id = p.supplier_id where p.id = ${id}`
+      : category_id
       ? await sql`
           select p.*, s.name as supplier_name
           from plants p join suppliers s on s.id = p.supplier_id

@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { customer_id = null, product_id = null, status = null, order_by = "customer", sent_from = null, sent_to = null, order_number = null } = body;
+    const { id = null, customer_id = null, product_id = null, status = null, order_by = "customer", sent_from = null, sent_to = null, order_number = null } = body;
     const limit = Math.min(Number(body.limit) || 100, 1000);
 
     if (status && !VALID_STATUSES.includes(status)) {
@@ -28,7 +28,8 @@ Deno.serve(async (req) => {
 
     const results = await sql`
       select * from sent_offers
-      where (${customer_id}::uuid is null or customer_id = ${customer_id})
+      where (${id}::uuid is null or id = ${id})
+        and (${customer_id}::uuid is null or customer_id = ${customer_id})
         and (${product_id}::uuid is null or product_id = ${product_id})
         and (${status}::text is null or status = ${status})
         and (${sent_from}::timestamptz is null or sent_at >= ${sent_from})
