@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard — BuenTrade Trading OS (Staging API)</title>
+<title>BuenTrade Trading OS — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -22,8 +22,9 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
-  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px;margin-bottom:24px;}
-  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:#fff;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .subtitle{font-size:12.5px;color:#B9CBEB;margin-top:4px;}
   main{max-width:1180px;margin:0 auto;padding:0 24px 60px;}
@@ -63,8 +64,10 @@
 </head>
 <body>
 <header>
-  <div class="brand-word">Buen<span>Trade</span> — Dashboard</div>
-  <div class="subtitle">Cargas, cobros y ofertas — 100% vía Edge Functions (staging) <span class="badge-api">API only, sin acceso directo a la base</span></div>
+  <div class="top-row">
+    <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
+  </div>
+  <div class="subtitle">Shipments, collections, and offers — 100% via Edge Functions (staging) <span class="badge-api">API only, no direct database access</span></div>
   <nav class="nav-row">
     <a href="customers.html" class="nav-pill">Customers</a>
     <a href="providers.html" class="nav-pill">Freight &amp; Logistics</a>
@@ -78,17 +81,17 @@
 <main>
   <div id="errBox"></div>
 
-  <h1>Este mes <span class="refresh" onclick="loadAll()">↻ recargar</span></h1>
-  <div class="kpis" id="kpis"><div class="empty">Cargando…</div></div>
+  <h1>This Month <span class="refresh" onclick="loadAll()">↻ refresh</span></h1>
+  <div class="kpis" id="kpis"><div class="empty">Loading…</div></div>
 
-  <h1>Cuentas por cobrar</h1>
-  <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Cliente</th><th>Pendiente</th><th>Cupo</th><th>Vencidas</th></tr></thead><tbody></tbody></table></div>
+  <h1>Accounts Receivable</h1>
+  <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Customer</th><th>Outstanding</th><th>Credit Limit</th><th>Overdue</th></tr></thead><tbody></tbody></table></div>
 
-  <h1>Cargas en curso</h1>
-  <div class="tbl-wrap"><table id="tblShipments"><thead><tr><th>Orden</th><th>Cliente</th><th>Producto</th><th>Estado</th><th>Fecha entrega</th><th>Pago</th><th></th></tr></thead><tbody></tbody></table></div>
+  <h1>Active Shipments</h1>
+  <div class="tbl-wrap"><table id="tblShipments"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Status</th><th>Delivery Date</th><th>Payment</th><th></th></tr></thead><tbody></tbody></table></div>
 
-  <h1>Offers (ofertas enviadas)</h1>
-  <div class="tbl-wrap"><table id="tblOffers"><thead><tr><th>Cliente</th><th>Producto</th><th>Planta</th><th>Canal</th><th>Estado</th><th>Enviada</th></tr></thead><tbody></tbody></table></div>
+  <h1>Offers (sent)</h1>
+  <div class="tbl-wrap"><table id="tblOffers"><thead><tr><th>Customer</th><th>Product</th><th>Plant</th><th>Channel</th><th>Status</th><th>Sent</th></tr></thead><tbody></tbody></table></div>
 </main>
 
 <script>
@@ -111,9 +114,9 @@ const dt = s => s ? new Date(s).toLocaleDateString() : '—';
 
 // Real 4 stages (pending_pickup/picked_up/unloading/delivered) — matches offers.html's Status
 // tab and shipments-update-status exactly. Not scheduled/in_transit, which were wrong here.
-const STATUS_LABEL = { pending_pickup:'Por recoger', picked_up:'Recogida', unloading:'Descargando', delivered:'Entregada' };
+const STATUS_LABEL = { pending_pickup:'Pending Pickup', picked_up:'Picked Up', unloading:'Unloading', delivered:'Delivered' };
 const NEXT_STATUS = { pending_pickup:'picked_up', picked_up:'unloading', unloading:'delivered' };
-const NEXT_LABEL = { pending_pickup:'Marcar recogida', picked_up:'Marcar descargando', unloading:'Marcar entregada' };
+const NEXT_LABEL = { pending_pickup:'Mark Picked Up', picked_up:'Mark Unloading', unloading:'Mark Delivered' };
 
 function showErr(msg){
   document.getElementById('errBox').innerHTML = `<div class="err">${msg}</div>`;
@@ -132,7 +135,7 @@ async function loadAll(){
     renderShipments(shipments.results);
     renderOffers(offers.results);
   } catch (e) {
-    showErr('Error llamando al API: ' + e.message);
+    showErr('Error calling API: ' + e.message);
   }
 }
 
@@ -140,32 +143,32 @@ function renderKpis(s){
   const overdue = (s.overdue || []).length;
   const upcoming = (s.upcoming_due || []).length;
   document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="kpi-label">Facturado este mes</div><div class="kpi-value">${money(s.invoiced_this_month)}</div></div>
-    <div class="kpi"><div class="kpi-label">Cuentas vencidas</div><div class="kpi-value ${overdue?'red':''}">${overdue}</div></div>
-    <div class="kpi"><div class="kpi-label">Por vencer (7 días)</div><div class="kpi-value ${upcoming?'amber':''}">${upcoming}</div></div>
+    <div class="kpi"><div class="kpi-label">Invoiced This Month</div><div class="kpi-value">${money(s.invoiced_this_month)}</div></div>
+    <div class="kpi"><div class="kpi-label">Overdue Accounts</div><div class="kpi-value ${overdue?'red':''}">${overdue}</div></div>
+    <div class="kpi"><div class="kpi-label">Due Soon (7 days)</div><div class="kpi-value ${upcoming?'amber':''}">${upcoming}</div></div>
   `;
 }
 
 function renderOutstanding(rows){
   const tbody = document.querySelector('#tblOutstanding tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nada pendiente de cobro.</td></tr>'; return; }
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing pending collection.</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.customer_name)}</td>
       <td>${money(r.outstanding)}</td>
-      <td>${r.credit_limit != null ? money(r.credit_limit) : '<span style="color:#B0BAC9">sin fijar</span>'}</td>
-      <td>${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} vencida(s)</span>` : '—'}</td>
+      <td>${r.credit_limit != null ? money(r.credit_limit) : '<span style="color:#B0BAC9">not set</span>'}</td>
+      <td>${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} overdue</span>` : '—'}</td>
     </tr>
   `).join('');
 }
 
 function renderShipments(rows){
   const tbody = document.querySelector('#tblShipments tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay cargas todavía.</td></tr>'; return; }
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">No shipments yet.</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => {
     const next = NEXT_STATUS[r.status];
-    const payTag = r.paid_at ? '<span class="tag paid">Pagado</span>' : (r.status === 'delivered' ? '<span class="tag unpaid">Pendiente</span>' : '—');
-    const payBtn = (r.status === 'delivered' && !r.paid_at) ? `<button class="btn secondary" onclick="markPaid('${r.id}')">Marcar pagado</button>` : '';
+    const payTag = r.paid_at ? '<span class="tag paid">Paid</span>' : (r.status === 'delivered' ? '<span class="tag unpaid">Unpaid</span>' : '—');
+    const payBtn = (r.status === 'delivered' && !r.paid_at) ? `<button class="btn secondary" onclick="markPaid('${r.id}')">Mark Paid</button>` : '';
     const advanceBtn = next ? `<button class="btn" onclick="advance('${r.id}','${next}')">${NEXT_LABEL[r.status]}</button>` : '';
     return `
     <tr>
@@ -182,7 +185,7 @@ function renderShipments(rows){
 
 function renderOffers(rows){
   const tbody = document.querySelector('#tblOffers tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">No hay offers todavía.</td></tr>'; return; }
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">No offers yet.</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.customer_name)}</td>
@@ -199,14 +202,14 @@ async function advance(shipmentId, status){
   try {
     await callApi('shipments-update-status', { actor: 'dashboard-ui', shipment_id: shipmentId, status });
     await loadAll();
-  } catch (e) { showErr('No se pudo avanzar la carga: ' + e.message); }
+  } catch (e) { showErr('Could not advance the shipment: ' + e.message); }
 }
 
 async function markPaid(shipmentId){
   try {
     await callApi('shipments-mark-paid', { actor: 'dashboard-ui', shipment_id: shipmentId });
     await loadAll();
-  } catch (e) { showErr('No se pudo marcar como pagado: ' + e.message); }
+  } catch (e) { showErr('Could not mark as paid: ' + e.message); }
 }
 
 function escapeHtml(s){
