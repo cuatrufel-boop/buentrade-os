@@ -108,7 +108,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -119,14 +118,22 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  accessToken: async () => {
-    const user = auth.currentUser;
-    return user ? await user.getIdToken(false) : null;
-  }
-});
+// STAGING Trading OS API — see providers.html for the full note. Every read/write here goes
+// through an Edge Function; nothing talks to Postgres directly.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
 
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
@@ -359,6 +366,10 @@ function openForm(customer){
     document.getElementById('custId').value = customer.id;
     fields.slice(1).forEach(f => {
       if (f === 'usual_incoterm_text') return; // resolved separately below, no incoterms catalog data yet
+      if (f === 'preferred_currency'){
+        if (customer.preferred_currency_id) document.getElementById(f).value = customer.preferred_currency_id;
+        return;
+      }
       if (customer[f] !== undefined && customer[f] !== null) document.getElementById(f).value = customer[f];
     });
   }
@@ -374,34 +385,40 @@ function closeForm(){
 // Suggestion only — the trader can always override it.
 function suggestCurrency(){
   const delivery = document.getElementById('usual_delivery_type').value;
-  const currencyField = document.getElementById('preferred_currency');
-  if (delivery === 'Border') currencyField.value = 'USD';
-  else if (delivery === 'Delivered Mexico') currencyField.value = 'MXN';
+  const code = delivery === 'Border' ? 'USD' : delivery === 'Delivered Mexico' ? 'MXN' : null;
+  if (!code) return;
+  const match = currencies.find(c => c.code === code);
+  if (match) document.getElementById('preferred_currency').value = match.id;
 }
 
 let customsAgencies = []; // providers with role = customs_broker — each customer clears through their own, not necessarily ours
 
+let currencies = [];
+
 async function loadCustomsAgencies(){
-  const [provRes, roleRes] = await Promise.all([
-    db.from('providers').select('id,name'),
-    db.from('provider_roles').select('provider_id,role').eq('role', 'customs_broker'),
-  ]);
-  const brokerIds = new Set((roleRes.data || []).map(r => r.provider_id));
-  customsAgencies = (provRes.data || []).filter(p => brokerIds.has(p.id)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const res = await callApi('providers-search', { role: 'customs_broker' });
+  customsAgencies = (res.results || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const sel = document.getElementById('customs_agency_provider_id');
   sel.innerHTML = '<option value="">—</option>' + customsAgencies.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
 }
 
+async function loadCurrencies(){
+  const res = await callApi('currencies-search', {});
+  currencies = res.results || [];
+  const sel = document.getElementById('preferred_currency');
+  sel.innerHTML = '<option value="">—</option>' + currencies.map(c => `<option value="${c.id}">${escapeHtml(c.code)}</option>`).join('') + '<option value="other">Other</option>';
+}
+
 async function loadCustomers(){
-  await loadCustomsAgencies();
-  const { data, error } = await db.from('customers').select('*').order('trade_name');
-  if (error){
+  try {
+    await Promise.all([loadCustomsAgencies(), loadCurrencies()]);
+    const res = await callApi('customers-search', {});
+    customers = res.results || [];
+    renderCustomers();
+  } catch (e) {
     document.getElementById('emptyState').style.display = 'block';
-    document.getElementById('emptyState').textContent = 'Error loading customers: ' + error.message;
-    return;
+    document.getElementById('emptyState').textContent = 'Error loading customers: ' + e.message;
   }
-  customers = data || [];
-  renderCustomers();
 }
 
 // ===== Products a customer buys — customer_products already existed with real data (id,
@@ -410,8 +427,8 @@ async function loadCustomers(){
 let allCustProducts = null;
 async function fetchAllCustProducts(){
   if (allCustProducts) return allCustProducts;
-  const { data } = await db.from('products').select('id,name,name_en,brand').order('name');
-  allCustProducts = data || [];
+  const res = await callApi('products-search', {});
+  allCustProducts = res.results || [];
   document.getElementById('custProductNames').innerHTML = allCustProducts.map(p => `<option value="${escapeHtml(custProductLabel(p))}">`).join('');
   return allCustProducts;
 }
@@ -425,11 +442,14 @@ function custProductLabel(p){
 let currentCustProducts = [];
 async function loadCustomerProducts(customerId){
   await fetchAllCustProducts();
-  const { data, error } = await db.from('customer_products').select('id,product_id').eq('customer_id', customerId);
-  if (error){ currentCustProducts = []; renderCustomerProducts(); return; }
-  currentCustProducts = (data || [])
-    .map(r => ({ linkId: r.id, product: allCustProducts.find(p => p.id === r.product_id) }))
-    .filter(r => r.product);
+  try {
+    const res = await callApi('customer-products-search', { customer_id: customerId });
+    currentCustProducts = (res.results || [])
+      .map(r => ({ linkId: r.id, product: allCustProducts.find(p => p.id === r.product_id) }))
+      .filter(r => r.product);
+  } catch (e) {
+    currentCustProducts = [];
+  }
   renderCustomerProducts();
 }
 
@@ -452,16 +472,25 @@ async function addCustomerProduct(){
   const match = allCustProducts.find(p => custProductLabel(p) === label);
   if (!match){ alert('Elige un producto de la lista sugerida (empieza a escribir y selecciona una opción exacta).'); return; }
   if (currentCustProducts.some(r => r.product.id === match.id)){ input.value = ''; return; }
-  const { data, error } = await db.from('customer_products').insert({ customer_id: viewingCustomerId, product_id: match.id }).select();
-  if (error){ alert('Error: ' + error.message); return; }
-  currentCustProducts.push({ linkId: data[0].id, product: match });
+  try {
+    const res = await callApi('customer-products-add', { actor: currentActor(), customer_id: viewingCustomerId, product_id: match.id });
+    const link = res.link || res; // already_linked also carries .link
+    currentCustProducts.push({ linkId: link.id, product: match });
+  } catch (e) {
+    alert('Error: ' + e.message);
+    return;
+  }
   input.value = '';
   renderCustomerProducts();
 }
 
 async function removeCustomerProduct(linkId){
-  const { error } = await db.from('customer_products').delete().eq('id', linkId);
-  if (error){ alert('Error: ' + error.message); return; }
+  try {
+    await callApi('customer-products-remove', { actor: currentActor(), id: linkId });
+  } catch (e) {
+    alert('Error: ' + e.message);
+    return;
+  }
   currentCustProducts = currentCustProducts.filter(r => r.linkId !== linkId);
   renderCustomerProducts();
 }
@@ -533,7 +562,8 @@ function viewCustomer(id){
   document.getElementById('v_payments_contact_name').textContent = c.payments_contact_name || '—';
   document.getElementById('v_payments_contact_email').textContent = c.payments_contact_email || '—';
   document.getElementById('v_payments_contact_phone').textContent = c.payments_contact_phone || '—';
-  document.getElementById('v_preferred_currency').textContent = c.preferred_currency || '—';
+  const curr = currencies.find(x => x.id === c.preferred_currency_id);
+  document.getElementById('v_preferred_currency').textContent = curr ? curr.code : '—';
   document.getElementById('v_usual_delivery_type').textContent = c.usual_delivery_type || '—';
   document.getElementById('v_payment_days').textContent = c.payment_days ?? '—';
   document.getElementById('v_usual_destination').textContent = c.usual_destination || '—';
@@ -567,8 +597,9 @@ function openViewWhatsApp(){
   window.open('https://wa.me/' + digits, '_blank');
 }
 
-async function saveCustomer(){
+async function saveCustomer(forceOverride){
   const id = document.getElementById('custId').value;
+  const currencyVal = document.getElementById('preferred_currency').value;
   const payload = {
     trade_name: document.getElementById('trade_name').value,
     legal_name: document.getElementById('legal_name').value || null,
@@ -587,7 +618,7 @@ async function saveCustomer(){
     payments_contact_email: document.getElementById('payments_contact_email').value || null,
     payments_contact_phone: document.getElementById('payments_contact_phone').value || null,
     payments_contact_whatsapp: document.getElementById('payments_contact_whatsapp').value || null,
-    preferred_currency: document.getElementById('preferred_currency').value || null,
+    preferred_currency_id: (currencyVal && currencyVal !== 'other') ? currencyVal : null,
     usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
     payment_days: document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null,
     usual_destination: document.getElementById('usual_destination').value || null,
@@ -608,11 +639,22 @@ async function saveCustomer(){
     document.getElementById('formMsg').textContent = 'WhatsApp must include the country code, e.g. +52 6621234567.';
     return;
   }
-  const { error } = id
-    ? await db.from('customers').update(payload).eq('id', id)
-    : await db.from('customers').insert(payload);
-  if (error){
-    document.getElementById('formMsg').textContent = 'Error: ' + error.message;
+  try {
+    if (id) await callApi('customers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+    else await callApi('customers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
+      document.getElementById('formMsg').innerHTML = `
+        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
+          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.trade_name)}</strong>` : ''}
+          <div style="margin-top:8px;">
+            <button type="button" class="btn small" onclick="saveCustomer(true)">Save anyway — this is genuinely different</button>
+          </div>
+        </div>`;
+      return;
+    }
+    document.getElementById('formMsg').textContent = 'Error: ' + e.message;
     return;
   }
   closeForm();
@@ -621,8 +663,12 @@ async function saveCustomer(){
 
 async function deleteCustomer(id){
   if (!confirm('Delete this customer? This cannot be undone.')) return;
-  const { error } = await db.from('customers').delete().eq('id', id);
-  if (error){ alert('Error deleting: ' + error.message); return; }
+  try {
+    await callApi('customers-delete', { actor: currentActor(), id });
+  } catch (e) {
+    alert('Error deleting: ' + e.message);
+    return;
+  }
   document.getElementById('viewCard').style.display = 'none';
   loadCustomers();
 }
