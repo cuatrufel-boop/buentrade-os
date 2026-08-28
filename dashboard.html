@@ -40,9 +40,9 @@
   tr:last-child td{border-bottom:none;}
   .tbl-wrap{overflow-x:auto;border-radius:12px;}
   .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;}
-  .tag.scheduled{background:#EEF1F6;color:#516079;}
+  .tag.pending_pickup{background:#EEF1F6;color:#516079;}
   .tag.picked_up{background:#FFF3E0;color:var(--amber);}
-  .tag.in_transit{background:var(--blue-light);color:var(--blue);}
+  .tag.unloading{background:var(--blue-light);color:var(--blue);}
   .tag.delivered{background:#E7F7EE;color:var(--green);}
   .tag.sent{background:var(--blue-light);color:var(--blue);}
   .tag.won{background:#E7F7EE;color:var(--green);}
@@ -56,12 +56,24 @@
   .err{background:#FBE9E7;color:var(--red);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;}
   .refresh{float:right;font-size:12.5px;color:var(--blue);cursor:pointer;text-decoration:underline;}
   .badge-api{font-size:10.5px;background:rgba(255,255,255,.12);color:#B9CBEB;padding:3px 9px;border-radius:20px;margin-left:10px;vertical-align:middle;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
 </style>
 </head>
 <body>
 <header>
   <div class="brand-word">Buen<span>Trade</span> — Dashboard</div>
   <div class="subtitle">Cargas, cobros y ofertas — 100% vía Edge Functions (staging) <span class="badge-api">API only, sin acceso directo a la base</span></div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Customers</a>
+    <a href="providers.html" class="nav-pill">Freight &amp; Logistics</a>
+    <a href="plants.html" class="nav-pill">Meat Packers</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="offers.html" class="nav-pill">Offers</a>
+    <a href="trading-tool.html" class="nav-pill">Trading Tool</a>
+  </nav>
 </header>
 <main>
   <div id="errBox"></div>
@@ -97,9 +109,11 @@ async function callApi(fn, body){
 const money = n => n == null ? '—' : '$' + Number(n).toLocaleString(undefined, {maximumFractionDigits:0});
 const dt = s => s ? new Date(s).toLocaleDateString() : '—';
 
-const STATUS_LABEL = { scheduled:'Programada', picked_up:'Recogida', in_transit:'En tránsito', delivered:'Entregada' };
-const NEXT_STATUS = { scheduled:'picked_up', picked_up:'in_transit', in_transit:'delivered' };
-const NEXT_LABEL = { scheduled:'Marcar recogida', picked_up:'Marcar en tránsito', in_transit:'Marcar entregada' };
+// Real 4 stages (pending_pickup/picked_up/unloading/delivered) — matches offers.html's Status
+// tab and shipments-update-status exactly. Not scheduled/in_transit, which were wrong here.
+const STATUS_LABEL = { pending_pickup:'Por recoger', picked_up:'Recogida', unloading:'Descargando', delivered:'Entregada' };
+const NEXT_STATUS = { pending_pickup:'picked_up', picked_up:'unloading', unloading:'delivered' };
+const NEXT_LABEL = { pending_pickup:'Marcar recogida', picked_up:'Marcar descargando', unloading:'Marcar entregada' };
 
 function showErr(msg){
   document.getElementById('errBox').innerHTML = `<div class="err">${msg}</div>`;
