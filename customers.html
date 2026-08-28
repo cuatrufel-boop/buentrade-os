@@ -350,7 +350,6 @@ auth.onAuthStateChanged(user => {
 
 <script>
 let customers = [];
-let incotermsById = {};
 
 function openForm(customer){
   document.getElementById('viewCard').style.display = 'none';
@@ -365,7 +364,6 @@ function openForm(customer){
   if (customer){
     document.getElementById('custId').value = customer.id;
     fields.slice(1).forEach(f => {
-      if (f === 'usual_incoterm_text') return; // resolved separately below, no incoterms catalog data yet
       if (f === 'preferred_currency'){
         if (customer.preferred_currency_id) document.getElementById(f).value = customer.preferred_currency_id;
         return;
@@ -622,6 +620,7 @@ async function saveCustomer(forceOverride){
     usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
     payment_days: document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null,
     usual_destination: document.getElementById('usual_destination').value || null,
+    usual_incoterm_text: document.getElementById('usual_incoterm_text').value || null,
     payment_method: document.getElementById('payment_method').value || null,
     customs_agency_provider_id: document.getElementById('customs_agency_provider_id').value || null,
     preferred_exchange_rate_mode: document.getElementById('preferred_exchange_rate_mode').value || null,

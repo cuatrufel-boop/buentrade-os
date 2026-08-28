@@ -277,14 +277,25 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  accessToken: async () => {
-    const user = auth.currentUser;
-    return user ? await user.getIdToken(false) : null;
-  }
-});
+// STAGING Trading OS API — see providers.html/plants.html for the full note. Every read/write
+// goes through an Edge Function. The one deliberate exception is file Storage (order-documents
+// PDFs) — storageClient below, pointed at staging's bucket, same pattern as products.html.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
 
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
@@ -463,21 +474,24 @@ async function loadOffers(){
   const to = document.getElementById('f_to').value;
   // Grouped by customer first — when a customer calls in with a bid, that's what you already
   // know and search by, not the plant or when it was sent.
-  let q = db.from('sent_offers').select('*').order('customer_name', { ascending: true }).order('sent_at', { ascending: false });
-  if (from) q = q.gte('sent_at', from + 'T00:00:00');
-  if (to) q = q.lte('sent_at', to + 'T23:59:59');
-  const { data, error } = await q;
-  if (error){
+  let data;
+  try {
+    data = (await callApi('sent-offers-search', {
+      sent_from: from ? from + 'T00:00:00' : null,
+      sent_to: to ? to + 'T23:59:59' : null,
+      order_by: 'customer', limit: 1000,
+    })).results || [];
+  } catch (e) {
     document.getElementById('emptyState').style.display = 'block';
-    document.getElementById('emptyState').textContent = 'Error loading offers: ' + error.message;
+    document.getElementById('emptyState').textContent = 'Error loading offers: ' + e.message;
     return;
   }
-  offers = data || [];
+  offers = data;
   // Same plant-avatar logo used in Pending Quotes — fetched once here since sent_offers itself
   // only stores the plant's name/id, not its logo.
   if (!Object.keys(offerPlantsById).length){
-    const { data: plantRows } = await db.from('plants').select('id,logo_url,logo_url_dark');
-    (plantRows || []).forEach(p => { offerPlantsById[p.id] = p; });
+    const plantRows = (await callApi('plants-search', {})).results || [];
+    plantRows.forEach(p => { offerPlantsById[p.id] = p; });
   }
   renderOffers();
 }
@@ -733,79 +747,41 @@ window.addEventListener('message', (e) => {
 // Losing an offer just needs the status flip — no orders, nothing else to generate.
 async function markOffer(id, status){
   if (status === 'lost'){
-    const { error } = await db.from('sent_offers').update({ status: 'lost' }).eq('id', id);
-    if (error){ alert('Error: ' + error.message); return; }
+    try { await callApi('sent-offers-mark-lost', { actor: currentActor(), sent_offer_id: id }); }
+    catch (e) { alert('Error: ' + e.message); return; }
     loadOffers();
     return;
   }
   await markWon(id);
 }
 
-// Winning is the real event: stamp a consecutive order number on the offer, then spawn the
-// PO (plant), SO (customer), and — only if freight was actually part of this deal — one
-// freight_orders row per leg (US and/or Mexican), each resolved from the same provider_rates
-// row the offer itself was built from.
-async function markWon(id){
+// Winning is the real event — sent_offers.markWon is one atomic transaction on the API side:
+// stamps a consecutive order number, flips the offer, and creates the PO (plant), SO (customer),
+// a freight_order per leg actually part of this deal (US and/or Mexican, each resolved from the
+// same provider_rates row the offer itself was built from), and any customs costs charged. This
+// used to be ~55 lines of that same logic duplicated here (and diverging from trading-tool.html's
+// own copy, which only ever handled the US leg) — now there's exactly one implementation.
+async function markWon(id, overrideCreditCheck){
   const o = offers.find(x => x.id === id);
   if (!o) return;
-  const ok = await showConfirm('Create Order?', `${o.product_name} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
-  if (!ok) return;
-
-  const { data: numRes, error: numErr } = await db.rpc('next_order_number');
-  if (numErr){ alert('Error generating order number: ' + numErr.message); return; }
-  const orderNumber = numRes;
-  const who = (auth.currentUser && auth.currentUser.email) || null;
-
-  const { error: updErr } = await db.from('sent_offers').update({
-    status: 'won', order_number: orderNumber, won_at: new Date().toISOString(), won_by: who,
-  }).eq('id', id);
-  if (updErr){ alert('Error marking won: ' + updErr.message); return; }
-
-  // The status update above is the one that must not fail silently — it already returns early
-  // on error. These secondary inserts can still fail independently (e.g. a bad FK), and the
-  // trader needs to know the order isn't fully built, not just see a blanket "created" message.
-  const warnings = [];
-
-  const { error: poErr } = await db.from('purchase_orders').insert({
-    order_number: orderNumber, sent_offer_id: o.id, plant_id: o.plant_id, plant_name: o.plant_name,
-    product_id: o.product_id, product_name: o.product_name, product_spec: o.product_spec, purchase_price: o.purchase_price,
-    weight: o.weight, total_cost: o.total_cost, docs_on: o.docs_on, delivery_dates: o.delivery_dates,
-  });
-  if (poErr) warnings.push('PO: ' + poErr.message);
-
-  const { error: soErr } = await db.from('sales_orders').insert({
-    order_number: orderNumber, sent_offer_id: o.id, customer_id: o.customer_id, customer_name: o.customer_name,
-    product_id: o.product_id, product_name: o.product_name, product_spec: o.product_spec,
-    product_name_es: o.product_name_es, product_spec_es: o.product_spec_es, sale_price: o.sale_per_lb,
-    weight: o.weight, total_sale: o.total_sale, delivery_dates: o.delivery_dates,
-  });
-  if (soErr) warnings.push('SO: ' + soErr.message);
-
-  if (o.us_freight_rate_id && o.us_freight_amount > 0){
-    const { data: rate } = await db.from('provider_rates').select('provider_id,origin').eq('id', o.us_freight_rate_id).single();
-    const { error: foErr } = await db.from('freight_orders').insert({
-      order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
-      origin: rate ? rate.origin : null, destination: 'Border', quoted_rate: o.us_freight_amount, currency: 'USD',
-      product_name_es: o.product_name_es, product_spec_es: o.product_spec_es,
-    });
-    if (foErr) warnings.push('FO (US freight): ' + foErr.message);
+  if (!overrideCreditCheck){
+    const ok = await showConfirm('Create Order?', `${o.product_name} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
+    if (!ok) return;
   }
 
-  if (o.mexican_dest_rate_id && o.mexican_freight_mxn){
-    const { data: rate } = await db.from('provider_rates').select('provider_id,destination,rate').eq('id', o.mexican_dest_rate_id).single();
-    const { error: foErr } = await db.from('freight_orders').insert({
-      order_number: orderNumber, sent_offer_id: o.id, carrier_provider_id: rate ? rate.provider_id : null,
-      origin: 'Border', destination: rate ? rate.destination : null, quoted_rate: rate ? rate.rate : null, currency: 'USD',
-      product_name_es: o.product_name_es, product_spec_es: o.product_spec_es,
-    });
-    if (foErr) warnings.push('FO (Mexican freight): ' + foErr.message);
+  let result;
+  try {
+    result = await callApi('sent-offers-mark-won', { actor: currentActor(), sent_offer_id: id, override_credit_check: !!overrideCreditCheck });
+  } catch (e) {
+    if (e.data && e.data.error === 'credit_limit_exceeded'){
+      const proceed = await showConfirm('Credit limit exceeded', e.data.message, 'Create anyway');
+      if (proceed) return markWon(id, true);
+      return;
+    }
+    alert('Error marking won: ' + e.message);
+    return;
   }
-
-  if (warnings.length){
-    alert(`Orden ${orderNumber} creada, PERO con errores:\n\n${warnings.join('\n')}\n\nRevisa esta orden — puede faltar el PO, SO, o el flete.`);
-  } else {
-    alert(`Orden ${orderNumber} creada.`);
-  }
+  alert(`Orden ${result.order_number} creada.`);
   loadOffers();
 }
 
@@ -992,48 +968,32 @@ async function loadStatusOrders(){
   const wrap = document.getElementById('statusCards');
   wrap.innerHTML = '<div class="empty">Loading…</div>';
 
+  let orders;
+  try { orders = (await callApi('shipments-search', { limit: 500 })).results || []; }
+  catch (e) { wrap.innerHTML = ''; document.getElementById('statusEmpty').style.display = 'block'; document.getElementById('statusEmpty').textContent = 'Error loading: ' + e.message; return; }
+
   // A load stops needing attention once it's delivered AND either 3+ days past its payment due
-  // date (paid or written off by then in practice) — no "paid" flag exists yet, so this is a
-  // time-based cutoff to keep old closed loads from accumulating here forever.
-  const { data: orders, error } = await db.from('sales_orders').select('*').order('created_at', { ascending: false });
-  if (error){ wrap.innerHTML = ''; document.getElementById('statusEmpty').style.display = 'block'; document.getElementById('statusEmpty').textContent = 'Error loading: ' + error.message; return; }
-
-  const orderNumbers = (orders || []).map(o => o.order_number);
-  const productIds = [...new Set((orders||[]).map(o => o.product_id).filter(Boolean))];
-  const [{ data: pos }, { data: fos }, { data: customers }, { data: catalogProducts }] = await Promise.all([
-    db.from('purchase_orders').select('order_number,plant_name').in('order_number', orderNumbers.length ? orderNumbers : ['']),
-    db.from('freight_orders').select('order_number,carrier_provider_id,origin').in('order_number', orderNumbers.length ? orderNumbers : ['']),
-    db.from('customers').select('id,contact_name,whatsapp,phone').in('id', (orders||[]).map(o=>o.customer_id).filter(Boolean)),
-    // Only orders logged after the product_id link was added (see quotes.html rqLogSentOffers)
-    // carry this — older orders fall back to their stored product_name text, no photo.
-    productIds.length ? db.from('products').select('id,name,name_en,photo_url').in('id', productIds) : Promise.resolve({ data: [] }),
-  ]);
-  const plantByOrder = Object.fromEntries((pos||[]).map(p => [p.order_number, p.plant_name]));
-  const freightByOrder = {};
-  (fos||[]).forEach(f => { if (!freightByOrder[f.order_number]) freightByOrder[f.order_number] = f; });
-  const custById = Object.fromEntries((customers||[]).map(c => [c.id, c]));
-  const productById = Object.fromEntries((catalogProducts||[]).map(p => [p.id, p]));
-
-  const providerIds = [...new Set((fos||[]).map(f => f.carrier_provider_id).filter(Boolean))];
-  const { data: providers } = providerIds.length ? await db.from('providers').select('id,name,phone').in('id', providerIds) : { data: [] };
-  const providerById = Object.fromEntries((providers||[]).map(p => [p.id, p]));
-
+  // date (paid or written off by then in practice) — this is a time-based cutoff to keep old
+  // closed loads from accumulating here forever, not a real "paid" flag.
   const today = new Date();
-  const active = (orders || []).filter(o => {
-    if ((o.load_status || 'pending_pickup') !== 'delivered') return true;
+  const active = orders.filter(o => {
+    if (o.status !== 'delivered') return true;
     if (!o.delivered_at) return true;
     const daysSinceDelivery = (today - new Date(o.delivered_at)) / 86400000;
     const payDays = 30; // shown badge already accounts for the real payment_due_date; this is just the list cutoff
     return daysSinceDelivery < payDays + 3;
   });
 
+  // shipments-search already joins everything (carrier, customer contact, catalog product,
+  // freight origin) — just reshape field names to what renderStatusOrders/advanceLoadStatus
+  // already expect, so those functions didn't need to change at all.
   statusOrders = active.map(o => ({
     ...o,
-    plant_name: plantByOrder[o.order_number] || '',
-    freight: freightByOrder[o.order_number] || null,
-    carrier: freightByOrder[o.order_number] ? providerById[freightByOrder[o.order_number].carrier_provider_id] : null,
-    customer: custById[o.customer_id] || null,
-    catalogProduct: o.product_id ? (productById[o.product_id] || null) : null,
+    load_status: o.status,
+    freight: o.freight_origin ? { origin: o.freight_origin } : null,
+    carrier: o.carrier_provider_id ? { phone: o.carrier_phone } : null,
+    customer: { contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, payment_days: o.customer_payment_days },
+    catalogProduct: o.product_id ? { name: o.catalog_product_name, name_en: o.catalog_product_name_en, photo_url: o.catalog_product_photo_url } : null,
   }));
 
   renderStatusOrders();
@@ -1137,20 +1097,10 @@ async function advanceLoadStatus(orderNumber, newStatus){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
 
-  const payload = { load_status: newStatus };
-  const now = new Date().toISOString();
-  if (newStatus === 'picked_up') payload.picked_up_at = now;
-  if (newStatus === 'unloading') payload.unloading_at = now;
-  if (newStatus === 'delivered'){
-    payload.delivered_at = now;
-    const days = (o.customer && o.customer.payment_days) || 30;
-    const due = new Date();
-    due.setDate(due.getDate() + days);
-    payload.payment_due_date = due.toISOString().slice(0, 10);
-  }
-
-  const { error } = await db.from('sales_orders').update(payload).eq('order_number', orderNumber);
-  if (error){ alert('Error updating status: ' + error.message); return; }
+  // shipments.updateStatus computes picked_up_at/unloading_at/delivered_at + payment_due_date
+  // (from the customer's own payment_days) itself — this used to happen here by hand.
+  try { await callApi('shipments-update-status', { actor: currentActor(), shipment_id: o.id, status: newStatus }); }
+  catch (e) { alert('Error updating status: ' + e.message); return; }
 
   const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
   const phone = ((o.customer && (o.customer.whatsapp || o.customer.phone)) || '').replace(/\D/g, '');
@@ -1363,48 +1313,29 @@ function collectEmails(entity){
 }
 
 async function buildPODoc(orderNumber){
-  const { data: po } = await db.from('purchase_orders').select('*').eq('order_number', orderNumber).single();
-  if (!po) throw new Error('PO not found.');
-  const { data: plant } = po.plant_id ? await db.from('plants').select('*').eq('id', po.plant_id).single() : { data: null };
-  const { data: sentOffer } = await db.from('sent_offers').select('won_by,us_freight_rate_id,customs_agency_provider_id').eq('order_number', orderNumber).limit(1).single();
-
-  // FOB (BuenTrade booked the truck, us_freight_rate_id is set) vs Delivered by plant (no
-  // freight leg on file — the plant's own truck brings it in, so there's no pick-up to schedule
-  // and the address that matters is where it's actually going: the customer's customs broker).
-  const isFob = !!(sentOffer && sentOffer.us_freight_rate_id);
-  const { data: agency } = (!isFob && sentOffer && sentOffer.customs_agency_provider_id)
-    ? await db.from('providers').select('*').eq('id', sentOffer.customs_agency_provider_id).single() : { data: null };
+  let result;
+  try { result = await callApi('orders-compose-po', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'PO not found.' : e.message); }
+  const { document: composed, po, plant } = result;
+  const isFob = composed.incoterms.startsWith('FCA');
 
   const doc = pdfDoc();
   pdfHeader(doc, 'Purchase Order', orderNumber, CONTACT_EMAIL_PO);
 
-  const vendorLines = [
-    plant ? plant.name : po.plant_name,
-    plant && plant.address,
-    plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', '),
-  ];
+  const vendorLines = composed.vendor.split('\n');
   pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
-  pdfInfoBlock(doc, 320, 168, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO',
-    isFob ? vendorLines : [
-      agency ? agency.name : 'Customs broker — TBD',
-      agency && agency.address,
-      agency && [agency.city, agency.country].filter(Boolean).join(', '),
-    ]);
+  pdfInfoBlock(doc, 320, 168, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO', composed.ship_to.split('\n'));
 
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['DATE', todayStr()],
-    [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', fmtDatesList(po.delivery_dates)],
-    ['PAYMENT TERMS', plant && plant.payment_terms],
+    [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
+    ['PAYMENT TERMS', composed.payment_terms],
     ['ORDER #', orderNumber],
   ]);
-  // Pickup happens at the vendor's own dock (SHIP TO / PICK UP LOCATION above == VENDOR),
-  // so risk transfers there — that's FCA at the plant under Incoterms 2020, not a guessed term.
-  // When the plant delivers instead, risk transfers at the customs broker's dock (DAP).
-  const plantLocation = plant && [plant.city, plant.state, plant.country].filter(Boolean).join(', ');
   const yRight = pdfKeyValueRows(doc, 320, 240, [
-    ['INCOTERMS', isFob ? (plantLocation ? `FCA – ${plantLocation}` : null) : (agency ? `DAP – ${[agency.city, agency.country].filter(Boolean).join(', ')}` : null)],
-    ['COUNTRY OF ORIGIN', plant && plant.country],
-    ['TRADER', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
+    ['INCOTERMS', composed.incoterms],
+    ['COUNTRY OF ORIGIN', composed.country_of_origin],
+    ['TRADER', composed.trader],
   ]);
   const y = Math.max(yLeft, yRight);
 
@@ -1414,10 +1345,10 @@ async function buildPODoc(orderNumber){
     startY: y + 12,
     head: [['Item Description', 'Qty LBS', 'Unit Cost', 'Amount']],
     body: [[
-      po.product_spec || po.product_name || '',
-      (po.weight || 0).toLocaleString('en-US'),
-      '$' + (po.purchase_price || 0).toFixed(4),
-      '$' + (po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      composed.line_item.description || '',
+      (composed.line_item.weight || 0).toLocaleString('en-US'),
+      '$' + (composed.line_item.purchase_price || 0).toFixed(4),
+      '$' + (composed.line_item.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
     ]],
     theme: 'grid',
     headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1429,7 +1360,7 @@ async function buildPODoc(orderNumber){
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text('NOTES: ' + (po.docs_on ? 'Docs included by vendor.' : 'No export documentation included — buyer to arrange.'), 40, ty);
+  doc.text('NOTES: ' + composed.docs_note, 40, ty);
 
   pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
   pdfFooter(doc, 'en');
@@ -1698,74 +1629,44 @@ async function sharePO(orderNumber){
 }
 
 async function buildSODoc(orderNumber){
-  const { data: so } = await db.from('sales_orders').select('*').eq('order_number', orderNumber).single();
-  if (!so) throw new Error('SO not found.');
-  const { data: customer } = so.customer_id ? await db.from('customers').select('*').eq('id', so.customer_id).single() : { data: null };
-  const { data: sentOffer } = await db.from('sent_offers').select('won_by,plant_id').eq('order_number', orderNumber).limit(1).single();
-  const { data: originPlant } = sentOffer && sentOffer.plant_id
-    ? await db.from('plants').select('country').eq('id', sentOffer.plant_id).single() : { data: null };
-  // "Border" is a delivery TYPE (who pays for the last leg), never a mailing address — when a
-  // customer is set up that way, the real place the load goes is their customs broker's address.
-  const { data: agency } = (customer && customer.usual_delivery_type === 'Border' && customer.customs_agency_provider_id)
-    ? await db.from('providers').select('*').eq('id', customer.customs_agency_provider_id).single() : { data: null };
-  // Only shown when the customer is actually billed in MXN and we have a rate on file — never
-  // fabricated. Latest row in exchange_rates wins; if that table is empty, this block is skipped.
-  let mxnLine = null;
-  if (customer && customer.preferred_currency === 'MXN'){
-    const { data: rates } = await db.from('exchange_rates').select('rate').order('created_at', { ascending: false }).limit(1);
-    const rate = rates && rates[0] ? rates[0].rate : null;
-    if (rate){
-      const lbToKg = 0.453592;
-      const pricePerKgMxn = (so.sale_price || 0) * rate / lbToKg;
-      const totalMxn = (so.total_sale || 0) * rate;
-      mxnLine = `MXN $${pricePerKgMxn.toFixed(2)} / kg — Total MXN $${totalMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (TC ${rate})`;
-    }
-  }
+  let result;
+  try { result = await callApi('orders-compose-so', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'SO not found.' : e.message); }
+  const { document: composed, so, customer } = result;
 
   const doc = pdfDoc();
   pdfHeader(doc, 'Confirmación de Venta', orderNumber, CONTACT_EMAIL_SO);
 
-  const custLines = [
-    customer ? customer.trade_name : so.customer_name,
-    customer && customer.address,
-    customer && [customer.city, customer.state, customer.country].filter(Boolean).join(', '),
-  ];
-  pdfInfoBlock(doc, 40, 168, 'CLIENTE', custLines);
-  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', agency ? [
-    agency.name, agency.address, [agency.city, agency.country].filter(Boolean).join(', '),
-  ] : [
-    customer && customer.address,
-    customer && [customer.city, customer.state, customer.country].filter(Boolean).join(', '),
-    customer && customer.usual_delivery_type && customer.usual_delivery_type !== 'Border' ? customer.usual_delivery_type : null,
-  ]);
+  pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
 
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()],
     ['ENTREGA ESTIMADA', fmtDatesList(so.delivery_dates)],
-    ['CONDICIONES DE PAGO', customer && customer.payment_days ? `Neto ${customer.payment_days} días` : null],
+    ['CONDICIONES DE PAGO', composed.condiciones_pago],
     ['ORDEN #', orderNumber],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
-    ['INCOTERMS', customer && customer.usual_incoterm_text],
-    ['PAÍS DE ORIGEN', originPlant && originPlant.country],
-    ['MONEDA', customer && customer.preferred_currency ? customer.preferred_currency : 'USD'],
-    ['EJECUTIVO', sentOffer && sentOffer.won_by ? sentOffer.won_by.split('@')[0] : null],
+    ['INCOTERMS', composed.incoterms],
+    ['PAÍS DE ORIGEN', composed.pais_origen],
+    ['MONEDA', composed.moneda],
+    ['EJECUTIVO', composed.ejecutivo],
   ]);
   const y = Math.max(yLeft, yRight);
 
   // Both full names shown — Spanish leads (this is the customer-facing document) with the
   // English catalog name underneath in parentheses, so nothing is left to a single casilla.
-  const nameEs = so.product_spec_es || so.product_name_es || so.product_name || '';
-  const nameEn = so.product_spec || so.product_name || '';
+  const nameEs = composed.linea.descripcion_es || '';
+  const nameEn = composed.linea.descripcion_en || '';
   const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
   doc.autoTable({
     startY: y + 12,
     head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
     body: [[
       description,
-      (so.weight || 0).toLocaleString('en-US'),
-      '$' + (so.sale_price || 0).toFixed(4),
-      '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      (composed.linea.peso || 0).toLocaleString('en-US'),
+      '$' + (composed.linea.precio || 0).toFixed(4),
+      '$' + (composed.linea.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
     ]],
     theme: 'grid',
     headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1774,11 +1675,11 @@ async function buildSODoc(orderNumber){
   });
 
   let ty = doc.lastAutoTable.finalY + 20;
-  if (mxnLine){
+  if (composed.mxn_equivalente){
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
-    doc.text('EQUIVALENTE: ' + mxnLine, 40, ty);
+    doc.text('EQUIVALENTE: MXN $' + composed.mxn_equivalente.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 }) + ` (TC ${composed.mxn_equivalente.rate})`, 40, ty);
     ty += 20;
   }
 
@@ -1819,37 +1720,15 @@ async function shareSO(orderNumber){
   }
 }
 
-// A US-leg's "Border" destination and a Mexican-leg's "Border" origin both used to print as the
-// literal word "Border" — not a real place a driver can navigate to. This resolves it to the
-// carrier's own crossing facility (their city/state/country on file) when known.
-function describeBorderPoint(carrier){
-  if (carrier && (carrier.city || carrier.country)){
-    return `Border crossing — ${[carrier.city, carrier.state, carrier.country].filter(Boolean).join(', ')}${carrier.address ? ' (' + carrier.address + ')' : ''}`;
-  }
-  return 'Border crossing — facility TBD';
-}
-
-// Picks out the temperature word already leading product_spec ("Frozen Pork Snouts, Box" ->
-// "Frozen") rather than a second lookup — quotes.html always puts it first now.
-function temperatureFromSpec(spec){
-  if (!spec) return null;
-  const m = spec.match(/^(Frozen|Fresh)\b/i);
-  return m ? m[1] : null;
-}
 
 async function buildFODocs(orderNumber){
-  const { data: fos } = await db.from('freight_orders').select('*').eq('order_number', orderNumber);
-  if (!fos || !fos.length) throw new Error('No freight leg on this order.');
-  const { data: sentOffer } = await db.from('sent_offers').select('weight,delivery_dates,product_name,product_spec,customs_agency_provider_id').eq('order_number', orderNumber).limit(1).single();
-  const { data: agency } = sentOffer && sentOffer.customs_agency_provider_id
-    ? await db.from('providers').select('name').eq('id', sentOffer.customs_agency_provider_id).single() : { data: null };
+  let result;
+  try { result = await callApi('orders-compose-fo', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
+  const docs = result.documents;
 
   const built = [];
-  for (const fo of fos){
-    const { data: carrier } = fo.carrier_provider_id ? await db.from('providers').select('*').eq('id', fo.carrier_provider_id).single() : { data: null };
-    const pickupAddress = fo.origin === 'Border' ? describeBorderPoint(carrier) : fo.origin;
-    const deliveryAddress = fo.destination === 'Border' ? describeBorderPoint(carrier) : fo.destination;
-
+  for (const { document: composed, fo, carrier } of docs){
     const doc = pdfDoc();
     pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
 
@@ -1864,18 +1743,18 @@ async function buildFODocs(orderNumber){
 
     const yLeft = pdfKeyValueRows(doc, 40, 240, [
       ['DATE', todayStr()],
-      ['PICK-UP ADDRESS', pickupAddress],
-      ['DELIVERY ADDRESS', deliveryAddress],
-      ['PICK-UP / DELIVERY DATE', sentOffer ? fmtDatesList(sentOffer.delivery_dates) : null],
+      ['PICK-UP ADDRESS', composed.pick_up_address],
+      ['DELIVERY ADDRESS', composed.delivery_address],
+      ['PICK-UP / DELIVERY DATE', fmtDatesList(composed.delivery_dates)],
     ]);
     const yRight = pdfKeyValueRows(doc, 320, 240, [
-      ['TEMPERATURE SETTING', sentOffer ? (temperatureFromSpec(sentOffer.product_spec) || 'Confirm with plant') : null],
-      ['WEIGHT', sentOffer ? (sentOffer.weight || 0).toLocaleString('en-US') + ' lbs' : null],
+      ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
+      ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
       ['CLIENT ORDER #', orderNumber],
       ['RELEASE #', '____________________'],
     ]);
     const y2 = pdfKeyValueRows(doc, 40, Math.max(yLeft, yRight) + 30, [
-      ['CUSTOMS BROKER', agency ? agency.name : 'TBD'],
+      ['CUSTOMS BROKER', composed.customs_broker || 'TBD'],
     ]);
     const y = Math.max(yLeft, yRight, y2);
 
@@ -1885,9 +1764,9 @@ async function buildFODocs(orderNumber){
       startY: y + 12,
       head: [['Product', 'Service', 'Agreed Rate']],
       body: [[
-        sentOffer ? sentOffer.product_name : '—',
+        composed.product_name || '—',
         'Inland Freight',
-        '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+        '$' + (composed.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
       ]],
       theme: 'grid',
       headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1902,7 +1781,7 @@ async function buildFODocs(orderNumber){
     // performance) and the MBG reference examples didn't include one either.
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${fos.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
 }
@@ -1941,9 +1820,9 @@ async function shareFO(orderNumber){
 // PO/SO/FO already exist for this order, so this bundles links to all of them in one email
 // instead of asking the trader to forward each separately.
 async function shareCustoms(orderNumber){
-  const { data: sentOffer } = await db.from('sent_offers').select('customs_agency_provider_id').eq('order_number', orderNumber).limit(1).single();
+  const sentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
   if (!sentOffer || !sentOffer.customs_agency_provider_id){ alert('No customs agency on file for this order.'); return; }
-  const { data: agency } = await db.from('providers').select('*').eq('id', sentOffer.customs_agency_provider_id).single();
+  const agency = ((await callApi('providers-search', { id: sentOffer.customs_agency_provider_id })).results || [])[0];
   const emails = collectEmails(agency);
   if (!emails.length){ alert('This customs agency has no email on file.'); return; }
 
