@@ -1,6 +1,9 @@
 // plant_products.search — read-only. "Everything this plant sells, with its price" (plants.html's
-// Products & Prices tab) — or, given a product_id instead, every plant carrying that one product
-// (the Coverage view in quotes.html).
+// Products & Prices tab), every plant carrying one product (the Coverage view in quotes.html), or
+// — with no filter at all — every plant_products row with its product's category attached, which
+// is what plants.html's plant-list badges and the price-list category pre-fill need (both plant_id
+// and product_id are optional now; empty means "everything," same rule as the other .search
+// functions).
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
@@ -12,11 +15,15 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const { plant_id = null, product_id = null } = body;
-    if (!plant_id && !product_id) return jsonResponse({ error: "plant_id or product_id is required" }, 400);
-    const limit = Math.min(Number(body.limit) || 200, 1000);
+    const limit = Math.min(Number(body.limit) || 500, 2000);
 
     const results = await sql`
-      select pp.*, pr.name_en as product_name_en, pr.name as product_name_es, pl.name as plant_name
+      select
+        pp.id, pp.plant_id, pp.product_id, pp.current_price, pp.price_currency, pp.price_currency_id,
+        pp.price_date, pp.availability, pp.docs_included, pp.notes, pp.last_requested_at,
+        pp.created_at, pp.updated_at,
+        pl.name as plant_name,
+        to_jsonb(pr.*) as product
       from plant_products pp
       join products pr on pr.id = pp.product_id
       join plants pl on pl.id = pp.plant_id

@@ -116,14 +116,27 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  accessToken: async () => {
-    const user = auth.currentUser;
-    return user ? await user.getIdToken(true) : null;
-  }
-});
+// STAGING Trading OS API — see providers.html for the full note. Every read/write goes through an
+// Edge Function, INCLUDING the price-list product matching itself (products.matchFromPlantText) —
+// this page used to carry its own copy of that matching logic; it now calls the same one central
+// version everything else uses, instead of two copies that could quietly drift apart.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+// The one deliberate exception — file Storage, see products.html for the full reasoning.
+const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
 
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
@@ -343,7 +356,10 @@ auth.onAuthStateChanged(user => {
 
   <div class="card" id="newPlantCard" style="display:none;">
     <strong>New Plant</strong>
-    <div class="field" style="margin-top:12px;"><label>Plant / Packer Name</label><input id="newPlantName" placeholder="e.g. Tyson — Waterloo"></div>
+    <div class="grid2" style="margin-top:12px;">
+      <div class="field"><label>Plant / Packer Name</label><input id="newPlantName" placeholder="e.g. Tyson — Waterloo"></div>
+      <div class="field"><label>Species *</label><select id="newPlantCategory"><option value="">—</option></select></div>
+    </div>
     <div style="display:flex;gap:10px;"><button class="btn" onclick="saveNewPlant()">Create Plant</button><button class="btn secondary" onclick="document.getElementById('newPlantCard').style.display='none'">Cancel</button></div>
     <div id="newPlantMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
@@ -450,14 +466,24 @@ function plCloseNotice(){
 
 // Always shows what already exists (real products to compare against, never a bare yes/no) and
 // both buttons say exactly what happens — never framed as a block, since saving genuinely
-// different products stays one click away.
+// different products stays one click away. Fed directly from products.create/update's real
+// possible_duplicate response now (exact_match / same_spec_different_subcategory /
+// near_duplicate_names / subcategory_typo_conflicts) — the duplicate DECISION is made server-side,
+// this only renders whatever it found.
 let plDupModalResolver = null;
-function plShowDupConfirm(sameSpec, newSubcategory){
+function plShowDupConfirm(dupData){
   return new Promise(resolve => {
     plDupModalResolver = resolve;
-    const list = sameSpec.map(p => `• "${p.subcategory_en || '(no subcategory)'}"${p.brand ? ' — ' + p.brand : ''}`).join('<br>');
-    document.getElementById('plDupModalText').innerHTML =
-      `${sameSpec.length} product(s) already exist with this exact name, temperature, packaging and category:<br><br>${list}<br><br>You're about to save subcategory: "${newSubcategory || '(none)'}"`;
+    const describe = p => `• "${(p.name_en || p.name)}" — ${p.subcategory_en || '(no subcategory)'}${p.brand ? ' — ' + p.brand : ''}`;
+    const groups = [
+      dupData.exact_match ? [dupData.exact_match] : [],
+      dupData.same_spec_different_subcategory || [],
+      dupData.near_duplicate_names || [],
+      dupData.subcategory_typo_conflicts || [],
+    ].flat();
+    const uniqueById = [...new Map(groups.map(p => [p.id, p])).values()];
+    const list = uniqueById.map(describe).join('<br>');
+    document.getElementById('plDupModalText').innerHTML = `${escapeHtml(dupData.message)}<br><br>${list}`;
     document.getElementById('plDupModalOverlay').style.display = 'flex';
   });
 }
@@ -477,20 +503,28 @@ let pendingSpecFile = null;
 
 let plantProteins = {};
 
+let categories = [];
+let usdCurrencyId = null;
+
 async function loadEverything(){
-  const [plantsRes, tempRes, packRes, linksRes] = await Promise.all([
-    db.from('plants').select('*').order('name'),
-    db.from('temperature').select('*').order('name'),
-    db.from('packaging').select('*').order('name'),
-    db.from('plant_products').select('plant_id, products(category)'),
+  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes] = await Promise.all([
+    callApi('plants-search', {}),
+    callApi('temperature-search', {}),
+    callApi('packaging-search', {}),
+    callApi('categories-search', {}),
+    callApi('plant-products-search', {}),
+    callApi('currencies-search', {}),
   ]);
-  plants = plantsRes.data || [];
-  temperatures = tempRes.data || [];
-  packagings = packRes.data || [];
+  plants = plantsRes.results || [];
+  temperatures = tempRes.results || [];
+  packagings = packRes.results || [];
+  categories = catRes.results || [];
+  const usd = (currRes.results || []).find(c => c.code === 'USD');
+  usdCurrencyId = usd ? usd.id : null;
 
   plantProteins = {};
-  (linksRes.data || []).forEach(link => {
-    const cat = link.products && link.products.category;
+  (linksRes.results || []).forEach(link => {
+    const cat = link.product && link.product.category;
     if (!cat) return;
     if (!plantProteins[link.plant_id]) plantProteins[link.plant_id] = new Set();
     plantProteins[link.plant_id].add(cat);
@@ -502,15 +536,18 @@ async function loadEverything(){
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
   packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`);
-  // Fixed list, not free text — category drives the ES→EN translation used everywhere else in
-  // the app (CATEGORY_EN below). The stored value stays the Spanish key (that's what's actually
-  // in the database and what CATEGORY_EN expects), but the label shown here is English-only, to
-  // match the rest of the OS.
+  // Fixed catalog, never free text — value is the real category_id (a proper FK) now, not a
+  // hand-typed Spanish string.
   const catSel = document.getElementById('category');
-  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(CATEGORY_EN[c])}</option>`);
+  categories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
+  const newPlantCatSel = document.getElementById('newPlantCategory');
+  categories.forEach(c => newPlantCatSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
 
   renderPlants();
 }
+
+function categoryEnById(id){ const c = categories.find(x => x.id === id); return c ? c.name_en : null; }
+function categoryEnByName(name){ const c = categories.find(x => x.name === name); return c ? c.name_en : name; }
 
 function renderPlants(){
   const term = (document.getElementById('plantSearchBox').value || '').trim().toLowerCase();
@@ -543,28 +580,60 @@ function openNewPlant(){
   document.getElementById('newPlantCard').scrollIntoView({behavior:'smooth'});
 }
 
-async function saveNewPlant(){
+async function saveNewPlant(forceOverride){
   const name = document.getElementById('newPlantName').value;
+  const category_id = document.getElementById('newPlantCategory').value;
   if (!name){
     document.getElementById('newPlantMsg').textContent = 'Enter a plant name.';
     return;
   }
-  // Every plant needs a linked supplier row for referential integrity; create one silently with the same name.
-  const { data: sup, error: supErr } = await db.from('suppliers').insert({ name }).select();
-  if (supErr){
-    document.getElementById('newPlantMsg').textContent = 'Error: ' + supErr.message;
+  if (!category_id){
+    document.getElementById('newPlantMsg').textContent = 'Select the species — every plant has one fixed species (rule: never guessed line-by-line later).';
     return;
   }
-  const { data, error } = await db.from('plants').insert({ supplier_id: sup[0].id, name }).select();
-  if (error){
-    document.getElementById('newPlantMsg').textContent = 'Error: ' + error.message;
+  let supplierId, plantResult;
+  try {
+    // Every plant needs a linked supplier row for referential integrity — created with the same
+    // name. Real near-duplicate checking still applies (this isn't a silent bypass of the
+    // never-duplicate-master-data rule just because it's automatic).
+    const sup = await trySaveGeneric('suppliers-create', { actor: currentActor(), name }, 'newPlantMsg', () => saveNewPlant(true), forceOverride);
+    if (!sup) return;
+    supplierId = sup.supplier.id;
+    plantResult = await trySaveGeneric('plants-create', { actor: currentActor(), supplier_id: supplierId, name, category_id }, 'newPlantMsg', () => saveNewPlant(true), forceOverride);
+    if (!plantResult) return;
+  } catch (e) {
+    document.getElementById('newPlantMsg').textContent = 'Error: ' + e.message;
     return;
   }
   document.getElementById('newPlantCard').style.display = 'none';
   document.getElementById('newPlantName').value = '';
   document.getElementById('plantSearchBox').value = '';
   await loadEverything();
-  selectPlant(data[0].id);
+  selectPlant(plantResult.plant.id);
+}
+
+// Shared duplicate-confirmation helper — calls fn, and on a possible_duplicate 409 shows the real
+// match with a "Save anyway" action inline in the given message element, never a silent override
+// and never a generic confirm(). Returns the API result on success, or null (message already
+// shown) when a duplicate needs confirming or a hard error happened.
+async function trySaveGeneric(fn, payload, msgElId, retryFn, forceOverride){
+  try {
+    return await callApi(fn, { ...payload, override_duplicate_check: !!forceOverride });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
+      const matchName = match ? (match.name_en || match.name || match.trade_name) : null;
+      document.getElementById(msgElId).innerHTML = `
+        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
+          ${escapeHtml(e.data.message)}${matchName ? `<br><strong>${escapeHtml(matchName)}</strong>` : ''}
+          <div style="margin-top:8px;"><button type="button" class="btn small" id="${msgElId}_retry">Save anyway — this is genuinely different</button></div>
+        </div>`;
+      document.getElementById(msgElId + '_retry').onclick = retryFn;
+      return null;
+    }
+    document.getElementById(msgElId).textContent = 'Error: ' + e.message;
+    return null;
+  }
 }
 
 const PROFILE_FIELDS = ['country','state','city','address','contact_name','email','email_cc','phone','whatsapp','website','avg_response_time','business_hours','payment_terms','avg_loading_time','document_cost','required_documentation','avg_freight_to_border','notes','internal_notes'];
@@ -648,7 +717,7 @@ function toggleProfile(){
   }
 }
 
-async function saveProfile(){
+async function saveProfile(forceOverride){
   const payload = {};
   PROFILE_FIELDS.forEach(f => { payload[f] = document.getElementById('pe_' + f).value || null; });
   if (payload.phone && !payload.phone.trim().startsWith('+')){
@@ -659,11 +728,8 @@ async function saveProfile(){
     document.getElementById('profileMsg').textContent = 'WhatsApp must include the country code, e.g. +52 6621234567.';
     return;
   }
-  const { error } = await db.from('plants').update(payload).eq('id', currentPlantId);
-  if (error){
-    document.getElementById('profileMsg').textContent = 'Error: ' + error.message;
-    return;
-  }
+  const result = await trySaveGeneric('plants-update', { actor: currentActor(), id: currentPlantId, ...payload }, 'profileMsg', () => saveProfile(true), forceOverride);
+  if (!result) return;
   await loadEverything();
   const plant = plants.find(p => p.id === currentPlantId);
   renderProfileView(plant);
@@ -671,22 +737,21 @@ async function saveProfile(){
 }
 
 async function loadPlantProducts(){
-  const { data, error } = await db
-    .from('plant_products')
-    .select('id, current_price, price_currency, price_date, products(*)')
-    .eq('plant_id', currentPlantId);
-  if (error){
+  let res;
+  try {
+    res = await callApi('plant-products-search', { plant_id: currentPlantId });
+  } catch (e) {
     document.getElementById('plantEmpty').style.display = 'block';
-    document.getElementById('plantEmpty').textContent = 'Error loading products: ' + error.message;
+    document.getElementById('plantEmpty').textContent = 'Error loading products: ' + e.message;
     return;
   }
   // Price lives on the plant_products link row (plant + product), not on the product itself —
   // the same fixed/canonical product can be carried by several plants at different prices.
   // Merged onto the product object here so the rest of this page keeps reading p.current_price
   // like before, just sourced from the right row now.
-  plantProducts = (data || [])
-    .filter(r => r.products)
-    .map(r => ({ ...r.products, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date }))
+  plantProducts = (res.results || [])
+    .filter(r => r.product)
+    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date }))
     // Most recently priced first, stale/never-priced ones sinking to the bottom — the trader
     // wants to see what just got loaded, not scroll past it to find it alphabetically.
     .sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
@@ -715,9 +780,6 @@ function fmtPriceCell(p){
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
 // (remembering the plant's own wording as an alias for next time), review, apply in one shot. =====
 let priceListRows = []; // { rawText, price, matchedProductId }
-// Set at the start of each processPriceListText() run — read by matchCatalogProduct() below so
-// both the single-line loop and the block-format fallback share the exact same alias lookup.
-let currentAliasMap = new Map();
 // Set while the "+ Crear producto nuevo…" product form is open on behalf of one price-list row,
 // so saveProduct() knows which row to link the new product back into. Null the rest of the time.
 let priceListCreateForRowIndex = null;
@@ -736,10 +798,10 @@ function startCreateProductForRow(i){
   openProductForm(null);
   const plant = plants.find(p => p.id === currentPlantId);
   if (plant) document.getElementById('brand').value = plant.name;
-  // Same grounding as the category filter above the review table — this plant's known protein
-  // (from its existing products, or from what else matched in this very paste), never a guess
-  // from scanning the new row's own text.
-  if (priceListCategoryFilter) document.getElementById('category').value = priceListCategoryFilter;
+  // The plant's own fixed species (rule 15) — the real source of truth now, not the text-based
+  // list filter above the review table (which only ever drove local dropdown filtering, never the
+  // actual match decision, since that moved server-side).
+  if (plant && plant.category_id) document.getElementById('category').value = plant.category_id;
   // Temperature/Packaging aren't a judgment call here — if the row's own wording already reads
   // as Frozen/Combo/etc. (the same detection used to match against the catalog), it's already
   // "explicit" in the plant's own text, just not typed into the form yet. Only pre-filled when
@@ -936,8 +998,8 @@ function isSectionHeaderLine(line){
 let allCatalogProducts = null;
 async function fetchAllCatalogProducts(){
   if (allCatalogProducts) return allCatalogProducts;
-  const { data } = await db.from('products').select('*').order('name');
-  allCatalogProducts = data || [];
+  const res = await callApi('products-search', {});
+  allCatalogProducts = res.results || [];
   return allCatalogProducts;
 }
 
@@ -1022,9 +1084,11 @@ let plantTermAliasMap = new Map();
 let pendingTermAliases = []; // [{ term, meaning_type, meaning_id }] taught but not yet applied
 
 async function fetchPlantTermAliases(){
-  const { data } = await db.from('plant_term_aliases').select('*').eq('plant_id', currentPlantId);
+  let res;
+  try { res = await callApi('plant-term-aliases-search', { plant_id: currentPlantId }); }
+  catch (e) { res = { results: [] }; }
   plantTermAliasMap = new Map();
-  (data || []).forEach(a => {
+  (res.results || []).forEach(a => {
     const entry = plantTermAliasMap.get(a.term) || {};
     entry[a.meaning_type] = a.meaning_id;
     plantTermAliasMap.set(a.term, entry);
@@ -1116,8 +1180,9 @@ function renderDetectedLocations(names){
 async function addDetectedLocation(name, btn){
   btn.disabled = true;
   btn.textContent = 'Adding…';
-  const { error } = await db.from('plant_locations').insert({ plant_id: currentPlantId, location_name: name });
-  if (error){
+  try {
+    await callApi('plant-locations-create', { actor: currentActor(), plant_id: currentPlantId, location_name: name });
+  } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Error — retry';
     return;
@@ -1173,17 +1238,14 @@ async function processPriceListText(){
   // click, instead of retyping them by hand later.
   renderDetectedLocations(detectPickupLocations(text));
 
-  const [{ data: aliases }] = await Promise.all([
-    db.from('plant_product_aliases').select('*').eq('plant_id', currentPlantId),
-    fetchAllCatalogProducts(),
-    fetchPlantTermAliases(),
-  ]);
-  currentAliasMap = new Map((aliases || []).map(a => [a.raw_text, a.product_id]));
+  // Alias lookup/re-validation now happens server-side, inside products.matchFromPlantText —
+  // nothing to fetch client-side for it anymore.
+  await Promise.all([fetchAllCatalogProducts(), fetchPlantTermAliases()]);
   pendingTermAliases = []; // fresh paste, fresh batch of anything taught during this review
 
-  const toBlockRow = item => {
+  const toBlockRow = async item => {
     const rawText = item.nameEs ? `${item.nameEn} — ${item.nameEs}` : item.nameEn;
-    return { rawText, price: item.price, ...matchCatalogProduct(rawText, item.nameEn, item.nameEs) };
+    return { rawText, price: item.price, ...(await matchCatalogProduct(rawText, item.nameEn, item.nameEs)) };
   };
 
   // Some plants' price lists (Seaboard confirmed) arrive as an HTML table that gets flattened
@@ -1200,9 +1262,10 @@ async function processPriceListText(){
 
   priceListRows = [];
   if (looksLikeBlockFormat){
-    priceListRows = detectBlockFormatItems(lines).map(toBlockRow);
+    priceListRows = await Promise.all(detectBlockFormatItems(lines).map(toBlockRow));
   } else {
     let currentSection = null;
+    const singleLineJobs = [];
     for (const line of lines){
       if (isSectionHeaderLine(line)){
         currentSection = line.replace(/:\s*$/, '').trim();
@@ -1221,17 +1284,18 @@ async function processPriceListText(){
       // rawText used for both languages here since single-line format never tells us which part
       // of the line is English vs Spanish — matchCatalogProduct falls back to checking it against
       // both catalog fields in that case.
-      priceListRows.push({ rawText, price, ...matchCatalogProduct(rawText) });
+      singleLineJobs.push((async () => ({ rawText, price, ...(await matchCatalogProduct(rawText)) }))());
     }
+    priceListRows = await Promise.all(singleLineJobs);
     // Safety nets for a plant that's neither shape cleanly — never worse than the single-line
     // scan finding nothing at all. Block-format first (a table with only 1-2 rows might not have
     // hit the ratio threshold above), then the casual "name line, price line right after"
     // pairing (confirmed against a real Amity Packing email).
     if (!priceListRows.length){
-      priceListRows = detectBlockFormatItems(lines).map(toBlockRow);
+      priceListRows = await Promise.all(detectBlockFormatItems(lines).map(toBlockRow));
     }
     if (!priceListRows.length){
-      priceListRows = detectAdjacentNamePriceItems(lines).map(item => ({ rawText: item.rawText, price: item.price, ...matchCatalogProduct(item.rawText) }));
+      priceListRows = await Promise.all(detectAdjacentNamePriceItems(lines).map(async item => ({ rawText: item.rawText, price: item.price, ...(await matchCatalogProduct(item.rawText)) })));
     }
   }
 
@@ -1274,56 +1338,21 @@ async function processPriceListText(){
 // When nameEn/nameEs are known separately (block-format lists), each is checked against its own
 // catalog field only — more precise than the single-line case, which has to check one ambiguous
 // text against both fields since it never knows which language it's reading.
-function matchCatalogProduct(rawText, nameEn, nameEs){
-  const key = normalizeForMatch(rawText);
-  const matchedProductId = currentAliasMap.get(key) || null;
-  if (matchedProductId){
-    // An alias is a cached decision, not permanent truth — re-check it against what THIS line's
-    // own wording says, every single time, not just the first time it was taught. Real incident:
-    // a Fresh-section Tyson price matched, once, to the closest Frozen product that existed at the
-    // time (no Fresh option existed yet) — that pick then applied silently on every list since,
-    // never re-questioned, even though the text kept saying Fresh. Never silent, never a hard
-    // block: if this line's own temperature/packaging signal conflicts with what the alias points
-    // to, don't trust the cache — fall through to the normal matching below, which surfaces a real
-    // dropdown to re-confirm (or "no match, create new") exactly like a brand-new row. Whatever
-    // gets picked there is saved as the alias going forward, same as any other row.
-    const product = allCatalogProducts.find(p => p.id === matchedProductId);
-    const { tempId, packagingId } = detectTempPackFromLine(rawText);
-    const tempConflict = product && tempId && product.temperature_id && tempId !== product.temperature_id;
-    const packConflict = product && packagingId && product.packaging_id && packagingId !== product.packaging_id;
-    if (!tempConflict && !packConflict) return { matchedProductId, candidateIds: null };
+// Calls the SAME central function every other price-list-matching caller in the system uses
+// (products.matchFromPlantText) — this used to be a local copy of that exact logic (alias lookup
+// + re-validation, exact/loose name match, category boundary, temp/pack narrowing), which meant
+// two places that could silently drift apart. Now there's one authoritative version, and this
+// page just calls it.
+async function matchCatalogProduct(rawText, nameEn, nameEs){
+  try {
+    const res = await callApi('products-match-from-plant-text', {
+      plant_id: currentPlantId, raw_text: rawText, name_en: nameEn || null, name_es: nameEs || null,
+    });
+    if (res.matched) return { matchedProductId: res.product.id, candidateIds: null };
+    return { matchedProductId: null, candidateIds: (res.candidates || []).map(p => p.id) };
+  } catch (e) {
+    return { matchedProductId: null, candidateIds: null };
   }
-  // The trader's own standing protein filter for this whole plant/list (a plant is virtually
-  // always one species) — never let matching cross Cerdo/Pollo/Res, in the species-insensitive
-  // fallback below most of all, since stripping "pork/beef/chicken/lamb" out of the name makes an
-  // accidental cross-category collision easier, not harder.
-  const inCategory = p => !priceListCategoryFilter || p.category === priceListCategoryFilter;
-  let nameMatches = (nameEn || nameEs)
-    ? allCatalogProducts.filter(p => inCategory(p) &&
-        ((nameEn && normalizeForMatch(p.name_en) === normalizeForMatch(nameEn)) ||
-        (nameEs && normalizeForMatch(p.name) === normalizeForMatch(nameEs))))
-    : allCatalogProducts.filter(p => inCategory(p) && (normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key));
-  // Real incident this closes: Smithfield's price list said "Boneless Loin" (no "Pork"); the
-  // catalog's own entry is "Pork Boneless loin" — the exact compare above found nothing, so this
-  // read as a brand-new product and "+ Crear producto nuevo" spun up a duplicate row instead of
-  // linking Smithfield to the one that already exists. Only tried when the exact compare truly
-  // found nothing, so it never overrides a real exact match.
-  if (!nameMatches.length){
-    nameMatches = (nameEn || nameEs)
-      ? allCatalogProducts.filter(p => inCategory(p) &&
-          ((nameEn && normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(nameEn)) ||
-          (nameEs && normalizeForMatchLoose(p.name) === normalizeForMatchLoose(nameEs))))
-      : allCatalogProducts.filter(p => inCategory(p) && (normalizeForMatchLoose(p.name) === normalizeForMatchLoose(rawText) || normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(rawText)));
-  }
-  if (!nameMatches.length) return { matchedProductId: null, candidateIds: null };
-  // rawText (not a bare line) so a section header carried into it — "Frozen Boxed Muscles — Bone
-  // in Loins" — still counts as a frozen signal for items that don't repeat the word themselves.
-  const narrowed = narrowByTempPack(rawText, nameMatches);
-  if (narrowed.length === 1) return { matchedProductId: narrowed[0].id, candidateIds: null };
-  // Still unresolved — remembered so the inline "teach me this abbreviation" prompt in the review
-  // table can re-check this exact row the moment the trader confirms what the plant's wording
-  // meant, without needing to re-paste the whole list.
-  return { matchedProductId: null, candidateIds: nameMatches.map(p => p.id) };
 }
 
 // A price-only line: a bare dollar amount ("$1.95", "$.54"), a dash placeholder meaning "not
@@ -1508,39 +1537,37 @@ async function applyPriceList(){
   const applied = [];
   let errors = 0;
   for (const row of toApply){
-    // Price lives on the plant+product link, never on the product itself — a fixed/shared
-    // product can be carried by several plants at different prices. This upsert also creates
-    // the link the first time this plant carries that product, so a brand-new plant/product
-    // pairing needs no separate "link it" step.
-    const { error: priceErr } = await db.from('plant_products').upsert({
-      plant_id: applyPlantId,
-      product_id: row.matchedProductId,
-      current_price: row.price,
-      price_currency: 'USD',
-      price_date: today,
-    }, { onConflict: 'plant_id,product_id' });
-    if (priceErr){ errors++; continue; }
-    // Remember this plant's exact wording (normalized) for next time — upsert so re-confirming
-    // an already-known alias just refreshes it instead of erroring on the unique index.
-    await db.from('plant_product_aliases').upsert({
-      plant_id: applyPlantId,
-      raw_text: normalizeForMatch(row.rawText),
-      product_id: row.matchedProductId,
-    }, { onConflict: 'plant_id,raw_text' });
-    applied.push(row);
+    // Price + alias saved together, one call, one transaction — plant_products.applyMatch is the
+    // ONLY place either of these gets written, closing the loop products.matchFromPlantText
+    // starts (that one only ever proposes, never writes).
+    try {
+      await callApi('plant-products-apply-match', {
+        actor: currentActor(), plant_id: applyPlantId, product_id: row.matchedProductId,
+        raw_text: normalizeForMatch(row.rawText), price: row.price,
+        price_currency_id: usdCurrencyId, price_date: today,
+      });
+      applied.push(row);
+    } catch (e) {
+      errors++;
+    }
   }
 
   // Save the plant-level docs default once per apply, not once per row — it's the same fact for
   // every product on this plant's sheet.
   if (detectedDocsIncluded !== null){
-    await db.from('plants').update({ docs_included: detectedDocsIncluded }).eq('id', applyPlantId);
+    try { await callApi('plants-update', { actor: currentActor(), id: applyPlantId, docs_included: detectedDocsIncluded }); } catch (e) {}
   }
 
   // Any abbreviation the trader taught mid-review (see teachTermAlias) only lived in memory until
   // now — this is the one confirm point the whole screen funnels through, so it's persisted here,
   // together with everything else, never earlier.
   if (pendingTermAliases.length){
-    await db.from('plant_term_aliases').upsert(pendingTermAliases, { onConflict: 'plant_id,term,meaning_type' });
+    try {
+      await callApi('plant-term-aliases-set', {
+        actor: currentActor(), plant_id: applyPlantId,
+        aliases: pendingTermAliases.map(a => ({ term: a.term, meaning_type: a.meaning_type, meaning_id: a.meaning_id })),
+      });
+    } catch (e) {}
     pendingTermAliases = [];
   }
 
@@ -1573,15 +1600,13 @@ async function applyPriceList(){
 let plantLocations = [];
 
 async function loadPlantLocations(){
-  const { data, error } = await db
-    .from('plant_locations')
-    .select('*')
-    .eq('plant_id', currentPlantId)
-    .order('location_name');
-  plantLocations = data || [];
+  let res;
+  try { res = await callApi('plant-locations-search', { plant_id: currentPlantId }); }
+  catch (e) { res = { results: [] }; }
+  plantLocations = res.results || [];
   const tbody = document.getElementById('plantLocationRows');
   tbody.innerHTML = '';
-  if (error || !plantLocations.length){
+  if (!plantLocations.length){
     document.getElementById('plantLocationsEmpty').style.display = 'block';
     return;
   }
@@ -1668,11 +1693,11 @@ async function saveLocation(){
     document.getElementById('locationFormMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
     return;
   }
-  const { error } = id
-    ? await db.from('plant_locations').update(payload).eq('id', id)
-    : await db.from('plant_locations').insert(payload);
-  if (error){
-    document.getElementById('locationFormMsg').textContent = 'Error: ' + error.message;
+  try {
+    if (id) await callApi('plant-locations-update', { actor: currentActor(), id, ...payload });
+    else await callApi('plant-locations-create', { actor: currentActor(), ...payload });
+  } catch (e) {
+    document.getElementById('locationFormMsg').textContent = 'Error: ' + e.message;
     return;
   }
   closeLocationForm();
@@ -1681,8 +1706,12 @@ async function saveLocation(){
 
 async function deleteLocation(id){
   if (!confirm('Delete this location?')) return;
-  const { error } = await db.from('plant_locations').delete().eq('id', id);
-  if (error){ alert('Error: ' + error.message); return; }
+  try {
+    await callApi('plant-locations-delete', { actor: currentActor(), id });
+  } catch (e) {
+    alert('Error: ' + e.message);
+    return;
+  }
   await loadPlantLocations();
 }
 
@@ -1793,6 +1822,10 @@ function openProductForm(product){
   if (product){
     document.getElementById('prodId').value = product.id;
     fields.slice(1).forEach(f => {
+      if (f === 'category'){
+        if (product.category_id) document.getElementById('category').value = product.category_id;
+        return;
+      }
       if (product[f] !== undefined && product[f] !== null) document.getElementById(f).value = product[f];
     });
     if (product.photo_url) showFilePreview(product.photo_url, preview, filePrev);
@@ -1860,12 +1893,12 @@ function extractMarkers(text){
   return matches.map(m => m.replace(/\s+/g, '').toUpperCase());
 }
 
-async function saveProduct(){
+async function saveProduct(forceOverride){
   const id = document.getElementById('prodId').value;
   const payload = {
     name: document.getElementById('name').value,
     name_en: document.getElementById('name_en').value || null,
-    category: document.getElementById('category').value,
+    category_id: document.getElementById('category').value,
     subcategory: document.getElementById('subcategory').value || null,
     subcategory_en: document.getElementById('subcategory_en').value || null,
     brand: document.getElementById('brand').value || null,
@@ -1883,51 +1916,16 @@ async function saveProduct(){
   // exactly the ambiguity that later silently misapplies a price to the wrong variant of a
   // shared name. No partial products, ever, however this form was opened. Full name EN/ES included
   // — the real PO/FO/SO text is written by hand, never auto-composed, so it must exist too.
-  // Brand is deliberately NOT required — a new product is created brand-agnostic on purpose (the
-  // whole point of the shared-product model), so it can be linked to whichever plant(s) actually
-  // carry it later. Real bug this closes: this check used to require brand, which would have
-  // outright blocked saving any correctly-built shared product with no brand set.
-  if (!payload.name || !payload.name_en || !payload.category || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
+  // Brand is deliberately NOT required — a new product is created brand-agnostic on purpose.
+  if (!payload.name || !payload.name_en || !payload.category_id || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
     document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, temperature, packaging, full name EN and full name ES.';
     return;
   }
-  // Real incident this closes: two catalog rows for the exact same cut/temp/packaging/subcategory
-  // ("Pork Boneless loin" and "Boneless Loin", both Fresh/VAC, both no subcategory) existed at once
-  // because "+ Crear producto nuevo" let a name get typed and saved with no check against what
-  // already existed — one had no customers linked (invisible everywhere) while the price sat on
-  // the wrong row. Subcategory alone does NOT clear this automatically — a typo'd subcategory
-  // ("Strap Off" vs "Strap-Off") would read as "different" and duplicate right past a plain
-  // subcategory compare, so ANY match on name+temp+packaging+category always confirms, listing
-  // every subcategory already on file so there's something real to compare the new one against
-  // (not a bare Cancel/OK with nothing to judge it by). This is a confirmation, never a hard block
-  // — the trader always has the final word; it just can't be a silent, unquestioned save.
-  // Runs on every save, not just a brand-new product — editing an EXISTING row's name/temperature/
-  // packaging to match another existing row is exactly as real a duplication risk as creating one
-  // from scratch, and was completely unguarded (this whole check used to be wrapped in `if (!id)`,
-  // so an edit went straight to the database with zero comparison). The row being edited is
-  // excluded from its own comparison, or it would always "match itself."
-  {
-    await fetchAllCatalogProducts();
-    const sameSpec = (allCatalogProducts || []).filter(p =>
-      p.id !== id &&
-      normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(payload.name_en) &&
-      p.temperature_id === payload.temperature_id &&
-      p.packaging_id === payload.packaging_id &&
-      (p.category || '') === (payload.category || '')
-    );
-    if (sameSpec.length){
-      const saveAsNew = await plShowDupConfirm(sameSpec, payload.subcategory_en);
-      if (!saveAsNew){
-        document.getElementById('formMsg').textContent = `Go back and pick the matching existing product from the row's dropdown instead of ${id ? 'saving this as a duplicate' : 'creating a new one'}.`;
-        return;
-      }
-    }
-  }
   // Confirmed real, pre-existing catalog errors: a grade/size/percentage detail present in one
   // language's text and silently missing from the other ("#2 Pork Backribs" whose Spanish name
-  // never got the "#2") — never caught until someone happened to compare them side by side. Blocks
-  // save instead, forcing it to be caught right here, every time, rather than trusting anyone to
-  // remember to check both languages by hand.
+  // never got the "#2") — never caught until someone happened to compare them side by side. This
+  // specific check has no API equivalent (it's about consistency WITHIN this one row's own two
+  // languages, not a comparison against other rows), so it stays here, client-side.
   const markersEn = new Set([...extractMarkers(payload.name_en), ...extractMarkers(payload.subcategory_en)]);
   const markersEs = new Set([...extractMarkers(payload.name), ...extractMarkers(payload.subcategory)]);
   const sameMarkers = markersEn.size === markersEs.size && [...markersEn].every(m => markersEs.has(m));
@@ -1939,9 +1937,9 @@ async function saveProduct(){
     document.getElementById('photoMsg').textContent = 'Uploading…';
     const ext = pendingPhotoFile.name.split('.').pop();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await db.storage.from('product-photos').upload(path, pendingPhotoFile);
+    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingPhotoFile);
     if (upErr){ document.getElementById('photoMsg').textContent = 'Upload failed: ' + upErr.message; return; }
-    const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
+    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
     payload.photo_url = pub.publicUrl;
     document.getElementById('photoMsg').textContent = '';
   }
@@ -1949,27 +1947,41 @@ async function saveProduct(){
     document.getElementById('specMsg').textContent = 'Uploading…';
     const ext = pendingSpecFile.name.split('.').pop();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await db.storage.from('product-photos').upload(path, pendingSpecFile);
+    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingSpecFile);
     if (upErr){ document.getElementById('specMsg').textContent = 'Upload failed: ' + upErr.message; return; }
-    const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
+    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
     payload.spec_url = pub.publicUrl;
     document.getElementById('specMsg').textContent = '';
   }
 
   let productId = id;
   let newProduct = null;
-  if (id){
-    const { error } = await db.from('products').update(payload).eq('id', id);
-    if (error){ document.getElementById('formMsg').textContent = 'Error: ' + error.message; return; }
-  } else {
-    const { data, error } = await db.from('products').insert(payload).select();
-    if (error){ document.getElementById('formMsg').textContent = 'Error: ' + error.message; return; }
-    newProduct = data[0];
-    productId = newProduct.id;
-    await db.from('plant_products').insert({ plant_id: currentPlantId, product_id: productId });
-    // Keep the cached catalog list (used by the price-list row pickers) in sync immediately —
-    // otherwise the product just created wouldn't show up as an option until a full page reload.
-    if (allCatalogProducts) allCatalogProducts.push(newProduct);
+  try {
+    if (id){
+      await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+    } else {
+      const created = await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+      newProduct = created.product;
+      productId = newProduct.id;
+      await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId });
+      // Keep the cached catalog list (used by the price-list row pickers) in sync immediately —
+      // otherwise the product just created wouldn't show up as an option until a full page reload.
+      if (allCatalogProducts) allCatalogProducts.push(newProduct);
+    }
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      // Real modal, not a bare confirm() — names exactly what already exists, both buttons say
+      // what they do. The duplicate DECISION came from the API; this only renders it and, if the
+      // trader confirms it's genuinely different, re-calls saveProduct with the override flag.
+      const saveAsNew = await plShowDupConfirm(e.data);
+      if (!saveAsNew){
+        document.getElementById('formMsg').textContent = `Go back and pick the matching existing product from the row's dropdown instead of ${id ? 'saving this as a duplicate' : 'creating a new one'}.`;
+        return;
+      }
+      return saveProduct(true);
+    }
+    document.getElementById('formMsg').textContent = 'Error: ' + e.message;
+    return;
   }
   const createdForRow = priceListCreateForRowIndex;
   closeForm();
