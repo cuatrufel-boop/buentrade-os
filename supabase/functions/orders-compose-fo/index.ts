@@ -6,7 +6,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
 function temperatureFromSpec(spec: string | null): string | null {
   if (!spec) return null;
@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
         pick_up_address: resolveBorder(fo.origin),
         delivery_address: resolveBorder(fo.destination),
         temperature_setting: temperatureFromSpec(offer?.product_spec),
+        product_name: offer?.product_name || null,
         weight: offer?.weight || null,
         delivery_dates: offer?.delivery_dates || null,
         rate: fo.actual_rate ?? fo.quoted_rate,
@@ -69,7 +70,9 @@ Deno.serve(async (req) => {
         doc.customs_broker ? `Customs broker: ${doc.customs_broker}` : null,
       ].filter((l) => l !== null).join("\n");
 
-      documents.push({ document: doc, text });
+      // Raw fo/carrier rows alongside the composed document — offers.html's WhatsApp-card flow
+      // needs the actual fo/carrier fields, not just the rendered text.
+      documents.push({ document: doc, text, fo, carrier });
     }
 
     return jsonResponse({ documents });

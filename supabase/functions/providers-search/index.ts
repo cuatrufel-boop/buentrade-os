@@ -5,7 +5,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const VALID_ROLES = ["carrier", "freight_forwarder", "customs_broker"];
 
 Deno.serve(async (req) => {
@@ -15,14 +15,18 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const q = (body.q || "").trim();
     const role = body.role || null;
+    const id = body.id || null;
     const limit = Math.min(Number(body.limit) || 200, 500);
 
     if (role && !VALID_ROLES.includes(role)) return jsonResponse({ error: "invalid role", valid_roles: VALID_ROLES }, 400);
     const like = `%${q}%`;
 
     // Empty q means "everything" (a list-view load), not an error — a keyword search is just a
-    // narrower case of the same query.
-    const results = role
+    // narrower case of the same query. id fetches one known provider directly (offers.html needs
+    // to resolve a stored customs_agency_provider_id to its full row).
+    const results = id
+      ? await sql`select * from providers where id = ${id}`
+      : role
       ? await sql`
           select distinct p.*
           from providers p join provider_roles pr on pr.provider_id = p.id

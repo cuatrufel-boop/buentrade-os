@@ -7,7 +7,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { duplicateResponse, isNearDuplicate, jsonResponse, normalize, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 Deno.serve(async (req) => {
@@ -26,6 +26,7 @@ Deno.serve(async (req) => {
       payment_days = null, payment_method = null, preferred_exchange_rate_mode = null,
       payments_contact_name = null, payments_contact_email = null, payments_contact_phone = null,
       payments_contact_whatsapp = null, customs_agency_provider_id = null, credit_limit = null,
+      usual_incoterm_text = null,
       override_duplicate_check = false, idempotency_key = null,
     } = body;
 
@@ -68,14 +69,14 @@ Deno.serve(async (req) => {
           preferred_currency_id, usual_delivery_type, usual_destination,
           payment_days, payment_method, preferred_exchange_rate_mode,
           payments_contact_name, payments_contact_email, payments_contact_phone, payments_contact_whatsapp,
-          customs_agency_provider_id, credit_limit, idempotency_key
+          customs_agency_provider_id, credit_limit, usual_incoterm_text, idempotency_key
         ) values (
           ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state}, ${address},
           ${contact_name}, ${contact_role}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${website}, ${notes},
           ${preferred_currency_id}, ${usual_delivery_type}, ${usual_destination},
           ${payment_days}, ${payment_method}, ${preferred_exchange_rate_mode},
           ${payments_contact_name}, ${payments_contact_email}, ${payments_contact_phone}, ${payments_contact_whatsapp},
-          ${customs_agency_provider_id}, ${credit_limit}, ${idempotency_key}
+          ${customs_agency_provider_id}, ${credit_limit}, ${usual_incoterm_text}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customers", record_id: customer.id, after: customer });

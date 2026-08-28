@@ -3,16 +3,17 @@
 // in offers.html's buildPODoc() — moved here so every caller (the future frontend, a WhatsApp/
 // email send, anything) gets the exact same document, computed once, not re-derived per screen.
 //
-// Incoterms rule (ported from the real app, confirmed via a full frontend audit 2026-08-26):
-// FOB (no customs agency on the offer) -> "FCA – {plant location}", the plant IS the ship-from/
-// pick-up point. Otherwise -> "DAP – {agency location}", delivered to the customs agency instead.
-// Never guessed — read directly off sent_offers.customs_agency_provider_id, the same field the
-// original logic keys off of.
+// Incoterms rule (re-verified directly against offers.html's real buildPODoc() source, 2026-08-28
+// — an earlier pass had this keyed off customs_agency_provider_id, which was wrong): FOB (a US
+// freight rate is on the offer — BuenTrade booked the truck) -> "FCA – {plant location}", the
+// plant IS the ship-from/pick-up point. Otherwise (the plant delivers on its own truck, no freight
+// leg booked) -> "DAP – {agency location}", delivered to the customer's customs agency instead.
+// Read off sent_offers.us_freight_rate_id, the actual field the original logic keys off of.
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
 function fmtAddress(name: string, address: string | null, city: string | null, state: string | null, country: string | null) {
   return [name, address, [city, state].filter(Boolean).join(", "), country].filter(Boolean).join("\n");
@@ -30,10 +31,11 @@ Deno.serve(async (req) => {
     const [offer] = await sql`select * from sent_offers where id = ${po.sent_offer_id}`;
     const [plant] = await sql`select * from plants where id = ${po.plant_id}`;
 
+    const isFob = !!offer?.us_freight_rate_id;
     let shipTo = fmtAddress(plant?.name, plant?.address, plant?.city, plant?.state, plant?.country);
     let incoterms = `FCA – ${plant?.name || "plant"}, ${[plant?.city, plant?.state].filter(Boolean).join(", ")}`;
     let customsAgency = null;
-    if (offer?.customs_agency_provider_id) {
+    if (!isFob && offer?.customs_agency_provider_id) {
       const [agency] = await sql`select * from providers where id = ${offer.customs_agency_provider_id}`;
       if (agency) {
         customsAgency = agency;
@@ -48,7 +50,11 @@ Deno.serve(async (req) => {
       order_number,
       date: po.created_at,
       pick_up_date: Array.isArray(po.delivery_dates) && po.delivery_dates[0] ? po.delivery_dates[0] : null,
-      payment_terms: po.docs_on ? "Docs included" : "No docs",
+      // Two separate real fields, previously conflated into one here: PAYMENT TERMS is the
+      // plant's own on-file terms text; the docs_on note is shown separately, matching the real
+      // "NOTES: Docs included by vendor." / "...buyer to arrange." line in buildPODoc().
+      payment_terms: plant?.payment_terms || null,
+      docs_note: po.docs_on ? "Docs included by vendor." : "No export documentation included — buyer to arrange.",
       incoterms,
       country_of_origin: plant?.country || null,
       trader,
@@ -68,7 +74,7 @@ Deno.serve(async (req) => {
       `PURCHASE ORDER ${order_number}`,
       `Date: ${new Date(doc.date).toLocaleDateString()}`,
       doc.pick_up_date ? `Pick-up date: ${doc.pick_up_date}` : null,
-      `Payment terms: ${doc.payment_terms}`,
+      doc.payment_terms ? `Payment terms: ${doc.payment_terms}` : null,
       `Incoterms: ${doc.incoterms}`,
       doc.country_of_origin ? `Country of origin: ${doc.country_of_origin}` : null,
       doc.trader ? `Trader: ${doc.trader}` : null,
@@ -81,9 +87,14 @@ Deno.serve(async (req) => {
       `Weight: ${doc.line_item.weight} lbs`,
       `Price: $${doc.line_item.purchase_price}/lb`,
       `Total: $${doc.line_item.total_cost}`,
+      ``,
+      `NOTES: ${doc.docs_note}`,
     ].filter((l) => l !== null).join("\n");
 
-    return jsonResponse({ document: doc, text });
+    // Raw rows alongside the composed document — offers.html's WhatsApp-card and email-send flows
+    // need the actual po/plant fields (whatsapp, phone, email, email_cc…), not just the rendered
+    // text, so one call here serves every consumer instead of needing a second endpoint.
+    return jsonResponse({ document: doc, text, po, plant, offer });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }

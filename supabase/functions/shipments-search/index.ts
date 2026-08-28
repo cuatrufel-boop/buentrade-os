@@ -7,8 +7,8 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
-const VALID_STATUSES = ["scheduled", "picked_up", "in_transit", "delivered"];
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
+const VALID_STATUSES = ["pending_pickup", "picked_up", "unloading", "delivered"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
@@ -23,9 +23,17 @@ Deno.serve(async (req) => {
     const results = await sql`
       select
         sh.*,
-        o.product_name, o.product_name_es, o.product_spec, o.product_spec_es,
+        o.product_id, o.product_name, o.product_name_es, o.product_spec, o.product_spec_es,
         o.plant_name, o.customer_name,
-        p.name as carrier_name,
+        p.name as carrier_name, p.phone as carrier_phone,
+        cu.contact_name as customer_contact_name, cu.whatsapp as customer_whatsapp, cu.phone as customer_phone,
+        cu.payment_days as customer_payment_days,
+        pr.name as catalog_product_name, pr.name_en as catalog_product_name_en, pr.photo_url as catalog_product_photo_url,
+        (
+          select fo.origin from freight_orders fo
+          where fo.order_number = sh.order_number and fo.carrier_provider_id = sh.carrier_provider_id
+          limit 1
+        ) as freight_origin,
         (
           select coalesce(json_agg(e.* order by e.at), '[]'::json)
           from shipment_events e where e.shipment_id = sh.id
@@ -33,6 +41,8 @@ Deno.serve(async (req) => {
       from shipments sh
       join sent_offers o on o.id = sh.sent_offer_id
       left join providers p on p.id = sh.carrier_provider_id
+      left join customers cu on cu.id = sh.customer_id
+      left join products pr on pr.id = o.product_id
       where (${status}::text is null or sh.status = ${status})
         and (${customer_id}::uuid is null or sh.customer_id = ${customer_id})
         and (${awaiting_payment}::boolean is false or (sh.status = 'delivered' and sh.paid_at is null))

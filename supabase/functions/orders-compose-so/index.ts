@@ -6,7 +6,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
@@ -22,27 +22,35 @@ Deno.serve(async (req) => {
     const [plant] = offer?.plant_id ? await sql`select * from plants where id = ${offer.plant_id}` : [null];
 
     let entregarA = customer ? [customer.trade_name, customer.address].filter(Boolean).join("\n") : null;
-    let incoterms = "FCA";
+    // The real INCOTERMS field is the customer's own stored text (e.g. "FOB", "CIF", "DAP
+    // planta") — re-verified directly against buildSODoc()'s source, 2026-08-28. It was
+    // previously computed here as FCA/DAP, which doesn't match: this is a fact on file per
+    // customer, not derived from delivery_type.
+    const incoterms = customer?.usual_incoterm_text || null;
     let customsAgency = null;
     if (customer?.usual_delivery_type === "Border" && customer.customs_agency_provider_id) {
       const [agency] = await sql`select * from providers where id = ${customer.customs_agency_provider_id}`;
       if (agency) {
         customsAgency = agency;
         entregarA = [agency.name, agency.city].filter(Boolean).join("\n");
-        incoterms = `DAP – ${agency.name}`;
       }
     }
 
-    let mxnEquivalent = null;
+    // preferred_currency_id is the real forward field (customers.preferred_currency, the older
+    // text column, is only ever populated for legacy-imported rows, never by customers.create/
+    // update going forward) — resolved once here and reused for both MONEDA and the MXN check.
+    let currencyCode = null;
     if (customer?.preferred_currency_id) {
       const [currency] = await sql`select code from currencies where id = ${customer.preferred_currency_id}`;
-      if (currency?.code === "MXN" && so.total_sale != null) {
-        const [rate] = await sql`
-          select rate from exchange_rates where from_currency = 'USD' and to_currency = 'MXN'
-          order by rate_date desc limit 1
-        `;
-        if (rate) mxnEquivalent = { rate: rate.rate, amount: Number(so.total_sale) * Number(rate.rate) };
-      }
+      currencyCode = currency?.code ?? null;
+    }
+    let mxnEquivalent = null;
+    if (currencyCode === "MXN" && so.total_sale != null) {
+      const [rate] = await sql`
+        select rate from exchange_rates where from_currency = 'USD' and to_currency = 'MXN'
+        order by rate_date desc limit 1
+      `;
+      if (rate) mxnEquivalent = { rate: rate.rate, amount: Number(so.total_sale) * Number(rate.rate) };
     }
 
     const trader = offer?.won_by ? offer.won_by.split("@")[0] : null;
@@ -54,7 +62,7 @@ Deno.serve(async (req) => {
       condiciones_pago: customer?.payment_days ? `${customer.payment_days} días` : "Por confirmar",
       incoterms,
       pais_origen: plant?.country || null,
-      moneda: "USD",
+      moneda: currencyCode || "USD",
       mxn_equivalente: mxnEquivalent,
       ejecutivo: trader,
       cliente: [customer?.trade_name, customer?.address].filter(Boolean).join("\n"),
@@ -74,7 +82,7 @@ Deno.serve(async (req) => {
       `Fecha: ${new Date(doc.date).toLocaleDateString()}`,
       doc.entrega_estimada ? `Entrega estimada: ${doc.entrega_estimada}` : null,
       `Condiciones de pago: ${doc.condiciones_pago}`,
-      `Incoterms: ${doc.incoterms}`,
+      doc.incoterms ? `Incoterms: ${doc.incoterms}` : null,
       doc.pais_origen ? `País de origen: ${doc.pais_origen}` : null,
       doc.ejecutivo ? `Ejecutivo: ${doc.ejecutivo}` : null,
       ``,
@@ -91,7 +99,10 @@ Deno.serve(async (req) => {
       `Documento preliminar sujeto a confirmación final.`,
     ].filter((l) => l !== null).join("\n");
 
-    return jsonResponse({ document: doc, text });
+    // Raw rows alongside the composed document — offers.html's WhatsApp-card and email-send flows
+    // need the actual so/customer fields (whatsapp, phone, email, email_cc…), not just the
+    // rendered text, so one call here serves every consumer instead of needing a second endpoint.
+    return jsonResponse({ document: doc, text, so, customer, offer });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }

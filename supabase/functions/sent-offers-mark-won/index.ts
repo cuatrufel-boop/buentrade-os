@@ -12,7 +12,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 Deno.serve(async (req) => {
@@ -138,7 +138,20 @@ Deno.serve(async (req) => {
         await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "order_extra_costs", record_id: c.id, after: c });
       }
 
-      return { offer: updatedOffer, purchaseOrder, salesOrder, freightOrder, mexicanFreightOrder, extraCosts };
+      // Tracking starts the moment the load exists — production kept load-status fields directly
+      // on the same order row, so a won order was always trackable with no separate step. Staging
+      // splits tracking into its own table, so that same "always trackable from the moment it's
+      // won" behavior has to be recreated here: one shipments row per won order, carrier defaulted
+      // to whichever leg actually picks up from the plant (the US leg).
+      const [shipment] = await tx`
+        insert into shipments (order_number, sent_offer_id, customer_id, sale_amount, carrier_provider_id)
+        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${offer.total_sale}, ${freightOrder ? freightOrder.carrier_provider_id : null})
+        returning *
+      `;
+      await tx`insert into shipment_events (shipment_id, event_type) values (${shipment.id}, 'scheduled')`;
+      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "shipments", record_id: shipment.id, after: shipment });
+
+      return { offer: updatedOffer, purchaseOrder, salesOrder, freightOrder, mexicanFreightOrder, extraCosts, shipment };
     });
 
     return jsonResponse({
@@ -150,6 +163,7 @@ Deno.serve(async (req) => {
       freight_order: result.freightOrder,
       mexican_freight_order: result.mexicanFreightOrder,
       extra_costs: result.extraCosts,
+      shipment: result.shipment,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);

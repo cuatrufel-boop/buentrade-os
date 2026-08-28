@@ -4,7 +4,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { duplicateResponse, isNearDuplicate, jsonResponse, normalize, writeAuditLog } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const UPDATABLE_FIELDS = [
@@ -13,7 +13,7 @@ const UPDATABLE_FIELDS = [
   "preferred_currency_id", "usual_delivery_type", "usual_destination",
   "payment_days", "payment_method", "preferred_exchange_rate_mode",
   "payments_contact_name", "payments_contact_email", "payments_contact_phone", "payments_contact_whatsapp",
-  "customs_agency_provider_id", "credit_limit",
+  "customs_agency_provider_id", "credit_limit", "usual_incoterm_text",
 ];
 
 Deno.serve(async (req) => {
@@ -59,6 +59,7 @@ Deno.serve(async (req) => {
           payments_contact_name = ${merged.payments_contact_name}, payments_contact_email = ${merged.payments_contact_email},
           payments_contact_phone = ${merged.payments_contact_phone}, payments_contact_whatsapp = ${merged.payments_contact_whatsapp},
           customs_agency_provider_id = ${merged.customs_agency_provider_id}, credit_limit = ${merged.credit_limit},
+          usual_incoterm_text = ${merged.usual_incoterm_text},
           updated_at = now()
         where id = ${id} returning *
       `;

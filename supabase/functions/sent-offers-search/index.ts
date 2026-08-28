@@ -7,7 +7,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 
-const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
+const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const VALID_STATUSES = ["sent", "won", "lost"];
 
 Deno.serve(async (req) => {
@@ -15,8 +15,8 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { customer_id = null, product_id = null, status = null, order_by = "customer" } = body;
-    const limit = Math.min(Number(body.limit) || 100, 500);
+    const { customer_id = null, product_id = null, status = null, order_by = "customer", sent_from = null, sent_to = null, order_number = null } = body;
+    const limit = Math.min(Number(body.limit) || 100, 1000);
 
     if (status && !VALID_STATUSES.includes(status)) {
       return jsonResponse({ error: "invalid status", valid_statuses: VALID_STATUSES }, 400);
@@ -31,6 +31,9 @@ Deno.serve(async (req) => {
       where (${customer_id}::uuid is null or customer_id = ${customer_id})
         and (${product_id}::uuid is null or product_id = ${product_id})
         and (${status}::text is null or status = ${status})
+        and (${sent_from}::timestamptz is null or sent_at >= ${sent_from})
+        and (${sent_to}::timestamptz is null or sent_at <= ${sent_to})
+        and (${order_number}::text is null or order_number = ${order_number})
       ${orderClause}
       limit ${limit}
     `;
