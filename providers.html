@@ -98,7 +98,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -109,14 +108,25 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  accessToken: async () => {
-    const user = auth.currentUser;
-    return user ? await user.getIdToken(true) : null;
-  }
-});
+// STAGING Trading OS API — every read/write on this page goes through an Edge Function, never a
+// direct database call. This is a deliberate architecture change (2026-08): Claude/AI and the
+// frontend alike only ever call named, narrow API operations; Postgres itself is never touched
+// directly by anyone but the API's own service role. Points at staging (geqhjykbxvxugvnpnygn),
+// not the production database — this page shows staging data until Fase 4's real migration runs.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
 
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
@@ -283,29 +293,25 @@ const CUSTOMS_TYPES = [
 ];
 
 async function loadEverything(){
-  const fetchAll = () => Promise.all([
-    db.from('providers').select('*').order('name'),
-    db.from('provider_roles').select('*'),
-    db.from('plants').select('id,name').order('name'),
-    db.from('provider_rates').select('*'),
-  ]);
-  let [provRes, rolesRes, plantsRes, ratesRes] = await fetchAll();
-  // Firebase token can still be propagating right after sign-in — RLS can silently return an
-  // empty set (no error) rather than fail outright, so retry on empty plants too, not just on
-  // an explicit error.
-  if (provRes.error || rolesRes.error || plantsRes.error || ratesRes.error || !(plantsRes.data || []).length){
-    await new Promise(r => setTimeout(r, 800));
-    [provRes, rolesRes, plantsRes, ratesRes] = await fetchAll();
+  try {
+    const [provRes, rolesRes, plantsRes, ratesRes] = await Promise.all([
+      callApi('providers-search', {}),
+      callApi('provider-roles-search', {}),
+      callApi('plants-search', {}),
+      callApi('provider-rates-search', {}),
+    ]);
+    providers = provRes.results || [];
+    plantsList = plantsRes.results || [];
+    allRates = ratesRes.results || [];
+    providerRolesMap = {};
+    (rolesRes.results || []).forEach(r => {
+      if (!providerRolesMap[r.provider_id]) providerRolesMap[r.provider_id] = [];
+      providerRolesMap[r.provider_id].push(r.role);
+    });
+    renderProviders();
+  } catch (e) {
+    document.getElementById('providerRows').innerHTML = `<div class="empty">Error loading from API: ${escapeHtml(e.message)}</div>`;
   }
-  providers = provRes.data || [];
-  plantsList = plantsRes.data || [];
-  allRates = ratesRes.data || [];
-  providerRolesMap = {};
-  (rolesRes.data || []).forEach(r => {
-    if (!providerRolesMap[r.provider_id]) providerRolesMap[r.provider_id] = [];
-    providerRolesMap[r.provider_id].push(r.role);
-  });
-  renderProviders();
 }
 
 // Customs agencies are a different relationship than carriers/forwarders — a customer works
@@ -393,7 +399,31 @@ function editProvider(id){
 
 function closeForm(){ document.getElementById('formCard').style.display = 'none'; }
 
-async function saveProvider(){
+// Calls providers-create/providers-update; on a real possible-duplicate response, shows what
+// already exists and a real "Save anyway" action — never a silent override, never a generic
+// OK/Cancel confirm(). Returns the API result on success, or null (already shown the message) on
+// a duplicate that hasn't been confirmed yet or a hard error.
+async function trySaveProvider(fn, payload){
+  try {
+    return await callApi(fn, payload);
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
+      document.getElementById('formMsg').innerHTML = `
+        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
+          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name)}</strong>` : ''}
+          <div style="margin-top:8px;">
+            <button type="button" class="btn small" onclick="saveProvider(true)">Save anyway — this is genuinely different</button>
+          </div>
+        </div>`;
+      return null;
+    }
+    document.getElementById('formMsg').textContent = 'Error: ' + e.message;
+    return null;
+  }
+}
+
+async function saveProvider(forceOverride){
   const id = document.getElementById('providerId').value;
   const payload = {
     name: document.getElementById('p_name').value,
@@ -412,18 +442,26 @@ async function saveProvider(){
     return;
   }
   let providerId = id;
-  if (id){
-    const { error } = await db.from('providers').update(payload).eq('id', id);
-    if (error){ document.getElementById('formMsg').textContent = 'Error: ' + error.message; return; }
-  } else {
-    const { data, error } = await db.from('providers').insert(payload).select();
-    if (error){ document.getElementById('formMsg').textContent = 'Error: ' + error.message; return; }
-    providerId = data[0].id;
-  }
-  const selectedRoles = Array.from(document.querySelectorAll('.role-cb:checked')).map(cb => cb.value);
-  await db.from('provider_roles').delete().eq('provider_id', providerId);
-  if (selectedRoles.length){
-    await db.from('provider_roles').insert(selectedRoles.map(role => ({provider_id: providerId, role})));
+  try {
+    if (id){
+      const updated = await trySaveProvider('providers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+      if (!updated) return;
+    } else {
+      const created = await trySaveProvider('providers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+      if (!created) return;
+      providerId = created.provider.id;
+    }
+    // Diff against the current roles instead of production's old delete-all-then-reinsert — fewer
+    // writes, and a role that was never touched never gets a spurious delete+recreate.
+    const selectedRoles = Array.from(document.querySelectorAll('.role-cb:checked')).map(cb => cb.value);
+    const currentRoles = providerRolesMap[providerId] || [];
+    const toAdd = selectedRoles.filter(r => !currentRoles.includes(r));
+    const toRemove = currentRoles.filter(r => !selectedRoles.includes(r));
+    for (const role of toAdd) await callApi('provider-roles-assign', { actor: currentActor(), provider_id: providerId, role });
+    for (const role of toRemove) await callApi('provider-roles-remove', { actor: currentActor(), provider_id: providerId, role });
+  } catch (e) {
+    document.getElementById('formMsg').textContent = 'Error: ' + e.message;
+    return;
   }
   closeForm();
   await loadEverything();
@@ -431,10 +469,12 @@ async function saveProvider(){
 
 async function deleteProvider(id){
   if (!confirm('Delete this provider? This also deletes its roles and rates.')) return;
-  await db.from('provider_rates').delete().eq('provider_id', id);
-  await db.from('provider_roles').delete().eq('provider_id', id);
-  const { error } = await db.from('providers').delete().eq('id', id);
-  if (error){ alert('Error: ' + error.message); return; }
+  try {
+    await callApi('providers-delete', { actor: currentActor(), id });
+  } catch (e) {
+    alert('Error: ' + e.message);
+    return;
+  }
   if (currentProviderId === id) closeRates();
   await loadEverything();
 }
@@ -620,24 +660,29 @@ async function applyRateList(){
   const failedRows = [];
   for (const row of rateListRows){
     const payload = isCustoms ? {
+      actor: currentActor(),
       provider_id: currentProviderId,
       service_type: row.serviceType,
       origin: '',
       destination: '',
       rate: row.price,
-      currency: 'USD',
     } : {
+      actor: currentActor(),
       provider_id: currentProviderId,
       service_type: currentRateTab,
       origin: isUs ? row.origin : 'Border',
       destination: isUs ? '' : row.destination,
       rate: row.price,
-      currency: 'USD',
     };
-    // Same lane (provider+service+origin+destination) can already exist from a prior load — update
-    // its price instead of erroring on the unique constraint (see the Gadsden/AL multi-plant case).
-    const { error } = await db.from('provider_rates').upsert(payload, { onConflict: 'provider_id,service_type,origin,destination' });
-    if (error){ errors++; failedRows.push(row); } else { applied++; }
+    // Same lane (provider+service+origin+destination) can already exist from a prior load —
+    // provider-rates-set upserts on that exact key, updating the price instead of erroring (see
+    // the Gadsden/AL multi-plant case).
+    try {
+      await callApi('provider-rates-set', payload);
+      applied++;
+    } catch (e) {
+      errors++; failedRows.push(row);
+    }
   }
   rateListRows = failedRows;
   renderRateListReview();
@@ -723,11 +768,14 @@ async function saveRateField(rateId, field, value, inputEl){
   const row = allRates.find(r => r.id === rateId);
   if (!row) return;
   if (row[field] === value) return;
-  const { error } = await db.from('provider_rates').update({[field]: value}).eq('id', rateId);
-  if (error){ alert('Error saving: ' + error.message); return; }
+  try {
+    await callApi('provider-rates-update', { actor: currentActor(), id: rateId, [field]: value });
+  } catch (e) {
+    alert('Error saving: ' + e.message);
+    return;
+  }
   row[field] = value;
   if (inputEl){
-    const cell = inputEl.closest('td');
     inputEl.style.borderColor = 'var(--green)';
     setTimeout(() => { inputEl.style.borderColor = ''; }, 700);
   }
@@ -735,24 +783,28 @@ async function saveRateField(rateId, field, value, inputEl){
 
 async function addRateRow(){
   if (!currentProviderId) return;
-  const payload = {
-    provider_id: currentProviderId,
-    service_type: currentRateTab === 'customs' ? 'customs' : currentRateTab,
-    origin: '',
-    destination: '',
-    rate: 0,
-    currency: 'USD',
-  };
-  const { data, error } = await db.from('provider_rates').insert(payload).select();
-  if (error){ alert('Error: ' + error.message); return; }
-  allRates.push(data[0]);
-  renderRateTable();
+  try {
+    const created = await callApi('provider-rates-create', {
+      actor: currentActor(),
+      provider_id: currentProviderId,
+      service_type: currentRateTab === 'customs' ? 'customs' : currentRateTab,
+      origin: '', destination: '', rate: 0,
+    });
+    allRates.push(created.rate);
+    renderRateTable();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 async function deleteRate(rateId){
   if (!confirm('Delete this rate?')) return;
-  const { error } = await db.from('provider_rates').delete().eq('id', rateId);
-  if (error){ alert('Error: ' + error.message); return; }
+  try {
+    await callApi('provider-rates-delete', { actor: currentActor(), id: rateId });
+  } catch (e) {
+    alert('Error: ' + e.message);
+    return;
+  }
   allRates = allRates.filter(r => r.id !== rateId);
   renderRateTable();
 }

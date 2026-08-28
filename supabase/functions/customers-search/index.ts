@@ -12,9 +12,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const q = (body.q || "").trim();
-    const limit = Math.min(Number(body.limit) || 25, 100);
-
-    if (!q) return jsonResponse({ error: "q is required" }, 400);
+    const limit = Math.min(Number(body.limit) || 200, 500);
     const like = `%${q}%`;
 
     const results = await sql`

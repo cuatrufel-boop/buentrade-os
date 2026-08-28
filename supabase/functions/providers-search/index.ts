@@ -15,12 +15,13 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const q = (body.q || "").trim();
     const role = body.role || null;
-    const limit = Math.min(Number(body.limit) || 25, 100);
+    const limit = Math.min(Number(body.limit) || 200, 500);
 
-    if (!q) return jsonResponse({ error: "q is required" }, 400);
     if (role && !VALID_ROLES.includes(role)) return jsonResponse({ error: "invalid role", valid_roles: VALID_ROLES }, 400);
     const like = `%${q}%`;
 
+    // Empty q means "everything" (a list-view load), not an error — a keyword search is just a
+    // narrower case of the same query.
     const results = role
       ? await sql`
           select distinct p.*
