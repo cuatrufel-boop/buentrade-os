@@ -641,7 +641,10 @@ async function saveCustomer(forceOverride){
   }
   try {
     if (id) await callApi('customers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
-    else await callApi('customers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+    else {
+      const idempotencyKey = `customers-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
+      await callApi('customers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+    }
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);

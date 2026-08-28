@@ -27,8 +27,13 @@ Deno.serve(async (req) => {
       actor, name, country_id = null, city_id = null, state = null,
       contact_name = null, email = null, phone = null, website = null, notes = null,
       avg_response_time = null, payment_terms = null, required_documentation = null,
-      override_duplicate_check = false,
+      override_duplicate_check = false, idempotency_key = null,
     } = body;
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from suppliers where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, supplier: existing, idempotent_replay: true });
+    }
 
     const allSuppliers = await sql`select * from suppliers`;
 
@@ -59,11 +64,11 @@ Deno.serve(async (req) => {
         insert into suppliers (
           name, country, state, city, country_id, city_id,
           contact_name, email, phone, website, notes,
-          avg_response_time, payment_terms, required_documentation
+          avg_response_time, payment_terms, required_documentation, idempotency_key
         ) values (
           ${name}, null, ${state}, null, ${country_id}, ${city_id},
           ${contact_name}, ${email}, ${phone}, ${website}, ${notes},
-          ${avg_response_time}, ${payment_terms}, ${required_documentation}
+          ${avg_response_time}, ${payment_terms}, ${required_documentation}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "suppliers", record_id: supplier.id, after: supplier });

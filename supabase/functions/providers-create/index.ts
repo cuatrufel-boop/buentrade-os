@@ -22,8 +22,13 @@ Deno.serve(async (req) => {
       actor, name, country = null, city = null, country_id = null, city_id = null, phone = null,
       contact_name = null, email = null, email_cc = null, whatsapp_cc = null, notes = null,
       mc_number = null, dot_number = null,
-      override_duplicate_check = false,
+      override_duplicate_check = false, idempotency_key = null,
     } = body;
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from providers where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, provider: existing, idempotent_replay: true });
+    }
 
     const allProviders = await sql`select * from providers`;
 
@@ -51,8 +56,8 @@ Deno.serve(async (req) => {
 
     const provider = await sql.begin(async (tx) => {
       const [provider] = await tx`
-        insert into providers (name, country, city, country_id, city_id, phone, contact_name, email, email_cc, whatsapp_cc, notes, mc_number, dot_number)
-        values (${name}, ${country}, ${city}, ${country_id}, ${city_id}, ${phone}, ${contact_name}, ${email}, ${email_cc}, ${whatsapp_cc}, ${notes}, ${mc_number}, ${dot_number})
+        insert into providers (name, country, city, country_id, city_id, phone, contact_name, email, email_cc, whatsapp_cc, notes, mc_number, dot_number, idempotency_key)
+        values (${name}, ${country}, ${city}, ${country_id}, ${city_id}, ${phone}, ${contact_name}, ${email}, ${email_cc}, ${whatsapp_cc}, ${notes}, ${mc_number}, ${dot_number}, ${idempotency_key})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "providers", record_id: provider.id, after: provider });

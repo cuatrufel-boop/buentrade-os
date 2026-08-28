@@ -33,8 +33,13 @@ Deno.serve(async (req) => {
       avg_freight_to_border = null, docs_included = null, payment_terms = null,
       required_documentation = null, website = null, notes = null, internal_notes = null,
       logo_url = null, logo_url_dark = null,
-      override_duplicate_check = false,
+      override_duplicate_check = false, idempotency_key = null,
     } = body;
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from plants where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, plant: existing, idempotent_replay: true });
+    }
 
     const [supplier] = await sql`select id from suppliers where id = ${supplier_id}`;
     if (!supplier) return jsonResponse({ error: "unknown supplier_id" }, 400);
@@ -73,13 +78,13 @@ Deno.serve(async (req) => {
           contact_name, email, email_cc, phone, whatsapp, whatsapp_cc, business_hours,
           avg_loading_time, avg_response_time, document_cost, avg_freight_to_border,
           docs_included, payment_terms, required_documentation, website, notes, internal_notes,
-          logo_url, logo_url_dark
+          logo_url, logo_url_dark, idempotency_key
         ) values (
           ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${address}, ${internal_code},
           ${contact_name}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${business_hours},
           ${avg_loading_time}, ${avg_response_time}, ${document_cost}, ${avg_freight_to_border},
           ${docs_included}, ${payment_terms}, ${required_documentation}, ${website}, ${notes}, ${internal_notes},
-          ${logo_url}, ${logo_url_dark}
+          ${logo_url}, ${logo_url_dark}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plants", record_id: plant.id, after: plant });

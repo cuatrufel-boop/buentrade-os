@@ -32,11 +32,18 @@ Deno.serve(async (req) => {
       docs_on = false, inspection_amount = 0, mexican_dest_rate_id = null, mexican_freight_mxn = null,
       customs_agency_provider_id = null, tramite_aduanal_amount = 0, bodega_americana_amount = 0,
       extra_fields = [], weight = 40000, cost_per_lb = null, sale_per_lb = null,
-      total_cost = null, total_sale = null, delivery_dates = [],
+      total_cost = null, total_sale = null, delivery_dates = [], idempotency_key = null,
     } = body;
 
     if (!VALID_CHANNELS.includes(channel)) return jsonResponse({ error: "invalid channel", valid_channels: VALID_CHANNELS }, 400);
     if (!product_id && !product_name) return jsonResponse({ error: "product_id or product_name is required" }, 400);
+
+    // A double-click on Send (or a retried network request) replays the exact same key — return
+    // the offer already created instead of logging the send twice.
+    if (idempotency_key) {
+      const [existing] = await sql`select * from sent_offers where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, offer: existing, idempotent_replay: true });
+    }
 
     let product = null;
     if (product_id) {
@@ -61,14 +68,14 @@ Deno.serve(async (req) => {
           us_freight_rate_id, us_freight_amount, docs_on, inspection_amount,
           mexican_dest_rate_id, mexican_freight_mxn, customs_agency_provider_id,
           tramite_aduanal_amount, bodega_americana_amount, extra_fields, weight,
-          cost_per_lb, sale_per_lb, total_cost, total_sale, delivery_dates, status
+          cost_per_lb, sale_per_lb, total_cost, total_sale, delivery_dates, status, idempotency_key
         ) values (
           ${actor}, ${channel}, ${product_id}, ${finalProductName}, ${finalProductNameEs}, ${finalProductSpec}, ${finalProductSpecEs},
           ${plant_id}, ${plant.name}, ${customer_id}, ${customer.trade_name}, ${purchase_price},
           ${us_freight_rate_id}, ${us_freight_amount}, ${docs_on}, ${inspection_amount},
           ${mexican_dest_rate_id}, ${mexican_freight_mxn}, ${customs_agency_provider_id},
           ${tramite_aduanal_amount}, ${bodega_americana_amount}, ${tx.json(extra_fields)}, ${weight},
-          ${cost_per_lb}, ${sale_per_lb}, ${total_cost}, ${total_sale}, ${tx.json(delivery_dates)}, 'sent'
+          ${cost_per_lb}, ${sale_per_lb}, ${total_cost}, ${total_sale}, ${tx.json(delivery_dates)}, 'sent', ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "sent_offers", record_id: offer.id, after: offer });

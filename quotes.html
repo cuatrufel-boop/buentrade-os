@@ -2421,11 +2421,17 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
   withCalc.forEach(({ plant, calc }) => {
     const agencyId = plant.rqMexicanDestRateId ? rqCustomsAgencyForPlant(plant) : null;
     customers.forEach(c => {
+      // Deterministic, not random — a genuine double-click/double-fire of this exact same send
+      // (same plant, customer, product, channel) within the same minute reuses the same key, so
+      // the API's idempotency check catches it and returns the existing offer instead of logging
+      // it twice. A real re-send later (a different minute) always gets a fresh key.
+      const idempotencyKey = [plant.id, c.id, rqMatchedProductId || loggedProductName, channel, new Date().toISOString().slice(0, 16)].join('|');
       rows.push({
         actor: currentActor(),
         channel,
         product_id: rqMatchedProductId || null,
         product_name: loggedProductName,
+        idempotency_key: idempotencyKey,
         product_spec: rqProductSpec,
         product_name_es: loggedProductNameEs,
         product_spec_es: rqProductSpecEs,

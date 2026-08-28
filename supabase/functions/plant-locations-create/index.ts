@@ -17,15 +17,21 @@ Deno.serve(async (req) => {
     const {
       actor, plant_id, location_name, protein = null, freight_to_border_usd = null,
       delivered_by_plant = null, contact_name = null, phone = null, email = null, notes = null,
+      idempotency_key = null,
     } = body;
 
     const [plant] = await sql`select id from plants where id = ${plant_id}`;
     if (!plant) return jsonResponse({ error: "unknown plant_id" }, 400);
 
+    if (idempotency_key) {
+      const [existing] = await sql`select * from plant_locations where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, location: existing, idempotent_replay: true });
+    }
+
     const location = await sql.begin(async (tx) => {
       const [location] = await tx`
-        insert into plant_locations (plant_id, location_name, protein, freight_to_border_usd, delivered_by_plant, contact_name, phone, email, notes)
-        values (${plant_id}, ${location_name}, ${protein}, ${freight_to_border_usd}, ${delivered_by_plant}, ${contact_name}, ${phone}, ${email}, ${notes})
+        insert into plant_locations (plant_id, location_name, protein, freight_to_border_usd, delivered_by_plant, contact_name, phone, email, notes, idempotency_key)
+        values (${plant_id}, ${location_name}, ${protein}, ${freight_to_border_usd}, ${delivered_by_plant}, ${contact_name}, ${phone}, ${email}, ${notes}, ${idempotency_key})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_locations", record_id: location.id, after: location });

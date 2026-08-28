@@ -43,8 +43,13 @@ Deno.serve(async (req) => {
       brand = null, unit_id = null, standard_weight = null, presentation = null, origin = null,
       documents_included = null, documents_excluded = null, commercial_notes = null,
       photo_url = null, spec_url = null,
-      override_duplicate_check = false,
+      override_duplicate_check = false, idempotency_key = null,
     } = body;
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from products where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, product: existing, idempotent_replay: true });
+    }
 
     const [category] = await sql`select id from categories where id = ${category_id}`;
     if (!category) return jsonResponse({ error: "unknown category_id" }, 400);
@@ -112,12 +117,12 @@ Deno.serve(async (req) => {
           category, category_id, name, name_en, subcategory, subcategory_en,
           temperature_id, packaging_id, full_name_en, full_name_es, brand,
           unit_id, standard_weight, presentation, origin,
-          documents_included, documents_excluded, commercial_notes, photo_url, spec_url
+          documents_included, documents_excluded, commercial_notes, photo_url, spec_url, idempotency_key
         ) values (
           (select name from categories where id = ${category_id}), ${category_id}, ${name}, ${name_en}, ${subcategory}, ${subcategory_en},
           ${temperature_id}, ${packaging_id}, ${full_name_en}, ${full_name_es}, ${brand},
           ${unit_id}, ${standard_weight}, ${presentation}, ${origin},
-          ${documents_included}, ${documents_excluded}, ${commercial_notes}, ${photo_url}, ${spec_url}
+          ${documents_included}, ${documents_excluded}, ${commercial_notes}, ${photo_url}, ${spec_url}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "products", record_id: product.id, after: product });

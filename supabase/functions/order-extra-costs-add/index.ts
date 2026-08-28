@@ -14,12 +14,17 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const missing = ["actor", "order_number", "cost_type", "amount"].filter((k) => body[k] == null || body[k] === "");
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-    const { actor, order_number, sent_offer_id = null, cost_type, amount, notes = null } = body;
+    const { actor, order_number, sent_offer_id = null, cost_type, amount, notes = null, idempotency_key = null } = body;
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from order_extra_costs where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, cost: existing, idempotent_replay: true });
+    }
 
     const cost = await sql.begin(async (tx) => {
       const [cost] = await tx`
-        insert into order_extra_costs (order_number, sent_offer_id, cost_type, amount, notes)
-        values (${order_number}, ${sent_offer_id}, ${cost_type}, ${amount}, ${notes})
+        insert into order_extra_costs (order_number, sent_offer_id, cost_type, amount, notes, idempotency_key)
+        values (${order_number}, ${sent_offer_id}, ${cost_type}, ${amount}, ${notes}, ${idempotency_key})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "order_extra_costs", record_id: cost.id, after: cost });

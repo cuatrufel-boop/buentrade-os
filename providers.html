@@ -405,7 +405,12 @@ function closeForm(){ document.getElementById('formCard').style.display = 'none'
 // a duplicate that hasn't been confirmed yet or a hard error.
 async function trySaveProvider(fn, payload){
   try {
-    return await callApi(fn, payload);
+    // Deterministic key — a genuine double-click/double-fire of this exact same save within the
+    // same minute reuses the same key, so the API returns the row it already created instead of a
+    // second one. A 409 possible_duplicate never inserts anything, so an override retry still
+    // creates normally even though it computes the same key.
+    const idempotencyKey = payload.idempotency_key || `${fn}|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
+    return await callApi(fn, { ...payload, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);

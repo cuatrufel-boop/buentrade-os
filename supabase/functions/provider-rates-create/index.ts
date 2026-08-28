@@ -16,11 +16,16 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const missing = ["actor", "provider_id", "service_type"].filter((k) => !body[k]);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-    const { actor, provider_id, service_type, origin = "", destination = "", rate = 0, currency_id = null, plant_id = null, notes = null } = body;
+    const { actor, provider_id, service_type, origin = "", destination = "", rate = 0, currency_id = null, plant_id = null, notes = null, idempotency_key = null } = body;
 
     if (!VALID_SERVICE_TYPES.includes(service_type)) return jsonResponse({ error: "invalid service_type", valid_service_types: VALID_SERVICE_TYPES }, 400);
     const [provider] = await sql`select id from providers where id = ${provider_id}`;
     if (!provider) return jsonResponse({ error: "unknown provider_id" }, 400);
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from provider_rates where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, rate: existing, idempotent_replay: true });
+    }
 
     // currency_id is the real FK; `currency` is the older text column every other read path
     // (provider-rates-search included) still displays — keep both in sync rather than letting
@@ -33,8 +38,8 @@ Deno.serve(async (req) => {
 
     const rateRow = await sql.begin(async (tx) => {
       const [rateRow] = await tx`
-        insert into provider_rates (provider_id, service_type, origin, destination, rate, currency, currency_id, plant_id, notes)
-        values (${provider_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currencyCode ?? 'USD'}, ${currency_id}, ${plant_id}, ${notes})
+        insert into provider_rates (provider_id, service_type, origin, destination, rate, currency, currency_id, plant_id, notes, idempotency_key)
+        values (${provider_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currencyCode ?? 'USD'}, ${currency_id}, ${plant_id}, ${notes}, ${idempotency_key})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "provider_rates", record_id: rateRow.id, after: rateRow });

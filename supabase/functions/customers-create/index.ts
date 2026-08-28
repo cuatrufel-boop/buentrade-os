@@ -26,8 +26,15 @@ Deno.serve(async (req) => {
       payment_days = null, payment_method = null, preferred_exchange_rate_mode = null,
       payments_contact_name = null, payments_contact_email = null, payments_contact_phone = null,
       payments_contact_whatsapp = null, customs_agency_provider_id = null, credit_limit = null,
-      override_duplicate_check = false,
+      override_duplicate_check = false, idempotency_key = null,
     } = body;
+
+    // A retried request (or override_duplicate_check already applied once) replays the same key —
+    // short-circuit straight to the existing row, ahead of the fuzzy-duplicate check below.
+    if (idempotency_key) {
+      const [existing] = await sql`select * from customers where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, customer: existing, idempotent_replay: true });
+    }
 
     const allCustomers = await sql`select * from customers`;
 
@@ -61,14 +68,14 @@ Deno.serve(async (req) => {
           preferred_currency_id, usual_delivery_type, usual_destination,
           payment_days, payment_method, preferred_exchange_rate_mode,
           payments_contact_name, payments_contact_email, payments_contact_phone, payments_contact_whatsapp,
-          customs_agency_provider_id, credit_limit
+          customs_agency_provider_id, credit_limit, idempotency_key
         ) values (
           ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state}, ${address},
           ${contact_name}, ${contact_role}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${website}, ${notes},
           ${preferred_currency_id}, ${usual_delivery_type}, ${usual_destination},
           ${payment_days}, ${payment_method}, ${preferred_exchange_rate_mode},
           ${payments_contact_name}, ${payments_contact_email}, ${payments_contact_phone}, ${payments_contact_whatsapp},
-          ${customs_agency_provider_id}, ${credit_limit}
+          ${customs_agency_provider_id}, ${credit_limit}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customers", record_id: customer.id, after: customer });

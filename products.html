@@ -615,7 +615,10 @@ async function saveProduct(forceOverride){
 
   try {
     if (id) await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
-    else await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+    else {
+      const idempotencyKey = `products-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
+      await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+    }
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
