@@ -118,14 +118,28 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-const SUPABASE_URL = "https://zhtvimnaeogywmjuomiz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_bcyFUZhQKaYTFDLxzJh2qw_yBWgBAEu";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  accessToken: async () => {
-    const user = auth.currentUser;
-    return user ? await user.getIdToken(false) : null;
-  }
-});
+// STAGING Trading OS API — see providers.html for the full note. Every product READ/WRITE goes
+// through an Edge Function.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+// The ONE deliberate exception to "no direct Supabase client": file STORAGE (photos/spec PDFs) is
+// not relational data — it's binary blobs in a bucket, a genuinely different subsystem from the
+// business-rule-guarded Postgres tables everything else on this page goes through. Scoped to
+// staging's own bucket, and only ever used for .storage.* calls, never .from() table access.
+const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
 
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
@@ -219,7 +233,7 @@ auth.onAuthStateChanged(user => {
 
     <div class="section-title">Attributes</div>
     <div class="grid3">
-      <div class="field"><label>Brand *</label><input id="brand" required></div>
+      <div class="field"><label>Brand</label><input id="brand"></div>
       <div class="field"><label>Temperature *</label>
         <select id="temperature_id" required><option value="">—</option></select>
       </div>
@@ -297,6 +311,10 @@ function openForm(product){
   if (product){
     document.getElementById('prodId').value = product.id;
     fields.slice(1).forEach(f => {
+      if (f === 'category'){
+        if (product.category_id) document.getElementById('category').value = product.category_id;
+        return;
+      }
       if (product[f] !== undefined && product[f] !== null) document.getElementById(f).value = product[f];
     });
     if (product.photo_url){
@@ -359,40 +377,45 @@ document.getElementById('specFile').addEventListener('change', (e) => {
   specPrev.style.display = 'block';
 });
 
+let categories = [];
+
 async function loadLookups(){
-  const [tempRes, packRes] = await Promise.all([
-    db.from('temperature').select('*').order('name'),
-    db.from('packaging').select('*').order('name'),
+  const [tempRes, packRes, catRes] = await Promise.all([
+    callApi('temperature-search', {}),
+    callApi('packaging-search', {}),
+    callApi('categories-search', {}),
   ]);
-  temperatures = tempRes.data || [];
-  packagings = packRes.data || [];
+  temperatures = tempRes.results || [];
+  packagings = packRes.results || [];
+  categories = catRes.results || [];
   // English throughout the OS — falls back to the Spanish catalog entry only if a
-  // temperature/packaging row has no English name on file.
+  // temperature/packaging/category row has no English name on file.
   const tSel = document.getElementById('temperature_id');
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
   const pSel = document.getElementById('packaging_id');
   packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`);
-  // Fixed list, not free text — category drives the ES→EN translation (CATEGORY_EN below), so
-  // anything typed by hand that doesn't match one of these exact Spanish values silently creates
-  // a second, disconnected category instead of reusing the real one. The stored value stays the
-  // Spanish key (that's what's actually in the database), but the label is English-only.
+  // Fixed catalog, never free text — the dropdown value is now the real category_id (a proper FK),
+  // not a hand-typed Spanish string that could silently fork into a second, disconnected category.
   const catSel = document.getElementById('category');
-  Object.keys(CATEGORY_EN).forEach(c => catSel.innerHTML += `<option value="${c}">${escapeHtml(CATEGORY_EN[c])}</option>`);
+  categories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
 }
 
+function categoryEnById(id){ const c = categories.find(x => x.id === id); return c ? c.name_en : null; }
+function categoryEnByName(name){ const c = categories.find(x => x.name === name); return c ? c.name_en : name; }
+
 async function loadProducts(){
-  await loadLookups();
-  const { data, error } = await db.from('products').select('*').order('name');
-  if (error){
+  try {
+    await loadLookups();
+    const res = await callApi('products-search', {});
+    products = res.results || [];
+    const cats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+    const catSel = document.getElementById('categoryFilter');
+    cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(categoryEnByName(c))}</option>`);
+    renderProducts();
+  } catch (e) {
     document.getElementById('emptyState').style.display = 'block';
-    document.getElementById('emptyState').textContent = 'Error loading products: ' + error.message;
-    return;
+    document.getElementById('emptyState').textContent = 'Error loading products: ' + e.message;
   }
-  products = data || [];
-  const cats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
-  const catSel = document.getElementById('categoryFilter');
-  cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(CATEGORY_EN[c] || c)}</option>`);
-  renderProducts();
 }
 
 // English throughout this catalog screen, same rule as everywhere else in the app — falls back
@@ -494,12 +517,12 @@ function extractMarkers(text){
   return matches.map(m => m.replace(/\s+/g, '').toUpperCase());
 }
 
-async function saveProduct(){
+async function saveProduct(forceOverride){
   const id = document.getElementById('prodId').value;
   const payload = {
     name: document.getElementById('name').value,
     name_en: document.getElementById('name_en').value || null,
-    category: document.getElementById('category').value,
+    category_id: document.getElementById('category').value,
     subcategory: document.getElementById('subcategory').value || null,
     subcategory_en: document.getElementById('subcategory_en').value || null,
     brand: document.getElementById('brand').value || null,
@@ -517,8 +540,12 @@ async function saveProduct(){
   // here must meet the exact same bar as one created from a plant page or the price-list review,
   // never a looser version of the same table. Full name EN/ES included — the real PO/FO/SO text
   // is written by hand, never auto-composed, so it must exist before the product can be saved.
-  if (!payload.name || !payload.name_en || !payload.category || !payload.brand || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
-    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, brand, temperature, packaging, full name EN and full name ES.';
+  // Brand is deliberately NOT required — rule 4 of the catalog-matching rules: a new product is
+  // always created brand-agnostic so it can be linked to multiple plants later. This form used to
+  // require it (same bug already fixed once in plants.html) — aligned here to match the API's own
+  // policy instead of a stricter, contradicting client-side check.
+  if (!payload.name || !payload.name_en || !payload.category_id || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
+    document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, temperature, packaging, full name EN and full name ES.';
     return;
   }
   // Confirmed real catalog errors: a grade/size/percentage detail present in one language's name
@@ -537,12 +564,12 @@ async function saveProduct(){
     document.getElementById('photoMsg').textContent = 'Uploading photo…';
     const ext = pendingPhotoFile.name.split('.').pop();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await db.storage.from('product-photos').upload(path, pendingPhotoFile);
+    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingPhotoFile);
     if (upErr){
       document.getElementById('photoMsg').textContent = 'Photo upload failed: ' + upErr.message;
       return;
     }
-    const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
+    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
     payload.photo_url = pub.publicUrl;
     document.getElementById('photoMsg').textContent = '';
   }
@@ -550,21 +577,32 @@ async function saveProduct(){
     document.getElementById('specMsg').textContent = 'Uploading…';
     const ext = pendingSpecFile.name.split('.').pop();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await db.storage.from('product-photos').upload(path, pendingSpecFile);
+    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingSpecFile);
     if (upErr){
       document.getElementById('specMsg').textContent = 'Upload failed: ' + upErr.message;
       return;
     }
-    const { data: pub } = db.storage.from('product-photos').getPublicUrl(path);
+    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
     payload.spec_url = pub.publicUrl;
     document.getElementById('specMsg').textContent = '';
   }
 
-  const { error } = id
-    ? await db.from('products').update(payload).eq('id', id)
-    : await db.from('products').insert(payload);
-  if (error){
-    document.getElementById('formMsg').textContent = 'Error: ' + error.message;
+  try {
+    if (id) await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+    else await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
+      document.getElementById('formMsg').innerHTML = `
+        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
+          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name_en || match.name)}</strong>` : ''}
+          <div style="margin-top:8px;">
+            <button type="button" class="btn small" onclick="saveProduct(true)">Save anyway — this is genuinely different</button>
+          </div>
+        </div>`;
+      return;
+    }
+    document.getElementById('formMsg').textContent = 'Error: ' + e.message;
     return;
   }
   closeForm();
@@ -575,8 +613,12 @@ async function deleteProduct(id){
   // Products are shared across every plant now (no more one-row-per-plant) — deleting this one
   // removes it, and its prices/aliases for every plant that carries it, all at once.
   if (!confirm('Delete this product? This is shared across every plant that carries it — deleting it removes their prices and aliases for it too. This cannot be undone.')) return;
-  const { error } = await db.from('products').delete().eq('id', id);
-  if (error){ alert('Error deleting: ' + error.message); return; }
+  try {
+    await callApi('products-delete', { actor: currentActor(), id });
+  } catch (e) {
+    alert('Error deleting: ' + e.message);
+    return;
+  }
   loadProducts();
 }
 
