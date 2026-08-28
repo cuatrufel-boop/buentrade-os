@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — BuenTrade Trading OS (Staging API)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547;
+    --navy-2:#0E3D8F;
+    --blue:#1E6ADB;
+    --blue-bright:#5AAAFF;
+    --blue-light:#EAF3FC;
+    --bg:#F5F7FA;
+    --ink:#1A2436;
+    --line:#E3E8EF;
+    --green:#1E9E5A;
+    --red:#D0392B;
+    --amber:#B7791F;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px;margin-bottom:24px;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:#fff;}
+  .brand-word span{color:var(--blue-bright);}
+  .subtitle{font-size:12.5px;color:#B9CBEB;margin-top:4px;}
+  main{max-width:1180px;margin:0 auto;padding:0 24px 60px;}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:19px;margin:28px 0 14px;}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:8px;}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .kpi-label{font-size:11.5px;color:#6B7A90;text-transform:uppercase;letter-spacing:.04em;font-weight:600;}
+  .kpi-value{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;color:var(--navy);margin-top:4px;}
+  .kpi-value.red{color:var(--red);}
+  .kpi-value.amber{color:var(--amber);}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+  th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:#6B7A90;background:#FAFBFD;padding:10px 14px;border-bottom:1px solid var(--line);}
+  td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px;}
+  tr:last-child td{border-bottom:none;}
+  .tbl-wrap{overflow-x:auto;border-radius:12px;}
+  .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;}
+  .tag.scheduled{background:#EEF1F6;color:#516079;}
+  .tag.picked_up{background:#FFF3E0;color:var(--amber);}
+  .tag.in_transit{background:var(--blue-light);color:var(--blue);}
+  .tag.delivered{background:#E7F7EE;color:var(--green);}
+  .tag.sent{background:var(--blue-light);color:var(--blue);}
+  .tag.won{background:#E7F7EE;color:var(--green);}
+  .tag.lost{background:#FBE9E7;color:var(--red);}
+  .tag.paid{background:#E7F7EE;color:var(--green);}
+  .tag.unpaid{background:#FBE9E7;color:var(--red);}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-weight:600;font-size:12px;cursor:pointer;margin-right:6px;}
+  .btn:disabled{background:#C7D2E0;cursor:default;}
+  .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
+  .empty{padding:30px;text-align:center;color:#8A97AA;}
+  .err{background:#FBE9E7;color:var(--red);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;}
+  .refresh{float:right;font-size:12.5px;color:var(--blue);cursor:pointer;text-decoration:underline;}
+  .badge-api{font-size:10.5px;background:rgba(255,255,255,.12);color:#B9CBEB;padding:3px 9px;border-radius:20px;margin-left:10px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand-word">Buen<span>Trade</span> — Dashboard</div>
+  <div class="subtitle">Cargas, cobros y ofertas — 100% vía Edge Functions (staging) <span class="badge-api">API only, sin acceso directo a la base</span></div>
+</header>
+<main>
+  <div id="errBox"></div>
+
+  <h1>Este mes <span class="refresh" onclick="loadAll()">↻ recargar</span></h1>
+  <div class="kpis" id="kpis"><div class="empty">Cargando…</div></div>
+
+  <h1>Cuentas por cobrar</h1>
+  <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Cliente</th><th>Pendiente</th><th>Cupo</th><th>Vencidas</th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Cargas en curso</h1>
+  <div class="tbl-wrap"><table id="tblShipments"><thead><tr><th>Orden</th><th>Cliente</th><th>Producto</th><th>Estado</th><th>Fecha entrega</th><th>Pago</th><th></th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Offers (ofertas enviadas)</h1>
+  <div class="tbl-wrap"><table id="tblOffers"><thead><tr><th>Cliente</th><th>Producto</th><th>Planta</th><th>Canal</th><th>Estado</th><th>Enviada</th></tr></thead><tbody></tbody></table></div>
+</main>
+
+<script>
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+
+const money = n => n == null ? '—' : '$' + Number(n).toLocaleString(undefined, {maximumFractionDigits:0});
+const dt = s => s ? new Date(s).toLocaleDateString() : '—';
+
+const STATUS_LABEL = { scheduled:'Programada', picked_up:'Recogida', in_transit:'En tránsito', delivered:'Entregada' };
+const NEXT_STATUS = { scheduled:'picked_up', picked_up:'in_transit', in_transit:'delivered' };
+const NEXT_LABEL = { scheduled:'Marcar recogida', picked_up:'Marcar en tránsito', in_transit:'Marcar entregada' };
+
+function showErr(msg){
+  document.getElementById('errBox').innerHTML = `<div class="err">${msg}</div>`;
+}
+
+async function loadAll(){
+  document.getElementById('errBox').innerHTML = '';
+  try {
+    const [summary, shipments, offers] = await Promise.all([
+      callApi('dashboard-summary'),
+      callApi('shipments-search', {}),
+      callApi('sent-offers-search', {}),
+    ]);
+    renderKpis(summary);
+    renderOutstanding(summary.outstanding_by_customer);
+    renderShipments(shipments.results);
+    renderOffers(offers.results);
+  } catch (e) {
+    showErr('Error llamando al API: ' + e.message);
+  }
+}
+
+function renderKpis(s){
+  const overdue = (s.overdue || []).length;
+  const upcoming = (s.upcoming_due || []).length;
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Facturado este mes</div><div class="kpi-value">${money(s.invoiced_this_month)}</div></div>
+    <div class="kpi"><div class="kpi-label">Cuentas vencidas</div><div class="kpi-value ${overdue?'red':''}">${overdue}</div></div>
+    <div class="kpi"><div class="kpi-label">Por vencer (7 días)</div><div class="kpi-value ${upcoming?'amber':''}">${upcoming}</div></div>
+  `;
+}
+
+function renderOutstanding(rows){
+  const tbody = document.querySelector('#tblOutstanding tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nada pendiente de cobro.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.customer_name)}</td>
+      <td>${money(r.outstanding)}</td>
+      <td>${r.credit_limit != null ? money(r.credit_limit) : '<span style="color:#B0BAC9">sin fijar</span>'}</td>
+      <td>${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} vencida(s)</span>` : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderShipments(rows){
+  const tbody = document.querySelector('#tblShipments tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay cargas todavía.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => {
+    const next = NEXT_STATUS[r.status];
+    const payTag = r.paid_at ? '<span class="tag paid">Pagado</span>' : (r.status === 'delivered' ? '<span class="tag unpaid">Pendiente</span>' : '—');
+    const payBtn = (r.status === 'delivered' && !r.paid_at) ? `<button class="btn secondary" onclick="markPaid('${r.id}')">Marcar pagado</button>` : '';
+    const advanceBtn = next ? `<button class="btn" onclick="advance('${r.id}','${next}')">${NEXT_LABEL[r.status]}</button>` : '';
+    return `
+    <tr>
+      <td><strong>${escapeHtml(r.order_number)}</strong></td>
+      <td>${escapeHtml(r.customer_name || '—')}</td>
+      <td>${escapeHtml(r.product_name || '—')}</td>
+      <td><span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
+      <td>${dt(r.delivered_at || r.border_delivery_date)}</td>
+      <td>${payTag}</td>
+      <td>${advanceBtn}${payBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderOffers(rows){
+  const tbody = document.querySelector('#tblOffers tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">No hay offers todavía.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.customer_name)}</td>
+      <td>${escapeHtml(r.product_name)}</td>
+      <td>${escapeHtml(r.plant_name)}</td>
+      <td>${r.channel}</td>
+      <td><span class="tag ${r.status}">${r.status}</span></td>
+      <td>${dt(r.sent_at)}</td>
+    </tr>
+  `).join('');
+}
+
+async function advance(shipmentId, status){
+  try {
+    await callApi('shipments-update-status', { actor: 'dashboard-ui', shipment_id: shipmentId, status });
+    await loadAll();
+  } catch (e) { showErr('No se pudo avanzar la carga: ' + e.message); }
+}
+
+async function markPaid(shipmentId){
+  try {
+    await callApi('shipments-mark-paid', { actor: 'dashboard-ui', shipment_id: shipmentId });
+    await loadAll();
+  } catch (e) { showErr('No se pudo marcar como pagado: ' + e.message); }
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+loadAll();
+</script>
+</body>
+</html>
