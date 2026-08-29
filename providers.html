@@ -224,11 +224,7 @@ auth.onAuthStateChanged(user => {
         <div class="field"><label>Phone</label><input id="p_phone" placeholder="+52 6621234567" oninput="updateProviderProfile()"></div>
         <div class="field"><label>Contact Name</label><input id="p_contact_name" oninput="updateProviderProfile()"></div>
       </div>
-      <div class="grid3">
-        <div class="field"><label>Contact Email</label><input id="p_email" type="email" oninput="updateProviderProfile()"></div>
-        <div class="field"><label>MC# (Motor Carrier)</label><input id="p_mc_number" placeholder="e.g. MC-123456" oninput="updateProviderProfile()"></div>
-        <div class="field"><label>DOT# (USDOT)</label><input id="p_dot_number" placeholder="e.g. 1234567" oninput="updateProviderProfile()"></div>
-      </div>
+      <div class="field"><label>Contact Email</label><input id="p_email" type="email" oninput="updateProviderProfile()"></div>
       <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com" oninput="updateProviderProfile()"></div>
       <div class="field">
         <label>Roles — a provider can be one or both</label>
@@ -249,8 +245,6 @@ auth.onAuthStateChanged(user => {
         <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="pv_phone">—</span></div>
         <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="pv_contact_name">—</span></div>
         <div class="profile-row"><span class="view-label">Contact Email</span><span class="profile-row-value" id="pv_email">—</span></div>
-        <div class="profile-row"><span class="view-label">MC# (Motor Carrier)</span><span class="profile-row-value" id="pv_mc_number">—</span></div>
-        <div class="profile-row"><span class="view-label">DOT# (USDOT)</span><span class="profile-row-value" id="pv_dot_number">—</span></div>
         <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="pv_email_cc">—</span></div>
         <div class="profile-row"><span class="view-label">Roles</span><span class="profile-row-value" id="pv_roles">—</span></div>
         <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="pv_notes">—</span></div>
@@ -416,7 +410,7 @@ function openForm(){
   document.getElementById('formTitle').textContent = 'New provider';
   document.getElementById('formDeleteBtn').style.display = 'none';
   document.getElementById('providerId').value = '';
-  ['p_name','p_country_id','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
+  ['p_name','p_country_id','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_notes'].forEach(f => document.getElementById(f).value = '');
   // Roles are a property of the provider, not the tab — a provider can hold both and show up in
   // both tabs (see setProviderTab), so this never forces a choice; it's just a helpful default.
   // Each tab now maps to exactly one role (freight_forwarder removed 2026-08-30), so pre-checking
@@ -439,8 +433,6 @@ function updateProviderProfile(){
   setV('pv_phone', document.getElementById('p_phone').value);
   setV('pv_contact_name', document.getElementById('p_contact_name').value);
   setV('pv_email', document.getElementById('p_email').value);
-  setV('pv_mc_number', document.getElementById('p_mc_number').value);
-  setV('pv_dot_number', document.getElementById('p_dot_number').value);
   setV('pv_email_cc', document.getElementById('p_email_cc').value);
   const checkedRoles = [...document.querySelectorAll('.role-cb:checked')].map(cb => ROLE_LABELS[cb.value] || cb.value);
   setV('pv_roles', checkedRoles.join(', '));
@@ -463,8 +455,6 @@ function editProvider(id){
   document.getElementById('p_contact_name').value = p.contact_name || '';
   document.getElementById('p_email').value = p.email || '';
   document.getElementById('p_email_cc').value = p.email_cc || '';
-  document.getElementById('p_mc_number').value = p.mc_number || '';
-  document.getElementById('p_dot_number').value = p.dot_number || '';
   document.getElementById('p_notes').value = p.notes || '';
   const roles = providerRolesMap[id] || [];
   document.querySelectorAll('.role-cb').forEach(cb => cb.checked = roles.includes(cb.value));
@@ -518,8 +508,6 @@ async function saveProvider(forceOverride){
     contact_name: document.getElementById('p_contact_name').value || null,
     email: document.getElementById('p_email').value || null,
     email_cc: document.getElementById('p_email_cc').value || null,
-    mc_number: document.getElementById('p_mc_number').value || null,
-    dot_number: document.getElementById('p_dot_number').value || null,
     notes: document.getElementById('p_notes').value || null,
   };
   if (!payload.name){
