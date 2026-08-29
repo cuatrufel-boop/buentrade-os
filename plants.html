@@ -234,16 +234,24 @@ auth.onAuthStateChanged(user => {
   <h1 onclick="closePlantView()" style="cursor:pointer;">Meat Packers</h1>
 
   <div class="card" id="plantCard" style="display:none;">
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-      <div style="position:relative;width:120px;height:120px;flex-shrink:0;">
-        <div id="pv_logo_placeholder" class="pkg-plant-avatar" style="width:120px;height:120px;border-radius:18px;font-size:42px;"></div>
-        <img id="pv_logo" class="pkg-plant-avatar pkg-plant-avatar-logo" style="width:120px;height:120px;border-radius:18px;object-fit:contain;padding:10px;display:none;position:absolute;top:0;left:0;" alt="">
-        <button type="button" onclick="document.getElementById('plantLogoFileInput').click()" title="Change logo" style="position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:var(--blue);border:2px solid #fff;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✎</button>
-        <input type="file" id="plantLogoFileInput" accept="image/*" style="display:none;" onchange="uploadPlantLogo()">
+    <!-- ============ Always-visible header — logo, name, Edit/Delete — regardless of which tab
+         is active below, same "highlights" pattern as the customer/provider profile. ============ -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="position:relative;width:120px;height:120px;flex-shrink:0;">
+          <div id="pv_logo_placeholder" class="pkg-plant-avatar" style="width:120px;height:120px;border-radius:18px;font-size:42px;"></div>
+          <img id="pv_logo" class="pkg-plant-avatar pkg-plant-avatar-logo" style="width:120px;height:120px;border-radius:18px;object-fit:contain;padding:10px;display:none;position:absolute;top:0;left:0;" alt="">
+          <button type="button" onclick="document.getElementById('plantLogoFileInput').click()" title="Change logo" style="position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:var(--blue);border:2px solid #fff;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✎</button>
+          <input type="file" id="plantLogoFileInput" accept="image/*" style="display:none;" onchange="uploadPlantLogo()">
+        </div>
+        <div>
+          <strong id="plantTitle" style="font-size:22px;"></strong>
+          <div id="plantLogoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+        </div>
       </div>
-      <div>
-        <strong id="plantTitle" style="font-size:22px;"></strong>
-        <div id="plantLogoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" onclick="editPlantProfile()">Edit</button>
+        <button class="btn danger" onclick="deletePlant(currentPlantId)">Delete</button>
       </div>
     </div>
 
@@ -348,11 +356,6 @@ auth.onAuthStateChanged(user => {
     <!-- ============ DETAILS — contact/logistics terms, set-once fields. Switching to this tab
          never leaves the plant — it's the same record, just a different tab. ============ -->
     <div id="plantTab_details" style="display:none;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <button class="btn secondary" onclick="toggleProfile()" id="profileToggleBtn">Edit Profile</button>
-        <button class="btn danger" onclick="deletePlant(currentPlantId)">Delete Plant</button>
-      </div>
-
       <div id="profileView">
         <div class="profile-panel">
           <div class="profile-heading">Contact</div>
@@ -1453,7 +1456,6 @@ async function selectPlant(id){
   renderProfileView(plant);
   document.getElementById('profileView').style.display = 'block';
   document.getElementById('profileEdit').style.display = 'none';
-  document.getElementById('profileToggleBtn').textContent = 'Edit Profile';
   setPlantTab('products'); // always open on the daily-use tab, regardless of which tab was open last time
   await loadPlantLocations();
   await loadPlantProducts();
@@ -1625,13 +1627,19 @@ function openPlantWhatsApp(){
   window.open('https://wa.me/' + digits, '_blank');
 }
 
+// Edit now lives in the always-visible header (same pattern as Customers/Providers), not just
+// inside the Profile tab — so clicking it from any other tab needs to switch to Profile too.
+function editPlantProfile(){
+  setPlantTab('details');
+  if (document.getElementById('profileEdit').style.display === 'none') toggleProfile();
+}
+
 function toggleProfile(){
   const plant = plants.find(p => p.id === currentPlantId);
   const editing = document.getElementById('profileEdit').style.display !== 'none';
   if (editing){
     document.getElementById('profileEdit').style.display = 'none';
     document.getElementById('profileView').style.display = 'block';
-    document.getElementById('profileToggleBtn').textContent = 'Edit Profile';
   } else {
     PROFILE_FIELDS.forEach(f => { document.getElementById('pe_' + f).value = plant[f] || ''; });
     onPlantCountryChange('pe');
@@ -1650,7 +1658,6 @@ function toggleProfile(){
     document.getElementById('profileMsg').textContent = '';
     document.getElementById('profileEdit').style.display = 'block';
     document.getElementById('profileView').style.display = 'none';
-    document.getElementById('profileToggleBtn').textContent = 'View Profile';
   }
 }
 
