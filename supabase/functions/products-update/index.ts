@@ -74,6 +74,14 @@ Deno.serve(async (req) => {
       isNearDuplicate(normalize(p.name), normalize(merged.name))
     );
 
+    // Same real gap as products.create (2026-08-29): an EXACT name match with only temperature or
+    // packaging different was never checked at all — isNearDuplicate excludes exact matches, and
+    // exactDuplicate/sameSpecDifferentSubcat both require packaging_id to also match.
+    const sameCutDifferentSpec = siblings.filter((p: any) =>
+      normalizeLoose(p.name_en) === normalizeLoose(merged.name_en) &&
+      (p.temperature_id !== merged.temperature_id || p.packaging_id !== merged.packaging_id)
+    );
+
     const subcategorySiblings = siblings.filter((p: any) =>
       normalizeLoose(p.name_en) === normalizeLoose(merged.name_en) && p.subcategory_en
     );
@@ -86,7 +94,7 @@ Deno.serve(async (req) => {
         )
       : [];
 
-    if ((exactDuplicate || sameSpecDifferentSubcat.length || nearDuplicates.length || subcategoryTypoConflicts.length) && !override_duplicate_check) {
+    if ((exactDuplicate || sameSpecDifferentSubcat.length || nearDuplicates.length || subcategoryTypoConflicts.length || sameCutDifferentSpec.length) && !override_duplicate_check) {
       return duplicateResponse({
         message: exactDuplicate
           ? "This edit would make it identical to another existing product — confirm to see it or override to save anyway."
@@ -95,6 +103,7 @@ Deno.serve(async (req) => {
         same_spec_different_subcategory: sameSpecDifferentSubcat,
         near_duplicate_names: nearDuplicates,
         subcategory_typo_conflicts: subcategoryTypoConflicts,
+        same_cut_different_spec: sameCutDifferentSpec,
       });
     }
 

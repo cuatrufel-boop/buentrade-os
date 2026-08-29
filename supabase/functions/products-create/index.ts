@@ -79,6 +79,18 @@ Deno.serve(async (req) => {
       isNearDuplicate(normalize(p.name), normalize(name))
     );
 
+    // Real gap found live (2026-08-29): isNearDuplicate deliberately returns false for an EXACT
+    // name match (assuming exactDuplicate/sameSpecDifferentSubcat would catch it) — but both of
+    // those ALSO require packaging_id to match. So "Loin, Bone-In, Fresh, Combo" already on file
+    // and "Loin, Bone-In, Fresh, Box" being created slipped through with zero warning: same exact
+    // cut, only the packaging differs, and nothing above catches that combination. This closes it
+    // — same name in the same category with EITHER temperature or packaging different is exactly
+    // the "same cut, different spec" case the trader needs to see and confirm, not silently create.
+    const sameCutDifferentSpec = sameCategoryProducts.filter((p: any) =>
+      normalizeLoose(p.name_en) === normalizeLoose(name_en) &&
+      (p.temperature_id !== temperature_id || p.packaging_id !== packaging_id)
+    );
+
     // Rule 13 — subcategory gets the exact same typo/duplicate scrutiny as the name, scoped to
     // the SAME base cut (same loose name + category) — a subcategory value is only suspicious
     // relative to its own product family.
@@ -94,7 +106,7 @@ Deno.serve(async (req) => {
         )
       : [];
 
-    if ((exactDuplicate || sameSpecDifferentSubcat.length || nearDuplicates.length || subcategoryTypoConflicts.length) && !override_duplicate_check) {
+    if ((exactDuplicate || sameSpecDifferentSubcat.length || nearDuplicates.length || subcategoryTypoConflicts.length || sameCutDifferentSpec.length) && !override_duplicate_check) {
       return duplicateResponse({
         message: exactDuplicate
           ? "This exact product already exists — almost certainly the same one, confirm to see it or override to create a separate row anyway."
@@ -103,6 +115,7 @@ Deno.serve(async (req) => {
         same_spec_different_subcategory: sameSpecDifferentSubcat,
         near_duplicate_names: nearDuplicates,
         subcategory_typo_conflicts: subcategoryTypoConflicts,
+        same_cut_different_spec: sameCutDifferentSpec,
       });
     }
 
