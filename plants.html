@@ -34,6 +34,8 @@
   .tab-row{display:flex;gap:6px;margin:14px 0 18px;border-bottom:1.5px solid var(--line);}
   .tab-btn{background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;}
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .tab-btn:focus{outline:none;}
+  .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
@@ -47,9 +49,12 @@
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;}
+  .field select{-webkit-appearance:none;-moz-appearance:none;appearance:none;line-height:1.2;padding-right:28px;background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7a90' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");background-repeat:no-repeat;background-position:right 8px center;background-size:15px;}
   .field input[disabled]{background:#EAF3FC;color:var(--ink-soft);font-weight:600;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
+  .grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0 16px;}
+  .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:0 14px;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
@@ -66,6 +71,17 @@
   .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
   .pkg-plant-info{display:flex;flex-direction:column;gap:1px;flex:1;min-width:120px;}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
+  /* Profile tab — a real info panel instead of a loose grid, so rows stay aligned no matter how
+     much content is in the field next to them. */
+  .profile-panel{background:#F7FAFD;border:1px solid var(--line);border-radius:12px;padding:18px 22px;}
+  .profile-panel + .profile-panel{margin-top:16px;}
+  .profile-heading{font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px;}
+  .profile-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 28px;}
+  .profile-row{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .profile-row.half{grid-column:span 2;}
+  .profile-row.span2{grid-column:1 / -1;}
+  .profile-row .view-label{margin-bottom:0;}
+  .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;}
   #formCard{display:none;}
   .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
@@ -193,20 +209,26 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Meat Packers</h1>
+  <h1 onclick="closePlantView()" style="cursor:pointer;">Meat Packers</h1>
 
   <div class="card" id="plantCard" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;">
-        <img id="pv_logo" style="width:88px;height:88px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--line);padding:6px;display:none;" alt="">
-        <strong id="plantTitle" style="font-size:16px;"></strong>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="position:relative;width:120px;height:120px;flex-shrink:0;">
+        <div id="pv_logo_placeholder" class="pkg-plant-avatar" style="width:120px;height:120px;border-radius:18px;font-size:42px;"></div>
+        <img id="pv_logo" class="pkg-plant-avatar pkg-plant-avatar-logo" style="width:120px;height:120px;border-radius:18px;object-fit:contain;padding:10px;display:none;position:absolute;top:0;left:0;" alt="">
+        <button type="button" onclick="document.getElementById('plantLogoFileInput').click()" title="Change logo" style="position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:var(--blue);border:2px solid #fff;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✎</button>
+        <input type="file" id="plantLogoFileInput" accept="image/*" style="display:none;" onchange="uploadPlantLogo()">
+      </div>
+      <div>
+        <strong id="plantTitle" style="font-size:22px;"></strong>
+        <div id="plantLogoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
       </div>
     </div>
 
-    <div class="tab-row">
+    <div class="tab-row" style="margin-top:18px;">
+      <button type="button" class="tab-btn" id="plantTabBtn_details" onclick="setPlantTab('details')">Profile</button>
       <button type="button" class="tab-btn active" id="plantTabBtn_products" onclick="setPlantTab('products')">Products &amp; Prices</button>
       <button type="button" class="tab-btn" id="plantTabBtn_locations" onclick="setPlantTab('locations')">Locations</button>
-      <button type="button" class="tab-btn" id="plantTabBtn_details" onclick="setPlantTab('details')">Profile</button>
     </div>
 
     <!-- ============ PRODUCTS & PRICES — default tab; this is the daily action, always the
@@ -256,19 +278,38 @@ auth.onAuthStateChanged(user => {
       <div style="display:flex;align-items:center;margin-bottom:14px;">
         <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openLocationForm()">+ Add Location</button>
       </div>
-      <div id="locationFormCard" style="display:none;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div class="grid3">
-          <div class="field"><label>Location Name</label><input id="loc_name" placeholder="e.g. Fremont, Nebraska"></div>
-          <div class="field"><label>Protein</label><input id="loc_protein" placeholder="e.g. Cerdo"></div>
-          <div class="field"><label>Freight to Border (USD)</label><input id="loc_freight" type="number" step="0.01"></div>
+      <div id="locationFormCard" style="display:none;margin-bottom:14px;">
+        <!-- Same format as the product/plant forms: fill in the fields up top, and the read-only
+             Location Profile card below consolidates it into one glanceable record as you go. -->
+        <div class="profile-panel">
+          <div class="profile-heading">Classification</div>
+          <div class="grid3">
+            <div class="field"><label>Location Name</label><input id="loc_name" oninput="updateLocationProfile()" placeholder="e.g. Fremont, Nebraska"></div>
+            <div class="field"><label>Protein</label><input id="loc_protein" oninput="updateLocationProfile()" placeholder="e.g. Cerdo"></div>
+            <div class="field"><label>Freight to Border (USD)</label><input id="loc_freight" type="number" step="0.01" oninput="updateLocationProfile()"></div>
+          </div>
+          <div class="grid3">
+            <div class="field"><label>Contact Name</label><input id="loc_contact_name" oninput="updateLocationProfile()"></div>
+            <div class="field"><label>Phone</label><input id="loc_phone" placeholder="+1 7145551234" oninput="updateLocationProfile()"></div>
+            <div class="field"><label>Email</label><input id="loc_email" type="email" oninput="updateLocationProfile()"></div>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;"><input type="checkbox" id="loc_delivered" onchange="updateLocationProfile()" style="width:auto;"> Plant delivers to border themselves (no freight cost)</label>
+          <div class="field"><label>Notes</label><textarea id="loc_notes" rows="2" oninput="updateLocationProfile()"></textarea></div>
         </div>
-        <div class="grid3">
-          <div class="field"><label>Contact Name</label><input id="loc_contact_name"></div>
-          <div class="field"><label>Phone</label><input id="loc_phone" placeholder="+1 7145551234"></div>
-          <div class="field"><label>Email</label><input id="loc_email" type="email"></div>
+
+        <div class="profile-panel">
+          <div class="profile-heading">Location Profile</div>
+          <div class="profile-grid">
+            <div class="profile-row"><span class="view-label">Location Name</span><span class="profile-row-value" id="locv_name">—</span></div>
+            <div class="profile-row"><span class="view-label">Protein</span><span class="profile-row-value" id="locv_protein">—</span></div>
+            <div class="profile-row"><span class="view-label">Freight to Border</span><span class="profile-row-value" id="locv_freight">—</span></div>
+            <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="locv_contact_name">—</span></div>
+            <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="locv_phone">—</span></div>
+            <div class="profile-row"><span class="view-label">Email</span><span class="profile-row-value" id="locv_email">—</span></div>
+            <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="locv_notes">—</span></div>
+          </div>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;"><input type="checkbox" id="loc_delivered" style="width:auto;"> Plant delivers to border themselves (no freight cost)</label>
-        <div class="field"><label>Notes</label><textarea id="loc_notes" rows="2"></textarea></div>
+
         <div style="display:flex;gap:10px;">
           <button class="btn" onclick="saveLocation()">Save Location</button>
           <button class="btn secondary" onclick="closeLocationForm()">Cancel</button>
@@ -285,55 +326,89 @@ auth.onAuthStateChanged(user => {
     <!-- ============ DETAILS — contact/logistics terms, set-once fields. Switching to this tab
          never leaves the plant — it's the same record, just a different tab. ============ -->
     <div id="plantTab_details" style="display:none;">
-      <div style="display:flex;align-items:center;margin-bottom:14px;">
-        <button class="btn secondary" onclick="toggleProfile()" id="profileToggleBtn" style="padding:6px 12px;font-size:12px;">Edit Profile</button>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="btn secondary" onclick="toggleProfile()" id="profileToggleBtn">Edit Profile</button>
+        <button class="btn danger" onclick="deletePlant(currentPlantId)">Delete Plant</button>
       </div>
 
       <div id="profileView">
-        <div class="grid3" style="row-gap:10px;">
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Location</label><span id="pv_location">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Contact</label><span id="pv_contact">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">WhatsApp</label><button class="wa-btn" id="waBtn" style="display:none;" onclick="openPlantWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Email</label><span id="pv_email">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Website</label><span id="pv_website">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Response Time</label><span id="pv_avg_response_time">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Payment Terms</label><span id="pv_payment_terms">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Required Docs</label><span id="pv_required_documentation">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Loading Time</label><span id="pv_avg_loading_time">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Document Cost</label><span id="pv_document_cost">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Avg Freight to Border</label><span id="pv_avg_freight_to_border">—</span></div>
-          <div><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Business Hours</label><span id="pv_business_hours">—</span></div>
+        <div class="profile-panel">
+          <div class="profile-heading">Contact</div>
+          <div class="profile-grid">
+            <div class="profile-row"><span class="view-label">Location</span><span class="profile-row-value" id="pv_location">—</span></div>
+            <div class="profile-row"><span class="view-label">Contact</span><span class="profile-row-value" id="pv_contact">—</span></div>
+            <div class="profile-row"><span class="view-label">Email</span><span class="profile-row-value" id="pv_email">—</span></div>
+            <div class="profile-row"><span class="view-label">Website</span><span class="profile-row-value" id="pv_website">—</span></div>
+            <div class="profile-row"><span class="view-label">WhatsApp</span><button class="wa-btn" id="waBtn" style="display:none;width:fit-content;" onclick="openPlantWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button><span class="profile-row-value" id="pv_no_whatsapp" style="display:none;">—</span></div>
+          </div>
         </div>
-        <div style="margin-top:10px;"><label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Notes</label><span id="pv_notes">—</span></div>
+
+        <div class="profile-panel">
+          <div class="profile-heading">Commercial Terms</div>
+          <div class="profile-grid">
+            <div class="profile-row"><span class="view-label">Payment Terms</span><span class="profile-row-value" id="pv_payment_terms">—</span></div>
+            <div class="profile-row"><span class="view-label">Required Docs</span><span class="profile-row-value" id="pv_required_documentation">—</span></div>
+            <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="pv_notes">—</span></div>
+          </div>
+        </div>
+
+        <div class="profile-panel">
+          <div class="profile-heading">Documents</div>
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+            <button type="button" class="btn secondary" onclick="document.getElementById('plantDocFileInput').click()">Choose File</button>
+            <span id="plantDocFileName" style="font-size:13px;color:var(--ink-soft);">No file chosen</span>
+            <input type="file" id="plantDocFileInput" style="display:none;" onchange="document.getElementById('plantDocFileName').textContent = this.files[0] ? this.files[0].name : 'No file chosen';">
+            <button class="btn" onclick="uploadPlantDocument()">Upload</button>
+          </div>
+          <div id="plantDocMsg" style="font-size:12.5px;margin-bottom:10px;"></div>
+          <table>
+            <thead><tr><th>File</th><th>Uploaded</th><th></th></tr></thead>
+            <tbody id="plantDocRows"></tbody>
+          </table>
+          <div id="plantDocsEmpty" class="empty" style="display:none;">No documents attached for this plant yet.</div>
+        </div>
       </div>
 
       <div id="profileEdit" style="display:none;">
         <div class="grid3">
-          <div class="field"><label>Country</label><input id="pe_country"></div>
-          <div class="field"><label>State</label><input id="pe_state"></div>
+          <div class="field"><label>Country</label><select id="pe_country_id" onchange="onPlantCountryChange('pe')"><option value="">—</option></select></div>
+          <div class="field" id="pe_stateSelectField" style="display:none;"><label>State</label><select id="pe_state_id"><option value="">—</option></select></div>
+          <div class="field" id="pe_stateTextField"><label>State</label><input id="pe_state"></div>
           <div class="field"><label>City</label><input id="pe_city"></div>
         </div>
         <div class="field"><label>Address</label><input id="pe_address"></div>
         <div class="grid3">
           <div class="field"><label>Contact Name</label><input id="pe_contact_name"></div>
           <div class="field"><label>Email</label><input id="pe_email" type="email"></div>
-          <div class="field"><label>Phone</label><input id="pe_phone" placeholder="+1 7145551234"></div>
+          <div class="field"><label>Phone</label>
+            <div style="display:flex;gap:6px;">
+              <select id="pe_phone_code" style="width:88px;flex-shrink:0;"></select>
+              <input id="pe_phone_number" placeholder="7145551234" style="flex:1;">
+            </div>
+          </div>
         </div>
         <div class="grid3">
           <div class="field"><label>CC Emails (comma-separated)</label><input id="pe_email_cc" placeholder="ops@plant.com, billing@plant.com"></div>
-          <div class="field"><label>WhatsApp</label><input id="pe_whatsapp" placeholder="+1 7145551234"></div>
+          <div class="field"><label>WhatsApp</label>
+            <div style="display:flex;gap:6px;">
+              <select id="pe_whatsapp_code" style="width:88px;flex-shrink:0;"></select>
+              <input id="pe_whatsapp_number" placeholder="7145551234" style="flex:1;">
+            </div>
+          </div>
           <div class="field"><label>Website</label><input id="pe_website"></div>
-          <div class="field"><label>Avg Response Time</label><input id="pe_avg_response_time"></div>
-          <div class="field"><label>Business Hours</label><input id="pe_business_hours"></div>
-        </div>
-        <div class="grid3">
-          <div class="field"><label>Payment Terms</label><input id="pe_payment_terms"></div>
-          <div class="field"><label>Avg Loading Time</label><input id="pe_avg_loading_time"></div>
-          <div class="field"><label>Document Cost</label><input id="pe_document_cost"></div>
         </div>
         <div class="grid2">
+          <div class="field"><label>Payment Terms</label>
+            <select id="pe_payment_terms_type" onchange="togglePlantProfilePaymentDays()">
+              <option value="">—</option>
+              <option value="advance">Advance</option>
+              <option value="credit">Credit</option>
+            </select>
+          </div>
           <div class="field"><label>Required Documentation</label><input id="pe_required_documentation"></div>
-          <div class="field"><label>Avg Freight to Border</label><input id="pe_avg_freight_to_border"></div>
+        </div>
+        <div id="pePaymentDaysRow" style="display:none;max-width:220px;">
+          <div class="field"><label>Credit days</label><input type="number" id="pe_payment_terms_days" min="1"></div>
         </div>
         <div class="field"><label>Notes</label><textarea id="pe_notes" rows="2"></textarea></div>
         <div class="field"><label>Internal Notes</label><textarea id="pe_internal_notes" rows="2"></textarea></div>
@@ -346,7 +421,7 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="plantListCard">
     <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
       <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openNewPlant()">+ New Plant</button>
@@ -357,81 +432,182 @@ auth.onAuthStateChanged(user => {
 
   <div class="card" id="newPlantCard" style="display:none;">
     <strong>New Plant</strong>
-    <div class="grid2" style="margin-top:12px;">
-      <div class="field"><label>Plant / Packer Name</label><input id="newPlantName" placeholder="e.g. Tyson — Waterloo"></div>
-      <div class="field"><label>Species *</label><select id="newPlantCategory"><option value="">—</option></select></div>
+
+    <!-- Same format as the product form: fill in the fields up top, and the read-only Plant
+         Profile card below consolidates everything into one glanceable record as you go — nothing
+         computed/derived here (unlike Full Name), it's a live mirror of what Save will record. -->
+    <div class="profile-panel" style="margin-top:12px;">
+      <div class="profile-heading">Classification</div>
+      <div class="grid5">
+        <div class="field"><label>Plant / Packer Name *</label><input id="newPlantName" oninput="updateNewPlantProfile()" placeholder="e.g. Tyson — Waterloo"></div>
+        <div class="field"><label>Species *</label><select id="newPlantCategory" onchange="updateNewPlantProfile()"><option value="">—</option></select></div>
+        <div class="field"><label>Country</label><select id="np_country_id" onchange="onPlantCountryChange('np');updateNewPlantProfile()"><option value="">—</option></select></div>
+        <div class="field" id="np_stateSelectField" style="display:none;"><label>State</label><select id="np_state_id" onchange="updateNewPlantProfile()"><option value="">—</option></select></div>
+        <div class="field" id="np_stateTextField"><label>State</label><input id="np_state" oninput="updateNewPlantProfile()"></div>
+        <div class="field"><label>City</label><input id="np_city" oninput="updateNewPlantProfile()"></div>
+      </div>
+      <div class="grid5">
+        <div class="field"><label>Contact Name</label><input id="np_contact_name" oninput="updateNewPlantProfile()"></div>
+        <div class="field"><label>Email</label><input id="np_email" type="email" oninput="updateNewPlantProfile()"></div>
+        <div class="field"><label>Phone</label>
+          <div style="display:flex;gap:6px;">
+            <select id="np_phone_code" style="width:88px;flex-shrink:0;" onchange="updateNewPlantProfile()"></select>
+            <input id="np_phone_number" placeholder="7145551234" style="flex:1;" oninput="updateNewPlantProfile()">
+          </div>
+        </div>
+        <div class="field"><label>CC Emails (comma-separated)</label><input id="np_email_cc" placeholder="ops@plant.com, billing@plant.com" oninput="updateNewPlantProfile()"></div>
+        <div class="field"><label>WhatsApp</label>
+          <div style="display:flex;gap:6px;">
+            <select id="np_whatsapp_code" style="width:88px;flex-shrink:0;" onchange="updateNewPlantProfile()"></select>
+            <input id="np_whatsapp_number" placeholder="7145551234" style="flex:1;" oninput="updateNewPlantProfile()">
+          </div>
+        </div>
+      </div>
+      <div class="grid5">
+        <div class="field"><label>Website</label><input id="np_website" oninput="updateNewPlantProfile()"></div>
+        <div class="field"><label>Payment Terms</label>
+          <select id="np_payment_terms_type" onchange="toggleNewPlantPaymentDays();updateNewPlantProfile()">
+            <option value="">—</option>
+            <option value="advance">Advance</option>
+            <option value="credit">Credit</option>
+          </select>
+        </div>
+        <div class="field"><label>Required Documentation</label><input id="np_required_documentation" oninput="updateNewPlantProfile()"></div>
+        <div class="field" id="npPaymentDaysRow" style="display:none;"><label>Credit days</label><input type="number" id="np_payment_terms_days" min="1" oninput="updateNewPlantProfile()"></div>
+      </div>
+
+      <!-- The two genuinely long free-text fields, grouped together at the end instead of
+           interrupting the compact rows above — keeps every short field's box the same width
+           throughout, no jarring narrow/wide/narrow rhythm. -->
+      <div class="field"><label>Address</label><input id="np_address" oninput="updateNewPlantProfile()"></div>
+      <div class="field"><label>Notes</label><textarea id="np_notes" rows="2" oninput="updateNewPlantProfile()"></textarea></div>
     </div>
-    <div style="display:flex;gap:10px;"><button class="btn" onclick="saveNewPlant()">Create Plant</button><button class="btn secondary" onclick="document.getElementById('newPlantCard').style.display='none'">Cancel</button></div>
+
+    <div class="profile-panel">
+      <div class="profile-heading">Plant Profile</div>
+      <div class="profile-grid">
+        <div class="profile-row"><span class="view-label">Plant Name</span><span class="profile-row-value" id="npv_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Species</span><span class="profile-row-value" id="npv_species">—</span></div>
+        <div class="profile-row"><span class="view-label">Country</span><span class="profile-row-value" id="npv_country">—</span></div>
+        <div class="profile-row"><span class="view-label">State</span><span class="profile-row-value" id="npv_state">—</span></div>
+        <div class="profile-row"><span class="view-label">City</span><span class="profile-row-value" id="npv_city">—</span></div>
+        <div class="profile-row"><span class="view-label">Address</span><span class="profile-row-value" id="npv_address">—</span></div>
+        <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="npv_contact_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Email</span><span class="profile-row-value" id="npv_email">—</span></div>
+        <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="npv_phone">—</span></div>
+        <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="npv_email_cc">—</span></div>
+        <div class="profile-row"><span class="view-label">WhatsApp</span><span class="profile-row-value" id="npv_whatsapp">—</span></div>
+        <div class="profile-row"><span class="view-label">Website</span><span class="profile-row-value" id="npv_website">—</span></div>
+        <div class="profile-row"><span class="view-label">Payment Terms</span><span class="profile-row-value" id="npv_payment_terms">—</span></div>
+        <div class="profile-row"><span class="view-label">Required Documentation</span><span class="profile-row-value" id="npv_required_documentation">—</span></div>
+        <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="npv_notes">—</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:8px;"><button class="btn" onclick="saveNewPlant()">Create Plant</button><button class="btn secondary" onclick="closeNewPlant()">Cancel</button></div>
     <div id="newPlantMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
   <div class="card" id="formCard">
     <strong id="formTitle">New product</strong>
     <input type="hidden" id="prodId">
+    <input type="hidden" id="prodLinkId">
     <div id="priceListRefBanner" style="display:none;margin-top:10px;padding:8px 12px;background:#EEF3FF;border-radius:7px;font-size:12.5px;"></div>
 
-    <div class="section-title">Photo</div>
-    <img id="photoPreview" class="photo-preview" style="display:none;">
-    <div id="filePreview" style="display:none;margin-bottom:8px;"></div>
-    <input type="file" id="photoFile" accept="image/*">
-    <div id="photoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+    <div class="profile-panel">
+      <div class="profile-heading">Files</div>
+      <div class="grid2">
+        <div>
+          <span class="view-label">Photo</span>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:4px;">
+            <button type="button" class="btn secondary" onclick="document.getElementById('photoFile').click()">Choose File</button>
+            <img id="photoPreview" class="photo-preview" style="display:none;max-height:32px;">
+            <div id="filePreview" style="display:none;font-size:13px;color:var(--ink-soft);"></div>
+          </div>
+          <input type="file" id="photoFile" accept="image/*" style="display:none;">
+          <div id="photoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+        </div>
+        <div>
+          <span class="view-label">Spec Sheet (PDF)</span>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:4px;">
+            <button type="button" class="btn secondary" onclick="document.getElementById('specFile').click()">Choose File</button>
+            <div id="specPreview" style="display:none;font-size:13px;color:var(--ink-soft);"></div>
+          </div>
+          <input type="file" id="specFile" accept="application/pdf" style="display:none;">
+          <div id="specMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
 
-    <div class="section-title" style="margin-top:14px;">Spec Sheet (PDF)</div>
-    <div id="specPreview" style="display:none;margin-bottom:8px;"></div>
-    <input type="file" id="specFile" accept="application/pdf">
-    <div id="specMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
-
-    <div class="grid3" style="margin-top:14px;">
-      <div class="field"><label>Category *</label><select id="category" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
-      <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
-      <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+    <!-- Every selection first, all together — then the panel below just shows what got filled
+         in. Nothing to type until you've picked everything that can be picked. -->
+    <div class="profile-panel">
+      <div class="profile-heading">Classification</div>
+      <div class="grid5">
+        <div class="field"><label>Category *</label><select id="category" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+        <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="renderPackagingOptions();updateProfileDisplays()"><option value="">—</option></select></div>
+        <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+        <div class="field"><label>Cut Name *</label><select id="cut_name_id" required onchange="handleCutNameSelectChange()"><option value="">—</option></select></div>
+        <!-- A compact dropdown, not a wall of checkboxes — a real product can carry more than one
+           variation qualifier at once (Boneless AND Strap Off on the same loin), which one
+           selection can't represent, but the catalog can grow to 15-20+ entries over time and a
+           flat checkbox row doesn't scale. Checked boxes join in catalog order to build
+           subcategory/subcategory_en. -->
+        <div class="field" style="text-align:left;position:relative;">
+          <label style="text-align:left;">Variation</label>
+          <button type="button" onclick="toggleVariationDropdown()" id="variationDropdownBtn" style="width:100%;text-align:left;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+            <span id="variationDropdownLabel" style="color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">— None —</span><span style="color:var(--ink-soft);flex-shrink:0;">▾</span>
+          </button>
+          <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:#fff;border:1.5px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,31,51,.12);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;">
+            <div id="variationCheckboxes" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;">
+              <a href="#" onclick="event.preventDefault();addNewVariation();" style="font-size:12.5px;color:var(--blue);font-weight:600;text-decoration:none;white-space:nowrap;">+ Add new variation…</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
     </div>
 
     <!-- Product Profile — the 12 fields every product profile MUST carry (6 English, 6 Spanish),
-         same structure as products.html. Category/Temperature/Packaging are single dropdowns above
-         (closed catalogs, one selection drives both languages at once) — their EN/ES readouts
-         below are derived, not separately editable. -->
-    <div class="section-title">Product Profile</div>
-    <div class="grid2">
-      <div class="field"><label>Category English Product Name</label><input id="category_en_display" readonly disabled></div>
-      <div class="field"><label>Category Spanish Product Name</label><input id="category_es_display" readonly disabled></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Full English Product Name (for PO &amp; FO) *</label><input id="full_name_en" required placeholder="e.g. Frozen Pork Bone in Butt, Box"></div>
-      <div class="field"><label>Full Spanish Product Name (for SO) *</label><input id="full_name_es" required placeholder="e.g. Cabeza de lomo con hueso Congelado, Caja"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Product English Name *</label><input id="name_en" required></div>
-      <div class="field"><label>Product Spanish Name *</label><input id="name" required oninput="checkNameDuplicate()">
-        <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
+         same structure as products.html. Every value here is DERIVED from a Classification
+         selection above — rendered as plain summary text (not disabled form fields pretending to
+         be editable), each real value held in a paired hidden input so saveProduct()/editing keep
+         reading document.getElementById(id).value exactly as before. Full Name is the one
+         exception, typed by hand (see the note where it's defined). -->
+    <div class="profile-panel">
+      <div class="profile-heading">Product Profile</div>
+      <div class="profile-grid">
+        <div class="profile-row"><span class="view-label">Category (EN)</span><span class="profile-row-value" id="category_en_display_view">—</span><input type="hidden" id="category_en_display"></div>
+        <div class="profile-row"><span class="view-label">Category (ES)</span><span class="profile-row-value" id="category_es_display_view">—</span><input type="hidden" id="category_es_display"></div>
+        <div class="profile-row"><span class="view-label">Product Name (EN) *</span><span class="profile-row-value" id="name_en_view">—</span><input type="hidden" id="name_en"></div>
+        <div class="profile-row"><span class="view-label">Product Name (ES) *</span><span class="profile-row-value" id="name_view">—</span><input type="hidden" id="name"></div>
+        <div class="profile-row"><span class="view-label">Variation (EN)</span><span class="profile-row-value" id="subcategory_en_view">—</span><input type="hidden" id="subcategory_en"></div>
+        <div class="profile-row"><span class="view-label">Variation (ES)</span><span class="profile-row-value" id="subcategory_view">—</span><input type="hidden" id="subcategory"></div>
+        <div class="profile-row"><span class="view-label">Temperature (EN)</span><span class="profile-row-value" id="temperature_en_display_view">—</span><input type="hidden" id="temperature_en_display"></div>
+        <div class="profile-row"><span class="view-label">Temperature (ES)</span><span class="profile-row-value" id="temperature_es_display_view">—</span><input type="hidden" id="temperature_es_display"></div>
+        <div class="profile-row"><span class="view-label">Packing (EN)</span><span class="profile-row-value" id="packing_en_display_view">—</span><input type="hidden" id="packing_en_display"></div>
+        <div class="profile-row"><span class="view-label">Packing (ES)</span><span class="profile-row-value" id="packing_es_display_view">—</span><input type="hidden" id="packing_es_display"></div>
+      </div>
+      <!-- Composed automatically now that every ingredient (Category, Cut Name, Variation,
+           Temperature, Packaging) is itself a closed selection — no longer typed by hand.
+           EN order: Temperature Category Variation CutName, Packaging.
+           ES order: CutName Variation Temperature, Packaging.
+           (matches the real PO/SO text conventions in each language, verified against the
+           original "Frozen Pork Bone in Butt, Box" / "Cabeza de lomo con hueso Congelado, Caja"
+           examples). -->
+      <div class="profile-grid" style="margin-top:14px;">
+        <div class="profile-row half"><span class="view-label">Full English Product Name (for PO &amp; FO)</span><span class="profile-row-value" id="full_name_en_view">—</span><input type="hidden" id="full_name_en"></div>
+        <div class="profile-row half"><span class="view-label">Full Spanish Product Name (for SO)</span><span class="profile-row-value" id="full_name_es_view">—</span><input type="hidden" id="full_name_es"></div>
       </div>
     </div>
-    <div class="grid2">
-      <div class="field"><label>Variation English Product Name</label><input id="subcategory_en"></div>
-      <div class="field"><label>Variation Spanish Product Name</label><input id="subcategory"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Temperature English Product Name</label><input id="temperature_en_display" readonly disabled></div>
-      <div class="field"><label>Temperature Spanish Product Name</label><input id="temperature_es_display" readonly disabled></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Packing English Product Name</label><input id="packing_en_display" readonly disabled></div>
-      <div class="field"><label>Packing Spanish Product Name</label><input id="packing_es_display" readonly disabled></div>
+
+    <div class="profile-panel">
+      <div class="profile-heading">Brand</div>
+      <div class="field" style="max-width:280px;"><select id="brand" required onchange="handleBrandSelectChange()"><option value="">—</option></select></div>
     </div>
 
-    <div class="section-title">Attributes</div>
-    <div class="grid3">
-      <div class="field"><label>Brand *</label><input id="brand" required></div>
-      <div class="field"><label>Presentation detail</label><input id="presentation"></div>
-      <div class="field"><label>Origin</label><input id="origin"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>Unit of measure</label><input id="unit_of_measure"></div>
-      <div class="field"><label>Standard weight</label><input type="number" id="standard_weight"></div>
-    </div>
-    <div class="field"><label>Notes</label><textarea id="commercial_notes" rows="2"></textarea></div>
-
-    <div style="display:flex;gap:10px;margin-top:8px;">
+    <div style="display:flex;gap:10px;margin-top:16px;">
       <button class="btn" onclick="saveProduct()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
     </div>
@@ -527,19 +703,103 @@ let plantProteins = {};
 let categories = [];
 let usdCurrencyId = null;
 
+let countries = [];
+let allStates = [];
+
+// Same real E.164 calling codes as customers.html — closed dropdown next to Phone/WhatsApp so
+// the code can never be mistyped.
+const DIAL_CODES = {
+  US: '+1', CA: '+1', MX: '+52', CL: '+56', BR: '+55', GT: '+502', HN: '+504', SV: '+503',
+  NI: '+505', CR: '+506', PA: '+507', CO: '+57', EC: '+593', PE: '+51', BO: '+591', PY: '+595',
+  UY: '+598', AR: '+54', VE: '+58', DO: '+1',
+};
+// One entry per unique dial code, not per country — see the same note in customers.html.
+function populateDialCodeSelect(selectEl){
+  const uniqueCodes = [...new Set(Object.values(DIAL_CODES))].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+  selectEl.innerHTML = uniqueCodes.map(code => `<option value="${code}">${code}</option>`).join('');
+}
+function splitPhone(full){
+  if (!full) return { code: '', number: '' };
+  const codes = [...new Set(Object.values(DIAL_CODES))].sort((a, b) => b.length - a.length);
+  const match = codes.find(c => full.startsWith(c));
+  if (!match) return { code: '', number: full.replace(/^\+/, '') };
+  return { code: match, number: full.slice(match.length).trim() };
+}
+function joinPhone(code, number){
+  if (!number) return null;
+  return code ? `${code} ${number.trim()}` : number.trim();
+}
+
+// prefix is 'np' (New Plant form) or 'pe' (Edit Profile form) — same cascade logic, two forms.
+function onPlantCountryChange(prefix){
+  const countryId = document.getElementById(prefix + '_country_id').value;
+  const statesForCountry = allStates.filter(s => s.country_id === countryId);
+  const hasStates = statesForCountry.length > 0;
+  document.getElementById(prefix + '_stateSelectField').style.display = hasStates ? 'block' : 'none';
+  document.getElementById(prefix + '_stateTextField').style.display = hasStates ? 'none' : 'block';
+  const sel = document.getElementById(prefix + '_state_id');
+  sel.innerHTML = '<option value="">—</option>' + statesForCountry.map(s => `<option value="${s.id}">${escapeHtml(s.name_en)}</option>`).join('');
+  if (!hasStates) sel.value = '';
+  else document.getElementById(prefix + '_state').value = '';
+}
+
+let brands = [];
+
+async function loadBrands(){
+  const res = await callApi('brands-search', {});
+  brands = res.results || [];
+  const sel = document.getElementById('brand');
+  sel.innerHTML = '<option value="">—</option>' + brands.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('') + '<option value="__new__">+ Add new brand…</option>';
+}
+
+// The one place free text is still allowed to create a catalog row on the fly — brands genuinely
+// grow over time (a new plant's own private label), so a dead-end closed list would just push
+// people back to typing brand into some other field instead.
+async function handleBrandSelectChange(){
+  const sel = document.getElementById('brand');
+  if (sel.value !== '__new__') return;
+  const name = prompt('New brand name:');
+  if (!name || !name.trim()){ sel.value = ''; return; }
+  const idempotencyKey = `brands-create|${name.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  let result;
+  try {
+    result = await callApi('brands-create', { actor: currentActor(), name: name.trim(), idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name}` : ''}\n\nCreate "${name.trim()}" as a new brand anyway?`);
+      if (!proceed){ sel.value = ''; return; }
+      result = await callApi('brands-create', { actor: currentActor(), name: name.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+    } else {
+      alert('Error creating brand: ' + e.message);
+      sel.value = '';
+      return;
+    }
+  }
+  await loadBrands();
+  sel.value = result.brand.id;
+}
+
 async function loadEverything(){
-  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes] = await Promise.all([
+  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes] = await Promise.all([
     callApi('plants-search', {}),
     callApi('temperature-search', {}),
     callApi('packaging-search', {}),
     callApi('categories-search', {}),
     callApi('plant-products-search', {}),
     callApi('currencies-search', {}),
+    callApi('countries-search', {}),
+    callApi('states-search', {}),
+    loadBrands(),
+    loadVariations(),
+    loadCutNames(),
   ]);
   plants = plantsRes.results || [];
   temperatures = tempRes.results || [];
   packagings = packRes.results || [];
   categories = catRes.results || [];
+  countries = countryRes.results || [];
+  allStates = statesRes.results || [];
   const usd = (currRes.results || []).find(c => c.code === 'USD');
   usdCurrencyId = usd ? usd.id : null;
 
@@ -555,16 +815,34 @@ async function loadEverything(){
   // Spanish catalog entry only if a temperature/packaging row has no English name on file.
   const tSel = document.getElementById('temperature_id');
   temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
-  const pSel = document.getElementById('packaging_id');
-  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`);
+  renderPackagingOptions();
   // Fixed catalog, never free text — value is the real category_id (a proper FK) now, not a
   // hand-typed Spanish string.
   const catSel = document.getElementById('category');
   categories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
   const newPlantCatSel = document.getElementById('newPlantCategory');
   categories.forEach(c => newPlantCatSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
+  const countryOptions = countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+  document.getElementById('np_country_id').innerHTML += countryOptions;
+  document.getElementById('pe_country_id').innerHTML += countryOptions;
+  populateDialCodeSelect(document.getElementById('np_phone_code'));
+  populateDialCodeSelect(document.getElementById('np_whatsapp_code'));
+  populateDialCodeSelect(document.getElementById('pe_phone_code'));
+  populateDialCodeSelect(document.getElementById('pe_whatsapp_code'));
 
   renderPlants();
+}
+
+// Some packaging types are only valid for one temperature (Combo is Fresh-only — a real business
+// rule, not every combination on the grid is real). null valid_temperature_ids means "valid for
+// everything," so unrestricted packaging types keep showing up regardless of Temperature.
+function renderPackagingOptions(){
+  const tempId = document.getElementById('temperature_id').value;
+  const pSel = document.getElementById('packaging_id');
+  const currentValue = pSel.value;
+  const valid = packagings.filter(p => !p.valid_temperature_ids || !tempId || p.valid_temperature_ids.includes(tempId));
+  pSel.innerHTML = '<option value="">—</option>' + valid.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('');
+  if (valid.some(p => p.id === currentValue)) pSel.value = currentValue;
 }
 
 function categoryEnById(id){ const c = categories.find(x => x.id === id); return c ? c.name_en : null; }
@@ -574,16 +852,166 @@ function categoryEnByName(name){ const c = categories.find(x => x.name === name)
 // single closed-catalog dropdown that carries both languages on the same row, so picking one
 // selection fills both the English and Spanish labeled fields at once. Same pattern as
 // products.html.
+// Sets both the real hidden input (what saveProduct()/edit-repopulation actually read) and its
+// paired "_view" span (the plain-text summary the trader sees) in one call, so the two can never
+// silently drift apart.
+function setProfileField(id, value){
+  document.getElementById(id).value = value || '';
+  const view = document.getElementById(id + '_view');
+  if (view) view.textContent = value || '—';
+}
+
+function checkedVariations(){
+  return variations.filter(v => {
+    const box = document.getElementById('variation_check_' + v.id);
+    return box && box.checked;
+  });
+}
+
 function updateProfileDisplays(){
   const cat = categories.find(c => c.id === document.getElementById('category').value);
   const temp = temperatures.find(t => t.id === document.getElementById('temperature_id').value);
   const pack = packagings.find(p => p.id === document.getElementById('packaging_id').value);
-  document.getElementById('category_en_display').value = cat ? cat.name_en : '';
-  document.getElementById('category_es_display').value = cat ? cat.name : '';
-  document.getElementById('temperature_en_display').value = temp ? (temp.name_en || temp.name) : '';
-  document.getElementById('temperature_es_display').value = temp ? (temp.name || temp.name_en) : '';
-  document.getElementById('packing_en_display').value = pack ? (pack.name_en || pack.name) : '';
-  document.getElementById('packing_es_display').value = pack ? (pack.name || pack.name_en) : '';
+  const cutName = cutNames.find(c => c.id === document.getElementById('cut_name_id').value);
+  const chosenVariations = checkedVariations();
+  setProfileField('category_en_display', cat ? cat.name_en : '');
+  setProfileField('category_es_display', cat ? cat.name : '');
+  setProfileField('temperature_en_display', temp ? (temp.name_en || temp.name) : '');
+  setProfileField('temperature_es_display', temp ? (temp.name || temp.name_en) : '');
+  setProfileField('packing_en_display', pack ? (pack.name_en || pack.name) : '');
+  setProfileField('packing_es_display', pack ? (pack.name || pack.name_en) : '');
+  setProfileField('subcategory_en', chosenVariations.map(v => v.name_en).join(', '));
+  setProfileField('subcategory', chosenVariations.map(v => v.name_es).join(', '));
+  setProfileField('name_en', cutName ? cutName.name_en : '');
+  setProfileField('name', cutName ? cutName.name_es : '');
+  // Every ingredient, both languages, no exceptions.
+  // EN: Category Variation CutName Temperature, Packaging (e.g. "Pork Bone-In Butt Frozen, Box").
+  // ES: CutName Category Variation Temperature, Packaging (e.g. "Lomo Cerdo con hueso Congelado, Caja").
+  // Only composes once every ingredient is chosen — a half-picked product shows a blank Full Name
+  // rather than a broken-looking partial sentence.
+  if (cat && temp && pack && cutName){
+    const enParts = [cat.name_en, ...chosenVariations.map(v => v.name_en), cutName.name_en, temp.name_en || temp.name].filter(Boolean);
+    const esParts = [cutName.name_es, cat.name, ...chosenVariations.map(v => v.name_es), temp.name || temp.name_en].filter(Boolean);
+    setProfileField('full_name_en', `${enParts.join(' ')}, ${pack.name_en || pack.name}`);
+    setProfileField('full_name_es', `${esParts.join(' ')}, ${pack.name || pack.name_en}`);
+  } else {
+    setProfileField('full_name_en', '');
+    setProfileField('full_name_es', '');
+  }
+  // Re-check for a matching existing product every time any of these change — the combination
+  // (cut + category + temp + packaging + variation) is what makes something a real duplicate, not
+  // the cut name alone.
+  if (typeof checkNameDuplicate === 'function') checkNameDuplicate();
+}
+
+let variations = [];
+let cutNames = [];
+
+async function loadCutNames(){
+  const res = await callApi('cut-names-search', {});
+  cutNames = res.results || [];
+  const sel = document.getElementById('cut_name_id');
+  sel.innerHTML = '<option value="">—</option>' + cutNames.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</option>`).join('') + '<option value="__new__">+ Add new cut…</option>';
+}
+
+async function handleCutNameSelectChange(){
+  const sel = document.getElementById('cut_name_id');
+  if (sel.value !== '__new__'){ updateProfileDisplays(); return; }
+  const name_en = prompt('New cut — English (e.g. "Loin"):');
+  if (!name_en || !name_en.trim()){ sel.value = ''; return; }
+  const name_es = prompt('New cut — Spanish (e.g. "Lomo"):');
+  if (!name_es || !name_es.trim()){ sel.value = ''; return; }
+  const idempotencyKey = `cut-names-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  let result;
+  try {
+    result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new cut anyway?`);
+      if (!proceed){ sel.value = ''; return; }
+      result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+    } else {
+      alert('Error creating cut: ' + e.message);
+      sel.value = '';
+      return;
+    }
+  }
+  await loadCutNames();
+  sel.value = result.cut_name.id;
+  updateProfileDisplays();
+}
+
+function renderVariationCheckboxes(){
+  const wrap = document.getElementById('variationCheckboxes');
+  const checkedIds = new Set(checkedVariations().map(v => v.id));
+  wrap.innerHTML = variations.map(v => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;cursor:pointer;">
+      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays();closeVariationDropdown()" style="width:auto;">
+      ${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}
+    </label>
+  `).join('');
+  updateVariationDropdownLabel();
+}
+
+function updateVariationDropdownLabel(){
+  const chosen = checkedVariations();
+  const label = document.getElementById('variationDropdownLabel');
+  label.textContent = chosen.length ? chosen.map(v => v.name_en).join(', ') : '— None —';
+  label.style.color = chosen.length ? 'var(--ink)' : 'var(--ink-soft)';
+}
+
+function toggleVariationDropdown(){
+  const panel = document.getElementById('variationDropdownPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeVariationDropdown(){
+  document.getElementById('variationDropdownPanel').style.display = 'none';
+}
+
+// Close the dropdown on an outside click — otherwise it stays open forever once opened.
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('variationDropdownPanel');
+  const btn = document.getElementById('variationDropdownBtn');
+  if (!panel || panel.style.display === 'none') return;
+  if (panel.contains(e.target) || btn.contains(e.target)) return;
+  panel.style.display = 'none';
+});
+
+async function loadVariations(){
+  const res = await callApi('variations-search', {});
+  variations = res.results || [];
+  renderVariationCheckboxes();
+}
+
+// Needs both languages, unlike Brand — a variation with only one language is exactly the silent
+// EN/ES gap the catalog-matching rules exist to prevent.
+async function addNewVariation(){
+  const name_en = prompt('New variation — English (e.g. "Bone-In"):');
+  if (!name_en || !name_en.trim()) return;
+  const name_es = prompt('New variation — Spanish (e.g. "con hueso"):');
+  if (!name_es || !name_es.trim()) return;
+  const idempotencyKey = `variations-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  let result;
+  try {
+    result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new variation anyway?`);
+      if (!proceed) return;
+      result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+    } else {
+      alert('Error creating variation: ' + e.message);
+      return;
+    }
+  }
+  const previouslyChecked = new Set(checkedVariations().map(v => v.id));
+  await loadVariations();
+  previouslyChecked.forEach(id => { const box = document.getElementById('variation_check_' + id); if (box) box.checked = true; });
+  document.getElementById('variation_check_' + result.variation.id).checked = true;
+  updateProfileDisplays();
 }
 
 function renderPlants(){
@@ -591,7 +1019,7 @@ function renderPlants(){
   const filtered = term ? plants.filter(p =>
     (p.name || '').toLowerCase().includes(term) ||
     (p.city || '').toLowerCase().includes(term) ||
-    (p.country || '').toLowerCase().includes(term)
+    (countryName(p.country_id) || '').toLowerCase().includes(term)
   ) : plants;
   const wrap = document.getElementById('plantRows');
   document.getElementById('plantEmptyMsg').style.display = filtered.length ? 'none' : 'block';
@@ -607,7 +1035,7 @@ function renderPlants(){
         <span class="pkg-plant-sub">${escapeHtml(proteins)}</span>
       </div>
       <div style="min-width:160px;font-size:12.5px;">${p.contact_name && p.email ? `<a href="mailto:${escapeHtml(p.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.contact_name)}</a>` : escapeHtml(p.contact_name || '—')}</div>
-      <div style="margin-left:auto;flex-shrink:0;display:flex;align-items:center;gap:6px;">${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}<button class="btn danger" onclick="event.stopPropagation();deletePlant('${p.id}')">Delete</button></div>
+      <div style="margin-left:auto;flex-shrink:0;display:flex;align-items:center;gap:6px;">${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
     </div>`;
   }).join('');
 }
@@ -620,13 +1048,79 @@ async function deletePlant(id){
     alert('Error deleting: ' + e.message);
     return;
   }
-  if (currentPlantId === id) document.getElementById('plantCard').style.display = 'none';
+  if (currentPlantId === id) closePlantView();
   await loadEverything();
 }
 
 function openNewPlant(){
+  document.getElementById('plantListCard').style.display = 'none';
   document.getElementById('newPlantCard').style.display = 'block';
   document.getElementById('newPlantCard').scrollIntoView({behavior:'smooth'});
+  updateNewPlantProfile();
+}
+
+function closeNewPlant(){
+  document.getElementById('newPlantCard').style.display = 'none';
+  document.getElementById('plantListCard').style.display = 'block';
+}
+
+// Same format as the product form's Product Profile: a live, read-only mirror of everything
+// entered above so far — nothing here is derived/computed (unlike Full Name), it just consolidates
+// the fields into one glanceable card before Save. Called on every input/change up top.
+function updateNewPlantProfile(){
+  const setV = (id, val) => { document.getElementById(id).textContent = val || '—'; };
+  const selText = (sel) => sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+  setV('npv_name', document.getElementById('newPlantName').value);
+  setV('npv_species', selText(document.getElementById('newPlantCategory')));
+  setV('npv_country', selText(document.getElementById('np_country_id')));
+  const stateVal = document.getElementById('np_stateSelectField').style.display !== 'none'
+    ? selText(document.getElementById('np_state_id'))
+    : document.getElementById('np_state').value;
+  setV('npv_state', stateVal);
+  setV('npv_city', document.getElementById('np_city').value);
+  setV('npv_address', document.getElementById('np_address').value);
+  setV('npv_contact_name', document.getElementById('np_contact_name').value);
+  setV('npv_email', document.getElementById('np_email').value);
+  setV('npv_phone', joinPhone(document.getElementById('np_phone_code').value, document.getElementById('np_phone_number').value));
+  setV('npv_email_cc', document.getElementById('np_email_cc').value);
+  setV('npv_whatsapp', joinPhone(document.getElementById('np_whatsapp_code').value, document.getElementById('np_whatsapp_number').value));
+  setV('npv_website', document.getElementById('np_website').value);
+  setV('npv_payment_terms', formatPaymentTerms(document.getElementById('np_payment_terms_type').value, document.getElementById('np_payment_terms_days').value));
+  setV('npv_required_documentation', document.getElementById('np_required_documentation').value);
+  setV('npv_notes', document.getElementById('np_notes').value);
+}
+
+// Same field set as PROFILE_FIELDS/Edit Profile, filled upfront instead of in a later separate
+// step — a fresh plant should never need a second trip to Edit Profile just to record its
+// contact/logistics info.
+const NEW_PLANT_PROFILE_FIELDS = ['country_id','city','address','contact_name','email','email_cc','website','required_documentation','notes'];
+
+// Payment Terms is stored as one free-text string (plants.payment_terms — already read by
+// orders-compose-po and printed on the PO as-is), but the UI is closed/blindado: Advance, or
+// Credit + a day count. parsePaymentTerms recovers the two controls' state from an existing
+// string when editing; formatPaymentTerms goes the other way before saving.
+function parsePaymentTerms(text){
+  if (!text) return { type: '', days: '' };
+  if (text === 'Advance') return { type: 'advance', days: '' };
+  const m = /^Credit (\d+) days$/.exec(text);
+  if (m) return { type: 'credit', days: m[1] };
+  return { type: '', days: '' }; // unrecognized legacy value — re-select going forward
+}
+function formatPaymentTerms(type, days){
+  if (type === 'advance') return 'Advance';
+  if (type === 'credit' && days) return `Credit ${days} days`;
+  return null;
+}
+
+function toggleNewPlantPaymentDays(){
+  const isCredit = document.getElementById('np_payment_terms_type').value === 'credit';
+  document.getElementById('npPaymentDaysRow').style.display = isCredit ? 'block' : 'none';
+  if (!isCredit) document.getElementById('np_payment_terms_days').value = '';
+}
+function togglePlantProfilePaymentDays(){
+  const isCredit = document.getElementById('pe_payment_terms_type').value === 'credit';
+  document.getElementById('pePaymentDaysRow').style.display = isCredit ? 'block' : 'none';
+  if (!isCredit) document.getElementById('pe_payment_terms_days').value = '';
 }
 
 async function saveNewPlant(forceOverride){
@@ -640,6 +1134,18 @@ async function saveNewPlant(forceOverride){
     document.getElementById('newPlantMsg').textContent = 'Select the species — every plant has one fixed species (rule: never guessed line-by-line later).';
     return;
   }
+  const profilePayload = {};
+  NEW_PLANT_PROFILE_FIELDS.forEach(f => { profilePayload[f] = document.getElementById('np_' + f).value || null; });
+  profilePayload.state_id = document.getElementById('np_stateSelectField').style.display !== 'none' ? (document.getElementById('np_state_id').value || null) : null;
+  profilePayload.state = document.getElementById('np_stateTextField').style.display !== 'none' ? (document.getElementById('np_state').value || null) : null;
+  profilePayload.phone = joinPhone(document.getElementById('np_phone_code').value, document.getElementById('np_phone_number').value);
+  profilePayload.whatsapp = joinPhone(document.getElementById('np_whatsapp_code').value, document.getElementById('np_whatsapp_number').value);
+  const npTermsType = document.getElementById('np_payment_terms_type').value;
+  if (npTermsType === 'credit' && !document.getElementById('np_payment_terms_days').value){
+    document.getElementById('newPlantMsg').textContent = 'Enter how many credit days.';
+    return;
+  }
+  profilePayload.payment_terms = formatPaymentTerms(npTermsType, document.getElementById('np_payment_terms_days').value);
   let supplierId, plantResult;
   try {
     // Every plant needs a linked supplier row for referential integrity — created with the same
@@ -648,7 +1154,7 @@ async function saveNewPlant(forceOverride){
     const sup = await trySaveGeneric('suppliers-create', { actor: currentActor(), name }, 'newPlantMsg', () => saveNewPlant(true), forceOverride);
     if (!sup) return;
     supplierId = sup.supplier.id;
-    plantResult = await trySaveGeneric('plants-create', { actor: currentActor(), supplier_id: supplierId, name, category_id }, 'newPlantMsg', () => saveNewPlant(true), forceOverride);
+    plantResult = await trySaveGeneric('plants-create', { actor: currentActor(), supplier_id: supplierId, name, category_id, ...profilePayload }, 'newPlantMsg', () => saveNewPlant(true), forceOverride);
     if (!plantResult) return;
   } catch (e) {
     document.getElementById('newPlantMsg').textContent = 'Error: ' + e.message;
@@ -656,6 +1162,14 @@ async function saveNewPlant(forceOverride){
   }
   document.getElementById('newPlantCard').style.display = 'none';
   document.getElementById('newPlantName').value = '';
+  NEW_PLANT_PROFILE_FIELDS.forEach(f => { document.getElementById('np_' + f).value = ''; });
+  document.getElementById('np_state').value = '';
+  document.getElementById('np_phone_number').value = '';
+  document.getElementById('np_whatsapp_number').value = '';
+  onPlantCountryChange('np');
+  document.getElementById('np_payment_terms_type').value = '';
+  document.getElementById('np_payment_terms_days').value = '';
+  toggleNewPlantPaymentDays();
   document.getElementById('plantSearchBox').value = '';
   await loadEverything();
   selectPlant(plantResult.plant.id);
@@ -691,26 +1205,26 @@ async function trySaveGeneric(fn, payload, msgElId, retryFn, forceOverride){
   }
 }
 
-const PROFILE_FIELDS = ['country','state','city','address','contact_name','email','email_cc','phone','whatsapp','website','avg_response_time','business_hours','payment_terms','avg_loading_time','document_cost','required_documentation','avg_freight_to_border','notes','internal_notes'];
+const PROFILE_FIELDS = ['country_id','city','address','contact_name','email','email_cc','website','required_documentation','notes','internal_notes'];
 
 async function selectPlant(id){
   const plantCard = document.getElementById('plantCard');
   if (currentPlantId === id && plantCard.style.display === 'block'){
-    plantCard.style.display = 'none';
-    currentPlantId = null;
+    closePlantView();
     return;
   }
   currentPlantId = id;
   if (!currentPlantId){
-    plantCard.style.display = 'none';
+    closePlantView();
     return;
   }
   const plant = plants.find(p => p.id === currentPlantId);
   document.getElementById('plantTitle').textContent = plant.name;
-  const pvLogo = document.getElementById('pv_logo');
-  pvLogo.src = plant.logo_url || '';
-  pvLogo.style.display = plant.logo_url ? 'block' : 'none';
+  renderPlantLogo(plant);
   plantCard.style.display = 'block';
+  // Viewing one plant's full profile — the list of every other plant underneath is just noise
+  // until you come back to it (click the "Meat Packers" title).
+  document.getElementById('plantListCard').style.display = 'none';
   renderProfileView(plant);
   document.getElementById('profileView').style.display = 'block';
   document.getElementById('profileEdit').style.display = 'none';
@@ -718,10 +1232,131 @@ async function selectPlant(id){
   setPlantTab('products'); // always open on the daily-use tab, regardless of which tab was open last time
   await loadPlantLocations();
   await loadPlantProducts();
+  await loadPlantDocuments();
   document.getElementById('plantCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-const PLANT_TABS = ['products', 'locations', 'details'];
+function closePlantView(){
+  document.getElementById('plantCard').style.display = 'none';
+  document.getElementById('plantListCard').style.display = 'block';
+  currentPlantId = null;
+}
+
+let plantDocuments = [];
+
+async function loadPlantDocuments(){
+  try {
+    const res = await callApi('plant-documents-search', { plant_id: currentPlantId });
+    plantDocuments = res.results || [];
+  } catch (e) {
+    plantDocuments = [];
+  }
+  renderPlantDocuments();
+}
+
+function renderPlantDocuments(){
+  const tbody = document.getElementById('plantDocRows');
+  document.getElementById('plantDocsEmpty').style.display = plantDocuments.length ? 'none' : 'block';
+  tbody.innerHTML = plantDocuments.map(d => `<tr>
+    <td><a href="${escapeHtml(d.download_url)}" target="_blank" rel="noopener" style="color:var(--blue);">${escapeHtml(d.file_name)}</a></td>
+    <td>${new Date(d.created_at).toLocaleDateString()}</td>
+    <td class="row-actions"><button class="btn danger" onclick="deletePlantDocument('${d.id}')">×</button></td>
+  </tr>`).join('');
+}
+
+function uploadPlantDocument(){
+  const input = document.getElementById('plantDocFileInput');
+  const file = input.files[0];
+  if (!file) return;
+  const MAX_BYTES = 15 * 1024 * 1024;
+  if (file.size > MAX_BYTES){
+    document.getElementById('plantDocMsg').textContent = 'File must be 15MB or smaller.';
+    return;
+  }
+  document.getElementById('plantDocMsg').textContent = 'Uploading…';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    try {
+      await callApi('plant-documents-upload', {
+        actor: currentActor(), plant_id: currentPlantId,
+        file_name: file.name, file_base64: base64, content_type: file.type || null,
+      });
+    } catch (e) {
+      document.getElementById('plantDocMsg').textContent = 'Error: ' + e.message;
+      return;
+    }
+    input.value = '';
+    document.getElementById('plantDocFileName').textContent = 'No file chosen';
+    document.getElementById('plantDocMsg').textContent = '';
+    await loadPlantDocuments();
+  };
+  reader.onerror = () => { document.getElementById('plantDocMsg').textContent = 'Could not read the file.'; };
+  reader.readAsDataURL(file);
+}
+
+// Same letter-avatar-or-real-logo pattern as the plant list rows (pkg-plant-avatar), just bigger,
+// so the profile header and the list always look like the same design language.
+function renderPlantLogo(plant){
+  const img = document.getElementById('pv_logo');
+  const placeholder = document.getElementById('pv_logo_placeholder');
+  if (plant.logo_url){
+    img.src = plant.logo_url;
+    img.style.display = 'block';
+    placeholder.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = (plant.name || '?').trim().charAt(0).toUpperCase();
+  }
+}
+
+function uploadPlantLogo(){
+  const input = document.getElementById('plantLogoFileInput');
+  const file = input.files[0];
+  if (!file) return;
+  const MAX_BYTES = 5 * 1024 * 1024;
+  if (file.size > MAX_BYTES){
+    document.getElementById('plantLogoMsg').textContent = 'Logo must be 5MB or smaller.';
+    return;
+  }
+  document.getElementById('plantLogoMsg').textContent = 'Uploading…';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    let result;
+    try {
+      result = await callApi('plant-logo-upload', {
+        actor: currentActor(), plant_id: currentPlantId,
+        file_name: file.name, file_base64: base64, content_type: file.type || null,
+      });
+    } catch (e) {
+      document.getElementById('plantLogoMsg').textContent = 'Error: ' + e.message;
+      return;
+    }
+    input.value = '';
+    document.getElementById('plantLogoMsg').textContent = '';
+    const idx = plants.findIndex(p => p.id === currentPlantId);
+    if (idx !== -1) plants[idx] = result.plant;
+    renderPlantLogo(result.plant);
+    renderPlants();
+  };
+  reader.onerror = () => { document.getElementById('plantLogoMsg').textContent = 'Could not read the file.'; };
+  reader.readAsDataURL(file);
+}
+
+async function deletePlantDocument(id){
+  if (!confirm('Delete this document? This cannot be undone.')) return;
+  try {
+    await callApi('plant-documents-delete', { actor: currentActor(), id });
+  } catch (e) {
+    alert('Error deleting: ' + e.message);
+    return;
+  }
+  await loadPlantDocuments();
+}
+
+const PLANT_TABS = ['details', 'products', 'locations'];
 function setPlantTab(tab){
   PLANT_TABS.forEach(t => {
     document.getElementById('plantTab_' + t).style.display = (t === tab) ? 'block' : 'none';
@@ -729,23 +1364,30 @@ function setPlantTab(tab){
   });
 }
 
+function countryName(countryId){
+  const match = countries.find(c => c.id === countryId);
+  return match ? match.name_en : null;
+}
+
+function stateName(stateId){
+  const match = allStates.find(s => s.id === stateId);
+  return match ? match.name_en : null;
+}
+
 function renderProfileView(plant){
-  const loc = [plant.city, plant.state, plant.country].filter(Boolean).join(', ') || '—';
+  const stateLabel = plant.state || stateName(plant.state_id);
+  const loc = [plant.city, stateLabel, countryName(plant.country_id)].filter(Boolean).join(', ') || '—';
   document.getElementById('pv_location').textContent = loc;
   document.getElementById('pv_contact').innerHTML = (plant.contact_name && plant.email) ? `<a href="mailto:${escapeHtml(plant.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(plant.contact_name)}</a>` : escapeHtml(plant.contact_name || '—');
   const waNumber = plant.whatsapp || plant.phone;
   const waBtn = document.getElementById('waBtn');
   if (waNumber){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = waNumber; }
   else { waBtn.style.display = 'none'; waBtn.dataset.number = ''; }
+  document.getElementById('pv_no_whatsapp').style.display = waNumber ? 'none' : 'inline';
   document.getElementById('pv_email').innerHTML = plant.email ? `<a href="mailto:${escapeHtml(plant.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(plant.email)}</a>` : '—';
   document.getElementById('pv_website').textContent = plant.website || '—';
-  document.getElementById('pv_avg_response_time').textContent = plant.avg_response_time || '—';
   document.getElementById('pv_payment_terms').textContent = plant.payment_terms || '—';
   document.getElementById('pv_required_documentation').textContent = plant.required_documentation || '—';
-  document.getElementById('pv_avg_loading_time').textContent = plant.avg_loading_time || '—';
-  document.getElementById('pv_document_cost').textContent = plant.document_cost || '—';
-  document.getElementById('pv_avg_freight_to_border').textContent = plant.avg_freight_to_border || '—';
-  document.getElementById('pv_business_hours').textContent = plant.business_hours || '—';
   document.getElementById('pv_notes').textContent = plant.notes || '—';
 }
 
@@ -765,6 +1407,19 @@ function toggleProfile(){
     document.getElementById('profileToggleBtn').textContent = 'Edit Profile';
   } else {
     PROFILE_FIELDS.forEach(f => { document.getElementById('pe_' + f).value = plant[f] || ''; });
+    onPlantCountryChange('pe');
+    if (plant.state_id) document.getElementById('pe_state_id').value = plant.state_id;
+    document.getElementById('pe_state').value = plant.state || '';
+    const pePhone = splitPhone(plant.phone);
+    document.getElementById('pe_phone_code').value = pePhone.code;
+    document.getElementById('pe_phone_number').value = pePhone.number;
+    const peWa = splitPhone(plant.whatsapp);
+    document.getElementById('pe_whatsapp_code').value = peWa.code;
+    document.getElementById('pe_whatsapp_number').value = peWa.number;
+    const parsed = parsePaymentTerms(plant.payment_terms);
+    document.getElementById('pe_payment_terms_type').value = parsed.type;
+    document.getElementById('pe_payment_terms_days').value = parsed.days;
+    togglePlantProfilePaymentDays();
     document.getElementById('profileMsg').textContent = '';
     document.getElementById('profileEdit').style.display = 'block';
     document.getElementById('profileView').style.display = 'none';
@@ -775,14 +1430,16 @@ function toggleProfile(){
 async function saveProfile(forceOverride){
   const payload = {};
   PROFILE_FIELDS.forEach(f => { payload[f] = document.getElementById('pe_' + f).value || null; });
-  if (payload.phone && !payload.phone.trim().startsWith('+')){
-    document.getElementById('profileMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
+  payload.state_id = document.getElementById('pe_stateSelectField').style.display !== 'none' ? (document.getElementById('pe_state_id').value || null) : null;
+  payload.state = document.getElementById('pe_stateTextField').style.display !== 'none' ? (document.getElementById('pe_state').value || null) : null;
+  payload.phone = joinPhone(document.getElementById('pe_phone_code').value, document.getElementById('pe_phone_number').value);
+  payload.whatsapp = joinPhone(document.getElementById('pe_whatsapp_code').value, document.getElementById('pe_whatsapp_number').value);
+  const termsType = document.getElementById('pe_payment_terms_type').value;
+  if (termsType === 'credit' && !document.getElementById('pe_payment_terms_days').value){
+    document.getElementById('profileMsg').textContent = 'Enter how many credit days.';
     return;
   }
-  if (payload.whatsapp && !payload.whatsapp.trim().startsWith('+')){
-    document.getElementById('profileMsg').textContent = 'WhatsApp must include the country code, e.g. +52 6621234567.';
-    return;
-  }
+  payload.payment_terms = formatPaymentTerms(termsType, document.getElementById('pe_payment_terms_days').value);
   const result = await trySaveGeneric('plants-update', { actor: currentActor(), id: currentPlantId, ...payload }, 'profileMsg', () => saveProfile(true), forceOverride);
   if (!result) return;
   await loadEverything();
@@ -804,9 +1461,12 @@ async function loadPlantProducts(){
   // the same fixed/canonical product can be carried by several plants at different prices.
   // Merged onto the product object here so the rest of this page keeps reading p.current_price
   // like before, just sourced from the right row now.
+  // Brand/photo/spec sheet are per-plant too (same reasoning as price) — overridden from the link
+  // row AFTER the product spread, since products.brand/photo_url/spec_url are legacy dead columns
+  // now (2026-08-29: moved off the shared product onto plant_products, where they actually vary).
   plantProducts = (res.results || [])
     .filter(r => r.product)
-    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date }))
+    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date, brand_id: r.brand_id, photo_url: r.photo_url, spec_url: r.spec_url }))
     // Most recently priced first, stale/never-priced ones sinking to the bottom — the trader
     // wants to see what just got loaded, not scroll past it to find it alphabetically.
     .sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
@@ -1718,6 +2378,22 @@ function openLocationForm(loc){
   }
   document.getElementById('locationFormMsg').textContent = '';
   document.getElementById('locationFormCard').scrollIntoView({behavior:'smooth'});
+  updateLocationProfile();
+}
+
+// Same format as the product/plant profile cards: a live, read-only mirror of everything entered
+// above — nothing derived/computed here, just a consolidated glance at what Save will record.
+function updateLocationProfile(){
+  const setV = (id, val) => { document.getElementById(id).textContent = val || '—'; };
+  setV('locv_name', document.getElementById('loc_name').value);
+  setV('locv_protein', document.getElementById('loc_protein').value);
+  const freight = document.getElementById('loc_freight').value;
+  const delivered = document.getElementById('loc_delivered').checked;
+  setV('locv_freight', delivered ? 'Plant delivers to border (no freight cost)' : (freight ? `$${freight}` : ''));
+  setV('locv_contact_name', document.getElementById('loc_contact_name').value);
+  setV('locv_phone', document.getElementById('loc_phone').value);
+  setV('locv_email', document.getElementById('loc_email').value);
+  setV('locv_notes', document.getElementById('loc_notes').value);
 }
 
 function closeLocationForm(){
@@ -1845,9 +2521,24 @@ async function checkNameDuplicate(){
     const bits = [categoryEnById(p.category_id) || p.category, p.subcategory_en, tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean);
     return `${escapeHtml(p.name_en || p.name)} — ${escapeHtml(bits.join(', '))}`;
   };
-  warningEl.innerHTML = '⚠️ Possible duplicate — matches: ' + matches.map(p =>
-    `<a href="#" onclick="event.preventDefault();document.getElementById('name').value='${escapeHtml(p.name).replace(/'/g, "\\'")}';checkNameDuplicate();" style="color:#8a5a00;font-weight:600;">${specFor(p)}</a>`
-  ).join('; ');
+  // A real choice, not just a warning to read and ignore: linking the exact existing product
+  // (plant-products-link, idempotent, no new products row) is the only way this form can
+  // guarantee zero duplicates — typing text that merely LOOKS the same still creates a second row.
+  warningEl.innerHTML = '⚠️ This might already exist in the catalog:<br>' + matches.map(p =>
+    `<div style="margin-top:6px;">${specFor(p)} <button type="button" class="btn small" onclick="useExistingProduct('${p.id}')">Use this existing product</button></div>`
+  ).join('');
+}
+
+async function useExistingProduct(productId){
+  const brand_id = document.getElementById('brand').value || null;
+  try {
+    await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId, brand_id });
+  } catch (e) {
+    alert('Error linking product: ' + e.message);
+    return;
+  }
+  closeForm();
+  await loadPlantProducts();
 }
 
 function editProduct(id){
@@ -1858,8 +2549,12 @@ function editProduct(id){
 function openProductForm(product){
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
-  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','presentation','unit_of_measure','standard_weight','origin','commercial_notes','full_name_en','full_name_es'];
+  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
+  document.getElementById('prodLinkId').value = '';
+  variations.forEach(v => { const box = document.getElementById('variation_check_' + v.id); if (box) box.checked = false; });
+  document.getElementById('cut_name_id').value = '';
+  renderPackagingOptions(); // temperature_id is blank at this point — shows every unrestricted packaging
   pendingPhotoFile = null;
   pendingSpecFile = null;
   document.getElementById('photoFile').value = '';
@@ -1876,13 +2571,38 @@ function openProductForm(product){
   document.getElementById('specMsg').textContent = '';
   if (product){
     document.getElementById('prodId').value = product.id;
+    document.getElementById('prodLinkId').value = product.linkId || '';
     fields.slice(1).forEach(f => {
       if (f === 'category'){
         if (product.category_id) document.getElementById('category').value = product.category_id;
         return;
       }
+      if (f === 'brand'){
+        if (product.brand_id) document.getElementById('brand').value = product.brand_id;
+        return;
+      }
+      if (f === 'subcategory' || f === 'subcategory_en' || f === 'name' || f === 'name_en'){
+        return; // derived from variation_id/cut_name_id below, via updateProfileDisplays() — never set directly
+      }
+      if (f === 'packaging_id'){
+        // temperature_id (earlier in this same loop) must already be set before the packaging
+        // options are rebuilt, or the saved packaging_id might not exist yet as an option to select.
+        renderPackagingOptions();
+        if (product.packaging_id) document.getElementById('packaging_id').value = product.packaging_id;
+        return;
+      }
       if (product[f] !== undefined && product[f] !== null) document.getElementById(f).value = product[f];
     });
+    // Best-effort match back to variation/cut-name rows from the product's stored, comma-joined
+    // text — older rows saved before these catalogs existed, or a genuinely untracked value, just
+    // leave nothing checked / blank instead.
+    const storedVariationNames = new Set((product.subcategory_en || '').split(',').map(s => s.trim()).filter(Boolean));
+    variations.forEach(v => {
+      const box = document.getElementById('variation_check_' + v.id);
+      if (box) box.checked = storedVariationNames.has(v.name_en);
+    });
+    const matchingCutName = cutNames.find(c => c.name_en === product.name_en && c.name_es === product.name);
+    document.getElementById('cut_name_id').value = matchingCutName ? matchingCutName.id : '';
     if (product.photo_url) showFilePreview(product.photo_url, preview, filePrev);
     if (product.spec_url){
       const filename = decodeURIComponent(product.spec_url.split('/').pop());
@@ -1890,6 +2610,7 @@ function openProductForm(product){
       specPrev.style.display = 'block';
     }
   }
+  updateVariationDropdownLabel();
   updateProfileDisplays();
   document.getElementById('formMsg').textContent = '';
   document.getElementById('priceListRefBanner').style.display = 'none';
@@ -1951,22 +2672,23 @@ function extractMarkers(text){
 
 async function saveProduct(forceOverride){
   const id = document.getElementById('prodId').value;
+  const linkId = document.getElementById('prodLinkId').value;
+  // Structural identity — shared across every plant that carries this cut. Brand/photo/spec are
+  // NOT here: the same cut sold by two plants has two different brands/photos/specs, so those
+  // live on the plant_products link instead (see linkPayload below).
   const payload = {
     name: document.getElementById('name').value,
     name_en: document.getElementById('name_en').value || null,
     category_id: document.getElementById('category').value,
     subcategory: document.getElementById('subcategory').value || null,
     subcategory_en: document.getElementById('subcategory_en').value || null,
-    brand: document.getElementById('brand').value || null,
     temperature_id: document.getElementById('temperature_id').value || null,
     packaging_id: document.getElementById('packaging_id').value || null,
-    presentation: document.getElementById('presentation').value || null,
-    unit_of_measure: document.getElementById('unit_of_measure').value || null,
-    standard_weight: document.getElementById('standard_weight').value ? Number(document.getElementById('standard_weight').value) : null,
-    origin: document.getElementById('origin').value || null,
-    commercial_notes: document.getElementById('commercial_notes').value || null,
     full_name_en: document.getElementById('full_name_en').value || null,
     full_name_es: document.getElementById('full_name_es').value || null,
+  };
+  const linkPayload = {
+    brand_id: document.getElementById('brand').value || null,
   };
   // Every product on record must be fully specified — a row missing temperature or packaging is
   // exactly the ambiguity that later silently misapplies a price to the wrong variant of a
@@ -1989,38 +2711,58 @@ async function saveProduct(forceOverride){
     document.getElementById('formMsg').textContent = `The Spanish and English text don't carry the same detail (a #, %, or size like 13/15) — found [${[...markersEn].join(', ') || '—'}] in English vs [${[...markersEs].join(', ') || '—'}] in Spanish. Make sure both say the same thing before saving.`;
     return;
   }
+  // Photo and spec sheet are two independent files — uploading them in parallel instead of one
+  // after the other cuts this part of Save roughly in half when both are attached.
+  const uploads = [];
   if (pendingPhotoFile){
     document.getElementById('photoMsg').textContent = 'Uploading…';
     const ext = pendingPhotoFile.name.split('.').pop();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingPhotoFile);
-    if (upErr){ document.getElementById('photoMsg').textContent = 'Upload failed: ' + upErr.message; return; }
-    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
-    payload.photo_url = pub.publicUrl;
-    document.getElementById('photoMsg').textContent = '';
+    uploads.push(
+      storageClient.storage.from('product-photos').upload(path, pendingPhotoFile).then(({ error: upErr }) => {
+        if (upErr){ document.getElementById('photoMsg').textContent = 'Upload failed: ' + upErr.message; throw upErr; }
+        const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
+        linkPayload.photo_url = pub.publicUrl;
+        document.getElementById('photoMsg').textContent = '';
+      })
+    );
   }
   if (pendingSpecFile){
     document.getElementById('specMsg').textContent = 'Uploading…';
     const ext = pendingSpecFile.name.split('.').pop();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingSpecFile);
-    if (upErr){ document.getElementById('specMsg').textContent = 'Upload failed: ' + upErr.message; return; }
-    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
-    payload.spec_url = pub.publicUrl;
-    document.getElementById('specMsg').textContent = '';
+    uploads.push(
+      storageClient.storage.from('product-photos').upload(path, pendingSpecFile).then(({ error: upErr }) => {
+        if (upErr){ document.getElementById('specMsg').textContent = 'Upload failed: ' + upErr.message; throw upErr; }
+        const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
+        linkPayload.spec_url = pub.publicUrl;
+        document.getElementById('specMsg').textContent = '';
+      })
+    );
+  }
+  if (uploads.length){
+    try { await Promise.all(uploads); } catch { return; }
   }
 
   let productId = id;
   let newProduct = null;
+  let updatedProduct = null;
+  let linkResult = null;
   try {
     if (id){
-      await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+      const updated = await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+      updatedProduct = updated.product;
+      if (linkId){
+        const linkRes = await callApi('plant-products-update', { actor: currentActor(), id: linkId, ...linkPayload });
+        linkResult = linkRes.plant_product;
+      }
     } else {
       const idempotencyKey = `products-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
       const created = await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
       newProduct = created.product;
       productId = newProduct.id;
-      await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId });
+      const linkRes = await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId, ...linkPayload });
+      linkResult = linkRes.plant_product;
       // Keep the cached catalog list (used by the price-list row pickers) in sync immediately —
       // otherwise the product just created wouldn't show up as an option until a full page reload.
       if (allCatalogProducts) allCatalogProducts.push(newProduct);
@@ -2042,7 +2784,19 @@ async function saveProduct(forceOverride){
   }
   const createdForRow = priceListCreateForRowIndex;
   closeForm();
-  await loadPlantProducts();
+  // products-create/update and plant-products-link/update already return the full, up-to-date
+  // row — merging that in locally (same shape loadPlantProducts()'s .map() produces) skips a
+  // whole extra network round trip to Supabase (~1s) that would just re-fetch what we already have.
+  const finalProduct = newProduct || updatedProduct;
+  if (finalProduct && linkResult){
+    const merged = { ...finalProduct, linkId: linkResult.id, current_price: linkResult.current_price, price_currency: linkResult.price_currency, price_date: linkResult.price_date, brand_id: linkResult.brand_id, photo_url: linkResult.photo_url, spec_url: linkResult.spec_url };
+    const idx = plantProducts.findIndex(p => p.linkId === linkResult.id);
+    if (idx >= 0) plantProducts[idx] = merged; else plantProducts.push(merged);
+    plantProducts.sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
+    renderPlantProducts();
+  } else {
+    await loadPlantProducts();
+  }
   // This product was created mid-review, from a specific price-list row's "+ Crear producto
   // nuevo" option — link it back to that row instead of leaving the trader to re-find it in the
   // now-longer dropdown.

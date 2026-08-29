@@ -46,12 +46,23 @@
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;}
+  .field select{-webkit-appearance:none;-moz-appearance:none;appearance:none;line-height:1.2;padding-right:28px;background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7a90' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");background-repeat:no-repeat;background-position:right 8px center;background-size:15px;}
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);}
   .field input[disabled]{background:var(--blue-light);color:var(--ink-soft);font-weight:600;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
+  .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:0 14px;}
   .section-title{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px;}
   .section-title:first-child{margin-top:0;}
+  /* Product Profile — a read-only summary, not a form pretending to be editable. */
+  .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
+  .profile-panel{background:#F7FAFD;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:14px 0;}
+  .profile-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 28px;}
+  .profile-row{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .profile-row.half{grid-column:span 2;}
+  .profile-row.span2{grid-column:1 / -1;}
+  .profile-row .view-label{margin-bottom:0;}
+  .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
@@ -136,12 +147,6 @@ async function callApi(fn, body){
 }
 function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
 
-// The ONE deliberate exception to "no direct Supabase client": file STORAGE (photos/spec PDFs) is
-// not relational data — it's binary blobs in a bucket, a genuinely different subsystem from the
-// business-rule-guarded Postgres tables everything else on this page goes through. Scoped to
-// staging's own bucket, and only ever used for .storage.* calls, never .from() table access.
-const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
-
 function showAuthMsg(text){
   const el = document.getElementById('authMsg');
   el.textContent = text;
@@ -172,6 +177,7 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
+    loadLookups();
     loadProducts();
   } else {
     gate.style.display = 'flex';
@@ -202,84 +208,86 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Products</h1>
+  <h1 onclick="closeForm()" style="cursor:pointer;">Products</h1>
 
   <div class="card" id="formCard">
     <strong id="formTitle">New product</strong>
     <input type="hidden" id="prodId">
 
-    <div class="section-title">Photo</div>
-    <img id="photoPreview" class="photo-preview" style="display:none;">
-    <div id="filePreview" style="display:none;margin-bottom:8px;"></div>
-    <input type="file" id="photoFile" accept="image/*">
-    <div id="photoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
-
-    <div class="section-title">Spec Sheet (PDF)</div>
-    <div id="specPreview" style="display:none;margin-bottom:8px;"></div>
-    <input type="file" id="specFile" accept="application/pdf">
-    <div id="specMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
-
-    <div class="section-title">Category / Temperature / Packaging</div>
-    <div class="grid3">
+    <!-- No Photo/Spec Sheet/Brand here on purpose — this is the SHARED product identity, the same
+         cut many different plants offer. Those three are per-plant (a given cut has a different
+         brand/photo/spec at every plant that sells it) — set them from that plant's own product
+         row in Meat Packers, not here. -->
+    <!-- Every selection first, all together — then the panel below just shows what got filled
+         in. Nothing to type until you've picked everything that can be picked. -->
+    <div class="section-title">Classification</div>
+    <div class="grid5">
       <div class="field"><label>Category *</label><select id="category" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
-      <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+      <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="renderPackagingOptions();updateProfileDisplays()"><option value="">—</option></select></div>
       <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
-    </div>
-
-    <!-- Product Profile — the 12 fields every product profile MUST carry (6 English, 6 Spanish).
-         Category/Temperature/Packaging are single dropdowns above (closed catalogs, one selection
-         drives both languages at once) — their EN/ES readouts below are derived, not separately
-         editable. Name/Variation/Full name are independently typed per language. -->
-    <div class="section-title">Product Profile</div>
-    <div class="grid2">
-      <div class="field"><label>Category English Product Name</label><input id="category_en_display" readonly disabled></div>
-      <div class="field"><label>Category Spanish Product Name</label><input id="category_es_display" readonly disabled></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Full English Product Name (for PO &amp; FO) *</label><input id="full_name_en" required placeholder="e.g. Frozen Pork Bone in Butt, Box"></div>
-      <div class="field"><label>Full Spanish Product Name (for SO) *</label><input id="full_name_es" required placeholder="e.g. Cabeza de lomo con hueso Congelado, Caja"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Product English Name *</label><input id="name_en" required></div>
-      <div class="field"><label>Product Spanish Name *</label><input id="name" required oninput="checkNameDuplicate()">
-        <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
+      <div class="field"><label>Cut Name *</label><select id="cut_name_id" required onchange="handleCutNameSelectChange()"><option value="">—</option></select></div>
+      <!-- A compact dropdown, not a wall of checkboxes — a real product can carry more than one
+         variation qualifier at once (Boneless AND Strap Off on the same loin), which one
+         selection can't represent, but the catalog can grow to 15-20+ entries over time and a
+         flat checkbox row doesn't scale. Checked boxes join in catalog order to build
+         subcategory/subcategory_en. -->
+      <div class="field" style="text-align:left;position:relative;">
+        <label style="text-align:left;">Variation</label>
+        <button type="button" onclick="toggleVariationDropdown()" id="variationDropdownBtn" style="width:100%;text-align:left;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+          <span id="variationDropdownLabel" style="color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">— None —</span><span style="color:var(--ink-soft);flex-shrink:0;">▾</span>
+        </button>
+        <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:#fff;border:1.5px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,31,51,.12);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;">
+          <div id="variationCheckboxes" style="display:flex;flex-direction:column;gap:8px;"></div>
+          <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;">
+            <a href="#" onclick="event.preventDefault();addNewVariation();" style="font-size:12.5px;color:var(--blue);font-weight:600;text-decoration:none;white-space:nowrap;">+ Add new variation…</a>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="grid2">
-      <div class="field"><label>Variation English Product Name</label><input id="subcategory_en"></div>
-      <div class="field"><label>Variation Spanish Product Name</label><input id="subcategory"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Temperature English Product Name</label><input id="temperature_en_display" readonly disabled></div>
-      <div class="field"><label>Temperature Spanish Product Name</label><input id="temperature_es_display" readonly disabled></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Packing English Product Name</label><input id="packing_en_display" readonly disabled></div>
-      <div class="field"><label>Packing Spanish Product Name</label><input id="packing_es_display" readonly disabled></div>
+    <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
+
+    <!-- Product Profile — the 12 fields every product profile MUST carry (6 English, 6 Spanish).
+         Every value here is DERIVED from a Classification selection above, rendered as plain
+         summary text (not disabled form fields pretending to be editable) — each real value held
+         in a paired hidden input so saveProduct()/editing keep reading
+         document.getElementById(id).value exactly as before. Full Name is the one exception,
+         typed by hand (see the note where it's defined). -->
+    <div class="profile-panel">
+      <div class="profile-heading" style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;">Product Profile</div>
+      <div class="profile-grid">
+        <div class="profile-row"><span class="view-label">Category (EN)</span><span class="profile-row-value" id="category_en_display_view">—</span><input type="hidden" id="category_en_display"></div>
+        <div class="profile-row"><span class="view-label">Category (ES)</span><span class="profile-row-value" id="category_es_display_view">—</span><input type="hidden" id="category_es_display"></div>
+        <div class="profile-row"><span class="view-label">Product Name (EN) *</span><span class="profile-row-value" id="name_en_view">—</span><input type="hidden" id="name_en"></div>
+        <div class="profile-row"><span class="view-label">Product Name (ES) *</span><span class="profile-row-value" id="name_view">—</span><input type="hidden" id="name"></div>
+        <div class="profile-row"><span class="view-label">Variation (EN)</span><span class="profile-row-value" id="subcategory_en_view">—</span><input type="hidden" id="subcategory_en"></div>
+        <div class="profile-row"><span class="view-label">Variation (ES)</span><span class="profile-row-value" id="subcategory_view">—</span><input type="hidden" id="subcategory"></div>
+        <div class="profile-row"><span class="view-label">Temperature (EN)</span><span class="profile-row-value" id="temperature_en_display_view">—</span><input type="hidden" id="temperature_en_display"></div>
+        <div class="profile-row"><span class="view-label">Temperature (ES)</span><span class="profile-row-value" id="temperature_es_display_view">—</span><input type="hidden" id="temperature_es_display"></div>
+        <div class="profile-row"><span class="view-label">Packing (EN)</span><span class="profile-row-value" id="packing_en_display_view">—</span><input type="hidden" id="packing_en_display"></div>
+        <div class="profile-row"><span class="view-label">Packing (ES)</span><span class="profile-row-value" id="packing_es_display_view">—</span><input type="hidden" id="packing_es_display"></div>
+      </div>
+      <!-- Composed automatically now that every ingredient (Category, Cut Name, Variation,
+           Temperature, Packaging) is itself a closed selection — no longer typed by hand.
+           EN order: Temperature Category Variation CutName, Packaging.
+           ES order: CutName Variation Temperature, Packaging.
+           (matches the real PO/SO text conventions in each language, verified against the
+           original "Frozen Pork Bone in Butt, Box" / "Cabeza de lomo con hueso Congelado, Caja"
+           examples). -->
+      <div class="profile-grid" style="margin-top:14px;">
+        <div class="profile-row half"><span class="view-label">Full English Product Name (for PO &amp; FO)</span><span class="profile-row-value" id="full_name_en_view">—</span><input type="hidden" id="full_name_en"></div>
+        <div class="profile-row half"><span class="view-label">Full Spanish Product Name (for SO)</span><span class="profile-row-value" id="full_name_es_view">—</span><input type="hidden" id="full_name_es"></div>
+      </div>
     </div>
 
-    <div class="section-title">Attributes</div>
-    <div class="grid3">
-      <div class="field"><label>Brand</label><input id="brand"></div>
-      <div class="field"><label>Presentation detail</label><input id="presentation" placeholder="e.g. poly, encerada, al vacío"></div>
-      <div class="field"><label>Origin</label><input id="origin"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>Unit of measure</label><input id="unit_of_measure"></div>
-      <div class="field"><label>Standard weight</label><input type="number" id="standard_weight"></div>
-    </div>
-
-    <div class="section-title">Notes</div>
-    <div class="field"><textarea id="commercial_notes" rows="3"></textarea></div>
-
-    <div style="display:flex;gap:10px;margin-top:8px;">
+    <div style="display:flex;gap:10px;margin-top:8px;align-items:center;">
       <button class="btn" onclick="saveProduct()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
+      <button class="btn danger" id="formDeleteBtn" style="display:none;margin-left:auto;" onclick="deleteProduct(document.getElementById('prodId').value)">Delete</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="productListCard">
     <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
       <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openForm()">+ Add Product</button>
@@ -297,30 +305,18 @@ auth.onAuthStateChanged(user => {
 let products = [];
 let temperatures = [];
 let packagings = [];
-let pendingPhotoFile = null;
-let pendingSpecFile = null;
-
 function openForm(product){
   if (!product) editingProductId = null;
   document.getElementById('formCard').style.display = 'block';
+  document.getElementById('productListCard').style.display = 'none';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product';
-  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id',
-    'presentation','unit_of_measure','standard_weight','origin','commercial_notes','full_name_en','full_name_es'];
+  document.getElementById('formDeleteBtn').style.display = product ? 'inline-block' : 'none';
+  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','temperature_id','packaging_id',
+    'full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
-  pendingPhotoFile = null;
-  pendingSpecFile = null;
-  document.getElementById('photoFile').value = '';
-  document.getElementById('specFile').value = '';
-  const preview = document.getElementById('photoPreview');
-  const filePrev = document.getElementById('filePreview');
-  preview.style.display = 'none';
-  filePrev.style.display = 'none';
-  filePrev.innerHTML = '';
-  document.getElementById('photoMsg').textContent = '';
-  const specPrev = document.getElementById('specPreview');
-  specPrev.style.display = 'none';
-  specPrev.innerHTML = '';
-  document.getElementById('specMsg').textContent = '';
+  variations.forEach(v => { const box = document.getElementById('variation_check_' + v.id); if (box) box.checked = false; });
+  document.getElementById('cut_name_id').value = '';
+  renderPackagingOptions(); // temperature_id is blank at this point — shows every unrestricted packaging
   if (product){
     document.getElementById('prodId').value = product.id;
     fields.slice(1).forEach(f => {
@@ -328,68 +324,40 @@ function openForm(product){
         if (product.category_id) document.getElementById('category').value = product.category_id;
         return;
       }
+      if (f === 'subcategory' || f === 'subcategory_en' || f === 'name' || f === 'name_en'){
+        return; // derived from variation_id/cut_name_id below, via updateProfileDisplays() — never set directly
+      }
+      if (f === 'packaging_id'){
+        // temperature_id (earlier in this same loop) must already be set before the packaging
+        // options are rebuilt, or the saved packaging_id might not exist yet as an option to select.
+        renderPackagingOptions();
+        if (product.packaging_id) document.getElementById('packaging_id').value = product.packaging_id;
+        return;
+      }
       if (product[f] !== undefined && product[f] !== null) document.getElementById(f).value = product[f];
     });
-    if (product.photo_url){
-      showFilePreview(product.photo_url, preview, filePrev);
-    }
-    if (product.spec_url){
-      const filename = decodeURIComponent(product.spec_url.split('/').pop());
-      specPrev.innerHTML = `<a href="${product.spec_url}" target="_blank" rel="noopener">📄 ${escapeHtml(filename)}</a>`;
-      specPrev.style.display = 'block';
-    }
+    // Best-effort match back to variation/cut-name rows from the product's stored, comma-joined
+    // text — older rows saved before these catalogs existed, or a genuinely untracked value, just
+    // leave nothing checked / blank instead.
+    const storedVariationNames = new Set((product.subcategory_en || '').split(',').map(s => s.trim()).filter(Boolean));
+    variations.forEach(v => {
+      const box = document.getElementById('variation_check_' + v.id);
+      if (box) box.checked = storedVariationNames.has(v.name_en);
+    });
+    const matchingCutName = cutNames.find(c => c.name_en === product.name_en && c.name_es === product.name);
+    document.getElementById('cut_name_id').value = matchingCutName ? matchingCutName.id : '';
   }
+  updateVariationDropdownLabel();
   updateProfileDisplays();
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
 }
 
-// Shows an <img> preview for image files, or a plain filename/link for
-// anything else (PDF, Word spec sheets, etc.) — not everything is a photo.
-function showFilePreview(url, imgEl, containerEl){
-  const isImage = /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url);
-  if (isImage){
-    imgEl.src = url;
-    imgEl.style.display = 'block';
-    containerEl.style.display = 'none';
-  } else {
-    imgEl.style.display = 'none';
-    const filename = decodeURIComponent(url.split('/').pop());
-    containerEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener">📄 ${escapeHtml(filename)}</a>`;
-    containerEl.style.display = 'block';
-  }
-}
-
 function closeForm(){
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('productListCard').style.display = 'block';
   editingProductId = null;
 }
-
-document.getElementById('photoFile').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  pendingPhotoFile = file;
-  const preview = document.getElementById('photoPreview');
-  const filePrev = document.getElementById('filePreview');
-  if (file.type.startsWith('image/')){
-    preview.src = URL.createObjectURL(file);
-    preview.style.display = 'block';
-    filePrev.style.display = 'none';
-  } else {
-    preview.style.display = 'none';
-    filePrev.innerHTML = `📄 ${escapeHtml(file.name)}`;
-    filePrev.style.display = 'block';
-  }
-});
-
-document.getElementById('specFile').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  pendingSpecFile = file;
-  const specPrev = document.getElementById('specPreview');
-  specPrev.innerHTML = `📄 ${escapeHtml(file.name)}`;
-  specPrev.style.display = 'block';
-});
 
 let categories = [];
 
@@ -398,6 +366,8 @@ async function loadLookups(){
     callApi('temperature-search', {}),
     callApi('packaging-search', {}),
     callApi('categories-search', {}),
+    loadVariations(),
+    loadCutNames(),
   ]);
   temperatures = tempRes.results || [];
   packagings = packRes.results || [];
@@ -405,13 +375,24 @@ async function loadLookups(){
   // English throughout the OS — falls back to the Spanish catalog entry only if a
   // temperature/packaging/category row has no English name on file.
   const tSel = document.getElementById('temperature_id');
-  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
-  const pSel = document.getElementById('packaging_id');
-  packagings.forEach(p => pSel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`);
+  tSel.innerHTML = '<option value="">—</option>' + temperatures.map(t => `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('');
+  renderPackagingOptions();
   // Fixed catalog, never free text — the dropdown value is now the real category_id (a proper FK),
   // not a hand-typed Spanish string that could silently fork into a second, disconnected category.
   const catSel = document.getElementById('category');
-  categories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
+  catSel.innerHTML = '<option value="">—</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+}
+
+// Some packaging types are only valid for one temperature (Combo is Fresh-only — a real business
+// rule, not every combination on the grid is real). null valid_temperature_ids means "valid for
+// everything," so unrestricted packaging types keep showing up regardless of Temperature.
+function renderPackagingOptions(){
+  const tempId = document.getElementById('temperature_id').value;
+  const pSel = document.getElementById('packaging_id');
+  const currentValue = pSel.value;
+  const valid = packagings.filter(p => !p.valid_temperature_ids || !tempId || p.valid_temperature_ids.includes(tempId));
+  pSel.innerHTML = '<option value="">—</option>' + valid.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('');
+  if (valid.some(p => p.id === currentValue)) pSel.value = currentValue;
 }
 
 function categoryEnById(id){ const c = categories.find(x => x.id === id); return c ? c.name_en : null; }
@@ -420,21 +401,164 @@ function categoryEnByName(name){ const c = categories.find(x => x.name === name)
 // Drives the 6 read-only "Product Profile" fields for Category/Temperature/Packaging — each is a
 // single closed-catalog dropdown that carries both languages on the same row, so picking one
 // selection fills both the English and Spanish labeled fields at once.
+// Sets both the real hidden input (what saveProduct()/edit-repopulation actually read) and its
+// paired "_view" span (the plain-text summary the trader sees) in one call, so the two can never
+// silently drift apart.
+function setProfileField(id, value){
+  document.getElementById(id).value = value || '';
+  const view = document.getElementById(id + '_view');
+  if (view) view.textContent = value || '—';
+}
+
+function checkedVariations(){
+  return variations.filter(v => {
+    const box = document.getElementById('variation_check_' + v.id);
+    return box && box.checked;
+  });
+}
+
 function updateProfileDisplays(){
   const cat = categories.find(c => c.id === document.getElementById('category').value);
   const temp = temperatures.find(t => t.id === document.getElementById('temperature_id').value);
   const pack = packagings.find(p => p.id === document.getElementById('packaging_id').value);
-  document.getElementById('category_en_display').value = cat ? cat.name_en : '';
-  document.getElementById('category_es_display').value = cat ? cat.name : '';
-  document.getElementById('temperature_en_display').value = temp ? (temp.name_en || temp.name) : '';
-  document.getElementById('temperature_es_display').value = temp ? (temp.name || temp.name_en) : '';
-  document.getElementById('packing_en_display').value = pack ? (pack.name_en || pack.name) : '';
-  document.getElementById('packing_es_display').value = pack ? (pack.name || pack.name_en) : '';
+  const cutName = cutNames.find(c => c.id === document.getElementById('cut_name_id').value);
+  const chosenVariations = checkedVariations();
+  setProfileField('category_en_display', cat ? cat.name_en : '');
+  setProfileField('category_es_display', cat ? cat.name : '');
+  setProfileField('temperature_en_display', temp ? (temp.name_en || temp.name) : '');
+  setProfileField('temperature_es_display', temp ? (temp.name || temp.name_en) : '');
+  setProfileField('packing_en_display', pack ? (pack.name_en || pack.name) : '');
+  setProfileField('packing_es_display', pack ? (pack.name || pack.name_en) : '');
+  setProfileField('subcategory_en', chosenVariations.map(v => v.name_en).join(', '));
+  setProfileField('subcategory', chosenVariations.map(v => v.name_es).join(', '));
+  setProfileField('name_en', cutName ? cutName.name_en : '');
+  setProfileField('name', cutName ? cutName.name_es : '');
+  // Every ingredient, both languages, no exceptions.
+  // EN: Category Variation CutName Temperature, Packaging (e.g. "Pork Bone-In Butt Frozen, Box").
+  // ES: CutName Category Variation Temperature, Packaging (e.g. "Lomo Cerdo con hueso Congelado, Caja").
+  // Only composes once every ingredient is chosen — a half-picked product shows a blank Full Name
+  // rather than a broken-looking partial sentence.
+  if (cat && temp && pack && cutName){
+    const enParts = [cat.name_en, ...chosenVariations.map(v => v.name_en), cutName.name_en, temp.name_en || temp.name].filter(Boolean);
+    const esParts = [cutName.name_es, cat.name, ...chosenVariations.map(v => v.name_es), temp.name || temp.name_en].filter(Boolean);
+    setProfileField('full_name_en', `${enParts.join(' ')}, ${pack.name_en || pack.name}`);
+    setProfileField('full_name_es', `${esParts.join(' ')}, ${pack.name || pack.name_en}`);
+  } else {
+    setProfileField('full_name_en', '');
+    setProfileField('full_name_es', '');
+  }
+  if (typeof checkNameDuplicate === 'function') checkNameDuplicate();
+}
+
+let variations = [];
+let cutNames = [];
+
+async function loadCutNames(){
+  const res = await callApi('cut-names-search', {});
+  cutNames = res.results || [];
+  const sel = document.getElementById('cut_name_id');
+  sel.innerHTML = '<option value="">—</option>' + cutNames.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</option>`).join('') + '<option value="__new__">+ Add new cut…</option>';
+}
+
+async function handleCutNameSelectChange(){
+  const sel = document.getElementById('cut_name_id');
+  if (sel.value !== '__new__'){ updateProfileDisplays(); return; }
+  const name_en = prompt('New cut — English (e.g. "Loin"):');
+  if (!name_en || !name_en.trim()){ sel.value = ''; return; }
+  const name_es = prompt('New cut — Spanish (e.g. "Lomo"):');
+  if (!name_es || !name_es.trim()){ sel.value = ''; return; }
+  const idempotencyKey = `cut-names-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  let result;
+  try {
+    result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new cut anyway?`);
+      if (!proceed){ sel.value = ''; return; }
+      result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+    } else {
+      alert('Error creating cut: ' + e.message);
+      sel.value = '';
+      return;
+    }
+  }
+  await loadCutNames();
+  sel.value = result.cut_name.id;
+  updateProfileDisplays();
+}
+
+function renderVariationCheckboxes(){
+  const wrap = document.getElementById('variationCheckboxes');
+  const checkedIds = new Set(checkedVariations().map(v => v.id));
+  wrap.innerHTML = variations.map(v => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;cursor:pointer;">
+      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays();closeVariationDropdown()" style="width:auto;">
+      ${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}
+    </label>
+  `).join('');
+  updateVariationDropdownLabel();
+}
+
+function updateVariationDropdownLabel(){
+  const chosen = checkedVariations();
+  const label = document.getElementById('variationDropdownLabel');
+  label.textContent = chosen.length ? chosen.map(v => v.name_en).join(', ') : '— None —';
+  label.style.color = chosen.length ? 'var(--ink)' : 'var(--ink-soft)';
+}
+
+function toggleVariationDropdown(){
+  const panel = document.getElementById('variationDropdownPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeVariationDropdown(){
+  document.getElementById('variationDropdownPanel').style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('variationDropdownPanel');
+  const btn = document.getElementById('variationDropdownBtn');
+  if (!panel || panel.style.display === 'none') return;
+  if (panel.contains(e.target) || btn.contains(e.target)) return;
+  panel.style.display = 'none';
+});
+
+async function loadVariations(){
+  const res = await callApi('variations-search', {});
+  variations = res.results || [];
+  renderVariationCheckboxes();
+}
+
+async function addNewVariation(){
+  const name_en = prompt('New variation — English (e.g. "Bone-In"):');
+  if (!name_en || !name_en.trim()) return;
+  const name_es = prompt('New variation — Spanish (e.g. "con hueso"):');
+  if (!name_es || !name_es.trim()) return;
+  const idempotencyKey = `variations-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  let result;
+  try {
+    result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new variation anyway?`);
+      if (!proceed) return;
+      result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+    } else {
+      alert('Error creating variation: ' + e.message);
+      return;
+    }
+  }
+  const previouslyChecked = new Set(checkedVariations().map(v => v.id));
+  await loadVariations();
+  previouslyChecked.forEach(id => { const box = document.getElementById('variation_check_' + id); if (box) box.checked = true; });
+  document.getElementById('variation_check_' + result.variation.id).checked = true;
+  updateProfileDisplays();
 }
 
 async function loadProducts(){
   try {
-    await loadLookups();
     const res = await callApi('products-search', {});
     products = res.results || [];
     const cats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
@@ -462,24 +586,14 @@ function renderProducts(){
     ? 'No products match your search/filter.'
     : 'No products yet. Click "+ Add Product" to create the first one.';
   wrap.innerHTML = filtered.map(p => {
-    const tp = [tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean).join(' / ') || '—';
-    const isImg = p.photo_url && /\.(png|jpe?g|gif|webp)(\?|$)/i.test(p.photo_url);
-    const avatarHtml = (p.photo_url && isImg)
-      ? `<div class="pkg-plant-avatar"><img src="${escapeHtml(p.photo_url)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml((p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
-    const attachments = [
-      (p.photo_url && !isImg) ? `<a href="${p.photo_url}" target="_blank" rel="noopener" title="View attachment">📄</a>` : '',
-      p.spec_url ? `<a href="${p.spec_url}" target="_blank" rel="noopener" title="Spec sheet">📋</a>` : '',
-    ].filter(Boolean).join(' ');
+    // No photo here — it's per-plant now, not on the shared product. A letter avatar is all this
+    // screen can show; the real photo lives on each plant's own product row in Meat Packers.
+    const avatarHtml = `<div class="pkg-plant-avatar">${escapeHtml((p.full_name_en || p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
     return `<div class="pkg-row">
       ${avatarHtml}
       <div class="pkg-plant-info">
-        <a class="name-link pkg-plant-name" onclick="editProduct('${p.id}')">${escapeHtml(p.name_en || p.name || '')}</a>
-        <span class="pkg-plant-sub">${escapeHtml(categoryEnById(p.category_id) || p.category || '')} · ${escapeHtml(tp)}</span>
-      </div>
-      <div style="min-width:50px;font-size:15px;">${attachments}</div>
-      <div style="margin-left:auto;flex-shrink:0;">
-        <button class="btn danger" onclick="deleteProduct('${p.id}')">Delete</button>
+        <a class="name-link pkg-plant-name" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a>
+        <span class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}</span>
       </div>
     </div>`;
   }).join('');
@@ -515,16 +629,15 @@ function checkNameDuplicate(){
     const bits = [categoryEnById(p.category_id) || p.category, p.subcategory_en, tempName(p.temperature_id), packName(p.packaging_id)].filter(Boolean);
     return `${escapeHtml(p.name_en || p.name)} — ${escapeHtml(bits.join(', '))}`;
   };
-  warningEl.innerHTML = '⚠️ Possible duplicate — matches: ' + matches.map(p =>
-    `<a href="#" onclick="event.preventDefault();document.getElementById('name').value='${escapeHtml(p.name).replace(/'/g, "\\'")}';checkNameDuplicate();" style="color:#8a5a00;font-weight:600;">${specFor(p)}</a>`
-  ).join('; ');
+  // Informational only here — no plant context on this screen to link an existing product to
+  // (that action lives in Meat Packers' own "New product for this plant" form instead).
+  warningEl.innerHTML = '⚠️ Possible duplicate — already in the catalog: ' + matches.map(p => `<strong>${specFor(p)}</strong>`).join('; ');
 }
 
 function editProduct(id){
   const formCard = document.getElementById('formCard');
   if (editingProductId === id && formCard.style.display === 'block'){
-    formCard.style.display = 'none';
-    editingProductId = null;
+    closeForm();
     return;
   }
   const p = products.find(x => x.id === id);
@@ -551,14 +664,8 @@ async function saveProduct(forceOverride){
     category_id: document.getElementById('category').value,
     subcategory: document.getElementById('subcategory').value || null,
     subcategory_en: document.getElementById('subcategory_en').value || null,
-    brand: document.getElementById('brand').value || null,
     temperature_id: document.getElementById('temperature_id').value || null,
     packaging_id: document.getElementById('packaging_id').value || null,
-    presentation: document.getElementById('presentation').value || null,
-    unit_of_measure: document.getElementById('unit_of_measure').value || null,
-    standard_weight: document.getElementById('standard_weight').value ? Number(document.getElementById('standard_weight').value) : null,
-    origin: document.getElementById('origin').value || null,
-    commercial_notes: document.getElementById('commercial_notes').value || null,
     full_name_en: document.getElementById('full_name_en').value || null,
     full_name_es: document.getElementById('full_name_es').value || null,
   };
@@ -566,10 +673,6 @@ async function saveProduct(forceOverride){
   // here must meet the exact same bar as one created from a plant page or the price-list review,
   // never a looser version of the same table. Full name EN/ES included — the real PO/FO/SO text
   // is written by hand, never auto-composed, so it must exist before the product can be saved.
-  // Brand is deliberately NOT required — rule 4 of the catalog-matching rules: a new product is
-  // always created brand-agnostic so it can be linked to multiple plants later. This form used to
-  // require it (same bug already fixed once in plants.html) — aligned here to match the API's own
-  // policy instead of a stricter, contradicting client-side check.
   if (!payload.name || !payload.name_en || !payload.category_id || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
     document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, temperature, packaging, full name EN and full name ES.';
     return;
@@ -586,38 +689,16 @@ async function saveProduct(forceOverride){
     return;
   }
 
-  if (pendingPhotoFile){
-    document.getElementById('photoMsg').textContent = 'Uploading photo…';
-    const ext = pendingPhotoFile.name.split('.').pop();
-    const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingPhotoFile);
-    if (upErr){
-      document.getElementById('photoMsg').textContent = 'Photo upload failed: ' + upErr.message;
-      return;
-    }
-    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
-    payload.photo_url = pub.publicUrl;
-    document.getElementById('photoMsg').textContent = '';
-  }
-  if (pendingSpecFile){
-    document.getElementById('specMsg').textContent = 'Uploading…';
-    const ext = pendingSpecFile.name.split('.').pop();
-    const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: upErr } = await storageClient.storage.from('product-photos').upload(path, pendingSpecFile);
-    if (upErr){
-      document.getElementById('specMsg').textContent = 'Upload failed: ' + upErr.message;
-      return;
-    }
-    const { data: pub } = storageClient.storage.from('product-photos').getPublicUrl(path);
-    payload.spec_url = pub.publicUrl;
-    document.getElementById('specMsg').textContent = '';
-  }
 
+  let savedProduct = null;
   try {
-    if (id) await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
-    else {
+    if (id){
+      const updated = await callApi('products-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
+      savedProduct = updated.product;
+    } else {
       const idempotencyKey = `products-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
-      await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+      const created = await callApi('products-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+      savedProduct = created.product;
     }
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
@@ -635,7 +716,16 @@ async function saveProduct(forceOverride){
     return;
   }
   closeForm();
-  loadProducts();
+  // products-create/update already returns the full, current row — merging it in locally (instead
+  // of re-fetching the whole catalog with products-search) saves a full extra network round trip
+  // on every save.
+  if (savedProduct){
+    const idx = products.findIndex(p => p.id === savedProduct.id);
+    if (idx >= 0) products[idx] = savedProduct; else products.push(savedProduct);
+    renderProducts();
+  } else {
+    loadProducts();
+  }
 }
 
 async function deleteProduct(id){
@@ -648,7 +738,9 @@ async function deleteProduct(id){
     alert('Error deleting: ' + e.message);
     return;
   }
-  loadProducts();
+  products = products.filter(p => p.id !== id);
+  closeForm();
+  renderProducts();
 }
 
 function escapeHtml(str){

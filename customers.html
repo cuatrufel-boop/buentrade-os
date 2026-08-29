@@ -49,6 +49,17 @@
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
+  .grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0 16px;}
+  .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:0 14px;}
+  .profile-panel{background:#F7FAFD;border:1px solid var(--line);border-radius:12px;padding:18px 22px;}
+  .profile-panel + .profile-panel{margin-top:16px;}
+  .profile-heading{font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px;}
+  .profile-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 28px;}
+  .profile-row{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .profile-row.half{grid-column:span 2;}
+  .profile-row.span2{grid-column:1 / -1;}
+  .profile-row .view-label{margin-bottom:0;}
+  .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;}
   .section-title{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px;}
   .section-title:first-child{margin-top:0;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
@@ -69,6 +80,8 @@
   .tab-row{display:flex;gap:6px;margin:14px 0 18px;border-bottom:1.5px solid var(--line);}
   .tab-btn{background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;}
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .tab-btn:focus{outline:none;}
+  .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
 </style>
 </head>
 <body>
@@ -195,7 +208,7 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
-  <h1>Customers</h1>
+  <h1 onclick="closeCustomerDetail()" style="cursor:pointer;">Customers</h1>
 
   <div class="card" id="viewCard" style="display:none;">
     <!-- ============ Always-visible header — name, city, contact, WhatsApp — regardless of
@@ -224,8 +237,9 @@ auth.onAuthStateChanged(user => {
          glance, editable right here. ============ -->
     <div id="custTab_products">
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <input type="text" id="custProductInput" placeholder="Buscar producto del catálogo…" list="custProductNames" style="flex:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
-        <datalist id="custProductNames"></datalist>
+        <select id="custProductInput" style="flex:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+          <option value="">Choose a product from the catalog…</option>
+        </select>
         <button class="btn" style="padding:8px 16px;font-size:13px;" onclick="addCustomerProduct()">+ Add</button>
       </div>
       <table>
@@ -272,72 +286,146 @@ auth.onAuthStateChanged(user => {
     <strong id="formTitle">New customer</strong>
     <input type="hidden" id="custId">
 
-    <div class="section-title">Identity</div>
-    <div class="grid2">
-      <div class="field"><label>Trade name *</label><input id="trade_name" required></div>
-      <div class="field"><label>Legal name</label><input id="legal_name"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>Country</label><input id="country"></div>
-      <div class="field"><label>State</label><input id="state"></div>
-      <div class="field"><label>City</label><input id="city"></div>
-    </div>
-    <div class="field"><label>Address</label><input id="address"></div>
-    <div class="grid2">
-      <div class="field"><label>Contact name</label><input id="contact_name"></div>
-      <div class="field"><label>Contact role</label><input id="contact_role"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>Email</label><input type="email" id="email"></div>
-      <div class="field"><label>Phone</label><input id="phone" placeholder="+52 6621234567"></div>
-      <div class="field"><label>WhatsApp</label><input id="whatsapp" placeholder="+52 6621234567"></div>
-    </div>
-    <div class="field"><label>CC Emails (comma-separated)</label><input id="email_cc" placeholder="compras@cliente.com, pagos@cliente.com"></div>
-    <div class="field"><label>Website</label><input id="website"></div>
+    <!-- Same format as the product/plant/location forms: fill in the fields up top, and the
+         read-only Customer Profile card below consolidates it into one glanceable record as you
+         go — nothing derived/computed here, it's a live mirror of what Save will record. -->
+    <div class="profile-panel" style="margin-top:12px;">
+      <div class="profile-heading">Classification</div>
 
-    <div class="section-title">Payments contact (if different from buyer)</div>
-    <div class="grid2">
-      <div class="field"><label>Payments contact name</label><input id="payments_contact_name"></div>
-      <div class="field"><label>Payments contact email</label><input type="email" id="payments_contact_email"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Payments contact phone</label><input id="payments_contact_phone"></div>
-      <div class="field"><label>Payments contact WhatsApp</label><input id="payments_contact_whatsapp"></div>
-    </div>
-
-    <div class="section-title">Commercial profile</div>
-    <div class="grid3">
-      <div class="field"><label>Preferred currency</label>
-        <select id="preferred_currency"><option value="">—</option><option>USD</option><option>MXN</option><option>Other</option></select>
+      <div class="section-title" style="margin-top:0;">The basics</div>
+      <div class="grid5">
+        <div class="field"><label>Trade name *</label><input id="trade_name" required placeholder="e.g. Mi Ranchito" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Legal name</label><input id="legal_name" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Contact name</label><input id="contact_name" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Contact role</label><input id="contact_role" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Email</label><input type="email" id="email" oninput="updateCustomerProfile()"></div>
       </div>
-      <div class="field"><label>Usual delivery type</label>
-        <select id="usual_delivery_type" onchange="suggestCurrency()"><option value="">—</option><option>Border</option><option>Delivered Mexico</option><option>Other</option></select>
+      <div class="grid2">
+        <div class="field"><label>Phone</label>
+          <div style="display:flex;gap:6px;">
+            <select id="phone_code" style="width:88px;flex-shrink:0;" onchange="updateCustomerProfile()"></select>
+            <input id="phone_number" placeholder="6621234567" style="flex:1;" oninput="updateCustomerProfile()">
+          </div>
+        </div>
+        <div class="field"><label>WhatsApp</label>
+          <div style="display:flex;gap:6px;">
+            <select id="whatsapp_code" style="width:88px;flex-shrink:0;" onchange="updateCustomerProfile()"></select>
+            <input id="whatsapp_number" placeholder="6621234567" style="flex:1;" oninput="updateCustomerProfile()">
+          </div>
+        </div>
       </div>
-      <div class="field"><label>Payment days</label><input type="number" id="payment_days"></div>
-    </div>
-    <div class="grid3">
-      <div class="field"><label>Usual destination</label><input id="usual_destination"></div>
-      <div class="field"><label>Usual Incoterm</label><input id="usual_incoterm_text" placeholder="e.g. FOB, CIF, DAP"></div>
-      <div class="field"><label>Payment method</label><input id="payment_method"></div>
-    </div>
-    <div class="field"><label>Customs agency (who they clear with)</label>
-      <select id="customs_agency_provider_id"><option value="">—</option></select>
-    </div>
-    <div class="field"><label>Exchange rate preference</label>
-      <select id="preferred_exchange_rate_mode"><option value="">—</option><option value="automatic">Automatic (daily)</option><option value="manual">Manual</option></select>
+
+      <div class="section-title">Address</div>
+      <div class="grid5">
+        <div class="field"><label>Country</label>
+          <select id="country_id" onchange="onCustomerCountryChange();updateCustomerProfile()"><option value="">—</option></select>
+        </div>
+        <div class="field" id="stateSelectField" style="display:none;"><label>State</label>
+          <select id="state_id" onchange="updateCustomerProfile()"><option value="">—</option></select>
+        </div>
+        <div class="field" id="stateTextField"><label>State</label><input id="state" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>City</label><input id="city" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Street address</label><input id="address" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Zip / Postal code</label><input id="postal_code" oninput="updateCustomerProfile()"></div>
+      </div>
+
+      <div class="section-title">Commercial profile</div>
+      <div class="grid5">
+        <div class="field"><label>Preferred currency</label>
+          <select id="preferred_currency" onchange="updateCustomerProfile()"><option value="">—</option><option>USD</option><option>MXN</option><option>Other</option></select>
+        </div>
+        <div class="field"><label>Usual delivery type</label>
+          <select id="usual_delivery_type" onchange="suggestCurrency();updateCustomerProfile()">
+            <option value="">—</option>
+            <option value="Border">Picked up (FOB)</option>
+            <option value="Delivered Mexico">Delivered</option>
+          </select>
+        </div>
+        <div class="field"><label>Payment terms</label>
+          <select id="payment_terms_type" onchange="togglePaymentDaysInput();updateCustomerProfile()">
+            <option value="">—</option>
+            <option value="advance">Advance</option>
+            <option value="credit">Credit</option>
+          </select>
+        </div>
+        <div class="field"><label>Usual destination</label><input id="usual_destination" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Usual Incoterm</label><input id="usual_incoterm_text" placeholder="e.g. FOB, CIF, DAP" oninput="updateCustomerProfile()"></div>
+      </div>
+      <div id="paymentDaysRow" style="display:none;max-width:220px;">
+        <div class="field"><label>Credit days</label><input type="number" id="payment_days" min="1" oninput="updateCustomerProfile()"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Payment method</label><input id="payment_method" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Customs agency (who they clear with)</label>
+          <select id="customs_agency_provider_id" onchange="updateCustomerProfile()"><option value="">—</option></select>
+        </div>
+        <div class="field"><label>Exchange rate preference</label>
+          <select id="preferred_exchange_rate_mode" onchange="updateCustomerProfile()"><option value="">—</option><option value="automatic">Automatic (daily)</option><option value="manual">Manual</option></select>
+        </div>
+      </div>
+
+      <div class="section-title">Other</div>
+      <div class="grid2">
+        <div class="field"><label>CC Emails (comma-separated)</label><input id="email_cc" placeholder="compras@cliente.com, pagos@cliente.com" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Website</label><input id="website" oninput="updateCustomerProfile()"></div>
+      </div>
+      <div class="field" style="text-align:left;margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;">
+          <input type="checkbox" id="paymentsContactDifferent" onchange="togglePaymentsContact();updateCustomerProfile()" style="width:auto;">
+          Payments contact is different from the buyer
+        </label>
+      </div>
+      <div id="paymentsContactBlock" style="display:none;">
+        <div class="grid4">
+          <div class="field"><label>Payments contact name</label><input id="payments_contact_name" oninput="updateCustomerProfile()"></div>
+          <div class="field"><label>Payments contact email</label><input type="email" id="payments_contact_email" oninput="updateCustomerProfile()"></div>
+          <div class="field"><label>Payments contact phone</label><input id="payments_contact_phone" oninput="updateCustomerProfile()"></div>
+          <div class="field"><label>Payments contact WhatsApp</label><input id="payments_contact_whatsapp" oninput="updateCustomerProfile()"></div>
+        </div>
+      </div>
+
+      <div class="section-title">Notes</div>
+      <div class="field"><textarea id="notes" rows="3" oninput="updateCustomerProfile()"></textarea></div>
     </div>
 
-    <div class="section-title">Notes</div>
-    <div class="field"><textarea id="notes" rows="3"></textarea></div>
+    <div class="profile-panel">
+      <div class="profile-heading">Customer Profile</div>
+      <div class="profile-grid">
+        <div class="profile-row"><span class="view-label">Trade Name</span><span class="profile-row-value" id="cv_trade_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Legal Name</span><span class="profile-row-value" id="cv_legal_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="cv_contact_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Contact Role</span><span class="profile-row-value" id="cv_contact_role">—</span></div>
+        <div class="profile-row"><span class="view-label">Email</span><span class="profile-row-value" id="cv_email">—</span></div>
+        <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="cv_phone">—</span></div>
+        <div class="profile-row"><span class="view-label">WhatsApp</span><span class="profile-row-value" id="cv_whatsapp">—</span></div>
+        <div class="profile-row"><span class="view-label">Country</span><span class="profile-row-value" id="cv_country">—</span></div>
+        <div class="profile-row"><span class="view-label">State</span><span class="profile-row-value" id="cv_state">—</span></div>
+        <div class="profile-row"><span class="view-label">City</span><span class="profile-row-value" id="cv_city">—</span></div>
+        <div class="profile-row"><span class="view-label">Street Address</span><span class="profile-row-value" id="cv_address">—</span></div>
+        <div class="profile-row"><span class="view-label">Zip / Postal Code</span><span class="profile-row-value" id="cv_postal_code">—</span></div>
+        <div class="profile-row"><span class="view-label">Preferred Currency</span><span class="profile-row-value" id="cv_preferred_currency">—</span></div>
+        <div class="profile-row"><span class="view-label">Usual Delivery Type</span><span class="profile-row-value" id="cv_usual_delivery_type">—</span></div>
+        <div class="profile-row"><span class="view-label">Payment Terms</span><span class="profile-row-value" id="cv_payment_terms">—</span></div>
+        <div class="profile-row"><span class="view-label">Usual Destination</span><span class="profile-row-value" id="cv_usual_destination">—</span></div>
+        <div class="profile-row"><span class="view-label">Usual Incoterm</span><span class="profile-row-value" id="cv_usual_incoterm_text">—</span></div>
+        <div class="profile-row"><span class="view-label">Payment Method</span><span class="profile-row-value" id="cv_payment_method">—</span></div>
+        <div class="profile-row"><span class="view-label">Customs Agency</span><span class="profile-row-value" id="cv_customs_agency">—</span></div>
+        <div class="profile-row"><span class="view-label">Exchange Rate Preference</span><span class="profile-row-value" id="cv_preferred_exchange_rate_mode">—</span></div>
+        <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="cv_email_cc">—</span></div>
+        <div class="profile-row"><span class="view-label">Website</span><span class="profile-row-value" id="cv_website">—</span></div>
+        <div class="profile-row"><span class="view-label">Payments Contact</span><span class="profile-row-value" id="cv_payments_contact">—</span></div>
+        <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="cv_notes">—</span></div>
+      </div>
+    </div>
 
-    <div style="display:flex;gap:10px;margin-top:8px;">
+    <div style="display:flex;gap:10px;margin-top:14px;">
       <button class="btn" onclick="saveCustomer()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="customerListCard">
     <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;">
       <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openForm()">+ Add Customer</button>
@@ -353,14 +441,23 @@ let customers = [];
 
 function openForm(customer){
   document.getElementById('viewCard').style.display = 'none';
+  document.getElementById('customerListCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
-  const fields = ['custId','trade_name','legal_name','country','state','city','address','contact_name',
-    'contact_role','email','email_cc','phone','whatsapp','website',
+  const fields = ['custId','trade_name','legal_name','country_id','state','city','address','postal_code','contact_name',
+    'contact_role','email','email_cc','website',
     'payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp',
     'preferred_currency','usual_delivery_type',
-    'payment_days','usual_destination','usual_incoterm_text','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes'];
+    'usual_destination','usual_incoterm_text','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes'];
   fields.forEach(f => document.getElementById(f).value = '');
+  document.getElementById('phone_number').value = '';
+  document.getElementById('whatsapp_number').value = '';
+  document.getElementById('phone_code').value = '';
+  document.getElementById('whatsapp_code').value = '';
+  onCustomerCountryChange(); // resets state_id/state visibility for the blank country above
+  document.getElementById('payment_days').value = '';
+  document.getElementById('payment_terms_type').value = '';
+  document.getElementById('paymentsContactDifferent').checked = false;
   if (customer){
     document.getElementById('custId').value = customer.id;
     fields.slice(1).forEach(f => {
@@ -370,13 +467,100 @@ function openForm(customer){
       }
       if (customer[f] !== undefined && customer[f] !== null) document.getElementById(f).value = customer[f];
     });
+    onCustomerCountryChange(); // now that country_id is set, populate/reveal the right State field
+    if (customer.state_id) document.getElementById('state_id').value = customer.state_id;
+    const phoneParts = splitPhone(customer.phone);
+    document.getElementById('phone_code').value = phoneParts.code;
+    document.getElementById('phone_number').value = phoneParts.number;
+    const waParts = splitPhone(customer.whatsapp);
+    document.getElementById('whatsapp_code').value = waParts.code;
+    document.getElementById('whatsapp_number').value = waParts.number;
+    if (customer.payment_days === 0){
+      document.getElementById('payment_terms_type').value = 'advance';
+    } else if (customer.payment_days != null){
+      document.getElementById('payment_terms_type').value = 'credit';
+      document.getElementById('payment_days').value = customer.payment_days;
+    }
+    const hasPaymentsContact = ['payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp']
+      .some(f => customer[f]);
+    document.getElementById('paymentsContactDifferent').checked = hasPaymentsContact;
   }
+  togglePaymentDaysInput();
+  togglePaymentsContact();
+  updateCustomerProfile();
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
 }
 
+// Same format as the product/plant/location profile cards: a live, read-only mirror of every
+// field entered above — nothing derived/computed here, just a consolidated glance before Save.
+function updateCustomerProfile(){
+  const setV = (id, val) => { document.getElementById(id).textContent = val || '—'; };
+  const selText = (sel) => sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+  setV('cv_trade_name', document.getElementById('trade_name').value);
+  setV('cv_legal_name', document.getElementById('legal_name').value);
+  setV('cv_contact_name', document.getElementById('contact_name').value);
+  setV('cv_contact_role', document.getElementById('contact_role').value);
+  setV('cv_email', document.getElementById('email').value);
+  setV('cv_phone', joinPhone(document.getElementById('phone_code').value, document.getElementById('phone_number').value));
+  setV('cv_whatsapp', joinPhone(document.getElementById('whatsapp_code').value, document.getElementById('whatsapp_number').value));
+  setV('cv_country', selText(document.getElementById('country_id')));
+  const stateVal = document.getElementById('stateSelectField').style.display !== 'none'
+    ? selText(document.getElementById('state_id'))
+    : document.getElementById('state').value;
+  setV('cv_state', stateVal);
+  setV('cv_city', document.getElementById('city').value);
+  setV('cv_address', document.getElementById('address').value);
+  setV('cv_postal_code', document.getElementById('postal_code').value);
+  const currSel = document.getElementById('preferred_currency');
+  setV('cv_preferred_currency', currSel.value === 'other' ? 'Other' : selText(currSel));
+  setV('cv_usual_delivery_type', selText(document.getElementById('usual_delivery_type')));
+  const termsType = document.getElementById('payment_terms_type').value;
+  const termsLabel = termsType === 'advance' ? 'Advance'
+    : termsType === 'credit' ? (document.getElementById('payment_days').value ? `Credit ${document.getElementById('payment_days').value} days` : 'Credit')
+    : '';
+  setV('cv_payment_terms', termsLabel);
+  setV('cv_usual_destination', document.getElementById('usual_destination').value);
+  setV('cv_usual_incoterm_text', document.getElementById('usual_incoterm_text').value);
+  setV('cv_payment_method', document.getElementById('payment_method').value);
+  setV('cv_customs_agency', selText(document.getElementById('customs_agency_provider_id')));
+  setV('cv_preferred_exchange_rate_mode', selText(document.getElementById('preferred_exchange_rate_mode')));
+  setV('cv_email_cc', document.getElementById('email_cc').value);
+  setV('cv_website', document.getElementById('website').value);
+  const hasPaymentsContact = document.getElementById('paymentsContactDifferent').checked;
+  setV('cv_payments_contact', hasPaymentsContact
+    ? [document.getElementById('payments_contact_name').value, document.getElementById('payments_contact_email').value,
+       document.getElementById('payments_contact_phone').value, document.getElementById('payments_contact_whatsapp').value]
+        .filter(Boolean).join(' · ')
+    : 'Same as buyer');
+  setV('cv_notes', document.getElementById('notes').value);
+}
+
 function closeForm(){
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('customerListCard').style.display = 'block';
+}
+
+function closeCustomerDetail(){
+  document.getElementById('viewCard').style.display = 'none';
+  document.getElementById('formCard').style.display = 'none';
+  document.getElementById('customerListCard').style.display = 'block';
+  viewingCustomerId = null;
+}
+
+function togglePaymentDaysInput(){
+  const isCredit = document.getElementById('payment_terms_type').value === 'credit';
+  document.getElementById('paymentDaysRow').style.display = isCredit ? 'block' : 'none';
+  if (!isCredit) document.getElementById('payment_days').value = '';
+}
+
+function togglePaymentsContact(){
+  const show = document.getElementById('paymentsContactDifferent').checked;
+  document.getElementById('paymentsContactBlock').style.display = show ? 'block' : 'none';
+  if (!show){
+    ['payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp']
+      .forEach(f => document.getElementById(f).value = '');
+  }
 }
 
 // Border = USD, Delivered Mexico = MXN (BUENTRADE Trading OS rule).
@@ -407,9 +591,69 @@ async function loadCurrencies(){
   sel.innerHTML = '<option value="">—</option>' + currencies.map(c => `<option value="${c.id}">${escapeHtml(c.code)}</option>`).join('') + '<option value="other">Other</option>';
 }
 
+let countries = [];
+let allStates = [];
+
+// Real E.164 calling codes for the countries seeded in `countries` — a closed dropdown next to
+// Phone/WhatsApp so the code can never be mistyped and the WhatsApp deep link always builds a
+// valid number.
+const DIAL_CODES = {
+  US: '+1', CA: '+1', MX: '+52', CL: '+56', BR: '+55', GT: '+502', HN: '+504', SV: '+503',
+  NI: '+505', CR: '+506', PA: '+507', CO: '+57', EC: '+593', PE: '+51', BO: '+591', PY: '+595',
+  UY: '+598', AR: '+54', VE: '+58', DO: '+1',
+};
+
+// One entry per unique dial code, not per country — +1 (US/CA/DO) is the exact same value
+// regardless of which country you'd nominally pick, so listing it three times just invites
+// picking the "wrong" one for no actual difference in the number that gets saved.
+function populateDialCodeSelect(selectEl){
+  const uniqueCodes = [...new Set(Object.values(DIAL_CODES))].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+  selectEl.innerHTML = uniqueCodes.map(code => `<option value="${code}">${code}</option>`).join('');
+}
+
+// A dial code alone doesn't identify one country (+1 is US/CA/DO), so parsing a stored number
+// back into code+digits just needs the LONGEST matching prefix, not a specific country.
+function splitPhone(full){
+  if (!full) return { code: '', number: '' };
+  const codes = [...new Set(Object.values(DIAL_CODES))].sort((a, b) => b.length - a.length);
+  const match = codes.find(c => full.startsWith(c));
+  if (!match) return { code: '', number: full.replace(/^\+/, '') };
+  return { code: match, number: full.slice(match.length).trim() };
+}
+function joinPhone(code, number){
+  if (!number) return null;
+  return code ? `${code} ${number.trim()}` : number.trim();
+}
+
+async function loadCountries(){
+  const res = await callApi('countries-search', {});
+  countries = res.results || [];
+  const sel = document.getElementById('country_id');
+  sel.innerHTML = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+  populateDialCodeSelect(document.getElementById('phone_code'));
+  populateDialCodeSelect(document.getElementById('whatsapp_code'));
+}
+
+async function loadStates(){
+  const res = await callApi('states-search', {});
+  allStates = res.results || [];
+}
+
+function onCustomerCountryChange(){
+  const countryId = document.getElementById('country_id').value;
+  const statesForCountry = allStates.filter(s => s.country_id === countryId);
+  const hasStates = statesForCountry.length > 0;
+  document.getElementById('stateSelectField').style.display = hasStates ? 'block' : 'none';
+  document.getElementById('stateTextField').style.display = hasStates ? 'none' : 'block';
+  const sel = document.getElementById('state_id');
+  sel.innerHTML = '<option value="">—</option>' + statesForCountry.map(s => `<option value="${s.id}">${escapeHtml(s.name_en)}</option>`).join('');
+  if (!hasStates) sel.value = '';
+  else document.getElementById('state').value = '';
+}
+
 async function loadCustomers(){
   try {
-    await Promise.all([loadCustomsAgencies(), loadCurrencies()]);
+    await Promise.all([loadCustomsAgencies(), loadCurrencies(), loadCountries(), loadStates()]);
     const res = await callApi('customers-search', {});
     customers = res.results || [];
     renderCustomers();
@@ -426,8 +670,9 @@ let allCustProducts = null;
 async function fetchAllCustProducts(){
   if (allCustProducts) return allCustProducts;
   const res = await callApi('products-search', {});
-  allCustProducts = res.results || [];
-  document.getElementById('custProductNames').innerHTML = allCustProducts.map(p => `<option value="${escapeHtml(custProductLabel(p))}">`).join('');
+  allCustProducts = (res.results || []).slice().sort((a, b) => custProductLabel(a).localeCompare(custProductLabel(b)));
+  document.getElementById('custProductInput').innerHTML = '<option value="">Choose a product from the catalog…</option>' +
+    allCustProducts.map(p => `<option value="${p.id}">${escapeHtml(custProductLabel(p))}</option>`).join('');
   return allCustProducts;
 }
 
@@ -464,12 +709,12 @@ function renderCustomerProducts(){
 }
 
 async function addCustomerProduct(){
-  const input = document.getElementById('custProductInput');
-  const label = input.value.trim();
-  if (!label || !viewingCustomerId) return;
-  const match = allCustProducts.find(p => custProductLabel(p) === label);
-  if (!match){ alert('Elige un producto de la lista sugerida (empieza a escribir y selecciona una opción exacta).'); return; }
-  if (currentCustProducts.some(r => r.product.id === match.id)){ input.value = ''; return; }
+  const select = document.getElementById('custProductInput');
+  const productId = select.value;
+  if (!productId || !viewingCustomerId) return;
+  const match = allCustProducts.find(p => p.id === productId);
+  if (!match) return;
+  if (currentCustProducts.some(r => r.product.id === match.id)){ select.value = ''; return; }
   try {
     const res = await callApi('customer-products-add', { actor: currentActor(), customer_id: viewingCustomerId, product_id: match.id });
     const link = res.link || res; // already_linked also carries .link
@@ -478,7 +723,7 @@ async function addCustomerProduct(){
     alert('Error: ' + e.message);
     return;
   }
-  input.value = '';
+  select.value = '';
   renderCustomerProducts();
 }
 
@@ -501,6 +746,16 @@ function setCustomerTab(tab){
   });
 }
 
+function countryName(countryId){
+  const match = countries.find(c => c.id === countryId);
+  return match ? match.name_en : null;
+}
+
+function paymentDaysLabel(days){
+  if (days == null) return null;
+  return days === 0 ? 'Advance' : `Credit ${days}d`;
+}
+
 function renderCustomers(){
   const wrap = document.getElementById('customerRows');
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
@@ -513,10 +768,10 @@ function renderCustomers(){
     : 'No customers yet. Click "+ Add Customer" to create the first one.';
   wrap.innerHTML = filtered.map(c => {
     const sub = [
-      [c.city, c.country].filter(Boolean).join(', '),
+      [c.city, countryName(c.country_id)].filter(Boolean).join(', '),
       c.preferred_currency,
       c.usual_delivery_type,
-      c.payment_days != null ? `${c.payment_days}d payment` : null,
+      paymentDaysLabel(c.payment_days),
     ].filter(Boolean).join(' · ');
     return `<div class="pkg-row">
       <div class="pkg-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
@@ -540,19 +795,20 @@ let viewingCustomerId = null;
 function viewCustomer(id){
   const viewCard = document.getElementById('viewCard');
   if (viewingCustomerId === id && viewCard.style.display === 'block'){
-    viewCard.style.display = 'none';
-    viewingCustomerId = null;
+    closeCustomerDetail();
     return;
   }
   const c = customers.find(x => x.id === id);
   if (!c) return;
   viewingCustomerId = id;
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('customerListCard').style.display = 'none';
   viewCard.style.display = 'block';
   document.getElementById('viewTitle').textContent = c.trade_name || '';
   document.getElementById('v_legal_name').textContent = c.legal_name || '—';
-  document.getElementById('v_location').textContent = [c.city, c.state, c.country].filter(Boolean).join(', ') || '—';
-  document.getElementById('v_address').textContent = c.address || '—';
+  const stateName = c.state || (allStates.find(s => s.id === c.state_id) || {}).name_en || null;
+  document.getElementById('v_location').textContent = [c.city, stateName, countryName(c.country_id)].filter(Boolean).join(', ') || '—';
+  document.getElementById('v_address').textContent = [c.address, c.postal_code].filter(Boolean).join(' — ') || '—';
   document.getElementById('v_contact_name').innerHTML = (c.contact_name && c.email) ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—');
   document.getElementById('v_contact_role').textContent = c.contact_role || '—';
   document.getElementById('v_email').innerHTML = c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.email)}</a>` : '—';
@@ -562,8 +818,9 @@ function viewCustomer(id){
   document.getElementById('v_payments_contact_phone').textContent = c.payments_contact_phone || '—';
   const curr = currencies.find(x => x.id === c.preferred_currency_id);
   document.getElementById('v_preferred_currency').textContent = curr ? curr.code : '—';
-  document.getElementById('v_usual_delivery_type').textContent = c.usual_delivery_type || '—';
-  document.getElementById('v_payment_days').textContent = c.payment_days ?? '—';
+  const deliveryLabels = { 'Border': 'Picked up (FOB)', 'Delivered Mexico': 'Delivered' };
+  document.getElementById('v_usual_delivery_type').textContent = deliveryLabels[c.usual_delivery_type] || c.usual_delivery_type || '—';
+  document.getElementById('v_payment_days').textContent = paymentDaysLabel(c.payment_days) || '—';
   document.getElementById('v_usual_destination').textContent = c.usual_destination || '—';
   document.getElementById('v_usual_incoterm_text').textContent = c.usual_incoterm_text || '—';
   document.getElementById('v_payment_method').textContent = c.payment_method || '—';
@@ -601,16 +858,18 @@ async function saveCustomer(forceOverride){
   const payload = {
     trade_name: document.getElementById('trade_name').value,
     legal_name: document.getElementById('legal_name').value || null,
-    country: document.getElementById('country').value || null,
-    state: document.getElementById('state').value || null,
+    country_id: document.getElementById('country_id').value || null,
+    state_id: document.getElementById('stateSelectField').style.display !== 'none' ? (document.getElementById('state_id').value || null) : null,
+    state: document.getElementById('stateTextField').style.display !== 'none' ? (document.getElementById('state').value || null) : null,
     city: document.getElementById('city').value || null,
     address: document.getElementById('address').value || null,
+    postal_code: document.getElementById('postal_code').value || null,
     contact_name: document.getElementById('contact_name').value || null,
     contact_role: document.getElementById('contact_role').value || null,
     email: document.getElementById('email').value || null,
     email_cc: document.getElementById('email_cc').value || null,
-    phone: document.getElementById('phone').value || null,
-    whatsapp: document.getElementById('whatsapp').value || null,
+    phone: joinPhone(document.getElementById('phone_code').value, document.getElementById('phone_number').value),
+    whatsapp: joinPhone(document.getElementById('whatsapp_code').value, document.getElementById('whatsapp_number').value),
     website: document.getElementById('website').value || null,
     payments_contact_name: document.getElementById('payments_contact_name').value || null,
     payments_contact_email: document.getElementById('payments_contact_email').value || null,
@@ -618,7 +877,12 @@ async function saveCustomer(forceOverride){
     payments_contact_whatsapp: document.getElementById('payments_contact_whatsapp').value || null,
     preferred_currency_id: (currencyVal && currencyVal !== 'other') ? currencyVal : null,
     usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
-    payment_days: document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null,
+    payment_days: (() => {
+      const termsType = document.getElementById('payment_terms_type').value;
+      if (termsType === 'advance') return 0;
+      if (termsType === 'credit') return document.getElementById('payment_days').value ? Number(document.getElementById('payment_days').value) : null;
+      return null;
+    })(),
     usual_destination: document.getElementById('usual_destination').value || null,
     usual_incoterm_text: document.getElementById('usual_incoterm_text').value || null,
     payment_method: document.getElementById('payment_method').value || null,
@@ -638,11 +902,17 @@ async function saveCustomer(forceOverride){
     document.getElementById('formMsg').textContent = 'WhatsApp must include the country code, e.g. +52 6621234567.';
     return;
   }
+  if (document.getElementById('payment_terms_type').value === 'credit' && !payload.payment_days){
+    document.getElementById('formMsg').textContent = 'Enter how many credit days.';
+    return;
+  }
+  let createdCustomer = null;
   try {
     if (id) await callApi('customers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
     else {
       const idempotencyKey = `customers-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
-      await callApi('customers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+      const res = await callApi('customers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+      createdCustomer = res.customer;
     }
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
@@ -660,7 +930,8 @@ async function saveCustomer(forceOverride){
     return;
   }
   closeForm();
-  loadCustomers();
+  await loadCustomers();
+  if (createdCustomer) viewCustomer(createdCustomer.id);
 }
 
 async function deleteCustomer(id){
@@ -672,6 +943,8 @@ async function deleteCustomer(id){
     return;
   }
   document.getElementById('viewCard').style.display = 'none';
+  document.getElementById('customerListCard').style.display = 'block';
+  viewingCustomerId = null;
   loadCustomers();
 }
 
