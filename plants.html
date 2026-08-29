@@ -21,6 +21,15 @@
   .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
   .email-modal-field textarea{min-height:110px;resize:vertical;}
   .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+  /* Bigger, side-by-side comparison — the trader needs to see exactly what already exists next to
+     exactly what they're about to create, not just a bare name buried in a small text line. */
+  .dup-modal-box{max-width:640px;max-height:85vh;overflow-y:auto;}
+  .dup-compare-card{margin-bottom:14px;}
+  .dup-compare-table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+  .dup-compare-table th{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:6px 10px;border-bottom:1.5px solid var(--line);}
+  .dup-compare-table td{font-size:13.5px;padding:7px 10px;border-bottom:1px solid var(--line);}
+  .dup-compare-table td.dup-row-label{color:var(--ink-soft);font-weight:600;white-space:nowrap;}
+  .dup-diff-text{background:#EEF3FF;border:1px solid #C9DBFA;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--ink);margin:0;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;letter-spacing:.2px;line-height:1;}
@@ -629,12 +638,27 @@ auth.onAuthStateChanged(user => {
      the same as, and both buttons say exactly what they do. Replaces a native confirm() call the
      trader read as just another block, even though it technically wasn't one. -->
 <div id="plDupModalOverlay" class="email-modal-overlay" style="display:none;">
-  <div class="email-modal-box" style="max-width:480px;">
+  <div class="email-modal-box dup-modal-box">
     <h3>This might already exist</h3>
-    <div id="plDupModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:16px;"></div>
+    <div id="plDupModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:4px;"></div>
     <div class="email-modal-actions">
       <button onclick="plDupModalResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Use the existing product instead</button>
       <button onclick="plDupModalResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">This is genuinely different — save it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Replaces native prompt() dialogs for adding a new Brand/Variation/Cut Name — same visual
+     language as every other modal, not the browser's generic gray box. -->
+<div id="addCatalogModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box">
+    <h3 id="addCatalogModalTitle">Add new</h3>
+    <div class="email-modal-field"><label id="addCatalogModalLabelEn">English</label><input type="text" id="addCatalogModalEn" autocomplete="off"></div>
+    <div class="email-modal-field"><label id="addCatalogModalLabelEs">Spanish</label><input type="text" id="addCatalogModalEs" autocomplete="off"></div>
+    <div id="addCatalogModalMsg" style="font-size:12.5px;color:var(--red);min-height:16px;"></div>
+    <div class="email-modal-actions">
+      <button onclick="addCatalogModalResolve(null)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="addCatalogModalSubmit()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Add</button>
     </div>
   </div>
 </div>
@@ -668,10 +692,50 @@ function plCloseNotice(){
 // near_duplicate_names / subcategory_typo_conflicts) — the duplicate DECISION is made server-side,
 // this only renders whatever it found.
 let plDupModalResolver = null;
+// Side-by-side comparison, not a bare name — reads the still-open form's own Product Profile
+// fields directly (the form never closes while this modal is up) so "what you're creating" is
+// exactly what's on screen, and computes which specific fields differ from each existing match
+// instead of leaving the trader to spot it themselves.
+function plDupCompareRows(existing){
+  const newVals = {
+    Category: document.getElementById('category_en_display_view').textContent,
+    'Cut Name': document.getElementById('name_en_view').textContent,
+    Variation: document.getElementById('subcategory_en_view').textContent,
+    Temperature: document.getElementById('temperature_en_display_view').textContent,
+    Packing: document.getElementById('packing_en_display_view').textContent,
+  };
+  const oldVals = {
+    Category: categoryEnById(existing.category_id) || existing.category || '—',
+    'Cut Name': existing.name_en || existing.name || '—',
+    Variation: existing.subcategory_en || '— None —',
+    Temperature: tempName(existing.temperature_id) || '—',
+    Packing: packName(existing.packaging_id) || '—',
+  };
+  const diffKeys = Object.keys(newVals).filter(k => normalizeProductName(newVals[k]) !== normalizeProductName(oldVals[k]));
+  return { newVals, oldVals, diffKeys };
+}
+function plDupCompareCardHtml(existing){
+  const { newVals, oldVals, diffKeys } = plDupCompareRows(existing);
+  const row = (label) => {
+    const differs = diffKeys.includes(label);
+    const style = differs ? 'color:var(--blue);font-weight:700;' : '';
+    return `<tr><td class="dup-row-label">${escapeHtml(label)}</td><td style="${style}">${escapeHtml(oldVals[label])}</td><td style="${style}">${escapeHtml(newVals[label])}</td></tr>`;
+  };
+  const diffText = diffKeys.length
+    ? `The difference is: <strong>${diffKeys.join(', ')}</strong>. Are you sure you want to create this as a new, separate product?`
+    : `No difference found — this looks like exactly the same product.`;
+  return `
+    <div class="dup-compare-card">
+      <table class="dup-compare-table">
+        <tr><th></th><th>Already in the catalog</th><th>You're creating</th></tr>
+        ${row('Category')}${row('Cut Name')}${row('Variation')}${row('Temperature')}${row('Packing')}
+      </table>
+      <p class="dup-diff-text">${diffText}</p>
+    </div>`;
+}
 function plShowDupConfirm(dupData){
   return new Promise(resolve => {
     plDupModalResolver = resolve;
-    const describe = p => `• "${(p.name_en || p.name)}" — ${p.subcategory_en || '(no subcategory)'}${p.brand ? ' — ' + p.brand : ''}`;
     const groups = [
       dupData.exact_match ? [dupData.exact_match] : [],
       dupData.same_spec_different_subcategory || [],
@@ -679,8 +743,8 @@ function plShowDupConfirm(dupData){
       dupData.subcategory_typo_conflicts || [],
     ].flat();
     const uniqueById = [...new Map(groups.map(p => [p.id, p])).values()];
-    const list = uniqueById.map(describe).join('<br>');
-    document.getElementById('plDupModalText').innerHTML = `${escapeHtml(dupData.message)}<br><br>${list}`;
+    const cardsHtml = uniqueById.map(plDupCompareCardHtml).join('<hr style="margin:16px 0;border:none;border-top:1px solid var(--line);">');
+    document.getElementById('plDupModalText').innerHTML = `<p style="margin:0 0 14px;">${escapeHtml(dupData.message)}</p>${cardsHtml}`;
     document.getElementById('plDupModalOverlay').style.display = 'flex';
   });
 }
@@ -688,6 +752,42 @@ function plDupModalResolve(saveAsNew){
   document.getElementById('plDupModalOverlay').style.display = 'none';
   if (plDupModalResolver) plDupModalResolver(saveAsNew);
   plDupModalResolver = null;
+}
+
+// One shared modal for every "+ Add new X" catalog escape hatch (Brand, Variation, Cut Name).
+// labelEs omitted (Brand) means single-language — the Spanish field just stays hidden.
+let addCatalogModalResolver = null;
+function showAddCatalogModal({ title, labelEn, labelEs = null }){
+  return new Promise(resolve => {
+    addCatalogModalResolver = resolve;
+    document.getElementById('addCatalogModalTitle').textContent = title;
+    document.getElementById('addCatalogModalLabelEn').textContent = labelEn;
+    document.getElementById('addCatalogModalEn').value = '';
+    const esField = document.getElementById('addCatalogModalEs').closest('.email-modal-field');
+    if (labelEs){
+      esField.style.display = 'block';
+      document.getElementById('addCatalogModalLabelEs').textContent = labelEs;
+      document.getElementById('addCatalogModalEs').value = '';
+    } else {
+      esField.style.display = 'none';
+    }
+    document.getElementById('addCatalogModalMsg').textContent = '';
+    document.getElementById('addCatalogModalOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('addCatalogModalEn').focus(), 50);
+  });
+}
+function addCatalogModalSubmit(){
+  const en = document.getElementById('addCatalogModalEn').value.trim();
+  const esVisible = document.getElementById('addCatalogModalEs').closest('.email-modal-field').style.display !== 'none';
+  const es = document.getElementById('addCatalogModalEs').value.trim();
+  if (!en){ document.getElementById('addCatalogModalMsg').textContent = 'Required.'; return; }
+  if (esVisible && !es){ document.getElementById('addCatalogModalMsg').textContent = 'Both languages are required.'; return; }
+  addCatalogModalResolve({ en, es: esVisible ? es : null });
+}
+function addCatalogModalResolve(result){
+  document.getElementById('addCatalogModalOverlay').style.display = 'none';
+  if (addCatalogModalResolver) addCatalogModalResolver(result);
+  addCatalogModalResolver = null;
 }
 
 let plants = [];
@@ -758,18 +858,19 @@ async function loadBrands(){
 async function handleBrandSelectChange(){
   const sel = document.getElementById('brand');
   if (sel.value !== '__new__') return;
-  const name = prompt('New brand name:');
-  if (!name || !name.trim()){ sel.value = ''; return; }
-  const idempotencyKey = `brands-create|${name.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  const entered = await showAddCatalogModal({ title: 'Add new brand', labelEn: 'Brand name' });
+  if (!entered){ sel.value = ''; return; }
+  const name = entered.en;
+  const idempotencyKey = `brands-create|${name}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('brands-create', { actor: currentActor(), name: name.trim(), idempotency_key: idempotencyKey });
+    result = await callApi('brands-create', { actor: currentActor(), name, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name}` : ''}\n\nCreate "${name.trim()}" as a new brand anyway?`);
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name}` : ''}\n\nCreate "${name}" as a new brand anyway?`);
       if (!proceed){ sel.value = ''; return; }
-      result = await callApi('brands-create', { actor: currentActor(), name: name.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('brands-create', { actor: currentActor(), name, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating brand: ' + e.message);
       sel.value = '';
@@ -917,20 +1018,19 @@ async function loadCutNames(){
 async function handleCutNameSelectChange(){
   const sel = document.getElementById('cut_name_id');
   if (sel.value !== '__new__'){ updateProfileDisplays(); return; }
-  const name_en = prompt('New cut — English (e.g. "Loin"):');
-  if (!name_en || !name_en.trim()){ sel.value = ''; return; }
-  const name_es = prompt('New cut — Spanish (e.g. "Lomo"):');
-  if (!name_es || !name_es.trim()){ sel.value = ''; return; }
-  const idempotencyKey = `cut-names-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  const entered = await showAddCatalogModal({ title: 'Add new cut name', labelEn: 'English (e.g. "Loin")', labelEs: 'Spanish (e.g. "Lomo")' });
+  if (!entered){ sel.value = ''; return; }
+  const { en: name_en, es: name_es } = entered;
+  const idempotencyKey = `cut-names-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+    result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new cut anyway?`);
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new cut anyway?`);
       if (!proceed){ sel.value = ''; return; }
-      result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating cut: ' + e.message);
       sel.value = '';
@@ -947,7 +1047,7 @@ function renderVariationCheckboxes(){
   const checkedIds = new Set(checkedVariations().map(v => v.id));
   wrap.innerHTML = variations.map(v => `
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;cursor:pointer;">
-      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays();closeVariationDropdown()" style="width:auto;">
+      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays()" style="width:auto;">
       ${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}
     </label>
   `).join('');
@@ -988,20 +1088,19 @@ async function loadVariations(){
 // Needs both languages, unlike Brand — a variation with only one language is exactly the silent
 // EN/ES gap the catalog-matching rules exist to prevent.
 async function addNewVariation(){
-  const name_en = prompt('New variation — English (e.g. "Bone-In"):');
-  if (!name_en || !name_en.trim()) return;
-  const name_es = prompt('New variation — Spanish (e.g. "con hueso"):');
-  if (!name_es || !name_es.trim()) return;
-  const idempotencyKey = `variations-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  const entered = await showAddCatalogModal({ title: 'Add new variation', labelEn: 'English (e.g. "Bone-In")', labelEs: 'Spanish (e.g. "con hueso")' });
+  if (!entered) return;
+  const { en: name_en, es: name_es } = entered;
+  const idempotencyKey = `variations-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+    result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new variation anyway?`);
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new variation anyway?`);
       if (!proceed) return;
-      result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating variation: ' + e.message);
       return;

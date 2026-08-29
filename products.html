@@ -80,6 +80,24 @@
   .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
   .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:160px;}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
+  /* Real modals, not native prompt()/confirm() boxes — same visual language as the rest of the
+     OS (Space Grotesk heading, rounded white card, blue primary button). */
+  .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;}
+  .email-modal-box{background:#fff;border-radius:14px;width:100%;max-width:480px;padding:22px 24px;box-shadow:0 24px 60px rgba(15,31,51,.35);}
+  .email-modal-box h3{margin:0 0 14px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .email-modal-field{margin-bottom:12px;}
+  .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
+  .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+  /* Bigger, side-by-side comparison — see exactly what already exists next to exactly what you're
+     about to create, not a bare name buried in a small text line. */
+  .dup-modal-box{max-width:640px;max-height:85vh;overflow-y:auto;}
+  .dup-compare-card{margin-bottom:14px;}
+  .dup-compare-table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+  .dup-compare-table th{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:6px 10px;border-bottom:1.5px solid var(--line);}
+  .dup-compare-table td{font-size:13.5px;padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;}
+  .dup-compare-table td.dup-row-label{color:var(--ink-soft);font-weight:600;white-space:nowrap;}
+  .dup-diff-text{background:#EEF3FF;border:1px solid #C9DBFA;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--ink);margin:0;}
 </style>
 </head>
 <body>
@@ -299,6 +317,35 @@ auth.onAuthStateChanged(user => {
     <div id="emptyState" class="empty" style="display:none;">No products yet. Click "+ Add Product" to create the first one.</div>
   </div>
 </div>
+
+<!-- A real confirmation, not a bare browser alert — always names the existing product(s) it might
+     be the same as, side by side with what's being created, and both buttons say exactly what
+     they do. -->
+<div id="dupModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box dup-modal-box">
+    <h3>This might already exist</h3>
+    <div id="dupModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:4px;"></div>
+    <div class="email-modal-actions">
+      <button onclick="dupModalResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Go back and check</button>
+      <button onclick="dupModalResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">This is genuinely different — save it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Replaces native prompt() dialogs for adding a new Variation/Cut Name — same visual language
+     as every other modal, not the browser's generic gray box. -->
+<div id="addCatalogModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box">
+    <h3 id="addCatalogModalTitle">Add new</h3>
+    <div class="email-modal-field"><label id="addCatalogModalLabelEn">English</label><input type="text" id="addCatalogModalEn" autocomplete="off"></div>
+    <div class="email-modal-field"><label id="addCatalogModalLabelEs">Spanish</label><input type="text" id="addCatalogModalEs" autocomplete="off"></div>
+    <div id="addCatalogModalMsg" style="font-size:12.5px;color:var(--red);min-height:16px;"></div>
+    <div class="email-modal-actions">
+      <button onclick="addCatalogModalResolve(null)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="addCatalogModalSubmit()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Add</button>
+    </div>
+  </div>
+</div>
 </div>
 
 <script>
@@ -463,20 +510,19 @@ async function loadCutNames(){
 async function handleCutNameSelectChange(){
   const sel = document.getElementById('cut_name_id');
   if (sel.value !== '__new__'){ updateProfileDisplays(); return; }
-  const name_en = prompt('New cut — English (e.g. "Loin"):');
-  if (!name_en || !name_en.trim()){ sel.value = ''; return; }
-  const name_es = prompt('New cut — Spanish (e.g. "Lomo"):');
-  if (!name_es || !name_es.trim()){ sel.value = ''; return; }
-  const idempotencyKey = `cut-names-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  const entered = await showAddCatalogModal({ title: 'Add new cut name', labelEn: 'English (e.g. "Loin")', labelEs: 'Spanish (e.g. "Lomo")' });
+  if (!entered){ sel.value = ''; return; }
+  const { en: name_en, es: name_es } = entered;
+  const idempotencyKey = `cut-names-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+    result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new cut anyway?`);
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new cut anyway?`);
       if (!proceed){ sel.value = ''; return; }
-      result = await callApi('cut-names-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating cut: ' + e.message);
       sel.value = '';
@@ -493,7 +539,7 @@ function renderVariationCheckboxes(){
   const checkedIds = new Set(checkedVariations().map(v => v.id));
   wrap.innerHTML = variations.map(v => `
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;cursor:pointer;">
-      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays();closeVariationDropdown()" style="width:auto;">
+      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays()" style="width:auto;">
       ${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}
     </label>
   `).join('');
@@ -531,20 +577,19 @@ async function loadVariations(){
 }
 
 async function addNewVariation(){
-  const name_en = prompt('New variation — English (e.g. "Bone-In"):');
-  if (!name_en || !name_en.trim()) return;
-  const name_es = prompt('New variation — Spanish (e.g. "con hueso"):');
-  if (!name_es || !name_es.trim()) return;
-  const idempotencyKey = `variations-create|${name_en.trim()}|${name_es.trim()}|${new Date().toISOString().slice(0, 16)}`;
+  const entered = await showAddCatalogModal({ title: 'Add new variation', labelEn: 'English (e.g. "Bone-In")', labelEs: 'Spanish (e.g. "con hueso")' });
+  if (!entered) return;
+  const { en: name_en, es: name_es } = entered;
+  const idempotencyKey = `variations-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), idempotency_key: idempotencyKey });
+    result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en.trim()} / ${name_es.trim()}" as a new variation anyway?`);
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new variation anyway?`);
       if (!proceed) return;
-      result = await callApi('variations-create', { actor: currentActor(), name_en: name_en.trim(), name_es: name_es.trim(), override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating variation: ' + e.message);
       return;
@@ -603,6 +648,108 @@ let editingProductId = null;
 
 function normalizeProductName(s){
   return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+}
+
+// ============ Real modals, not native prompt()/confirm() boxes ============
+
+// One shared modal for every "+ Add new X" catalog escape hatch (Variation, Cut Name — Brand
+// lives on plants.html only). labelEs omitted means single-language (not used here, kept for
+// parity with plants.html's version).
+let addCatalogModalResolver = null;
+function showAddCatalogModal({ title, labelEn, labelEs = null }){
+  return new Promise(resolve => {
+    addCatalogModalResolver = resolve;
+    document.getElementById('addCatalogModalTitle').textContent = title;
+    document.getElementById('addCatalogModalLabelEn').textContent = labelEn;
+    document.getElementById('addCatalogModalEn').value = '';
+    const esField = document.getElementById('addCatalogModalEs').closest('.email-modal-field');
+    if (labelEs){
+      esField.style.display = 'block';
+      document.getElementById('addCatalogModalLabelEs').textContent = labelEs;
+      document.getElementById('addCatalogModalEs').value = '';
+    } else {
+      esField.style.display = 'none';
+    }
+    document.getElementById('addCatalogModalMsg').textContent = '';
+    document.getElementById('addCatalogModalOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('addCatalogModalEn').focus(), 50);
+  });
+}
+function addCatalogModalSubmit(){
+  const en = document.getElementById('addCatalogModalEn').value.trim();
+  const esVisible = document.getElementById('addCatalogModalEs').closest('.email-modal-field').style.display !== 'none';
+  const es = document.getElementById('addCatalogModalEs').value.trim();
+  if (!en){ document.getElementById('addCatalogModalMsg').textContent = 'Required.'; return; }
+  if (esVisible && !es){ document.getElementById('addCatalogModalMsg').textContent = 'Both languages are required.'; return; }
+  addCatalogModalResolve({ en, es: esVisible ? es : null });
+}
+function addCatalogModalResolve(result){
+  document.getElementById('addCatalogModalOverlay').style.display = 'none';
+  if (addCatalogModalResolver) addCatalogModalResolver(result);
+  addCatalogModalResolver = null;
+}
+
+// Side-by-side comparison for the possible-duplicate gate at Save time — reads the still-open
+// form's own Product Profile fields directly (the form never closes while this modal is up) so
+// "what you're creating" is exactly what's on screen, and computes which specific fields differ
+// from each existing match instead of leaving the trader to spot it themselves.
+let dupModalResolver = null;
+function dupCompareRows(existing){
+  const newVals = {
+    Category: document.getElementById('category_en_display_view').textContent,
+    'Cut Name': document.getElementById('name_en_view').textContent,
+    Variation: document.getElementById('subcategory_en_view').textContent,
+    Temperature: document.getElementById('temperature_en_display_view').textContent,
+    Packing: document.getElementById('packing_en_display_view').textContent,
+  };
+  const oldVals = {
+    Category: categoryEnById(existing.category_id) || existing.category || '—',
+    'Cut Name': existing.name_en || existing.name || '—',
+    Variation: existing.subcategory_en || '— None —',
+    Temperature: tempName(existing.temperature_id) || '—',
+    Packing: packName(existing.packaging_id) || '—',
+  };
+  const diffKeys = Object.keys(newVals).filter(k => normalizeProductName(newVals[k]) !== normalizeProductName(oldVals[k]));
+  return { newVals, oldVals, diffKeys };
+}
+function dupCompareCardHtml(existing){
+  const { newVals, oldVals, diffKeys } = dupCompareRows(existing);
+  const row = (label) => {
+    const differs = diffKeys.includes(label);
+    const style = differs ? 'color:var(--blue);font-weight:700;' : '';
+    return `<tr><td class="dup-row-label">${escapeHtml(label)}</td><td style="${style}">${escapeHtml(oldVals[label])}</td><td style="${style}">${escapeHtml(newVals[label])}</td></tr>`;
+  };
+  const diffText = diffKeys.length
+    ? `The difference is: <strong>${diffKeys.join(', ')}</strong>. Are you sure you want to create this as a new, separate product?`
+    : `No difference found — this looks like exactly the same product.`;
+  return `
+    <div class="dup-compare-card">
+      <table class="dup-compare-table">
+        <tr><th></th><th>Already in the catalog</th><th>You're creating</th></tr>
+        ${row('Category')}${row('Cut Name')}${row('Variation')}${row('Temperature')}${row('Packing')}
+      </table>
+      <p class="dup-diff-text">${diffText}</p>
+    </div>`;
+}
+function showDupConfirm(dupData){
+  return new Promise(resolve => {
+    dupModalResolver = resolve;
+    const groups = [
+      dupData.exact_match ? [dupData.exact_match] : [],
+      dupData.same_spec_different_subcategory || [],
+      dupData.near_duplicate_names || [],
+      dupData.subcategory_typo_conflicts || [],
+    ].flat();
+    const uniqueById = [...new Map(groups.map(p => [p.id, p])).values()];
+    const cardsHtml = uniqueById.map(dupCompareCardHtml).join('<hr style="margin:16px 0;border:none;border-top:1px solid var(--line);">');
+    document.getElementById('dupModalText').innerHTML = `<p style="margin:0 0 14px;">${escapeHtml(dupData.message)}</p>${cardsHtml}`;
+    document.getElementById('dupModalOverlay').style.display = 'flex';
+  });
+}
+function dupModalResolve(saveAsNew){
+  document.getElementById('dupModalOverlay').style.display = 'none';
+  if (dupModalResolver) dupModalResolver(saveAsNew);
+  dupModalResolver = null;
 }
 
 function checkNameDuplicate(){
@@ -702,15 +849,14 @@ async function saveProduct(forceOverride){
     }
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
-      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
-      document.getElementById('formMsg').innerHTML = `
-        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
-          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name_en || match.name)}</strong>` : ''}
-          <div style="margin-top:8px;">
-            <button type="button" class="btn small" onclick="saveProduct(true)">Save anyway — this is genuinely different</button>
-          </div>
-        </div>`;
-      return;
+      // Real modal, not a bare confirm() or a small inline text box — shows exactly what already
+      // exists side by side with what's being created, and names the specific field that differs.
+      const saveAsNew = await showDupConfirm(e.data);
+      if (!saveAsNew){
+        document.getElementById('formMsg').textContent = 'Go back and check the fields — pick the matching existing product instead of creating a new one, if this is really the same cut.';
+        return;
+      }
+      return saveProduct(true);
     }
     document.getElementById('formMsg').textContent = 'Error: ' + e.message;
     return;
