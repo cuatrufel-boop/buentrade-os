@@ -47,6 +47,10 @@
   .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
+  /* A visible "+" next to a closed dropdown, instead of burying "add new" as the last option
+     inside the select itself where it's easy to never notice. */
+  .btn-add-inline{flex-shrink:0;width:38px;height:38px;border:1.5px solid var(--blue);border-radius:7px;background:#fff;color:var(--blue);font-size:19px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s;}
+  .btn-add-inline:hover{background:var(--blue-light);}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
   .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
   .wa-btn:hover{background:#1EBE5A;}
@@ -556,7 +560,13 @@ auth.onAuthStateChanged(user => {
         <div class="field"><label>Category *</label><select id="category" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
         <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="renderPackagingOptions();updateProfileDisplays()"><option value="">—</option></select></div>
         <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
-        <div class="field"><label>Cut Name *</label><select id="cut_name_id" required onchange="handleCutNameSelectChange()"><option value="">—</option></select></div>
+        <div class="field">
+          <label>Cut Name *</label>
+          <div style="display:flex;gap:6px;">
+            <select id="cut_name_id" required onchange="updateProfileDisplays()" style="flex:1;min-width:0;"><option value="">—</option></select>
+            <button type="button" class="btn-add-inline" onclick="addNewCutName()" title="Add a new cut name">+</button>
+          </div>
+        </div>
         <!-- A compact dropdown, not a wall of checkboxes — a real product can carry more than one
            variation qualifier at once (Boneless AND Strap Off on the same loin), which one
            selection can't represent, but the catalog can grow to 15-20+ entries over time and a
@@ -1012,14 +1022,15 @@ async function loadCutNames(){
   const res = await callApi('cut-names-search', {});
   cutNames = res.results || [];
   const sel = document.getElementById('cut_name_id');
-  sel.innerHTML = '<option value="">—</option>' + cutNames.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</option>`).join('') + '<option value="__new__">+ Add new cut…</option>';
+  sel.innerHTML = '<option value="">—</option>' + cutNames.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</option>`).join('');
 }
 
-async function handleCutNameSelectChange(){
+// A visible "+" button next to the select, not buried as the last option inside the dropdown
+// itself — the same visibility problem the Variation panel's own "+ Add new…" link already solved.
+async function addNewCutName(){
   const sel = document.getElementById('cut_name_id');
-  if (sel.value !== '__new__'){ updateProfileDisplays(); return; }
   const entered = await showAddCatalogModal({ title: 'Add new cut name', labelEn: 'English (e.g. "Loin")', labelEs: 'Spanish (e.g. "Lomo")' });
-  if (!entered){ sel.value = ''; return; }
+  if (!entered) return;
   const { en: name_en, es: name_es } = entered;
   const idempotencyKey = `cut-names-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
@@ -1029,11 +1040,10 @@ async function handleCutNameSelectChange(){
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
       const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new cut anyway?`);
-      if (!proceed){ sel.value = ''; return; }
+      if (!proceed) return;
       result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating cut: ' + e.message);
-      sel.value = '';
       return;
     }
   }
