@@ -108,6 +108,49 @@ function narrowByTempPack(
   );
 }
 
+// Real gap closed 2026-08-29: this matcher checked category + name + temperature + packaging,
+// but NEVER Variation (subcategory_en) — so two real products differing ONLY by variation (e.g.
+// "Loin Boneless Fresh Box" vs "Loin Boneless Skinless Fresh Box") were narrowed identically by
+// everything above, meaning the line's own wording (which might say "Skinless" outright) was
+// simply thrown away instead of being used to tell them apart. Subcategory_en is a comma-joined
+// list of variation names_en, not a single value, so this is a set-containment check, not an
+// equality check like temperature/packaging: the line's detected variation words must ALL be
+// present on the candidate, but the candidate is allowed to carry additional variations the line
+// didn't bother spelling out (plants often write "Skinless" and never restate "Boneless" even
+// when the product genuinely is both) — same "no signal, no filter" rule as temp/pack (rule 10):
+// a line with zero variation words narrows nothing, never assumed to mean "no variation."
+function detectVariationNamesFromLine(line: string, variationNames: string[]): Set<string> {
+  const norm = line.toLowerCase();
+  const matched = new Set<string>();
+  for (const name of variationNames) {
+    if (name && wordBoundary(name).test(norm)) matched.add(name.toLowerCase());
+  }
+  return matched;
+}
+
+function candidateVariationSet(p: any): Set<string> {
+  return new Set(
+    (p.subcategory_en || "")
+      .split(",")
+      .map((s: string) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function narrowByVariation(rawText: string, candidates: any[], variationNames: string[]) {
+  const lineVariations = detectVariationNamesFromLine(rawText, variationNames);
+  if (lineVariations.size === 0) return candidates; // no signal in the line — never a silent default
+  const narrowed = candidates.filter((p) => {
+    const pVariations = candidateVariationSet(p);
+    for (const v of lineVariations) if (!pVariations.has(v)) return false;
+    return true;
+  });
+  // Rule 5 — never narrow to zero silently. If nothing on file actually has the variation the line
+  // names, that's real information to surface (as candidates, still requiring a human pick), not a
+  // reason to pretend the variation signal didn't exist.
+  return narrowed.length ? narrowed : candidates;
+}
+
 function productSummary(p: any) {
   return {
     id: p.id,
@@ -151,6 +194,8 @@ Deno.serve(async (req) => {
 
     const temperatures = await sql<TempPack[]>`select id, name, name_en from temperature`;
     const packagings = await sql<TempPack[]>`select id, name, name_en from packaging`;
+    const variationRows = await sql`select id, name_es, name_en from variations`;
+    const variationNames = variationRows.map((v: any) => v.name_en).filter(Boolean) as string[];
 
     const termAliasRows = await sql`
       select term, meaning_type, meaning_id from plant_term_aliases where plant_id = ${plant_id}
@@ -177,7 +222,14 @@ Deno.serve(async (req) => {
         const { tempId, packagingId } = detectTempPackFromLine(raw_text, temperatures, packagings, plantTermAliasMap);
         const tempConflict = tempId && product.temperature_id && tempId !== product.temperature_id;
         const packConflict = packagingId && product.packaging_id && packagingId !== product.packaging_id;
-        if (!tempConflict && !packConflict) {
+        // Same re-validation the temp/pack conflict check already does — a remembered alias never
+        // overrides what THIS line's own text says. If the line now names a variation the aliased
+        // product doesn't have (e.g. it learned "Skinless" pointed at a Boneless-only row, and this
+        // line's wording also says "Skinless" but the aliased row lacks it), that's a real conflict.
+        const lineVariations = detectVariationNamesFromLine(raw_text, variationNames);
+        const productVariations = candidateVariationSet(product);
+        const variationConflict = [...lineVariations].some((v) => !productVariations.has(v));
+        if (!tempConflict && !packConflict && !variationConflict) {
           return new Response(JSON.stringify({ matched: true, source: "alias", product: productSummary(product) }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -220,8 +272,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Rule 4/12 — narrow the name matches by temperature/packaging too, never stop at name alone.
-    const narrowed = narrowByTempPack(raw_text, nameMatches, temperatures, packagings, plantTermAliasMap);
+    // Rule 4/12 — narrow the name matches by temperature/packaging, AND by variation, never stop
+    // at name alone. Two real products differing ONLY by variation (e.g. "Loin Boneless Fresh
+    // Box" vs "Loin Boneless Skinless Fresh Box") used to narrow identically through everything
+    // above — this is what tells them apart when the line's own wording actually says so.
+    const tempPackNarrowed = narrowByTempPack(raw_text, nameMatches, temperatures, packagings, plantTermAliasMap);
+    const narrowed = narrowByVariation(raw_text, tempPackNarrowed, variationNames);
 
     if (narrowed.length === 1) {
       return new Response(JSON.stringify({ matched: true, source: "name_and_spec", product: productSummary(narrowed[0]) }), {
@@ -230,7 +286,7 @@ Deno.serve(async (req) => {
     }
 
     // Rule 5 — genuinely ambiguous: real, pickable candidates, never a silent guess.
-    const candidates = (narrowed.length ? narrowed : nameMatches).map(productSummary);
+    const candidates = (narrowed.length ? narrowed : (tempPackNarrowed.length ? tempPackNarrowed : nameMatches)).map(productSummary);
     return new Response(JSON.stringify({ matched: false, candidates }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
