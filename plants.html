@@ -25,6 +25,8 @@
      exactly what they're about to create, not just a bare name buried in a small text line. */
   .dup-modal-box{max-width:640px;max-height:85vh;overflow-y:auto;}
   .dup-compare-card{margin-bottom:14px;}
+  .dup-compare-heading{font-size:13px;color:var(--ink-soft);margin-bottom:8px;}
+  .dup-compare-heading strong{color:var(--ink);}
   .dup-compare-table{width:100%;border-collapse:collapse;margin-bottom:8px;}
   .dup-compare-table th{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:6px 10px;border-bottom:1.5px solid var(--line);}
   .dup-compare-table td{font-size:13.5px;padding:7px 10px;border-bottom:1px solid var(--line);}
@@ -734,8 +736,13 @@ function plDupCompareCardHtml(existing){
   const diffText = diffKeys.length
     ? `The difference is: <strong>${diffKeys.join(', ')}</strong>. Are you sure you want to create this as a new, separate product?`
     : `No difference found — this looks like exactly the same product.`;
+  // Names the exact catalog row this comparison is against — with more than one possible match,
+  // a bare comparison table doesn't say WHICH existing product each card refers to.
+  const existingLabel = existing.full_name_en || existing.name_en || existing.name || 'Existing product';
+  const existingId = existing.business_id ? ` (${escapeHtml(existing.business_id)})` : '';
   return `
     <div class="dup-compare-card">
+      <div class="dup-compare-heading">Comparing with: <strong>${escapeHtml(existingLabel)}</strong>${existingId}</div>
       <table class="dup-compare-table">
         <tr><th></th><th>Already in the catalog</th><th>You're creating</th></tr>
         ${row('Category')}${row('Cut Name')}${row('Variation')}${row('Temperature')}${row('Packing')}
