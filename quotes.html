@@ -182,16 +182,13 @@
   .rq-quickpick-chip{font-size:12.5px;font-weight:600;color:var(--navy-2);background:var(--blue-light);border:1px solid rgba(30,106,219,.15);border-radius:20px;padding:7px 15px;cursor:pointer;white-space:nowrap;transition:background .12s ease,transform .12s ease,box-shadow .12s ease;}
   .rq-quickpick-chip:hover{background:var(--blue);color:#fff;border-color:var(--blue);transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,106,219,.3);}
   .rq-suggest{position:absolute;top:calc(100% + 4px);left:0;width:100%;background:#12294f;border:1.5px solid rgba(255,255,255,.14);border-radius:10px;max-height:280px;overflow-y:auto;z-index:20;display:none;box-shadow:0 12px 28px rgba(8,18,32,.35);}
-  /* Centered, not anchored — with a real dropdown you'd have to look back down at your own input
-     to read the list; a centered panel reads as a deliberate search overlay you look AT. Dark
-     glass instead of a plain white box — matches the navy hero it launches from. */
-  .rq-suggest.show{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(600px,90vw);max-height:min(420px,70vh);border-radius:14px;background:rgba(14,32,64,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 30px 70px rgba(8,18,32,.55);}
+  /* Wide dark glass panel, not a plain anchored dropdown — matches the navy hero it launches from.
+     `top` is set inline by JS (rqPositionSuggestBelowInput) to sit just under the real input, so
+     the input itself — where the trader is actually looking while typing — is never covered. */
+  .rq-suggest.show{position:fixed;left:50%;transform:translateX(-50%);width:min(600px,90vw);max-height:min(420px,70vh);border-radius:14px;background:rgba(14,32,64,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 30px 70px rgba(8,18,32,.55);}
   .rq-suggest-backdrop{position:fixed;inset:0;background:rgba(8,18,32,.4);z-index:19;display:none;pointer-events:none;}
   .rq-suggest-backdrop.show{display:block;}
   .rq-suggest.show{display:block;}
-  /* The overlay covers the real input (by design, see above) — echoes what's being typed at the
-     top of the panel itself, so there's no need to look away to confirm it. */
-  .rq-suggest-echo{padding:12px 18px;font-size:15px;font-weight:600;color:#fff;border-bottom:1.5px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);border-radius:13px 13px 0 0;}
   .rq-suggest-item{padding:12px 18px;font-size:14px;color:rgba(255,255,255,.85);cursor:pointer;white-space:normal;transition:background .12s ease;border-bottom:1px solid rgba(255,255,255,.07);}
   .rq-suggest-item:last-child{border-bottom:none;}
   .rq-suggest-item:hover{background:rgba(90,170,255,.16);color:#fff;}
@@ -989,21 +986,26 @@ function rqSetSuggestBackdrop(on){
   document.getElementById('rq_suggest_backdrop').classList.toggle('show', on);
 }
 
+// Positions the (fixed, centered-horizontally) suggestion panel just under the real search input
+// instead of covering it — real complaint from the trader: a dead-center overlay hid the input
+// while typing, so there was no way to see what had actually been typed so far.
+function rqPositionSuggestBelowInput(box){
+  const inputRect = document.getElementById('rq_product_name').getBoundingClientRect();
+  box.style.top = (inputRect.bottom + 8) + 'px';
+}
+
 function rqRenderSuggestions(){
   const box = document.getElementById('rq_product_suggestions');
-  const rawTerm = document.getElementById('rq_product_name').value.trim();
-  const term = rawTerm.toLowerCase();
+  const term = document.getElementById('rq_product_name').value.trim().toLowerCase();
   // Once the text is already an exact match, the pick is done — no need to keep suggesting.
   if (term && rqProductSuggestions.some(s => s.matchName.toLowerCase() === term)){
     box.classList.remove('show'); box.innerHTML = ''; rqSetSuggestBackdrop(false); rqSyncQuickpicksVisibility(); return;
   }
   const matches = (term ? rqProductSuggestions.filter(s => s.label.toLowerCase().includes(term)) : rqProductSuggestions).slice(0, 8);
   if (!matches.length){ box.classList.remove('show'); box.innerHTML = ''; rqSetSuggestBackdrop(false); rqSyncQuickpicksVisibility(); return; }
-  // The overlay sits on top of the real input (by design) — echo what's typed so far so there's
-  // never a moment of "did that keystroke register" while looking at the panel, not the input.
-  const echoHtml = rawTerm ? `<div class="rq-suggest-echo">${escapeHtml(rawTerm)}</div>` : '';
-  box.innerHTML = echoHtml + matches.map((s, i) => `<div class="rq-suggest-item" data-suggest-idx="${i}" onmousedown="rqSelectSuggestionIdx(${i})">${escapeHtml(s.label)}</div>`).join('');
+  box.innerHTML = matches.map((s, i) => `<div class="rq-suggest-item" data-suggest-idx="${i}" onmousedown="rqSelectSuggestionIdx(${i})">${escapeHtml(s.label)}</div>`).join('');
   box.dataset.matches = JSON.stringify(matches.map(s => ({ n: s.matchName, p: s.productId })));
+  rqPositionSuggestBelowInput(box);
   box.classList.add('show');
   rqSetSuggestBackdrop(true);
   rqSyncQuickpicksVisibility();
