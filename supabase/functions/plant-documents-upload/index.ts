@@ -20,10 +20,15 @@ Deno.serve(async (req) => {
     const missing = ["actor", "plant_id", "file_name", "file_base64"].filter((k) => !body[k]);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
 
-    const { actor, plant_id, file_name, file_base64, content_type = null } = body;
+    const { actor, plant_id, file_name, file_base64, content_type = null, idempotency_key = null } = body;
 
     const [plant] = await sql`select id from plants where id = ${plant_id}`;
     if (!plant) return jsonResponse({ error: "unknown plant_id" }, 400);
+
+    if (idempotency_key) {
+      const [existing] = await sql`select * from plant_documents where idempotency_key = ${idempotency_key}`;
+      if (existing) return jsonResponse({ created: true, document: existing, idempotent_replay: true });
+    }
 
     let bytes: Uint8Array;
     try {
@@ -43,8 +48,8 @@ Deno.serve(async (req) => {
 
     const doc = await sql.begin(async (tx) => {
       const [doc] = await tx`
-        insert into plant_documents (plant_id, file_name, storage_path, content_type, file_size, uploaded_by)
-        values (${plant_id}, ${file_name}, ${storagePath}, ${content_type}, ${bytes.byteLength}, ${actor})
+        insert into plant_documents (plant_id, file_name, storage_path, content_type, file_size, uploaded_by, idempotency_key)
+        values (${plant_id}, ${file_name}, ${storagePath}, ${content_type}, ${bytes.byteLength}, ${actor}, ${idempotency_key})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_documents", record_id: doc.id, after: doc });

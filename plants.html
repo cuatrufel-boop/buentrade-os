@@ -1277,10 +1277,12 @@ function uploadPlantDocument(){
   const reader = new FileReader();
   reader.onload = async () => {
     const base64 = reader.result.split(',')[1];
+    const idempotencyKey = `plant-documents-upload|${currentPlantId}|${file.name}|${file.size}|${new Date().toISOString().slice(0, 16)}`;
     try {
       await callApi('plant-documents-upload', {
         actor: currentActor(), plant_id: currentPlantId,
         file_name: file.name, file_base64: base64, content_type: file.type || null,
+        idempotency_key: idempotencyKey,
       });
     } catch (e) {
       document.getElementById('plantDocMsg').textContent = 'Error: ' + e.message;

@@ -771,9 +771,10 @@ async function markWon(id, overrideCreditCheck){
     if (!ok) return;
   }
 
+  const wonIdempotencyKey = `sent-offers-mark-won|${id}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('sent-offers-mark-won', { actor: currentActor(), sent_offer_id: id, override_credit_check: !!overrideCreditCheck });
+    result = await callApi('sent-offers-mark-won', { actor: currentActor(), sent_offer_id: id, override_credit_check: !!overrideCreditCheck, won_idempotency_key: wonIdempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
       const proceed = await showConfirm('Credit limit exceeded', e.data.message, 'Create anyway');

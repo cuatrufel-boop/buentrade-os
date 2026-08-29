@@ -28,11 +28,26 @@ Deno.serve(async (req) => {
       // have edited these live without saving them via sent_offers.negotiate first; winning has to
       // snapshot whatever's actually on screen at that moment, not the last-saved values.
       purchase_price = null, sale_per_lb = null, total_cost = null, total_sale = null,
-      weight = null, us_freight_amount = null,
+      weight = null, us_freight_amount = null, won_idempotency_key = null,
     } = body;
 
     const [offer] = await sql`select * from sent_offers where id = ${sent_offer_id}`;
     if (!offer) return jsonResponse({ error: "unknown sent_offer_id" }, 404);
+
+    // Closes the narrow race the status check below can't: two requests arriving close enough
+    // together could both read status === 'sent' before either commits. A replay of the exact
+    // same won-click (same key) returns the order that already exists instead of running the
+    // whole PO/SO/freight/shipment cascade a second time.
+    if (won_idempotency_key && offer.won_idempotency_key === won_idempotency_key) {
+      const [purchaseOrder] = await sql`select * from purchase_orders where sent_offer_id = ${sent_offer_id}`;
+      const [salesOrder] = await sql`select * from sales_orders where sent_offer_id = ${sent_offer_id}`;
+      const [shipment] = await sql`select * from shipments where sent_offer_id = ${sent_offer_id}`;
+      return jsonResponse({
+        won: true, idempotent_replay: true, order_number: offer.order_number, offer,
+        purchase_order: purchaseOrder ?? null, sales_order: salesOrder ?? null, shipment: shipment ?? null,
+      });
+    }
+
     if (offer.status !== "sent") {
       return jsonResponse({ error: "not_pending", message: `This offer is already '${offer.status}', not 'sent' — can't mark it won again.`, current_status: offer.status }, 409);
     }
@@ -79,7 +94,8 @@ Deno.serve(async (req) => {
           status = 'won', order_number = ${orderNumber}, won_at = now(), won_by = ${actor},
           purchase_price = ${finalPurchasePrice}, sale_per_lb = ${finalSalePerLb},
           total_cost = ${finalTotalCost}, total_sale = ${finalTotalSale},
-          weight = ${finalWeight}, us_freight_amount = ${finalUsFreightAmount}
+          weight = ${finalWeight}, us_freight_amount = ${finalUsFreightAmount},
+          won_idempotency_key = ${won_idempotency_key}
         where id = ${sent_offer_id} returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "sent_offers", record_id: sent_offer_id, before: offer, after: updatedOffer });

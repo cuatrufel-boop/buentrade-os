@@ -864,8 +864,15 @@ async function saveRateField(rateId, field, value, inputEl){
   }
 }
 
+// A content-based idempotency key doesn't fit this one — every blank row is identical, and
+// clicking "+ Add row" twice on purpose (to add two blank rows to fill in) is the real, intended
+// workflow, not a duplicate. What actually needs guarding against is a genuine double-click firing
+// two overlapping requests before the first one's row shows up — a simple in-flight lock, not a
+// content key.
+let addRateRowInFlight = false;
 async function addRateRow(){
-  if (!currentProviderId) return;
+  if (!currentProviderId || addRateRowInFlight) return;
+  addRateRowInFlight = true;
   try {
     const created = await callApi('provider-rates-create', {
       actor: currentActor(),
@@ -877,6 +884,8 @@ async function addRateRow(){
     renderRateTable();
   } catch (e) {
     alert('Error: ' + e.message);
+  } finally {
+    addRateRowInFlight = false;
   }
 }
 

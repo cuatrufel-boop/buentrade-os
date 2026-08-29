@@ -1732,8 +1732,14 @@ function negoSetSaveStatus(state, msg){
   }
 }
 
+// No content-based idempotency key here — countering with the exact same price twice in a row is
+// a real (if rare) negotiation event, not necessarily a retry, so a time-bucketed key could
+// silently swallow a genuine second counter. What actually needs guarding against is a double-
+// click firing two overlapping requests — a simple in-flight lock instead.
+let negoLogEventInFlight = false;
 async function negoLogEvent(to, price){
-  if (!negoOffer) return;
+  if (!negoOffer || negoLogEventInFlight) return;
+  negoLogEventInFlight = true;
   negoSetSaveStatus('saving');
   try {
     const result = await callApi('sent-offers-log-event', { actor: currentActor(), sent_offer_id: negoOffer.id, to, price });
@@ -1742,6 +1748,8 @@ async function negoLogEvent(to, price){
     negoSetSaveStatus('saved');
   } catch (e) {
     negoSetSaveStatus('error', e.message);
+  } finally {
+    negoLogEventInFlight = false;
   }
 }
 
@@ -1873,11 +1881,13 @@ async function negoSaveDefinitive(overrideCreditCheck){
   const total_cost = purchase_price * weight;
   const total_sale = sale_per_lb * weight;
 
+  const wonIdempotencyKey = `sent-offers-mark-won|${negoOffer.id}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
     result = await callApi('sent-offers-mark-won', {
       actor: currentActor(), sent_offer_id: negoOffer.id, override_credit_check: !!overrideCreditCheck,
       purchase_price, sale_per_lb, us_freight_amount, total_cost, total_sale, weight,
+      won_idempotency_key: wonIdempotencyKey,
     });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
