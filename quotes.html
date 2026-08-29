@@ -189,6 +189,9 @@
   .rq-suggest-backdrop{position:fixed;inset:0;background:rgba(8,18,32,.4);z-index:19;display:none;pointer-events:none;}
   .rq-suggest-backdrop.show{display:block;}
   .rq-suggest.show{display:block;}
+  /* The overlay covers the real input (by design, see above) — echoes what's being typed at the
+     top of the panel itself, so there's no need to look away to confirm it. */
+  .rq-suggest-echo{padding:12px 18px;font-size:15px;font-weight:600;color:#fff;border-bottom:1.5px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);border-radius:13px 13px 0 0;}
   .rq-suggest-item{padding:12px 18px;font-size:14px;color:rgba(255,255,255,.85);cursor:pointer;white-space:normal;transition:background .12s ease;border-bottom:1px solid rgba(255,255,255,.07);}
   .rq-suggest-item:last-child{border-bottom:none;}
   .rq-suggest-item:hover{background:rgba(90,170,255,.16);color:#fff;}
@@ -988,14 +991,18 @@ function rqSetSuggestBackdrop(on){
 
 function rqRenderSuggestions(){
   const box = document.getElementById('rq_product_suggestions');
-  const term = document.getElementById('rq_product_name').value.trim().toLowerCase();
+  const rawTerm = document.getElementById('rq_product_name').value.trim();
+  const term = rawTerm.toLowerCase();
   // Once the text is already an exact match, the pick is done — no need to keep suggesting.
   if (term && rqProductSuggestions.some(s => s.matchName.toLowerCase() === term)){
     box.classList.remove('show'); box.innerHTML = ''; rqSetSuggestBackdrop(false); rqSyncQuickpicksVisibility(); return;
   }
   const matches = (term ? rqProductSuggestions.filter(s => s.label.toLowerCase().includes(term)) : rqProductSuggestions).slice(0, 8);
   if (!matches.length){ box.classList.remove('show'); box.innerHTML = ''; rqSetSuggestBackdrop(false); rqSyncQuickpicksVisibility(); return; }
-  box.innerHTML = matches.map((s, i) => `<div class="rq-suggest-item" data-suggest-idx="${i}" onmousedown="rqSelectSuggestionIdx(${i})">${escapeHtml(s.label)}</div>`).join('');
+  // The overlay sits on top of the real input (by design) — echo what's typed so far so there's
+  // never a moment of "did that keystroke register" while looking at the panel, not the input.
+  const echoHtml = rawTerm ? `<div class="rq-suggest-echo">${escapeHtml(rawTerm)}</div>` : '';
+  box.innerHTML = echoHtml + matches.map((s, i) => `<div class="rq-suggest-item" data-suggest-idx="${i}" onmousedown="rqSelectSuggestionIdx(${i})">${escapeHtml(s.label)}</div>`).join('');
   box.dataset.matches = JSON.stringify(matches.map(s => ({ n: s.matchName, p: s.productId })));
   box.classList.add('show');
   rqSetSuggestBackdrop(true);
