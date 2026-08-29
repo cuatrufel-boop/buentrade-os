@@ -197,7 +197,7 @@ auth.onAuthStateChanged(user => {
 
 <div class="wrap">
   <div class="tab-row" style="margin-bottom:20px;">
-    <button class="tab-btn active" id="tabCarriersBtn" onclick="setProviderTab('carriers')">Carriers &amp; Freight Forwarders</button>
+    <button class="tab-btn active" id="tabCarriersBtn" onclick="setProviderTab('carriers')">Carriers</button>
     <button class="tab-btn" id="tabAgenciesBtn" onclick="setProviderTab('agencies')">Customs Agencies</button>
   </div>
 
@@ -231,10 +231,9 @@ auth.onAuthStateChanged(user => {
       </div>
       <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com" oninput="updateProviderProfile()"></div>
       <div class="field">
-        <label>Roles — a provider can have one, two, or all three</label>
-        <div class="grid2" style="grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <label>Roles — a provider can be one or both</label>
+        <div class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;">
           <label class="role-check"><input type="checkbox" value="carrier" class="role-cb" onchange="updateProviderProfile()"> Carrier</label>
-          <label class="role-check"><input type="checkbox" value="freight_forwarder" class="role-cb" onchange="updateProviderProfile()"> Freight Forwarder</label>
           <label class="role-check"><input type="checkbox" value="customs_broker" class="role-cb" onchange="updateProviderProfile()"> Customs Broker</label>
         </div>
       </div>
@@ -319,7 +318,7 @@ let allRates = [];
 let currentProviderId = null;
 let currentRateTab = 'us_freight';
 
-const ROLE_LABELS = {carrier:'Carrier', freight_forwarder:'Freight Forwarder', customs_broker:'Customs Broker'};
+const ROLE_LABELS = {carrier:'Carrier', customs_broker:'Customs Broker'};
 const CUSTOMS_TYPES = [
   {value:'tramite_aduanal', label:'Trámite aduanal (customs processing)'},
   {value:'bodega_americana', label:'Bodega americana (US warehouse)'},
@@ -383,7 +382,7 @@ function renderProviders(){
     const providerRoles = providerRolesMap[p.id] || [];
     const inTab = providerTab === 'agencies'
       ? providerRoles.includes('customs_broker')
-      : providerRoles.some(r => r === 'carrier' || r === 'freight_forwarder');
+      : providerRoles.includes('carrier');
     if (!inTab) return false;
     const roles = providerRoles.map(r => ROLE_LABELS[r] || r).join(' ').toLowerCase();
     return (p.name || '').toLowerCase().includes(q) ||
@@ -418,11 +417,12 @@ function openForm(){
   document.getElementById('formDeleteBtn').style.display = 'none';
   document.getElementById('providerId').value = '';
   ['p_name','p_country_id','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
-  // Roles are a property of the provider, not the tab — a provider can hold any combination and
-  // show up in both tabs (see setProviderTab), so this never forces a choice. Pre-checking is
-  // only safe on the Customs Agencies tab, which maps to exactly one role; the Carriers tab covers
-  // two different roles (Carrier / Freight Forwarder), so guessing which one would be wrong.
-  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = (providerTab === 'agencies' && cb.value === 'customs_broker'));
+  // Roles are a property of the provider, not the tab — a provider can hold both and show up in
+  // both tabs (see setProviderTab), so this never forces a choice; it's just a helpful default.
+  // Each tab now maps to exactly one role (freight_forwarder removed 2026-08-30), so pre-checking
+  // whichever role matches the tab you opened the form from is never a guess.
+  const roleForTab = providerTab === 'agencies' ? 'customs_broker' : 'carrier';
+  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = (cb.value === roleForTab));
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
   updateProviderProfile();
@@ -573,7 +573,7 @@ async function deleteProvider(id){
 // unconditionally was misleading even after the underlying data was already split correctly.
 function ratesTabsForProvider(providerId){
   const roles = providerRolesMap[providerId] || [];
-  const isFreight = roles.includes('carrier') || roles.includes('freight_forwarder');
+  const isFreight = roles.includes('carrier');
   const isCustoms = roles.includes('customs_broker');
   return {
     us_freight: isFreight, mexican_freight: isFreight, customs: isCustoms,
