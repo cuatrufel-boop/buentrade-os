@@ -446,6 +446,7 @@ auth.onAuthStateChanged(user => {
   <div class="card" id="plantListCard">
     <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
       <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <select id="plantListCategoryFilter" onchange="renderPlants()" style="padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;"><option value="">All categories</option></select>
       <button class="btn" onclick="openNewPlant()">+ New Plant</button>
     </div>
     <div id="plantRows" class="pkg-table-wrap"></div>
@@ -566,7 +567,7 @@ auth.onAuthStateChanged(user => {
     <div class="profile-panel">
       <div class="profile-heading">Classification</div>
       <div class="grid5">
-        <div class="field"><label>Category *</label><select id="category" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+        <div class="field"><label>Category *</label><select id="category" required onchange="onCategoryChanged()"><option value="">—</option></select></div>
         <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="renderPackagingOptions();updateProfileDisplays()"><option value="">—</option></select></div>
         <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
         <div class="field">
@@ -961,6 +962,8 @@ async function loadEverything(){
   categories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
   const newPlantCatSel = document.getElementById('newPlantCategory');
   categories.forEach(c => newPlantCatSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
+  const listCatFilter = document.getElementById('plantListCategoryFilter');
+  categories.forEach(c => listCatFilter.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
   const countryOptions = countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
   document.getElementById('np_country_id').innerHTML += countryOptions;
   document.getElementById('pe_country_id').innerHTML += countryOptions;
@@ -1046,30 +1049,37 @@ function updateProfileDisplays(){
 let variations = [];
 let cutNames = [];
 
-async function loadCutNames(){
-  const res = await callApi('cut-names-search', {});
-  cutNames = res.results || [];
+// Scoped to the currently selected Category (2026-08-29: Chicken products started going in and
+// the dropdown was showing every category's cuts mixed together — category never crosses, same
+// boundary as products/plants). No category selected yet → empty list, not "show everything".
+async function loadCutNames(category_id){
+  const catId = category_id !== undefined ? category_id : (document.getElementById('category').value || null);
   const sel = document.getElementById('cut_name_id');
+  if (!catId){ cutNames = []; sel.innerHTML = '<option value="">— Select a category first —</option>'; return; }
+  const res = await callApi('cut-names-search', { category_id: catId });
+  cutNames = res.results || [];
   sel.innerHTML = '<option value="">—</option>' + cutNames.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</option>`).join('');
 }
 
 // A visible "+" button next to the select, not buried as the last option inside the dropdown
 // itself — the same visibility problem the Variation panel's own "+ Add new…" link already solved.
 async function addNewCutName(){
+  const category_id = document.getElementById('category').value;
+  if (!category_id){ alert('Select a Category first.'); return; }
   const sel = document.getElementById('cut_name_id');
   const entered = await showAddCatalogModal({ title: 'Add new cut name', labelEn: 'English (e.g. "Loin")', labelEs: 'Spanish (e.g. "Lomo")' });
   if (!entered) return;
   const { en: name_en, es: name_es } = entered;
-  const idempotencyKey = `cut-names-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
+  const idempotencyKey = `cut-names-create|${category_id}|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, idempotency_key: idempotencyKey });
+    result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, category_id, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
       const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new cut anyway?`);
       if (!proceed) return;
-      result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, category_id, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating cut: ' + e.message);
       return;
@@ -1077,6 +1087,14 @@ async function addNewCutName(){
   }
   await loadCutNames();
   sel.value = result.cut_name.id;
+  updateProfileDisplays();
+}
+
+// Category changed — cut names/variations from the old category are meaningless here, same
+// "never crosses" boundary enforced everywhere else. Clear both selections and reload scoped.
+async function onCategoryChanged(){
+  document.getElementById('cut_name_id').value = '';
+  await Promise.all([loadCutNames(), loadVariations()]);
   updateProfileDisplays();
 }
 
@@ -1142,8 +1160,11 @@ document.addEventListener('click', (e) => {
   panel.style.display = 'none';
 });
 
-async function loadVariations(){
-  const res = await callApi('variations-search', {});
+// Scoped to the currently selected Category, same reasoning and same real gap as loadCutNames.
+async function loadVariations(category_id){
+  const catId = category_id !== undefined ? category_id : (document.getElementById('category').value || null);
+  if (!catId){ variations = []; renderVariationCheckboxes(); return; }
+  const res = await callApi('variations-search', { category_id: catId });
   variations = res.results || [];
   renderVariationCheckboxes();
 }
@@ -1151,19 +1172,21 @@ async function loadVariations(){
 // Needs both languages, unlike Brand — a variation with only one language is exactly the silent
 // EN/ES gap the catalog-matching rules exist to prevent.
 async function addNewVariation(){
+  const category_id = document.getElementById('category').value;
+  if (!category_id){ alert('Select a Category first.'); return; }
   const entered = await showAddCatalogModal({ title: 'Add new variation', labelEn: 'English (e.g. "Bone-In")', labelEs: 'Spanish (e.g. "con hueso")' });
   if (!entered) return;
   const { en: name_en, es: name_es } = entered;
-  const idempotencyKey = `variations-create|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
+  const idempotencyKey = `variations-create|${category_id}|${name_en}|${name_es}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, idempotency_key: idempotencyKey });
+    result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, category_id, idempotency_key: idempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
       const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new variation anyway?`);
       if (!proceed) return;
-      result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, override_duplicate_check: true, idempotency_key: idempotencyKey });
+      result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, category_id, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
       alert('Error creating variation: ' + e.message);
       return;
@@ -1178,11 +1201,14 @@ async function addNewVariation(){
 
 function renderPlants(){
   const term = (document.getElementById('plantSearchBox').value || '').trim().toLowerCase();
-  const filtered = term ? plants.filter(p =>
-    (p.name || '').toLowerCase().includes(term) ||
-    (p.city || '').toLowerCase().includes(term) ||
-    (countryName(p.country_id) || '').toLowerCase().includes(term)
-  ) : plants;
+  const catFilter = document.getElementById('plantListCategoryFilter').value;
+  const filtered = plants.filter(p =>
+    (!catFilter || p.category_id === catFilter) &&
+    (!term ||
+      (p.name || '').toLowerCase().includes(term) ||
+      (p.city || '').toLowerCase().includes(term) ||
+      (countryName(p.country_id) || '').toLowerCase().includes(term))
+  );
   const wrap = document.getElementById('plantRows');
   document.getElementById('plantEmptyMsg').style.display = filtered.length ? 'none' : 'block';
   wrap.innerHTML = filtered.map(p => {
@@ -1672,15 +1698,14 @@ let priceListCreateForRowIndex = null;
 // dropdowns (e.g. a name that literally says "Combo Frozen" as text AND has Combo/Frozen selected
 // separately). Brand is pre-filled since it's simply a fact already known here — this row came
 // from this exact plant's price list.
-function startCreateProductForRow(i){
+async function startCreateProductForRow(i){
   priceListCreateForRowIndex = i;
-  openProductForm(null);
+  // openProductForm itself now defaults Category to this plant's fixed species (rule 15) before
+  // loading Cut Name/Variation scoped to it — awaited here so brand/temp/packaging below never
+  // race that load.
+  await openProductForm(null);
   const plant = plants.find(p => p.id === currentPlantId);
   if (plant) document.getElementById('brand').value = plant.name;
-  // The plant's own fixed species (rule 15) — the real source of truth now, not the text-based
-  // list filter above the review table (which only ever drove local dropdown filtering, never the
-  // actual match decision, since that moved server-side).
-  if (plant && plant.category_id) document.getElementById('category').value = plant.category_id;
   // Temperature/Packaging aren't a judgment call here — if the row's own wording already reads
   // as Frozen/Combo/etc. (the same detection used to match against the catalog), it's already
   // "explicit" in the plant's own text, just not typed into the form yet. Only pre-filled when
@@ -2710,15 +2735,21 @@ function editProduct(id){
   if (p) openProductForm(p);
 }
 
-function openProductForm(product){
+async function openProductForm(product){
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
   const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
   document.getElementById('prodLinkId').value = '';
-  variations.forEach(v => { const box = document.getElementById('variation_check_' + v.id); if (box) box.checked = false; });
   document.getElementById('cut_name_id').value = '';
   renderPackagingOptions(); // temperature_id is blank at this point — shows every unrestricted packaging
+  // Cut Name/Variation are scoped to Category (2026-08-29) — a plant carries one fixed species
+  // (rule 15), so a NEW product for this plant defaults straight to it instead of asking the
+  // trader to repick something that's already a known fact.
+  const plant = plants.find(p => p.id === currentPlantId);
+  const categoryId = (product && product.category_id) || (plant && plant.category_id) || null;
+  if (categoryId) document.getElementById('category').value = categoryId;
+  await Promise.all([loadCutNames(categoryId), loadVariations(categoryId)]);
   pendingPhotoFile = null;
   pendingSpecFile = null;
   document.getElementById('photoFile').value = '';
@@ -2737,10 +2768,7 @@ function openProductForm(product){
     document.getElementById('prodId').value = product.id;
     document.getElementById('prodLinkId').value = product.linkId || '';
     fields.slice(1).forEach(f => {
-      if (f === 'category'){
-        if (product.category_id) document.getElementById('category').value = product.category_id;
-        return;
-      }
+      if (f === 'category') return; // already set above
       if (f === 'brand'){
         if (product.brand_id) document.getElementById('brand').value = product.brand_id;
         return;
