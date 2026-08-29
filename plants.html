@@ -590,6 +590,7 @@ auth.onAuthStateChanged(user => {
               <span id="variationDropdownLabel" style="color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">— None —</span><span style="color:var(--ink-soft);flex-shrink:0;">▾</span>
             </button>
             <button type="button" class="btn-add-inline" onclick="addNewVariation()" title="Add a new variation">+</button>
+            <button type="button" class="btn-add-inline" onclick="manageVariations()" title="Remove a variation" style="font-size:15px;">🗑</button>
           </div>
           <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:#fff;border:1.5px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,31,51,.12);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;">
             <div id="variationCheckboxes" style="display:flex;flex-direction:column;gap:8px;"></div>
@@ -691,6 +692,17 @@ auth.onAuthStateChanged(user => {
     <div id="manageCutNamesList"></div>
     <div class="email-modal-actions">
       <button onclick="document.getElementById('manageCutNamesModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="manageVariationsModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:420px;max-height:70vh;overflow-y:auto;">
+    <h3>Remove variations</h3>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">Only removes it from this dropdown — never touches existing products.</div>
+    <div id="manageVariationsList"></div>
+    <div class="email-modal-actions">
+      <button onclick="document.getElementById('manageVariationsModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
     </div>
   </div>
 </div>
@@ -1197,6 +1209,31 @@ async function addNewVariation(){
   previouslyChecked.forEach(id => { const box = document.getElementById('variation_check_' + id); if (box) box.checked = true; });
   document.getElementById('variation_check_' + result.variation.id).checked = true;
   updateProfileDisplays();
+}
+
+// Removes a catalog entry only — variations is a suggestion list, subcategory/subcategory_en are
+// copied text onto products at creation time, so this never touches any existing product.
+function manageVariations(){
+  renderManageVariationsList();
+  document.getElementById('manageVariationsModalOverlay').style.display = 'flex';
+}
+function renderManageVariationsList(){
+  const wrap = document.getElementById('manageVariationsList');
+  if (!variations.length){ wrap.innerHTML = '<div style="font-size:13px;color:var(--ink-soft);padding:8px 0;">No variations yet.</div>'; return; }
+  wrap.innerHTML = variations.map(v => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);">
+      <span style="font-size:13.5px;">${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}</span>
+      <button type="button" onclick="deleteVariationFromCatalog('${v.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:#fff;color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
+    </div>
+  `).join('');
+}
+async function deleteVariationFromCatalog(id){
+  const v = variations.find(x => x.id === id);
+  if (!v) return;
+  if (!confirm(`Remove "${v.name_en} / ${v.name_es}" from the Variation catalog?\n\nThis only removes it from the dropdown — it does not touch any existing product.`)) return;
+  await callApi('variations-delete', { actor: currentActor(), id });
+  await loadVariations();
+  renderManageVariationsList();
 }
 
 function renderPlants(){
