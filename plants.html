@@ -32,6 +32,13 @@
   .dup-compare-table td{font-size:13.5px;padding:7px 10px;border-bottom:1px solid var(--line);}
   .dup-compare-table td.dup-row-label{color:var(--ink-soft);font-weight:600;white-space:nowrap;}
   .dup-diff-text{background:#EEF3FF;border:1px solid #C9DBFA;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--ink);margin:0;}
+  /* A 100% identical match is the most dangerous case, not the calmest one — every field would
+     otherwise show with no highlight at all (nothing differs), making an exact duplicate look
+     LESS alarming than a genuine one-field difference. Red, not blue, and a harder message. */
+  .dup-compare-card.exact{border:1.5px solid var(--red);border-radius:10px;padding:10px 12px;background:#FDF3F1;}
+  .dup-compare-card.exact .dup-diff-text{background:#FBE4DF;border-color:var(--red);color:var(--red);font-weight:700;}
+  .dup-compare-card.exact .dup-compare-heading{color:var(--red);font-weight:700;}
+  .dup-compare-card.exact .dup-compare-heading strong{color:var(--red);}
   .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;letter-spacing:.2px;line-height:1;}
@@ -733,15 +740,16 @@ function plDupCompareCardHtml(existing){
     const style = differs ? 'color:var(--blue);font-weight:700;' : '';
     return `<tr><td class="dup-row-label">${escapeHtml(label)}</td><td style="${style}">${escapeHtml(oldVals[label])}</td><td style="${style}">${escapeHtml(newVals[label])}</td></tr>`;
   };
-  const diffText = diffKeys.length
-    ? `The difference is: <strong>${diffKeys.join(', ')}</strong>. Are you sure you want to create this as a new, separate product?`
-    : `No difference found — this looks like exactly the same product.`;
+  const isExact = diffKeys.length === 0;
+  const diffText = isExact
+    ? `🚫 EXACT DUPLICATE — every field is identical to a product already in the catalog. Are you absolutely sure you want to create a duplicate?`
+    : `The difference is: <strong>${diffKeys.join(', ')}</strong>. Are you sure you want to create this as a new, separate product?`;
   // Names the exact catalog row this comparison is against — with more than one possible match,
   // a bare comparison table doesn't say WHICH existing product each card refers to.
   const existingLabel = existing.full_name_en || existing.name_en || existing.name || 'Existing product';
   const existingId = existing.business_id ? ` (${escapeHtml(existing.business_id)})` : '';
   return `
-    <div class="dup-compare-card">
+    <div class="dup-compare-card${isExact ? ' exact' : ''}">
       <div class="dup-compare-heading">Comparing with: <strong>${escapeHtml(existingLabel)}</strong>${existingId}</div>
       <table class="dup-compare-table">
         <tr><th></th><th>Already in the catalog</th><th>You're creating</th></tr>
