@@ -1639,9 +1639,11 @@ async function realCostAdd(){
   const amountInput = document.getElementById('realCostAmount');
   const amount = Number(amountInput.value);
   if (!amount || amount <= 0) return;
+  const idempotencyKey = `order-extra-costs-add|${negoOffer.id}|${type}|${amount}|${new Date().toISOString().slice(0, 16)}`;
   try {
     await callApi('order-extra-costs-add', {
       actor: currentActor(), order_number: negoOffer.order_number, sent_offer_id: negoOffer.id, cost_type: type, amount,
+      idempotency_key: idempotencyKey,
     });
   } catch (e) { alert('Error: ' + e.message); return; }
   amountInput.value = '';
