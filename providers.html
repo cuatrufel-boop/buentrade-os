@@ -36,6 +36,18 @@
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
+  .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:0 14px;}
+  .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
+  .profile-panel{background:#F7FAFD;border:1px solid var(--line);border-radius:12px;padding:18px 22px;}
+  .profile-panel + .profile-panel{margin-top:16px;}
+  .profile-heading{font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px;}
+  .profile-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 28px;}
+  .profile-row{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .profile-row.half{grid-column:span 2;}
+  .profile-row.span2{grid-column:1 / -1;}
+  .profile-row .view-label{margin-bottom:0;}
+  .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   #formCard{display:none;}
   #searchBox{width:100%;max-width:420px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
@@ -56,6 +68,8 @@
   .tab-row{display:flex;justify-content:center;gap:6px;margin-bottom:14px;border-bottom:1.5px solid var(--line);}
   .tab-btn{background:none;border:none;padding:9px 14px;font-size:15px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;}
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .tab-btn:focus{outline:none;}
+  .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
   .rate-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;}
   .rate-input:focus{outline:none;border-color:var(--blue);}
   .save-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;transition:background .2s;}
@@ -187,7 +201,7 @@ auth.onAuthStateChanged(user => {
     <button class="tab-btn" id="tabAgenciesBtn" onclick="setProviderTab('agencies')">Customs Agencies</button>
   </div>
 
-  <div class="card">
+  <div class="card" id="providerSearchCard">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
       <button class="btn" onclick="openForm()">+ Add Provider</button>
@@ -197,40 +211,62 @@ auth.onAuthStateChanged(user => {
   <div class="card" id="formCard">
     <strong id="formTitle">New provider</strong>
     <input type="hidden" id="providerId">
-    <div class="grid2" style="margin-top:14px;">
-      <div class="field"><label>Name *</label><input id="p_name" required></div>
-      <div class="field"><label>Country</label><input id="p_country"></div>
+
+    <!-- Same format as the other profiles: fill in the fields up top, and the read-only Provider
+         Profile card below consolidates it into one glanceable record as you go — nothing
+         derived/computed here, it's a live mirror of what Save will record. -->
+    <div class="profile-panel" style="margin-top:12px;">
+      <div class="profile-heading">Classification</div>
+      <div class="grid5">
+        <div class="field"><label>Name *</label><input id="p_name" required oninput="updateProviderProfile()"></div>
+        <div class="field"><label>Country</label><select id="p_country_id" onchange="updateProviderProfile()"><option value="">—</option></select></div>
+        <div class="field"><label>City</label><input id="p_city" oninput="updateProviderProfile()"></div>
+        <div class="field"><label>Phone</label><input id="p_phone" placeholder="+52 6621234567" oninput="updateProviderProfile()"></div>
+        <div class="field"><label>Contact Name</label><input id="p_contact_name" oninput="updateProviderProfile()"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Contact Email</label><input id="p_email" type="email" oninput="updateProviderProfile()"></div>
+        <div class="field"><label>MC# (Motor Carrier)</label><input id="p_mc_number" placeholder="e.g. MC-123456" oninput="updateProviderProfile()"></div>
+        <div class="field"><label>DOT# (USDOT)</label><input id="p_dot_number" placeholder="e.g. 1234567" oninput="updateProviderProfile()"></div>
+      </div>
+      <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com" oninput="updateProviderProfile()"></div>
+      <div class="field">
+        <label>Roles — a provider can have one, two, or all three</label>
+        <div class="grid2" style="grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <label class="role-check"><input type="checkbox" value="carrier" class="role-cb" onchange="updateProviderProfile()"> Carrier</label>
+          <label class="role-check"><input type="checkbox" value="freight_forwarder" class="role-cb" onchange="updateProviderProfile()"> Freight Forwarder</label>
+          <label class="role-check"><input type="checkbox" value="customs_broker" class="role-cb" onchange="updateProviderProfile()"> Customs Broker</label>
+        </div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="p_notes" rows="2" oninput="updateProviderProfile()"></textarea></div>
     </div>
-    <div class="grid2">
-      <div class="field"><label>City</label><input id="p_city"></div>
-      <div class="field"><label>Phone</label><input id="p_phone" placeholder="+52 6621234567"></div>
-    </div>
-    <div class="grid2">
-      <div class="field"><label>Contact Name</label><input id="p_contact_name"></div>
-      <div class="field"><label>Contact Email</label><input id="p_email" type="email"></div>
-    </div>
-    <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com"></div>
-    <div class="grid2">
-      <div class="field"><label>MC# (Motor Carrier)</label><input id="p_mc_number" placeholder="e.g. MC-123456"></div>
-      <div class="field"><label>DOT# (USDOT)</label><input id="p_dot_number" placeholder="e.g. 1234567"></div>
-    </div>
-    <div class="field"><label>Notes</label><textarea id="p_notes" rows="2"></textarea></div>
-    <div class="field">
-      <label>Roles — a provider can have one, two, or all three</label>
-      <div class="grid2" style="grid-template-columns:1fr 1fr 1fr;gap:8px;">
-        <label class="role-check"><input type="checkbox" value="carrier" class="role-cb"> Carrier</label>
-        <label class="role-check"><input type="checkbox" value="freight_forwarder" class="role-cb"> Freight Forwarder</label>
-        <label class="role-check"><input type="checkbox" value="customs_broker" class="role-cb"> Customs Broker</label>
+
+    <div class="profile-panel">
+      <div class="profile-heading">Provider Profile</div>
+      <div class="profile-grid">
+        <div class="profile-row"><span class="view-label">Name</span><span class="profile-row-value" id="pv_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Country</span><span class="profile-row-value" id="pv_country">—</span></div>
+        <div class="profile-row"><span class="view-label">City</span><span class="profile-row-value" id="pv_city">—</span></div>
+        <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="pv_phone">—</span></div>
+        <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="pv_contact_name">—</span></div>
+        <div class="profile-row"><span class="view-label">Contact Email</span><span class="profile-row-value" id="pv_email">—</span></div>
+        <div class="profile-row"><span class="view-label">MC# (Motor Carrier)</span><span class="profile-row-value" id="pv_mc_number">—</span></div>
+        <div class="profile-row"><span class="view-label">DOT# (USDOT)</span><span class="profile-row-value" id="pv_dot_number">—</span></div>
+        <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="pv_email_cc">—</span></div>
+        <div class="profile-row"><span class="view-label">Roles</span><span class="profile-row-value" id="pv_roles">—</span></div>
+        <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="pv_notes">—</span></div>
       </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:8px;">
+
+    <div style="display:flex;gap:10px;margin-top:8px;align-items:center;">
       <button class="btn" onclick="saveProvider()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
+      <button class="btn danger" id="formDeleteBtn" style="display:none;margin-left:auto;" onclick="deleteProvider(document.getElementById('providerId').value)">Delete</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="providerListCard">
     <div id="providerRows" class="pkg-table-wrap"></div>
     <div id="emptyMsg" class="empty" style="display:none;">No providers found.</div>
   </div>
@@ -292,17 +328,27 @@ const CUSTOMS_TYPES = [
   {value:'customs', label:'Other / lump customs cost'},
 ];
 
+let countries = [];
+function countryName(countryId){
+  const c = countries.find(x => x.id === countryId);
+  return c ? c.name_en : null;
+}
+
 async function loadEverything(){
   try {
-    const [provRes, rolesRes, plantsRes, ratesRes] = await Promise.all([
+    const [provRes, rolesRes, plantsRes, ratesRes, countriesRes] = await Promise.all([
       callApi('providers-search', {}),
       callApi('provider-roles-search', {}),
       callApi('plants-search', {}),
       callApi('provider-rates-search', {}),
+      callApi('countries-search', {}),
     ]);
     providers = provRes.results || [];
     plantsList = plantsRes.results || [];
     allRates = ratesRes.results || [];
+    countries = countriesRes.results || [];
+    const countrySel = document.getElementById('p_country_id');
+    countrySel.innerHTML = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
     providerRolesMap = {};
     (rolesRes.results || []).forEach(r => {
       if (!providerRolesMap[r.provider_id]) providerRolesMap[r.provider_id] = [];
@@ -348,7 +394,7 @@ function renderProviders(){
   document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
   wrap.innerHTML = filtered.map(p => {
     const roles = providerRolesMap[p.id] || [];
-    const city = [p.city, p.country].filter(Boolean).join(', ');
+    const city = [p.city, countryName(p.country_id)].filter(Boolean).join(', ');
     return `<div class="pkg-row">
       <div class="pkg-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>
       <div class="pkg-plant-info">
@@ -358,7 +404,6 @@ function renderProviders(){
       <div>${roles.map(r => `<span class="role-badge">${ROLE_LABELS[r] || r}</span>`).join('') || ''}</div>
       <div style="margin-left:auto;flex-shrink:0;white-space:nowrap;display:flex;gap:6px;">
         <button class="btn secondary small" onclick="editProvider('${p.id}')">Edit</button>
-        <button class="btn danger" onclick="deleteProvider('${p.id}')">Delete</button>
       </div>
     </div>`;
   }).join('');
@@ -366,23 +411,49 @@ function renderProviders(){
 
 function openForm(){
   closeRates();
+  document.getElementById('providerSearchCard').style.display = 'none';
+  document.getElementById('providerListCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = 'New provider';
+  document.getElementById('formDeleteBtn').style.display = 'none';
   document.getElementById('providerId').value = '';
-  ['p_name','p_country','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
+  ['p_name','p_country_id','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
   document.querySelectorAll('.role-cb').forEach(cb => cb.checked = false);
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
+  updateProviderProfile();
+}
+
+// Same format as the other profile cards: a live, read-only mirror of every field entered above —
+// nothing derived/computed here, just a consolidated glance at what Save will record.
+function updateProviderProfile(){
+  const setV = (id, val) => { document.getElementById(id).textContent = val || '—'; };
+  setV('pv_name', document.getElementById('p_name').value);
+  const countrySel = document.getElementById('p_country_id');
+  setV('pv_country', countrySel.options[countrySel.selectedIndex] ? countrySel.options[countrySel.selectedIndex].textContent : '');
+  setV('pv_city', document.getElementById('p_city').value);
+  setV('pv_phone', document.getElementById('p_phone').value);
+  setV('pv_contact_name', document.getElementById('p_contact_name').value);
+  setV('pv_email', document.getElementById('p_email').value);
+  setV('pv_mc_number', document.getElementById('p_mc_number').value);
+  setV('pv_dot_number', document.getElementById('p_dot_number').value);
+  setV('pv_email_cc', document.getElementById('p_email_cc').value);
+  const checkedRoles = [...document.querySelectorAll('.role-cb:checked')].map(cb => ROLE_LABELS[cb.value] || cb.value);
+  setV('pv_roles', checkedRoles.join(', '));
+  setV('pv_notes', document.getElementById('p_notes').value);
 }
 
 function editProvider(id){
   const p = providers.find(x => x.id === id);
   if (!p) return;
+  document.getElementById('providerSearchCard').style.display = 'none';
+  document.getElementById('providerListCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = 'Edit provider';
+  document.getElementById('formDeleteBtn').style.display = 'inline-block';
   document.getElementById('providerId').value = p.id;
   document.getElementById('p_name').value = p.name || '';
-  document.getElementById('p_country').value = p.country || '';
+  document.getElementById('p_country_id').value = p.country_id || '';
   document.getElementById('p_city').value = p.city || '';
   document.getElementById('p_phone').value = p.phone || '';
   document.getElementById('p_contact_name').value = p.contact_name || '';
@@ -395,9 +466,14 @@ function editProvider(id){
   document.querySelectorAll('.role-cb').forEach(cb => cb.checked = roles.includes(cb.value));
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
+  updateProviderProfile();
 }
 
-function closeForm(){ document.getElementById('formCard').style.display = 'none'; }
+function closeForm(){
+  document.getElementById('formCard').style.display = 'none';
+  document.getElementById('providerSearchCard').style.display = 'block';
+  document.getElementById('providerListCard').style.display = 'block';
+}
 
 // Calls providers-create/providers-update; on a real possible-duplicate response, shows what
 // already exists and a real "Save anyway" action — never a silent override, never a generic
@@ -432,7 +508,7 @@ async function saveProvider(forceOverride){
   const id = document.getElementById('providerId').value;
   const payload = {
     name: document.getElementById('p_name').value,
-    country: document.getElementById('p_country').value || null,
+    country_id: document.getElementById('p_country_id').value || null,
     city: document.getElementById('p_city').value || null,
     phone: document.getElementById('p_phone').value || null,
     contact_name: document.getElementById('p_contact_name').value || null,
@@ -452,7 +528,8 @@ async function saveProvider(forceOverride){
       const updated = await trySaveProvider('providers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
       if (!updated) return;
     } else {
-      const created = await trySaveProvider('providers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride });
+      const idempotencyKey = `providers-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
+      const created = await trySaveProvider('providers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
       if (!created) return;
       providerId = created.provider.id;
     }
@@ -481,6 +558,7 @@ async function deleteProvider(id){
     return;
   }
   if (currentProviderId === id) closeRates();
+  closeForm();
   await loadEverything();
 }
 
