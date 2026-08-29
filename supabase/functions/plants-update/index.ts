@@ -8,9 +8,8 @@ const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max:
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const UPDATABLE_FIELDS = [
-  "name", "category_id", "country_id", "city_id", "address", "internal_code",
-  "contact_name", "email", "email_cc", "phone", "whatsapp", "whatsapp_cc", "business_hours",
-  "avg_loading_time", "avg_response_time", "document_cost", "avg_freight_to_border",
+  "name", "category_id", "country_id", "city_id", "state_id", "state", "address", "internal_code",
+  "contact_name", "email", "email_cc", "phone", "whatsapp", "whatsapp_cc",
   "docs_included", "payment_terms", "required_documentation", "website", "notes", "internal_notes",
   "logo_url", "logo_url_dark",
 ];
@@ -54,12 +53,10 @@ Deno.serve(async (req) => {
       const [plant] = await tx`
         update plants set
           name = ${merged.name}, category_id = ${merged.category_id}, country_id = ${merged.country_id}, city_id = ${merged.city_id},
-          address = ${merged.address}, internal_code = ${merged.internal_code},
+          state_id = ${merged.state_id}, state = ${merged.state}, address = ${merged.address}, internal_code = ${merged.internal_code},
           contact_name = ${merged.contact_name}, email = ${merged.email}, email_cc = ${merged.email_cc},
           phone = ${merged.phone}, whatsapp = ${merged.whatsapp}, whatsapp_cc = ${merged.whatsapp_cc},
-          business_hours = ${merged.business_hours}, avg_loading_time = ${merged.avg_loading_time},
-          avg_response_time = ${merged.avg_response_time}, document_cost = ${merged.document_cost},
-          avg_freight_to_border = ${merged.avg_freight_to_border}, docs_included = ${merged.docs_included},
+          docs_included = ${merged.docs_included},
           payment_terms = ${merged.payment_terms}, required_documentation = ${merged.required_documentation},
           website = ${merged.website}, notes = ${merged.notes}, internal_notes = ${merged.internal_notes},
           logo_url = ${merged.logo_url}, logo_url_dark = ${merged.logo_url_dark},

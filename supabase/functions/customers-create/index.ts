@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
 
     const {
-      actor, trade_name, legal_name = null, country_id = null, city_id = null, state = null, address = null,
+      actor, trade_name, legal_name = null, country_id = null, city_id = null, state_id = null, state = null, address = null, postal_code = null,
       contact_name = null, contact_role = null, email = null, email_cc = null,
       phone = null, whatsapp = null, whatsapp_cc = null, website = null, notes = null,
       preferred_currency_id = null, usual_delivery_type = null, usual_destination = null,
@@ -64,14 +64,14 @@ Deno.serve(async (req) => {
     const customer = await sql.begin(async (tx) => {
       const [customer] = await tx`
         insert into customers (
-          trade_name, legal_name, country_id, city_id, state, address,
+          trade_name, legal_name, country_id, city_id, state_id, state, address, postal_code,
           contact_name, contact_role, email, email_cc, phone, whatsapp, whatsapp_cc, website, notes,
           preferred_currency_id, usual_delivery_type, usual_destination,
           payment_days, payment_method, preferred_exchange_rate_mode,
           payments_contact_name, payments_contact_email, payments_contact_phone, payments_contact_whatsapp,
           customs_agency_provider_id, credit_limit, usual_incoterm_text, idempotency_key
         ) values (
-          ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state}, ${address},
+          ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state_id}, ${state}, ${address}, ${postal_code},
           ${contact_name}, ${contact_role}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${website}, ${notes},
           ${preferred_currency_id}, ${usual_delivery_type}, ${usual_destination},
           ${payment_days}, ${payment_method}, ${preferred_exchange_rate_mode},

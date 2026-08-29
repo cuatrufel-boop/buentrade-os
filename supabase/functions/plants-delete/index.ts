@@ -26,9 +26,24 @@ Deno.serve(async (req) => {
     const [{ count: linkedLocations }] = await sql`select count(*)::int as count from plant_locations where plant_id = ${id}`;
     const [{ count: historicalOffers }] = await sql`select count(*)::int as count from sent_offers where plant_id = ${id}`;
 
+    let supplierAlsoDeleted = false;
     await sql.begin(async (tx) => {
       await tx`delete from plants where id = ${id}`;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "delete", table_name: "plants", record_id: id, before: existing });
+
+      // Every plant auto-creates its own supplier row (plants.html's "+ New Plant" flow) — with
+      // that plant gone, an orphaned supplier with zero plants left behind would silently block
+      // recreating a plant under the same name later (suppliers-create's own duplicate check would
+      // find it). Same reasoning as suppliers-delete's own guard, just applied automatically here.
+      const [{ count: remainingSiblingPlants }] = await tx`select count(*)::int as count from plants where supplier_id = ${existing.supplier_id}`;
+      if (remainingSiblingPlants === 0) {
+        const [supplier] = await tx`select * from suppliers where id = ${existing.supplier_id}`;
+        if (supplier) {
+          await tx`delete from suppliers where id = ${existing.supplier_id}`;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "delete", table_name: "suppliers", record_id: existing.supplier_id, before: supplier });
+          supplierAlsoDeleted = true;
+        }
+      }
     });
 
     return jsonResponse({
@@ -36,6 +51,7 @@ Deno.serve(async (req) => {
       cascaded_plant_products_removed: linkedProducts,
       cascaded_locations_removed: linkedLocations,
       historical_offers_unlinked: historicalOffers,
+      supplier_also_deleted: supplierAlsoDeleted,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);

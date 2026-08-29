@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const missing = ["actor", "plant_id", "product_id"].filter((k) => !body[k]);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-    const { actor, plant_id, product_id } = body;
+    const { actor, plant_id, product_id, brand_id = null, photo_url = null, spec_url = null } = body;
 
     const [plant] = await sql`select id from plants where id = ${plant_id}`;
     if (!plant) return jsonResponse({ error: "unknown plant_id" }, 400);
@@ -25,8 +25,10 @@ Deno.serve(async (req) => {
     const [existing] = await sql`select * from plant_products where plant_id = ${plant_id} and product_id = ${product_id}`;
     if (existing) return jsonResponse({ already_linked: true, plant_product: existing });
 
+    // Brand/Photo/Spec Sheet are per-plant, never on the shared product row — the same cut sold by
+    // two plants has two different brands/photos/specs (real correction, 2026-08-29).
     const link = await sql.begin(async (tx) => {
-      const [link] = await tx`insert into plant_products (plant_id, product_id) values (${plant_id}, ${product_id}) returning *`;
+      const [link] = await tx`insert into plant_products (plant_id, product_id, brand_id, photo_url, spec_url) values (${plant_id}, ${product_id}, ${brand_id}, ${photo_url}, ${spec_url}) returning *`;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_products", record_id: link.id, after: link });
       return link;
     });

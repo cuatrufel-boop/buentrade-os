@@ -40,9 +40,8 @@ Deno.serve(async (req) => {
     const {
       actor, name, name_en, category_id, subcategory, subcategory_en,
       temperature_id, packaging_id, full_name_en, full_name_es,
-      brand = null, unit_id = null, standard_weight = null, presentation = null, origin = null,
-      documents_included = null, documents_excluded = null, commercial_notes = null,
-      photo_url = null, spec_url = null,
+      unit_id = null,
+      documents_included = null, documents_excluded = null,
       override_duplicate_check = false, idempotency_key = null,
     } = body;
 
@@ -115,14 +114,14 @@ Deno.serve(async (req) => {
       const [product] = await tx`
         insert into products (
           category, category_id, name, name_en, subcategory, subcategory_en,
-          temperature_id, packaging_id, full_name_en, full_name_es, brand,
-          unit_id, standard_weight, presentation, origin,
-          documents_included, documents_excluded, commercial_notes, photo_url, spec_url, idempotency_key
+          temperature_id, packaging_id, full_name_en, full_name_es,
+          unit_id,
+          documents_included, documents_excluded, idempotency_key
         ) values (
           (select name from categories where id = ${category_id}), ${category_id}, ${name}, ${name_en}, ${subcategory}, ${subcategory_en},
-          ${temperature_id}, ${packaging_id}, ${full_name_en}, ${full_name_es}, ${brand},
-          ${unit_id}, ${standard_weight}, ${presentation}, ${origin},
-          ${documents_included}, ${documents_excluded}, ${commercial_notes}, ${photo_url}, ${spec_url}, ${idempotency_key}
+          ${temperature_id}, ${packaging_id}, ${full_name_en}, ${full_name_es},
+          ${unit_id},
+          ${documents_included}, ${documents_excluded}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "products", record_id: product.id, after: product });

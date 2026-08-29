@@ -59,7 +59,9 @@ Deno.serve(async (req) => {
       order_number,
       date: so.created_at,
       entrega_estimada: Array.isArray(so.delivery_dates) && so.delivery_dates[0] ? so.delivery_dates[0] : null,
-      condiciones_pago: customer?.payment_days ? `${customer.payment_days} días` : "Por confirmar",
+      // payment_days === 0 means "Anticipado" (paid in advance) — a real, confirmed term, not
+      // an unset one, so it must not fall into the "Por confirmar" branch (0 is falsy in JS).
+      condiciones_pago: customer?.payment_days == null ? "Por confirmar" : customer.payment_days === 0 ? "Anticipado" : `${customer.payment_days} días`,
       incoterms,
       pais_origen: plant?.country || null,
       moneda: currencyCode || "USD",

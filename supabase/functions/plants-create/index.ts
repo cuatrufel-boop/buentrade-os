@@ -26,11 +26,10 @@ Deno.serve(async (req) => {
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
 
     const {
-      actor, supplier_id, name, category_id, country_id = null, city_id = null,
+      actor, supplier_id, name, category_id, country_id = null, city_id = null, state_id = null, state = null,
       address = null, internal_code = null, contact_name = null, email = null, email_cc = null,
-      phone = null, whatsapp = null, whatsapp_cc = null, business_hours = null,
-      avg_loading_time = null, avg_response_time = null, document_cost = null,
-      avg_freight_to_border = null, docs_included = null, payment_terms = null,
+      phone = null, whatsapp = null, whatsapp_cc = null,
+      docs_included = null, payment_terms = null,
       required_documentation = null, website = null, notes = null, internal_notes = null,
       logo_url = null, logo_url_dark = null,
       override_duplicate_check = false, idempotency_key = null,
@@ -74,15 +73,13 @@ Deno.serve(async (req) => {
     const plant = await sql.begin(async (tx) => {
       const [plant] = await tx`
         insert into plants (
-          supplier_id, name, category_id, country_id, city_id, address, internal_code,
-          contact_name, email, email_cc, phone, whatsapp, whatsapp_cc, business_hours,
-          avg_loading_time, avg_response_time, document_cost, avg_freight_to_border,
+          supplier_id, name, category_id, country_id, city_id, state_id, state, address, internal_code,
+          contact_name, email, email_cc, phone, whatsapp, whatsapp_cc,
           docs_included, payment_terms, required_documentation, website, notes, internal_notes,
           logo_url, logo_url_dark, idempotency_key
         ) values (
-          ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${address}, ${internal_code},
-          ${contact_name}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${business_hours},
-          ${avg_loading_time}, ${avg_response_time}, ${document_cost}, ${avg_freight_to_border},
+          ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${state_id}, ${state}, ${address}, ${internal_code},
+          ${contact_name}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc},
           ${docs_included}, ${payment_terms}, ${required_documentation}, ${website}, ${notes}, ${internal_notes},
           ${logo_url}, ${logo_url_dark}, ${idempotency_key}
         ) returning *

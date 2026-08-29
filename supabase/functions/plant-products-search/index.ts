@@ -21,6 +21,7 @@ Deno.serve(async (req) => {
       select
         pp.id, pp.plant_id, pp.product_id, pp.current_price, pp.price_currency, pp.price_currency_id,
         pp.price_date, pp.availability, pp.docs_included, pp.notes, pp.last_requested_at,
+        pp.brand_id, pp.photo_url, pp.spec_url,
         pp.created_at, pp.updated_at,
         pl.name as plant_name,
         to_jsonb(pr.*) as product

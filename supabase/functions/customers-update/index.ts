@@ -8,7 +8,7 @@ const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max:
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const UPDATABLE_FIELDS = [
-  "trade_name", "legal_name", "country_id", "city_id", "state", "address",
+  "trade_name", "legal_name", "country_id", "city_id", "state_id", "state", "address", "postal_code",
   "contact_name", "contact_role", "email", "email_cc", "phone", "whatsapp", "whatsapp_cc", "website", "notes",
   "preferred_currency_id", "usual_delivery_type", "usual_destination",
   "payment_days", "payment_method", "preferred_exchange_rate_mode",
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
       const [customer] = await tx`
         update customers set
           trade_name = ${merged.trade_name}, legal_name = ${merged.legal_name},
-          country_id = ${merged.country_id}, city_id = ${merged.city_id}, state = ${merged.state}, address = ${merged.address},
+          country_id = ${merged.country_id}, city_id = ${merged.city_id}, state_id = ${merged.state_id}, state = ${merged.state}, address = ${merged.address}, postal_code = ${merged.postal_code},
           contact_name = ${merged.contact_name}, contact_role = ${merged.contact_role},
           email = ${merged.email}, email_cc = ${merged.email_cc}, phone = ${merged.phone},
           whatsapp = ${merged.whatsapp}, whatsapp_cc = ${merged.whatsapp_cc}, website = ${merged.website}, notes = ${merged.notes},

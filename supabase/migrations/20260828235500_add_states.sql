@@ -1,0 +1,105 @@
+-- Real states/provinces catalog so State can be a closed dropdown cascading off Country, not
+-- free text — seeded for the two countries BUENTRADE actually operates in (US plants/customers,
+-- Mexican customers/border). Other countries keep State as free text; there's no realistic full
+-- world states catalog to seed here, and it isn't needed for how this business actually operates.
+
+create table if not exists states (
+  id uuid primary key default gen_random_uuid(),
+  country_id uuid not null references countries(id),
+  name_es text not null,
+  name_en text not null,
+  code text
+);
+
+create index if not exists states_country_id_idx on states(country_id);
+
+alter table customers add column if not exists state_id uuid references states(id);
+alter table plants add column if not exists state_id uuid references states(id);
+
+insert into states (country_id, name_es, name_en, code) values
+('96ba356c-963e-4019-9385-0e3989626273','Aguascalientes','Aguascalientes','AGU'),
+('96ba356c-963e-4019-9385-0e3989626273','Baja California','Baja California','BCN'),
+('96ba356c-963e-4019-9385-0e3989626273','Baja California Sur','Baja California Sur','BCS'),
+('96ba356c-963e-4019-9385-0e3989626273','Campeche','Campeche','CAM'),
+('96ba356c-963e-4019-9385-0e3989626273','Chiapas','Chiapas','CHP'),
+('96ba356c-963e-4019-9385-0e3989626273','Chihuahua','Chihuahua','CHH'),
+('96ba356c-963e-4019-9385-0e3989626273','Ciudad de México','Mexico City','CMX'),
+('96ba356c-963e-4019-9385-0e3989626273','Coahuila','Coahuila','COA'),
+('96ba356c-963e-4019-9385-0e3989626273','Colima','Colima','COL'),
+('96ba356c-963e-4019-9385-0e3989626273','Durango','Durango','DUR'),
+('96ba356c-963e-4019-9385-0e3989626273','Estado de México','State of Mexico','MEX'),
+('96ba356c-963e-4019-9385-0e3989626273','Guanajuato','Guanajuato','GUA'),
+('96ba356c-963e-4019-9385-0e3989626273','Guerrero','Guerrero','GRO'),
+('96ba356c-963e-4019-9385-0e3989626273','Hidalgo','Hidalgo','HID'),
+('96ba356c-963e-4019-9385-0e3989626273','Jalisco','Jalisco','JAL'),
+('96ba356c-963e-4019-9385-0e3989626273','Michoacán','Michoacán','MIC'),
+('96ba356c-963e-4019-9385-0e3989626273','Morelos','Morelos','MOR'),
+('96ba356c-963e-4019-9385-0e3989626273','Nayarit','Nayarit','NAY'),
+('96ba356c-963e-4019-9385-0e3989626273','Nuevo León','Nuevo León','NLE'),
+('96ba356c-963e-4019-9385-0e3989626273','Oaxaca','Oaxaca','OAX'),
+('96ba356c-963e-4019-9385-0e3989626273','Puebla','Puebla','PUE'),
+('96ba356c-963e-4019-9385-0e3989626273','Querétaro','Querétaro','QUE'),
+('96ba356c-963e-4019-9385-0e3989626273','Quintana Roo','Quintana Roo','ROO'),
+('96ba356c-963e-4019-9385-0e3989626273','San Luis Potosí','San Luis Potosí','SLP'),
+('96ba356c-963e-4019-9385-0e3989626273','Sinaloa','Sinaloa','SIN'),
+('96ba356c-963e-4019-9385-0e3989626273','Sonora','Sonora','SON'),
+('96ba356c-963e-4019-9385-0e3989626273','Tabasco','Tabasco','TAB'),
+('96ba356c-963e-4019-9385-0e3989626273','Tamaulipas','Tamaulipas','TAM'),
+('96ba356c-963e-4019-9385-0e3989626273','Tlaxcala','Tlaxcala','TLA'),
+('96ba356c-963e-4019-9385-0e3989626273','Veracruz','Veracruz','VER'),
+('96ba356c-963e-4019-9385-0e3989626273','Yucatán','Yucatán','YUC'),
+('96ba356c-963e-4019-9385-0e3989626273','Zacatecas','Zacatecas','ZAC')
+on conflict do nothing;
+
+insert into states (country_id, name_es, name_en, code) values
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Alabama','Alabama','AL'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Alaska','Alaska','AK'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Arizona','Arizona','AZ'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Arkansas','Arkansas','AR'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','California','California','CA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Colorado','Colorado','CO'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Connecticut','Connecticut','CT'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Delaware','Delaware','DE'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Florida','Florida','FL'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Georgia','Georgia','GA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Hawái','Hawaii','HI'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Idaho','Idaho','ID'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Illinois','Illinois','IL'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Indiana','Indiana','IN'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Iowa','Iowa','IA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Kansas','Kansas','KS'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Kentucky','Kentucky','KY'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Luisiana','Louisiana','LA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Maine','Maine','ME'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Maryland','Maryland','MD'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Massachusetts','Massachusetts','MA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Míchigan','Michigan','MI'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Minnesota','Minnesota','MN'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Misisipi','Mississippi','MS'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Misuri','Missouri','MO'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Montana','Montana','MT'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Nebraska','Nebraska','NE'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Nevada','Nevada','NV'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Nuevo Hampshire','New Hampshire','NH'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Nueva Jersey','New Jersey','NJ'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Nuevo México','New Mexico','NM'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Nueva York','New York','NY'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Carolina del Norte','North Carolina','NC'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Dakota del Norte','North Dakota','ND'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Ohio','Ohio','OH'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Oklahoma','Oklahoma','OK'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Oregón','Oregon','OR'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Pensilvania','Pennsylvania','PA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Rhode Island','Rhode Island','RI'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Carolina del Sur','South Carolina','SC'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Dakota del Sur','South Dakota','SD'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Tennessee','Tennessee','TN'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Texas','Texas','TX'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Utah','Utah','UT'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Vermont','Vermont','VT'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Virginia','Virginia','VA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Washington','Washington','WA'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Virginia Occidental','West Virginia','WV'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Wisconsin','Wisconsin','WI'),
+('da1015d6-dc08-4344-8f26-c5d700ba91e8','Wyoming','Wyoming','WY')
+on conflict do nothing;

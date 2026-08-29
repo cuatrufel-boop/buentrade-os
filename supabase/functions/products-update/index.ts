@@ -16,9 +16,9 @@ const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const UPDATABLE_FIELDS = [
   "name", "name_en", "category_id", "subcategory", "subcategory_en",
-  "temperature_id", "packaging_id", "full_name_en", "full_name_es", "brand",
-  "unit_id", "standard_weight", "presentation", "origin",
-  "documents_included", "documents_excluded", "commercial_notes", "photo_url", "spec_url",
+  "temperature_id", "packaging_id", "full_name_en", "full_name_es",
+  "unit_id",
+  "documents_included", "documents_excluded",
 ];
 
 Deno.serve(async (req) => {
@@ -105,10 +105,9 @@ Deno.serve(async (req) => {
           category = (select name from categories where id = ${merged.category_id}), category_id = ${merged.category_id},
           subcategory = ${merged.subcategory}, subcategory_en = ${merged.subcategory_en},
           temperature_id = ${merged.temperature_id}, packaging_id = ${merged.packaging_id},
-          full_name_en = ${merged.full_name_en}, full_name_es = ${merged.full_name_es}, brand = ${merged.brand},
-          unit_id = ${merged.unit_id}, standard_weight = ${merged.standard_weight}, presentation = ${merged.presentation}, origin = ${merged.origin},
+          full_name_en = ${merged.full_name_en}, full_name_es = ${merged.full_name_es},
+          unit_id = ${merged.unit_id},
           documents_included = ${merged.documents_included}, documents_excluded = ${merged.documents_excluded},
-          commercial_notes = ${merged.commercial_notes}, photo_url = ${merged.photo_url}, spec_url = ${merged.spec_url},
           updated_at = now()
         where id = ${id}
         returning *

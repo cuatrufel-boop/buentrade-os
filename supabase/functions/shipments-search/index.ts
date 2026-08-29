@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
         p.name as carrier_name, p.phone as carrier_phone,
         cu.contact_name as customer_contact_name, cu.whatsapp as customer_whatsapp, cu.phone as customer_phone,
         cu.payment_days as customer_payment_days,
-        pr.name as catalog_product_name, pr.name_en as catalog_product_name_en, pr.photo_url as catalog_product_photo_url,
+        pr.name as catalog_product_name, pr.name_en as catalog_product_name_en, pp.photo_url as catalog_product_photo_url,
         (
           select fo.origin from freight_orders fo
           where fo.order_number = sh.order_number and fo.carrier_provider_id = sh.carrier_provider_id
@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
       left join providers p on p.id = sh.carrier_provider_id
       left join customers cu on cu.id = sh.customer_id
       left join products pr on pr.id = o.product_id
+      left join plant_products pp on pp.product_id = o.product_id and pp.plant_id = o.plant_id
       where (${status}::text is null or sh.status = ${status})
         and (${customer_id}::uuid is null or sh.customer_id = ${customer_id})
         and (${awaiting_payment}::boolean is false or (sh.status = 'delivered' and sh.paid_at is null))
