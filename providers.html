@@ -418,7 +418,11 @@ function openForm(){
   document.getElementById('formDeleteBtn').style.display = 'none';
   document.getElementById('providerId').value = '';
   ['p_name','p_country_id','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_mc_number','p_dot_number','p_notes'].forEach(f => document.getElementById(f).value = '');
-  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = false);
+  // Roles are a property of the provider, not the tab — a provider can hold any combination and
+  // show up in both tabs (see setProviderTab), so this never forces a choice. Pre-checking is
+  // only safe on the Customs Agencies tab, which maps to exactly one role; the Carriers tab covers
+  // two different roles (Carrier / Freight Forwarder), so guessing which one would be wrong.
+  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = (providerTab === 'agencies' && cb.value === 'customs_broker'));
   document.getElementById('formMsg').textContent = '';
   document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
   updateProviderProfile();
