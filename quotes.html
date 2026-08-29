@@ -78,6 +78,8 @@
   .tab-row{display:flex;gap:6px;margin:0 0 18px;border-bottom:1.5px solid var(--line);}
   .tab-btn{background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;font-family:inherit;display:inline-flex;align-items:center;gap:7px;}
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .tab-btn:focus{outline:none;}
+  .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
   .tab-count{background:#C4432E;color:#fff;font-size:10.5px;font-weight:700;border-radius:10px;padding:1px 7px;line-height:1.5;}
   .cov-card{padding:16px 0;border-bottom:1px solid var(--line);}
   .cov-card:last-child{border-bottom:none;}
@@ -627,22 +629,13 @@ async function loadQuotesPage(){
   rqAllProviders = provRes.results || [];
   rqAllProviderRates = rateRes.results || [];
 
-  // A bare name is never enough to pick from — the same name can point to several real products
-  // (Fresh vs Frozen, Combo vs Box), and picking blind meant no way to tell which one a click
-  // would actually select. Every suggestion now carries its own full spec (temp/pack) in the
-  // label, one entry PER VARIANT (not per name), in both languages — the exact-match below
-  // (onRqProductInput) already accepts either the Spanish or English catalog name, but the old
-  // suggestion list only offered Spanish, so typing in English (e.g. "belly") surfaced nothing.
-  //
-  // English only — showing both languages per variant was clutter, not a second useful option;
-  // the exact-match below (onRqProductInput) still accepts either language if something's typed
-  // by hand, this is just what gets suggested. Falls back to the Spanish name only for the rare
-  // product that has no English name on file at all, so nothing becomes unsearchable.
+  // Full Name only, never the bare cut name — a bare name doesn't say which real product it is
+  // (Fresh vs Frozen, Combo vs Box), so the suggestion IS the full spec, one entry PER VARIANT.
+  // Falls back to the short name only for a legacy product that predates the Full Name field.
   rqProductSuggestions = products.map(p => {
-    const spec = rqVariantSpec(p.id);
-    const n = p.name_en || p.name;
+    const n = p.full_name_en || p.name_en || p.name;
     if (!n) return null;
-    return { label: n + (spec ? ' — ' + spec : ''), matchName: n, productId: p.id };
+    return { label: n, matchName: n, productId: p.id };
   }).filter(Boolean);
   rqProductSuggestions.sort((a, b) => a.label.localeCompare(b.label));
 
@@ -651,8 +644,9 @@ async function loadQuotesPage(){
 }
 
 // How many times each product has actually gone out in a sent offer — real usage, not a guess —
-// so "Most requested" means what it says. Counts by name (not product_id) since sent_offers
-// stores the name as text at send time, same as everywhere else offer history is read.
+// so "Most requested" means what it says. Counts by full spec (product_spec — the Full Name at
+// send time), not the bare product_name, so it lines up with the Full-Name-only suggestions below
+// and two different variants of the same cut are never counted as the same product.
 async function rqMostRequestedProducts(limit){
   let data;
   try { data = (await callApi('sent-offers-search', { limit: 500 })).results || []; }
@@ -660,7 +654,7 @@ async function rqMostRequestedProducts(limit){
   data.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
   const counts = {};
   data.forEach(r => {
-    const n = (r.product_name || '').trim();
+    const n = (r.product_spec || r.product_name || '').trim();
     if (n) counts[n] = (counts[n] || 0) + 1;
   });
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name]) => name);
@@ -744,7 +738,6 @@ function renderCoverage(){
   if (!matches.length){ results.innerHTML = ''; empty.style.display = 'block'; empty.textContent = `No catalog product matches "${term}".`; return; }
   empty.style.display = 'none';
   results.innerHTML = matches.map(p => {
-    const spec = rqVariantSpec(p.id);
     const links = qCovLinks.filter(l => l.product_id === p.id);
     const plantRows = links.length
       ? links.map(l => {
@@ -758,8 +751,7 @@ function renderCoverage(){
       : `<div class="cov-no-plants">No plant has a price on file for this exact row yet.</div>`;
     return `<div class="cov-card">
       <div class="cov-card-head">
-        <span class="cov-card-name">${escapeHtml(p.name_en || p.name)}</span>
-        ${spec ? `<span class="cov-card-spec">${escapeHtml(spec)}</span>` : ''}
+        <span class="cov-card-name">${escapeHtml(p.full_name_en || p.name_en || p.name)}</span>
         <span class="cov-card-id">${escapeHtml(p.id)}</span>
       </div>
       ${plantRows}
@@ -823,8 +815,7 @@ async function loadPendingPrices(){
   // "requested Xd ago" alongside it as context instead of replacing the only thing to click.
   list.innerHTML = groupList.map(g => {
     const prod = products.find(p => p.id === g.productId);
-    const spec = rqVariantSpec(g.productId);
-    const name = (prod.name_en || prod.name) + (spec ? ' — ' + spec : '');
+    const name = prod.full_name_en || prod.name_en || prod.name;
     const pendingRowsHtml = g.rows.map(r => {
       const missing = r.current_price == null;
       const reqAge = rqPriceAgeDays(r.last_requested_at);
@@ -1054,15 +1045,18 @@ function rqSearchGo(){
 async function onRqProductInput(){
   rqRenderSuggestions();
   const name = document.getElementById('rq_product_name').value.trim();
-  // Matches on either the Spanish or the English catalog name — typing the English name used to
-  // silently miss the catalog entirely (no photo, no customer-facing Spanish name, sent as
-  // literally typed) since this only checked the Spanish field before.
+  // Matches on the Full Name (EN or ES) first — that's what the suggestions show now, one entry
+  // per real variant — and falls back to the bare cut name only for a legacy product that
+  // predates the Full Name field, or something hand-typed without using a suggestion at all.
   const nameLower = name.toLowerCase();
+  const isMatch = (p) =>
+    (p.full_name_en || '').toLowerCase() === nameLower || (p.full_name_es || '').toLowerCase() === nameLower ||
+    (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower;
   // A specific-variant suggestion click (rqSelectSuggestionIdx) pins exactly which product this
   // is — preferred over the plain name lookup, which would otherwise land on whichever same-named
   // product happens to come first and show the wrong temp/pack in the spec line below.
-  const match = (rqPreferredVariantId && products.find(p => p.id === rqPreferredVariantId && ((p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower)))
-    || products.find(p => (p.name || '').toLowerCase() === nameLower || (p.name_en || '').toLowerCase() === nameLower);
+  const match = (rqPreferredVariantId && products.find(p => p.id === rqPreferredVariantId && isMatch(p)))
+    || products.find(isMatch);
   const specLine = document.getElementById('rq_spec_line');
   // One step leads to the next instead of both fields demanding attention at once: Delivery day
   // only appears once a real product has actually been PICKED (a confirmed catalog match), not
@@ -1246,17 +1240,6 @@ function removeRqPlant(plantId){
 }
 
 
-// A name like "Cabeza de lomo de cerdo con hueso" can point to several real catalog products —
-// Fresh/Combo, Frozen/Box, etc. — and a plant's price is always for ONE specific variant
-// (p.rqProductId, set in autoPopulateRqPlants). Never shown before now, which meant there was no
-// way to tell which variant a given plant's price actually was for.
-function rqVariantSpec(productId){
-  const prod = products.find(pr => pr.id === productId);
-  if (!prod) return '';
-  const t = temperatures.find(x => x.id === prod.temperature_id);
-  const pk = packagings.find(x => x.id === prod.packaging_id);
-  return [t ? (t.name_en || t.name) : null, pk ? (pk.name_en || pk.name) : null].filter(Boolean).join(' / ');
-}
 
 // The whole price+freight+docs+calculator block for one plant — shared between Request Quote's
 // own list (renderRqPlants) and a Pending Quotes row opened inline (qOpenPendingPlantInline), so
