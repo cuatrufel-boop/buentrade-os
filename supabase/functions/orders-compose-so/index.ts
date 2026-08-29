@@ -22,11 +22,16 @@ Deno.serve(async (req) => {
     const [plant] = offer?.plant_id ? await sql`select * from plants where id = ${offer.plant_id}` : [null];
 
     let entregarA = customer ? [customer.trade_name, customer.address].filter(Boolean).join("\n") : null;
-    // The real INCOTERMS field is the customer's own stored text (e.g. "FOB", "CIF", "DAP
-    // planta") — re-verified directly against buildSODoc()'s source, 2026-08-28. It was
-    // previously computed here as FCA/DAP, which doesn't match: this is a fact on file per
-    // customer, not derived from delivery_type.
-    const incoterms = customer?.usual_incoterm_text || null;
+    // The real INCOTERMS field is a fact on file per customer, not derived from delivery_type
+    // (re-verified directly against buildSODoc()'s source, 2026-08-28). usual_incoterm_text (free
+    // text) was replaced 2026-08-29 with a closed usual_incoterm_id (the real Incoterms 2020
+    // codes) plus a separate usual_incoterm_place free-text field — real documents often need a
+    // named place alongside the code ("DAP Nogales, AZ"), not just the bare code.
+    let incoterms: string | null = null;
+    if (customer?.usual_incoterm_id) {
+      const [incoterm] = await sql`select code from incoterms where id = ${customer.usual_incoterm_id}`;
+      if (incoterm) incoterms = [incoterm.code, customer.usual_incoterm_place].filter(Boolean).join(" ");
+    }
     let customsAgency = null;
     if (customer?.usual_delivery_type === "Border" && customer.customs_agency_provider_id) {
       const [agency] = await sql`select * from providers where id = ${customer.customs_agency_provider_id}`;

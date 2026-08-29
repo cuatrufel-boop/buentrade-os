@@ -13,7 +13,7 @@ const UPDATABLE_FIELDS = [
   "preferred_currency_id", "usual_delivery_type", "usual_destination",
   "payment_days", "payment_method", "preferred_exchange_rate_mode",
   "payments_contact_name", "payments_contact_email", "payments_contact_phone", "payments_contact_whatsapp",
-  "customs_agency_provider_id", "credit_limit", "usual_incoterm_text",
+  "customs_agency_provider_id", "credit_limit", "usual_incoterm_id", "usual_incoterm_place",
 ];
 
 Deno.serve(async (req) => {
@@ -30,6 +30,11 @@ Deno.serve(async (req) => {
 
     const merged: any = { ...existing };
     for (const f of UPDATABLE_FIELDS) if (f in body) merged[f] = body[f];
+
+    if (merged.usual_incoterm_id) {
+      const [incoterm] = await sql`select id from incoterms where id = ${merged.usual_incoterm_id}`;
+      if (!incoterm) return jsonResponse({ error: "unknown usual_incoterm_id" }, 400);
+    }
 
     const others = (await sql`select * from customers`).filter((c: any) => c.id !== id);
     const exactDuplicate = others.find((c: any) => normalize(c.trade_name) === normalize(merged.trade_name));
@@ -59,7 +64,7 @@ Deno.serve(async (req) => {
           payments_contact_name = ${merged.payments_contact_name}, payments_contact_email = ${merged.payments_contact_email},
           payments_contact_phone = ${merged.payments_contact_phone}, payments_contact_whatsapp = ${merged.payments_contact_whatsapp},
           customs_agency_provider_id = ${merged.customs_agency_provider_id}, credit_limit = ${merged.credit_limit},
-          usual_incoterm_text = ${merged.usual_incoterm_text},
+          usual_incoterm_id = ${merged.usual_incoterm_id}, usual_incoterm_place = ${merged.usual_incoterm_place},
           updated_at = now()
         where id = ${id} returning *
       `;

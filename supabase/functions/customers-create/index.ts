@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
       payment_days = null, payment_method = null, preferred_exchange_rate_mode = null,
       payments_contact_name = null, payments_contact_email = null, payments_contact_phone = null,
       payments_contact_whatsapp = null, customs_agency_provider_id = null, credit_limit = null,
-      usual_incoterm_text = null,
+      usual_incoterm_id = null, usual_incoterm_place = null,
       override_duplicate_check = false, idempotency_key = null,
     } = body;
 
@@ -60,6 +60,10 @@ Deno.serve(async (req) => {
       const [city] = await sql`select id from cities where id = ${city_id}`;
       if (!city) return jsonResponse({ error: "unknown city_id" }, 400);
     }
+    if (usual_incoterm_id) {
+      const [incoterm] = await sql`select id from incoterms where id = ${usual_incoterm_id}`;
+      if (!incoterm) return jsonResponse({ error: "unknown usual_incoterm_id" }, 400);
+    }
 
     const customer = await sql.begin(async (tx) => {
       const [customer] = await tx`
@@ -69,14 +73,14 @@ Deno.serve(async (req) => {
           preferred_currency_id, usual_delivery_type, usual_destination,
           payment_days, payment_method, preferred_exchange_rate_mode,
           payments_contact_name, payments_contact_email, payments_contact_phone, payments_contact_whatsapp,
-          customs_agency_provider_id, credit_limit, usual_incoterm_text, idempotency_key
+          customs_agency_provider_id, credit_limit, usual_incoterm_id, usual_incoterm_place, idempotency_key
         ) values (
           ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state_id}, ${state}, ${address}, ${postal_code},
           ${contact_name}, ${contact_role}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${website}, ${notes},
           ${preferred_currency_id}, ${usual_delivery_type}, ${usual_destination},
           ${payment_days}, ${payment_method}, ${preferred_exchange_rate_mode},
           ${payments_contact_name}, ${payments_contact_email}, ${payments_contact_phone}, ${payments_contact_whatsapp},
-          ${customs_agency_provider_id}, ${credit_limit}, ${usual_incoterm_text}, ${idempotency_key}
+          ${customs_agency_provider_id}, ${credit_limit}, ${usual_incoterm_id}, ${usual_incoterm_place}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customers", record_id: customer.id, after: customer });

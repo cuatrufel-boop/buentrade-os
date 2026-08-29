@@ -274,7 +274,7 @@ auth.onAuthStateChanged(user => {
         <div><label class="view-label">Delivery Type</label><span id="v_usual_delivery_type">—</span></div>
         <div><label class="view-label">Payment Days</label><span id="v_payment_days">—</span></div>
         <div><label class="view-label">Destination</label><span id="v_usual_destination">—</span></div>
-        <div><label class="view-label">Incoterm</label><span id="v_usual_incoterm_text">—</span></div>
+        <div><label class="view-label">Incoterm</label><span id="v_usual_incoterm">—</span></div>
         <div><label class="view-label">Payment Method</label><span id="v_payment_method">—</span></div>
         <div><label class="view-label">Customs Agency</label><span id="v_customs_agency">—</span></div>
       </div>
@@ -349,12 +349,15 @@ auth.onAuthStateChanged(user => {
           </select>
         </div>
         <div class="field"><label>Usual destination</label><input id="usual_destination" oninput="updateCustomerProfile()"></div>
-        <div class="field"><label>Usual Incoterm</label><input id="usual_incoterm_text" placeholder="e.g. FOB, CIF, DAP" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Usual Incoterm</label>
+          <select id="usual_incoterm_id" onchange="updateCustomerProfile()"><option value="">—</option></select>
+        </div>
       </div>
       <div id="paymentDaysRow" style="display:none;max-width:220px;">
         <div class="field"><label>Credit days</label><input type="number" id="payment_days" min="1" oninput="updateCustomerProfile()"></div>
       </div>
-      <div class="grid3">
+      <div class="grid4">
+        <div class="field"><label>Incoterm Named Place</label><input id="usual_incoterm_place" placeholder="e.g. Nogales, AZ" oninput="updateCustomerProfile()"></div>
         <div class="field"><label>Payment method</label><input id="payment_method" oninput="updateCustomerProfile()"></div>
         <div class="field"><label>Customs agency (who they clear with)</label>
           <select id="customs_agency_provider_id" onchange="updateCustomerProfile()"><option value="">—</option></select>
@@ -407,7 +410,7 @@ auth.onAuthStateChanged(user => {
         <div class="profile-row"><span class="view-label">Usual Delivery Type</span><span class="profile-row-value" id="cv_usual_delivery_type">—</span></div>
         <div class="profile-row"><span class="view-label">Payment Terms</span><span class="profile-row-value" id="cv_payment_terms">—</span></div>
         <div class="profile-row"><span class="view-label">Usual Destination</span><span class="profile-row-value" id="cv_usual_destination">—</span></div>
-        <div class="profile-row"><span class="view-label">Usual Incoterm</span><span class="profile-row-value" id="cv_usual_incoterm_text">—</span></div>
+        <div class="profile-row"><span class="view-label">Usual Incoterm</span><span class="profile-row-value" id="cv_usual_incoterm">—</span></div>
         <div class="profile-row"><span class="view-label">Payment Method</span><span class="profile-row-value" id="cv_payment_method">—</span></div>
         <div class="profile-row"><span class="view-label">Customs Agency</span><span class="profile-row-value" id="cv_customs_agency">—</span></div>
         <div class="profile-row"><span class="view-label">Exchange Rate Preference</span><span class="profile-row-value" id="cv_preferred_exchange_rate_mode">—</span></div>
@@ -448,7 +451,7 @@ function openForm(customer){
     'contact_role','email','email_cc','website',
     'payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp',
     'preferred_currency','usual_delivery_type',
-    'usual_destination','usual_incoterm_text','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes'];
+    'usual_destination','usual_incoterm_id','usual_incoterm_place','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes'];
   fields.forEach(f => document.getElementById(f).value = '');
   document.getElementById('phone_number').value = '';
   document.getElementById('whatsapp_number').value = '';
@@ -521,7 +524,9 @@ function updateCustomerProfile(){
     : '';
   setV('cv_payment_terms', termsLabel);
   setV('cv_usual_destination', document.getElementById('usual_destination').value);
-  setV('cv_usual_incoterm_text', document.getElementById('usual_incoterm_text').value);
+  const incotermCode = selText(document.getElementById('usual_incoterm_id'));
+  const incotermPlace = document.getElementById('usual_incoterm_place').value;
+  setV('cv_usual_incoterm', [incotermCode, incotermPlace].filter(Boolean).join(' '));
   setV('cv_payment_method', document.getElementById('payment_method').value);
   setV('cv_customs_agency', selText(document.getElementById('customs_agency_provider_id')));
   setV('cv_preferred_exchange_rate_mode', selText(document.getElementById('preferred_exchange_rate_mode')));
@@ -591,6 +596,14 @@ async function loadCurrencies(){
   sel.innerHTML = '<option value="">—</option>' + currencies.map(c => `<option value="${c.id}">${escapeHtml(c.code)}</option>`).join('') + '<option value="other">Other</option>';
 }
 
+let incoterms = [];
+async function loadIncoterms(){
+  const res = await callApi('incoterms-search', {});
+  incoterms = res.results || [];
+  const sel = document.getElementById('usual_incoterm_id');
+  sel.innerHTML = '<option value="">—</option>' + incoterms.map(i => `<option value="${i.id}">${escapeHtml(i.code)}</option>`).join('');
+}
+
 let countries = [];
 let allStates = [];
 
@@ -653,7 +666,7 @@ function onCustomerCountryChange(){
 
 async function loadCustomers(){
   try {
-    await Promise.all([loadCustomsAgencies(), loadCurrencies(), loadCountries(), loadStates()]);
+    await Promise.all([loadCustomsAgencies(), loadCurrencies(), loadCountries(), loadStates(), loadIncoterms()]);
     const res = await callApi('customers-search', {});
     customers = res.results || [];
     renderCustomers();
@@ -822,7 +835,8 @@ function viewCustomer(id){
   document.getElementById('v_usual_delivery_type').textContent = deliveryLabels[c.usual_delivery_type] || c.usual_delivery_type || '—';
   document.getElementById('v_payment_days').textContent = paymentDaysLabel(c.payment_days) || '—';
   document.getElementById('v_usual_destination').textContent = c.usual_destination || '—';
-  document.getElementById('v_usual_incoterm_text').textContent = c.usual_incoterm_text || '—';
+  const incoterm = incoterms.find(x => x.id === c.usual_incoterm_id);
+  document.getElementById('v_usual_incoterm').textContent = [incoterm ? incoterm.code : null, c.usual_incoterm_place].filter(Boolean).join(' ') || '—';
   document.getElementById('v_payment_method').textContent = c.payment_method || '—';
   const agency = customsAgencies.find(a => a.id === c.customs_agency_provider_id);
   document.getElementById('v_customs_agency').textContent = agency ? agency.name : '—';
@@ -884,7 +898,8 @@ async function saveCustomer(forceOverride){
       return null;
     })(),
     usual_destination: document.getElementById('usual_destination').value || null,
-    usual_incoterm_text: document.getElementById('usual_incoterm_text').value || null,
+    usual_incoterm_id: document.getElementById('usual_incoterm_id').value || null,
+    usual_incoterm_place: document.getElementById('usual_incoterm_place').value || null,
     payment_method: document.getElementById('payment_method').value || null,
     customs_agency_provider_id: document.getElementById('customs_agency_provider_id').value || null,
     preferred_exchange_rate_mode: document.getElementById('preferred_exchange_rate_mode').value || null,
