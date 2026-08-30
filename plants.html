@@ -975,7 +975,11 @@ async function loadEverything(){
 
   plantProteins = {};
   (linksRes.results || []).forEach(link => {
-    const cat = link.product && link.product.category;
+    if (!link.product) return;
+    // English throughout the OS — categories only has category/name and category_en/name_en as
+    // separate lookup rows (products carries category_id, not its own category_en column), so this
+    // has to go through the same categories table lookup as categoryEnById does everywhere else.
+    const cat = categoryEnById(link.product.category_id) || link.product.category;
     if (!cat) return;
     if (!plantProteins[link.plant_id]) plantProteins[link.plant_id] = new Set();
     plantProteins[link.plant_id].add(cat);
