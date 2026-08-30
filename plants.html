@@ -659,6 +659,11 @@ auth.onAuthStateChanged(user => {
           </div>
         </div>
       </div>
+      <!-- Duplicate check already re-runs automatically on every Cut Name/Variation/Temp/Packaging
+           change (see updateProfileDisplays), but it only ever speaks up when it finds something —
+           silence isn't proof of safety, and a trader creating a product mid price-list-review
+           (the one place this matters most) asked for an explicit, on-demand answer either way. -->
+      <button type="button" class="btn secondary" style="margin-top:4px;" onclick="checkNameDuplicate(true)">🔍 Check for Duplicates</button>
       <div id="nameDupWarning" style="display:none;background:#FFF6E5;border:1px solid #F0C36D;border-radius:7px;padding:8px 10px;margin-top:6px;font-size:12.5px;"></div>
     </div>
 
@@ -2827,10 +2832,25 @@ function normalizeProductName(s){
 // more common place a brand-new product gets created (mid price-list review) — never blocks
 // saving, just flags a possible duplicate so it can be caught before it becomes a second row for
 // the same real-world cut.
-async function checkNameDuplicate(){
+// explicit=true means the trader clicked "Check for Duplicates" themselves, expecting a real
+// answer either way — the automatic re-check (every Cut Name/Variation/Temp/Packaging change)
+// stays silent when clear, so it doesn't flash a banner on every intermediate selection, but an
+// explicit ask gets a positive confirmation too, never just silence.
+async function checkNameDuplicate(explicit){
   const raw = document.getElementById('name').value.trim();
   const warningEl = document.getElementById('nameDupWarning');
-  if (!raw){ warningEl.style.display = 'none'; return; }
+  warningEl.style.background = '#FFF6E5';
+  warningEl.style.borderColor = '#F0C36D';
+  warningEl.style.color = 'inherit';
+  if (!raw){
+    if (explicit){
+      warningEl.style.display = 'block';
+      warningEl.textContent = 'Pick a Cut Name (and Temperature/Packaging) first, then check again.';
+    } else {
+      warningEl.style.display = 'none';
+    }
+    return;
+  }
   await fetchAllCatalogProducts();
   const norm = normalizeProductName(raw);
   const currentId = document.getElementById('prodId').value;
@@ -2848,7 +2868,18 @@ async function checkNameDuplicate(){
     if (!pn) return false;
     return pn === norm || pn.startsWith(norm) || norm.startsWith(pn);
   });
-  if (!matches.length){ warningEl.style.display = 'none'; return; }
+  if (!matches.length){
+    if (explicit){
+      warningEl.style.display = 'block';
+      warningEl.style.background = '#E8F5E9';
+      warningEl.style.borderColor = '#8BC79B';
+      warningEl.style.color = '#1E7A3E';
+      warningEl.textContent = '✓ No matching products found in the catalog — safe to create as new.';
+    } else {
+      warningEl.style.display = 'none';
+    }
+    return;
+  }
   warningEl.style.display = 'block';
   // Full spec per match, not just the bare name — "Pork Bone in Butt" alone can't be judged as a
   // real duplicate or a legitimate different packaging/temperature variant of the same cut.
