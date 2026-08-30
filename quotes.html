@@ -632,10 +632,12 @@ let rqAllLocations = [];
 let rqAllProviders = [];
 let rqAllProviderRates = [];
 
+// lookups-search replaces the separate temperature-search/packaging-search calls — every Edge
+// Function call pays the same ~1-1.5s Postgres connection cost regardless of query size (measured
+// 2026-08-31), so bundling small lookups cuts real wall-clock wait time on every page load.
 async function fetchQuotesLookups(){
   return Promise.all([
-    callApi('temperature-search', {}),
-    callApi('packaging-search', {}),
+    callApi('lookups-search', {}),
     callApi('products-search', { limit: 500 }),
     callApi('plants-search', {}),
     callApi('plant-locations-search', {}),
@@ -645,16 +647,16 @@ async function fetchQuotesLookups(){
 }
 
 async function loadQuotesPage(){
-  let tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes;
+  let lookupsRes, prodRes, plantRes, locRes, provRes, rateRes;
   try {
-    [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
+    [lookupsRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
   } catch (e) {
     // Firebase token can still be propagating right after sign-in — retry once.
     await new Promise(r => setTimeout(r, 800));
-    [tempRes, packRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
+    [lookupsRes, prodRes, plantRes, locRes, provRes, rateRes] = await fetchQuotesLookups();
   }
-  temperatures = tempRes.results || [];
-  packagings = packRes.results || [];
+  temperatures = lookupsRes.temperatures || [];
+  packagings = lookupsRes.packagings || [];
   products = prodRes.results || [];
   rqAllPlants = plantRes.results || [];
   rqAllLocations = locRes.results || [];

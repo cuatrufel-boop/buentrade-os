@@ -957,25 +957,24 @@ function onPlantCountryChange(prefix){
 }
 
 async function loadEverything(){
-  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes] = await Promise.all([
+  // lookups-search bundles temperature/packaging/categories/countries/states/currencies into one
+  // call — real fix 2026-08-31: every Edge Function call measured ~1-1.5s regardless of query
+  // size (the cost is the Postgres connection itself, not the query), so 6 separate small lookups
+  // paid that fixed cost 6 times on every single page load. Same data, same shape, one round trip.
+  const [plantsRes, lookupsRes, linksRes] = await Promise.all([
     callApi('plants-search', {}),
-    callApi('temperature-search', {}),
-    callApi('packaging-search', {}),
-    callApi('categories-search', {}),
+    callApi('lookups-search', {}),
     callApi('plant-products-search', {}),
-    callApi('currencies-search', {}),
-    callApi('countries-search', {}),
-    callApi('states-search', {}),
     loadVariations(),
     loadCutNames(),
   ]);
   plants = plantsRes.results || [];
-  temperatures = tempRes.results || [];
-  packagings = packRes.results || [];
-  categories = catRes.results || [];
-  countries = countryRes.results || [];
-  allStates = statesRes.results || [];
-  const usd = (currRes.results || []).find(c => c.code === 'USD');
+  temperatures = lookupsRes.temperatures || [];
+  packagings = lookupsRes.packagings || [];
+  categories = lookupsRes.categories || [];
+  countries = lookupsRes.countries || [];
+  allStates = lookupsRes.states || [];
+  const usd = (lookupsRes.currencies || []).find(c => c.code === 'USD');
   usdCurrencyId = usd ? usd.id : null;
 
   plantProteins = {};

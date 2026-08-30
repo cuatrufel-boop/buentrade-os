@@ -454,16 +454,17 @@ function closeForm(){
 let categories = [];
 
 async function loadLookups(){
-  const [tempRes, packRes, catRes] = await Promise.all([
-    callApi('temperature-search', {}),
-    callApi('packaging-search', {}),
-    callApi('categories-search', {}),
+  // One combined call instead of three separate ones — every Edge Function call pays the same
+  // ~1-1.5s Postgres connection cost regardless of query size (measured 2026-08-31), so bundling
+  // small lookups into lookups-search cuts real wall-clock wait time on every page load.
+  const [lookupsRes] = await Promise.all([
+    callApi('lookups-search', {}),
     loadVariations(),
     loadCutNames(),
   ]);
-  temperatures = tempRes.results || [];
-  packagings = packRes.results || [];
-  categories = catRes.results || [];
+  temperatures = lookupsRes.temperatures || [];
+  packagings = lookupsRes.packagings || [];
+  categories = lookupsRes.categories || [];
   // English throughout the OS — falls back to the Spanish catalog entry only if a
   // temperature/packaging/category row has no English name on file.
   const tSel = document.getElementById('temperature_id');

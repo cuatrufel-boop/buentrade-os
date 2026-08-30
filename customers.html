@@ -644,9 +644,7 @@ async function loadCustomsAgencies(){
   sel.innerHTML = '<option value="">—</option>' + customsAgencies.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
 }
 
-async function loadCurrencies(){
-  const res = await callApi('currencies-search', {});
-  currencies = res.results || [];
+function applyCurrencies(){
   const sel = document.getElementById('preferred_currency');
   sel.innerHTML = '<option value="">—</option>' + currencies.map(c => `<option value="${c.id}">${escapeHtml(c.code)}</option>`).join('') + '<option value="other">Other</option>';
 }
@@ -693,18 +691,23 @@ function joinPhone(code, number){
   return code ? `${code} ${number.trim()}` : number.trim();
 }
 
-async function loadCountries(){
-  const res = await callApi('countries-search', {});
-  countries = res.results || [];
+function applyCountries(){
   const sel = document.getElementById('country_id');
   sel.innerHTML = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
   populateDialCodeSelect(document.getElementById('phone_code'));
   populateDialCodeSelect(document.getElementById('whatsapp_code'));
 }
 
-async function loadStates(){
-  const res = await callApi('states-search', {});
-  allStates = res.results || [];
+// Bundles currencies/countries/states into one Edge Function call instead of three — every call
+// pays the same ~1-1.5s Postgres connection cost regardless of query size (measured 2026-08-31),
+// so three small lookups on every page load were paying that fixed cost three times over.
+async function loadCurrenciesCountriesStates(){
+  const res = await callApi('lookups-search', {});
+  currencies = res.currencies || [];
+  countries = res.countries || [];
+  allStates = res.states || [];
+  applyCurrencies();
+  applyCountries();
 }
 
 function onCustomerCountryChange(){
@@ -721,7 +724,7 @@ function onCustomerCountryChange(){
 
 async function loadCustomers(){
   try {
-    await Promise.all([loadCustomsAgencies(), loadCurrencies(), loadCountries(), loadStates(), loadIncoterms()]);
+    await Promise.all([loadCustomsAgencies(), loadCurrenciesCountriesStates(), loadIncoterms()]);
     const res = await callApi('customers-search', {});
     customers = res.results || [];
     renderCustomers();
