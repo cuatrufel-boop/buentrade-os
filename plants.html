@@ -66,9 +66,35 @@
   .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
   .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:#fff;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
   .plr-chip:hover{background:var(--blue);color:#fff;}
+  .plr-chip-current{background:var(--blue);color:#fff;}
+  .plr-chip-new{border-color:var(--ink-soft);color:var(--ink-soft);}
+  .plr-chip-new:hover{background:var(--ink-soft);color:#fff;}
   .plr-teach{margin-top:6px;padding:9px 11px;background:#FFF8EC;border:1px solid #F0D9A6;border-radius:8px;font-size:11.5px;color:#7A5300;}
   .plr-teach-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;}
   .plr-teach select,.plr-teach input{padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:11.5px;font-family:inherit;}
+  /* "Fichas" price-list review — the whole point is that this is a clicking game, never a typing
+     one: a resolved line collapses to one compact confirmed row, and a line needing a decision
+     always offers clickable option-cards (tight matches first, the rest of the category one click
+     away) instead of a search box, because clicking the right card is exactly how the plant's
+     wording gets taught to the system for next time — the free-text dropdown this replaced didn't
+     teach anything on its own the way a chip click does. */
+  .plr-summary{display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:#EEF3FF;border-radius:9px;font-size:12.5px;font-weight:600;color:var(--navy-2);margin-bottom:12px;}
+  .plr-summary-ok{color:#1E7A3E;}
+  .plr-summary-warn{color:#B8720A;}
+  .plr-summary-none{color:var(--red);}
+  .plr-list{display:flex;flex-direction:column;gap:8px;}
+  .plr-row{background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;transition:border-color .15s;}
+  .plr-row-resolved{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .plr-check{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:#1E7A3E;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .plr-rawtext{color:var(--ink-soft);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;}
+  .plr-arrow{color:var(--ink-soft);flex-shrink:0;}
+  .plr-matched{font-weight:600;font-size:13px;flex:1;min-width:120px;}
+  .plr-price{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:13px;flex-shrink:0;}
+  .plr-change-btn{flex-shrink:0;background:none;border:none;color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;padding:2px 4px;}
+  .plr-open-rawtext{font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;}
+  .plr-open-rawtext strong{color:var(--ink);font-weight:600;}
+  .plr-browse{max-height:210px;overflow-y:auto;padding:2px;}
+  .plr-browse-toggle,.plr-teach-toggle{background:none;border:none;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px;}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
   .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
   .wa-btn:hover{background:#1EBE5A;}
@@ -303,11 +329,9 @@ auth.onAuthStateChanged(user => {
         <div id="priceListDocsNote" style="display:none;margin-top:14px;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
         <div id="priceListCategoryNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
         <div id="priceListLocationsNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
-        <div id="priceListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
-          <table style="table-layout:fixed;width:100%;min-width:640px;">
-            <thead><tr><th style="width:38%;">Original Text</th><th style="width:14%;">Price (USD/lb)</th><th style="width:48%;">Catalog Product</th></tr></thead>
-            <tbody id="priceListReviewRows"></tbody>
-          </table>
+        <div id="priceListReviewWrap" style="display:none;margin-top:16px;">
+          <div id="priceListSummary" class="plr-summary"></div>
+          <div id="priceListReviewRows" class="plr-list"></div>
           <div style="display:flex;gap:10px;margin-top:12px;">
             <button class="btn" onclick="applyPriceList()">Apply All</button>
             <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
@@ -1758,47 +1782,15 @@ async function startCreateProductForRow(i){
   document.getElementById('formMsg').textContent = 'Complete all required fields and save.';
 }
 
-// The row's <select> reverts to "— selecciona —" (or whatever was matched before) after opening
-// the create-product form — "+ Crear producto nuevo…" is an action, not a real product id, so it
-// must never be left sitting in matchedProductId.
-function onPriceListProductSelect(i, selectEl){
-  if (selectEl.value === '__new__'){
-    startCreateProductForRow(i);
-    selectEl.value = priceListRows[i].matchedProductId || '';
-    return;
-  }
-  priceListRows[i].matchedProductId = selectEl.value || null;
-}
-
 // The full shared catalog spans every protein at every plant — a chicken plant like Sanderson
 // showing pork options mixed in by default is exactly the noise this exists to cut. Blank means
-// no restriction; set from the one selector above the table, applied to every row's dropdown at
-// once (never per-row — a plant is virtually always one protein for the whole list).
+// no restriction; set from the one selector above the table, applied to every row's browse-all
+// fallback at once (never per-row — a plant is virtually always one protein for the whole list).
 let priceListCategoryFilter = '';
 
 function setPriceListCategoryFilter(value){
   priceListCategoryFilter = value;
-  document.querySelectorAll('select[id^="prodSelect_"]').forEach(select => {
-    const i = select.id.replace('prodSelect_', '');
-    const searchEl = document.getElementById(`prodSearch_${i}`);
-    filterProductOptions(i, searchEl ? searchEl.value : '');
-  });
-}
-
-// The catalog is only going to keep growing — scrolling a plain <select> to find one product
-// among 50+ stops being practical fast. Hides (doesn't remove) non-matching <option>s in place,
-// so the exact same select/onchange/product-id wiring keeps working — this is just a filter on
-// top of it, never a different widget with its own selection logic to keep in sync.
-function filterProductOptions(i, term){
-  const select = document.getElementById(`prodSelect_${i}`);
-  if (!select) return;
-  const norm = term.trim().toLowerCase();
-  Array.from(select.options).forEach(opt => {
-    if (opt.value === '' || opt.value === '__new__'){ opt.style.display = ''; return; }
-    const matchesCategory = !priceListCategoryFilter || opt.dataset.category === priceListCategoryFilter;
-    const matchesTerm = !norm || opt.textContent.toLowerCase().includes(norm);
-    opt.style.display = (matchesCategory && matchesTerm) ? '' : 'none';
-  });
+  renderPriceListReview();
 }
 
 function openPriceListPanel(){
@@ -2020,6 +2012,37 @@ async function fetchPlantTermAliases(){
 // word about, so this is a plain assignment, not a re-match.
 function pickCandidate(i, productId){
   priceListRows[i].matchedProductId = productId;
+  // Picking a card is the whole confirm — the row collapses straight back to its closed, resolved
+  // ficha, and any "Cambiar"/teach panel this row had open no longer applies to a settled row.
+  priceListRows[i]._forceOpen = false;
+  priceListRows[i]._teachOpen = false;
+  renderPriceListReview();
+}
+
+// "Cambiar" on an already-resolved ficha — re-opens it into the same click-to-pick view as an
+// unresolved row (current pick highlighted, rest of the category one click away), without losing
+// the existing match unless the trader actually clicks something else.
+function reopenRow(i){
+  priceListRows[i]._forceOpen = true;
+  renderPriceListReview();
+}
+function closeRow(i){
+  priceListRows[i]._forceOpen = false;
+  renderPriceListReview();
+}
+
+// The word-teaching panel is a secondary escape hatch (an arbitrary plant abbreviation no click
+// could ever cover on its own), never the default view — collapsed until asked for.
+function toggleTeachPanel(i){
+  priceListRows[i]._teachOpen = !priceListRows[i]._teachOpen;
+  renderPriceListReview();
+}
+
+// Tight candidates (same name, couldn't narrow further) are shown first and are almost always the
+// right list to pick from — the full category is one click away for the rarer case where none of
+// them are it, rather than always dumping every product in the plant's category on screen at once.
+function toggleBrowseAll(i){
+  priceListRows[i]._browseAll = !priceListRows[i]._browseAll;
   renderPriceListReview();
 }
 
@@ -2384,88 +2407,108 @@ function detectBlockFormatItems(lines){
   return items;
 }
 
+// One line's spec label — whatever actually distinguishes it (temp/pack/variation), never the
+// bare name every candidate in the same chip group already shares.
+function plrSpecLabel(p){
+  return [tempName(p.temperature_id), packName(p.packaging_id), p.subcategory_en || p.subcategory].filter(Boolean).join(', ') || (p.name_en || p.name);
+}
+
 function renderPriceListReview(){
   const wrap = document.getElementById('priceListReviewWrap');
-  const tbody = document.getElementById('priceListReviewRows');
+  const list = document.getElementById('priceListReviewRows');
   wrap.style.display = 'block';
-  tbody.innerHTML = priceListRows.map((row, i) => {
-    // A plant often carries the same cut name multiple times (fresh vs frozen, boxed vs vacuum,
-    // combo vs not) — without temp/pack in the label those show up as identical-looking
-    // duplicates in the picker, impossible to tell apart. This is what ends up on invoices, so
-    // getting the right one matters more here than almost anywhere else in the app.
-    // English leads (this screen is plant-facing) — Spanish name only as a secondary reference
-    // in parens, since a few teammates may still recognize a cut faster in Spanish.
-    const options = allCatalogProducts.map(p => {
-      // Subcategory is exactly what distinguishes two products that would otherwise share the
-      // same name AND the same temp/pack (confirmed real case: "Chicken Breast Trim" at 5% vs
-      // 15%, both Frozen/Bulk) — leaving it out of the label made them look identical here even
-      // though they're genuinely different products, real risk of picking the wrong one or
-      // creating a duplicate for a variant that already exists.
-      const spec = [tempName(p.temperature_id), packName(p.packaging_id), p.subcategory_en || p.subcategory].filter(Boolean).join(', ');
-      const label = p.name_en || p.name;
-      return `<option value="${p.id}" data-category="${escapeHtml(p.category || '')}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
+
+  // Summary first — the whole point of "fichas cerradas" is that the trader's attention should
+  // never have to scan a long list to figure out how much work is actually left.
+  const resolvedCount = priceListRows.filter(r => r.matchedProductId).length;
+  const ambiguousCount = priceListRows.filter(r => !r.matchedProductId && r.candidateIds && r.candidateIds.length).length;
+  const noMatchCount = priceListRows.length - resolvedCount - ambiguousCount;
+  document.getElementById('priceListSummary').innerHTML = `
+    <span class="plr-summary-ok">✓ ${resolvedCount} reconocida${resolvedCount === 1 ? '' : 's'} sola${resolvedCount === 1 ? '' : 's'}</span>
+    ${ambiguousCount ? `<span class="plr-summary-warn">${ambiguousCount} necesita${ambiguousCount === 1 ? '' : 'n'} tu decisión</span>` : ''}
+    ${noMatchCount ? `<span class="plr-summary-none">${noMatchCount} sin producto</span>` : ''}`;
+
+  list.innerHTML = priceListRows.map((row, i) => {
+    const priceLabel = row.price != null ? `$${row.price.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}` : '—';
+
+    // Resolved and not manually reopened — one compact confirmed line, nothing to click.
+    if (row.matchedProductId && !row._forceOpen){
+      const p = allCatalogProducts.find(x => x.id === row.matchedProductId);
+      const label = p ? `${p.name_en || p.name} — ${plrSpecLabel(p)}` : '(product not found)';
+      return `<div class="plr-row plr-row-resolved" id="plrRow_${i}">
+        <span class="plr-check">✓</span>
+        <span class="plr-rawtext" title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</span>
+        <span class="plr-arrow">→</span>
+        <span class="plr-matched">${escapeHtml(label)}</span>
+        <span class="plr-price">${priceLabel}</span>
+        <button type="button" class="plr-change-btn" onclick="reopenRow(${i})">Cambiar</button>
+      </div>`;
+    }
+
+    // Needs a click — tight candidates (if any) plus the current pick (if reopening an already-
+    // resolved row) come first; the rest of the plant's own category is one toggle away, never a
+    // text box. This is the "connect the incoming line to the right existing card" game.
+    const tightIds = row.candidateIds || [];
+    const currentId = row._forceOpen ? row.matchedProductId : null;
+    const shownIds = new Set([...(currentId ? [currentId] : []), ...tightIds]);
+    const tightChips = [...shownIds].map(id => {
+      const p = allCatalogProducts.find(x => x.id === id);
+      if (!p) return '';
+      const isCurrent = id === currentId;
+      return `<button type="button" class="plr-chip${isCurrent ? ' plr-chip-current' : ''}" onclick="pickCandidate(${i}, '${id}')">${isCurrent ? '✓ ' : ''}${escapeHtml(plrSpecLabel(p))}</button>`;
     }).join('');
-    // Real candidates the matcher already found (same name, couldn't narrow further from the
-    // line's own wording) get rendered as one-click chips — the whole reason this exists: picking
-    // between 2-3 known real options should never mean scrolling a dropdown of the entire catalog.
-    // Each chip shows exactly what differs between them (temp/pack/variation), never the bare
-    // name they already share.
-    const candidateChips = (!row.matchedProductId && row.candidateIds && row.candidateIds.length && row.candidateIds.length <= 6) ? `
-      <div class="plr-candidates">
-        ${row.candidateIds.map(id => {
-          const p = allCatalogProducts.find(x => x.id === id);
-          if (!p) return '';
-          const spec = [tempName(p.temperature_id), packName(p.packaging_id), p.subcategory_en || p.subcategory].filter(Boolean).join(', ') || (p.name_en || p.name);
-          return `<button type="button" class="plr-chip" onclick="pickCandidate(${i}, '${id}')">${escapeHtml(spec)}</button>`;
-        }).join('')}
+
+    const categoryName = priceListCategoryFilter || (currentId && (() => { const p = allCatalogProducts.find(x => x.id === currentId); return p && p.category; })()) || '';
+    const browseCandidates = allCatalogProducts
+      .filter(p => (!categoryName || p.category === categoryName) && !shownIds.has(p.id))
+      .sort((a, b) => (a.name_en || a.name).localeCompare(b.name_en || b.name));
+    const showBrowse = row._browseAll || !tightIds.length;
+    const browseChips = showBrowse ? `
+      <div class="plr-candidates plr-browse">
+        ${browseCandidates.map(p => `<button type="button" class="plr-chip" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.name_en || p.name)}${plrSpecLabel(p) !== (p.name_en || p.name) ? ' — ' + escapeHtml(plrSpecLabel(p)) : ''}</button>`).join('')}
       </div>` : '';
-    // A row where the name alone couldn't be resolved with confidence — either several catalog
-    // products share this exact name and the line's wording didn't narrow it to one, or exactly
-    // one product shares the name but something in the line (a temperature/packaging word) didn't
-    // match what's on file for it, or nothing at all matched (a genuine abbreviation the matcher
-    // has never seen) — gets an inline prompt to teach the exact word involved. One word can mean
-    // a Temperature, a Packaging, a Variation (e.g. "Bnls" = Boneless), or the Cut Name itself
-    // (e.g. "XF Trim" = Cutting Fat) — no algorithm can guess these, they're arbitrary per plant,
-    // but once confirmed here they're instantly applied to every other pending row with the same
-    // word, and remembered for every future price list from this plant once "Aplicar todo" is
-    // confirmed — never asked twice.
-    const teachPrompt = (!row.matchedProductId) ? `
+    const browseToggle = (tightIds.length && !row._browseAll)
+      ? `<button type="button" class="plr-browse-toggle" onclick="toggleBrowseAll(${i})">Ver el resto del catálogo (${browseCandidates.length})</button>`
+      : '';
+
+    const newChip = `<button type="button" class="plr-chip plr-chip-new" onclick="startCreateProductForRow(${i})">+ Crear producto nuevo</button>`;
+
+    const teachOpen = !!row._teachOpen;
+    const teachHint = tightIds.length > 1
+      ? `Esta planta usa una palabra que no reconozco para distinguir estos ${tightIds.length} productos.`
+      : tightIds.length === 1
+      ? `Algo en esta línea no coincide con el único producto que tengo con ese nombre — podría ser una palabra que no reconozco.`
+      : `No reconozco este corte todavía — podría ser la forma en que esta planta abrevia algo que ya está en el catálogo.`;
+    const teachPanel = teachOpen ? `
       <div class="plr-teach">
-        ${row.candidateIds && row.candidateIds.length > 1
-          ? `This plant uses a word I don't recognize to tell apart these ${row.candidateIds.length} products.`
-          : row.candidateIds && row.candidateIds.length === 1
-          ? `Something in this line doesn't match the only product on file with this name — could be a word I don't recognize.`
-          : `I don't recognize this cut at all yet — could be this plant's own shorthand for something already in the catalog.`}
+        ${teachHint}
         <div class="plr-teach-row">
-          <input type="text" id="termInput_${i}" placeholder="exact word, e.g. XF">
+          <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. XF">
           <select id="termMeaning_${i}">
-            <option value="">This word means…</option>
+            <option value="">Esta palabra significa…</option>
             <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
             <optgroup label="Variation">${variations.map(v => `<option value="variation:${v.id}">${escapeHtml(v.name_en)}</option>`).join('')}</optgroup>
             <optgroup label="Temperature">${temperatures.map(t => `<option value="temperature:${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}</optgroup>
             <optgroup label="Packaging">${packagings.map(p => `<option value="packaging:${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}</optgroup>
           </select>
-          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Save &amp; Recognize</button>
+          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Guardar y reconocer</button>
         </div>
         <div id="termMsg_${i}" style="font-size:11px;color:var(--red);margin-top:4px;font-weight:600;"></div>
       </div>` : '';
-    return `<tr>
-      <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
-      <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
-      <td>
-        ${candidateChips}
-        <input type="text" id="prodSearch_${i}" placeholder="Search product…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
-        <select id="prodSelect_${i}" style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="onPriceListProductSelect(${i}, this)">
-        <option value="">— select —</option>
-        <option value="__new__">+ Create new product…</option>
-        ${options}
-      </select>${teachPrompt}</td>
-    </tr>`;
+
+    return `<div class="plr-row" id="plrRow_${i}">
+      <div class="plr-open-rawtext"><strong>${escapeHtml(row.rawText)}</strong> — ${priceLabel}</div>
+      ${tightChips ? `<div class="plr-candidates">${tightChips}</div>` : ''}
+      ${browseChips}
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+        ${browseToggle}
+        ${newChip}
+        ${row._forceOpen ? `<button type="button" class="plr-browse-toggle" onclick="closeRow(${i})">Cerrar</button>` : ''}
+        <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Ocultar' : '¿Es una abreviatura?'}</button>
+      </div>
+      ${teachPanel}
+    </div>`;
   }).join('');
-  // The table just got rebuilt from scratch, which drops any previously-hidden <option>s along
-  // with it — re-apply the standing category filter (and each row's own search text, if any) so
-  // it doesn't silently reset back to "show everything" on every re-render.
-  if (priceListCategoryFilter) setPriceListCategoryFilter(priceListCategoryFilter);
 }
 
 async function applyPriceList(){
@@ -2502,7 +2545,7 @@ async function applyPriceList(){
     (byProduct[r.matchedProductId] = byProduct[r.matchedProductId] || []).push(realIdx);
   });
   const collisions = Object.values(byProduct).filter(idxs => idxs.length > 1);
-  document.querySelectorAll('#priceListReviewRows select[id^="prodSelect_"]').forEach(s => { s.style.borderColor = ''; });
+  document.querySelectorAll('#priceListReviewRows .plr-row').forEach(r => { r.style.borderColor = ''; });
   if (collisions.length){
     const productName = pid => {
       const p = allCatalogProducts.find(x => x.id === pid);
@@ -2510,8 +2553,8 @@ async function applyPriceList(){
     };
     const lines = collisions.map(idxs => {
       idxs.forEach(i => {
-        const sel = document.getElementById(`prodSelect_${i}`);
-        if (sel) sel.style.borderColor = '#C4432E';
+        const rowEl = document.getElementById(`plrRow_${i}`);
+        if (rowEl) rowEl.style.borderColor = '#C4432E';
       });
       const pid = priceListRows[idxs[0]].matchedProductId;
       const rows = idxs.map(i => `"${priceListRows[i].rawText}" ($${priceListRows[i].price})`).join(' and ');
