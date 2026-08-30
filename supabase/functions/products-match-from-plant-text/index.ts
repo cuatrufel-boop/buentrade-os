@@ -28,8 +28,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// % and hyphens stripped here (only in this matcher, not the shared duplicate-detection
+// normalize) — real gaps confirmed live 2026-08-30 against an actual Tyson price list: catalog
+// "42% Trim" never matched a plant's own "42 Trim" (the % is purely decorative, never typed by a
+// plant), and catalog "Bone-In" never matched a plant's own "Bone in" (same word, plants routinely
+// drop the hyphen and/or the capital I). Both symbols carry no matching-relevant meaning — a
+// hyphen becomes a space so "bone-in"/"bone in" normalize identically.
 function normalizeForMatch(s: string | null | undefined): string {
-  return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return (s || "").trim().toLowerCase().replace(/%/g, "").replace(/-/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function normalizeForMatchLoose(s: string | null | undefined): string {
@@ -137,8 +143,8 @@ function candidateVariationSet(p: any): Set<string> {
   );
 }
 
-function narrowByVariation(rawText: string, candidates: any[], variationNames: string[]) {
-  const lineVariations = detectVariationNamesFromLine(rawText, variationNames);
+function narrowByVariation(rawText: string, candidates: any[], variationNames: string[], taughtNames: Set<string> = new Set()) {
+  const lineVariations = new Set([...detectVariationNamesFromLine(rawText, variationNames), ...taughtNames]);
   if (lineVariations.size === 0) return candidates; // no signal in the line — never a silent default
   const narrowed = candidates.filter((p) => {
     const pVariations = candidateVariationSet(p);
@@ -196,15 +202,50 @@ Deno.serve(async (req) => {
     const packagings = await sql<TempPack[]>`select id, name, name_en from packaging`;
     const variationRows = await sql`select id, name_es, name_en from variations`;
     const variationNames = variationRows.map((v: any) => v.name_en).filter(Boolean) as string[];
+    const variationNameById = new Map(variationRows.map((v: any) => [v.id, v.name_en]));
+    // cut_names — real gap closed 2026-08-30: a plant's own abbreviation for the CUT ITSELF
+    // ("XF Trim" = Cutting Fat) is exactly as arbitrary as a temperature/packaging shorthand, but
+    // had nowhere to be taught before. No text-normalization trick (stripping %, hyphens, plurals)
+    // can ever bridge "XF" to "Cutting Fat" — they share no characters — only a human-confirmed,
+    // remembered alias can.
+    const cutNameRows = await sql`select id, name_es, name_en from cut_names`;
+    const cutNameById = new Map(cutNameRows.map((c: any) => [c.id, c.name_en]));
 
     const termAliasRows = await sql`
       select term, meaning_type, meaning_id from plant_term_aliases where plant_id = ${plant_id}
     `;
-    const plantTermAliasMap = new Map<string, { temperature?: string; packaging?: string }>();
+    const plantTermAliasMap = new Map<string, { temperature?: string; packaging?: string; variation?: string; cut_name?: string }>();
     for (const a of termAliasRows) {
       const entry = plantTermAliasMap.get(a.term) || {};
       (entry as any)[a.meaning_type] = a.meaning_id;
       plantTermAliasMap.set(a.term, entry);
+    }
+
+    // Any taught term (of either kind) that appears in this exact line, resolved to real
+    // catalog values — computed once, reused by both the alias-cache re-validation below and the
+    // full matching cascade further down, so a taught "Bnls" = Boneless behaves identically
+    // whether this line hits the fast alias-cache path or the slow name-matching path.
+    function taughtVariationNamesFromLine(line: string): Set<string> {
+      const norm = line.toLowerCase();
+      const found = new Set<string>();
+      for (const [term, meaning] of plantTermAliasMap) {
+        if (!meaning.variation) continue;
+        if (!wordBoundary(term).test(norm)) continue;
+        const name = variationNameById.get(meaning.variation);
+        if (name) found.add(String(name).toLowerCase());
+      }
+      return found;
+    }
+    function taughtCutNamesFromLine(line: string): Set<string> {
+      const norm = line.toLowerCase();
+      const found = new Set<string>();
+      for (const [term, meaning] of plantTermAliasMap) {
+        if (!meaning.cut_name) continue;
+        if (!wordBoundary(term).test(norm)) continue;
+        const name = cutNameById.get(meaning.cut_name);
+        if (name) found.add(String(name));
+      }
+      return found;
     }
 
     const inCategory = (p: any) => !plantCategoryId || p.category_id === plantCategoryId;
@@ -226,7 +267,7 @@ Deno.serve(async (req) => {
         // overrides what THIS line's own text says. If the line now names a variation the aliased
         // product doesn't have (e.g. it learned "Skinless" pointed at a Boneless-only row, and this
         // line's wording also says "Skinless" but the aliased row lacks it), that's a real conflict.
-        const lineVariations = detectVariationNamesFromLine(raw_text, variationNames);
+        const lineVariations = new Set([...detectVariationNamesFromLine(raw_text, variationNames), ...taughtVariationNamesFromLine(raw_text)]);
         const productVariations = candidateVariationSet(product);
         const variationConflict = [...lineVariations].some((v) => !productVariations.has(v));
         if (!tempConflict && !packConflict && !variationConflict) {
@@ -242,14 +283,37 @@ Deno.serve(async (req) => {
       ? await sql`select * from products where category_id = ${plantCategoryId}`
       : await sql`select * from products`;
 
-    let nameMatches = (name_en || name_es)
-      ? allInCategoryProducts.filter((p: any) => inCategory(p) && (
-          (name_en && normalizeForMatch(p.name_en) === normalizeForMatch(name_en)) ||
-          (name_es && normalizeForMatch(p.name) === normalizeForMatch(name_es))
-        ))
-      : allInCategoryProducts.filter((p: any) => inCategory(p) && (
-          normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key
-        ));
+    // A taught cut-name alias goes first, ahead of every text-normalization trick below — none of
+    // them (stripping %, hyphens, plurals, or checking substrings) can ever bridge something like
+    // "XF" to "Cutting Fat" on their own, since the words share no characters at all. Only
+    // reached for the raw_text-only path; a block-format caller already isolated a clean name_en/
+    // name_es and doesn't need this. Rule 3 still applies even to a taught fact — this only picks
+    // the CANDIDATE set, every one of them still goes through the exact same temp/pack/variation
+    // narrowing below, so a stale or overly-broad alias can never skip that check.
+    let nameMatches: any[] = [];
+    if (!name_en && !name_es) {
+      const taughtNames = taughtCutNamesFromLine(raw_text);
+      if (taughtNames.size) {
+        const taughtLoose = [...taughtNames].map(normalizeForMatch);
+        nameMatches = allInCategoryProducts.filter((p: any) =>
+          inCategory(p) && (
+            taughtLoose.includes(normalizeForMatch(p.name_en)) ||
+            taughtLoose.includes(normalizeForMatch(p.name))
+          )
+        );
+      }
+    }
+
+    if (!nameMatches.length) {
+      nameMatches = (name_en || name_es)
+        ? allInCategoryProducts.filter((p: any) => inCategory(p) && (
+            (name_en && normalizeForMatch(p.name_en) === normalizeForMatch(name_en)) ||
+            (name_es && normalizeForMatch(p.name) === normalizeForMatch(name_es))
+          ))
+        : allInCategoryProducts.filter((p: any) => inCategory(p) && (
+            normalizeForMatch(p.name) === key || normalizeForMatch(p.name_en) === key
+          ));
+    }
 
     if (!nameMatches.length) {
       nameMatches = (name_en || name_es)
@@ -261,6 +325,43 @@ Deno.serve(async (req) => {
             normalizeForMatchLoose(p.name) === normalizeForMatchLoose(raw_text) ||
             normalizeForMatchLoose(p.name_en) === normalizeForMatchLoose(raw_text)
           ));
+    }
+
+    // Real gap confirmed live 2026-08-30: a single-line price list (Tyson's exact format —
+    // "Fresh Green Meats — 42 Trim Combos", section header AND "Combos"/"Trim" qualifier baked
+    // into the same line by design, so temp/pack detection above has real words to scan) could
+    // never satisfy the equality checks above, which require the ENTIRE line to equal a catalog
+    // name exactly — real plant wording never is just the bare name alone. Only applies to the
+    // raw_text-only path (name_en/name_es null) — the block-format path already isolates a clean
+    // name and equality is the right check there. A candidate's name has to appear as a whole
+    // phrase (word-boundaried, same technique already used for temp/pack/variation detection)
+    // somewhere in the line — "42 Trim" inside "Fresh Green Meats — 42 Trim Combos" — not just
+    // share some words with it.
+    if (!nameMatches.length && !name_en && !name_es) {
+      const rawNorm = normalizeForMatch(raw_text);
+      nameMatches = allInCategoryProducts.filter((p: any) => {
+        if (!inCategory(p)) return false;
+        const candidateNames = [normalizeForMatch(p.name_en), normalizeForMatch(p.name)].filter(Boolean);
+        return candidateNames.some((n) => wordBoundary(n).test(rawNorm));
+      });
+    }
+
+    // Real gap confirmed live 2026-08-30, same Tyson list: the catalog stores singular cut names
+    // ("Butt", "Cushion", "Loin", "Sirloin", "Tenderloin") but plants almost always write the
+    // plural ("Butts", "Cushions", "Loins"...) since they're quoting a quantity of cuts, not one.
+    // Same contains-check as above, one step looser — light regular-plural stemming (drop a
+    // trailing "s" from words over 3 letters) applied to BOTH sides before comparing, so "butt"
+    // and "butts" line up. Only reached when the exact-phrase contains-check just above found
+    // nothing at all, and only for the raw_text-only path — never loosens the block-format
+    // (name_en/name_es given) equality checks above, which stay strict on purpose.
+    if (!nameMatches.length && !name_en && !name_es) {
+      const stem = (s: string) => s.split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ");
+      const rawStemmed = stem(normalizeForMatch(raw_text));
+      nameMatches = allInCategoryProducts.filter((p: any) => {
+        if (!inCategory(p)) return false;
+        const candidateNames = [normalizeForMatch(p.name_en), normalizeForMatch(p.name)].filter(Boolean).map(stem);
+        return candidateNames.some((n) => wordBoundary(n).test(rawStemmed));
+      });
     }
 
     // Rule 1/5 — nothing found means "needs a human to confirm creating something new," never an
@@ -277,7 +378,7 @@ Deno.serve(async (req) => {
     // Box" vs "Loin Boneless Skinless Fresh Box") used to narrow identically through everything
     // above — this is what tells them apart when the line's own wording actually says so.
     const tempPackNarrowed = narrowByTempPack(raw_text, nameMatches, temperatures, packagings, plantTermAliasMap);
-    const narrowed = narrowByVariation(raw_text, tempPackNarrowed, variationNames);
+    const narrowed = narrowByVariation(raw_text, tempPackNarrowed, variationNames, taughtVariationNamesFromLine(raw_text));
 
     if (narrowed.length === 1) {
       return new Response(JSON.stringify({ matched: true, source: "name_and_spec", product: productSummary(narrowed[0]) }), {

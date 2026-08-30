@@ -3,13 +3,18 @@
 // re-teaching the same word just corrects it. Accepts a batch (array of {term, meaning_type,
 // meaning_id}) since a review session can teach several at once, all confirmed together on
 // "Apply All", same single-confirm point as everything else on that screen.
+//
+// variation/cut_name added 2026-08-30 — real gap found against an actual Tyson price list:
+// "Bnls" (Boneless) and "XF Trim" (Cutting Fat) are exactly as arbitrary per-plant shorthand as a
+// temperature/packaging abbreviation, but had nowhere to be taught. No algorithm can guess these;
+// once a trader confirms one, it should never be asked again, same as temp/pack already work.
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
-const VALID_MEANING_TYPES = ["temperature", "packaging"];
+const VALID_MEANING_TYPES = ["temperature", "packaging", "variation", "cut_name"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
@@ -22,7 +27,7 @@ Deno.serve(async (req) => {
     if (!Array.isArray(aliases) || !aliases.length) return jsonResponse({ error: "aliases must be a non-empty array" }, 400);
     for (const a of aliases) {
       if (!a.term || !VALID_MEANING_TYPES.includes(a.meaning_type) || !a.meaning_id) {
-        return jsonResponse({ error: "each alias needs term, meaning_type (temperature|packaging), and meaning_id", bad_entry: a }, 400);
+        return jsonResponse({ error: "each alias needs term, meaning_type (temperature|packaging|variation|cut_name), and meaning_id", bad_entry: a }, 400);
       }
     }
 
