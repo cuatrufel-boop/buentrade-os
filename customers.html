@@ -71,7 +71,9 @@
   .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
   .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
   .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
-  .pkg-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-avatar{width:44px;height:44px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pkg-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:3px;}
+  .pkg-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
   .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
   .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
   .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:160px;}
@@ -252,12 +254,23 @@ auth.onAuthStateChanged(user => {
     <!-- ============ Always-visible header — name, city, contact, WhatsApp — regardless of
          which tab is active below, same "highlights" pattern as the plant profile. ============ -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
-      <div>
-        <strong id="viewTitle" style="font-size:18px;"></strong>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--ink-soft);">
-          <span id="v_location">—</span>
-          <span id="v_contact_name">—</span>
-          <button class="wa-btn" id="v_waBtn" style="display:none;" onclick="openViewWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <!-- Same wide-box logo treatment as Meat Packers/Providers (2026-08-30) — most real
+             logos are landscape-shaped, a forced square just shrinks them to a thin sliver. -->
+        <div style="position:relative;width:220px;height:140px;flex-shrink:0;">
+          <div id="v_logo_placeholder" class="pkg-plant-avatar" style="width:220px;height:140px;border-radius:18px;font-size:52px;"></div>
+          <img id="v_logo" class="pkg-plant-avatar pkg-plant-avatar-logo" style="width:220px;height:140px;border-radius:18px;object-fit:contain;padding:14px;display:none;position:absolute;top:0;left:0;" alt="">
+          <button type="button" onclick="document.getElementById('customerLogoFileInput').click()" title="Change logo" style="position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:var(--blue);border:2px solid #fff;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✎</button>
+          <input type="file" id="customerLogoFileInput" accept="image/*" style="display:none;" onchange="uploadCustomerLogo()">
+        </div>
+        <div>
+          <strong id="viewTitle" style="font-size:18px;"></strong>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--ink-soft);">
+            <span id="v_location">—</span>
+            <span id="v_contact_name">—</span>
+            <button class="wa-btn" id="v_waBtn" style="display:none;" onclick="openViewWhatsApp()"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button>
+          </div>
+          <div id="customerLogoMsg" style="font-size:12px;color:var(--ink-soft);margin-top:4px;"></div>
         </div>
       </div>
       <div style="display:flex;gap:8px;">
@@ -899,8 +912,11 @@ function renderCustomers(){
       c.usual_delivery_type,
       paymentDaysLabel(c.payment_days),
     ].filter(Boolean).join(' · ');
+    const avatarHtml = c.logo_url
+      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(c.logo_url)}" alt=""></div>`
+      : `<div class="pkg-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>`;
     return `<div class="pkg-row">
-      <div class="pkg-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
+      ${avatarHtml}
       <div class="pkg-plant-info">
         <a class="name-link pkg-plant-name" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a>
         <span class="pkg-plant-sub">${escapeHtml(sub || '—')}</span>
@@ -931,6 +947,7 @@ function viewCustomer(id){
   document.getElementById('customerListCard').style.display = 'none';
   viewCard.style.display = 'block';
   document.getElementById('viewTitle').textContent = c.trade_name || '';
+  renderCustomerLogo(c);
   document.getElementById('v_legal_name').textContent = c.legal_name || '—';
   const stateName = c.state || (allStates.find(s => s.id === c.state_id) || {}).name_en || null;
   document.getElementById('v_location').textContent = [c.city, stateName, countryName(c.country_id)].filter(Boolean).join(', ') || '—';
@@ -961,6 +978,54 @@ function viewCustomer(id){
   setCustomerTab('products'); // always open on what-they-buy, regardless of which tab was open last time
   loadCustomerProducts(id);
   document.getElementById('viewCard').scrollIntoView({behavior:'smooth'});
+}
+
+function renderCustomerLogo(c){
+  const img = document.getElementById('v_logo');
+  const placeholder = document.getElementById('v_logo_placeholder');
+  if (c.logo_url){
+    img.src = c.logo_url;
+    img.style.display = 'block';
+    placeholder.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = (c.trade_name || '?').trim().charAt(0).toUpperCase();
+  }
+}
+
+function uploadCustomerLogo(){
+  const input = document.getElementById('customerLogoFileInput');
+  const file = input.files[0];
+  if (!file || !viewingCustomerId) return;
+  const MAX_BYTES = 5 * 1024 * 1024;
+  if (file.size > MAX_BYTES){
+    document.getElementById('customerLogoMsg').textContent = 'Logo must be 5MB or smaller.';
+    return;
+  }
+  document.getElementById('customerLogoMsg').textContent = 'Uploading…';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    let result;
+    try {
+      result = await callApi('customer-logo-upload', {
+        actor: currentActor(), customer_id: viewingCustomerId,
+        file_name: file.name, file_base64: base64, content_type: file.type || null,
+      });
+    } catch (e) {
+      document.getElementById('customerLogoMsg').textContent = 'Error: ' + e.message;
+      return;
+    }
+    input.value = '';
+    document.getElementById('customerLogoMsg').textContent = '';
+    const idx = customers.findIndex(c => c.id === viewingCustomerId);
+    if (idx !== -1) customers[idx] = result.customer;
+    renderCustomerLogo(result.customer);
+    renderCustomers();
+  };
+  reader.onerror = () => { document.getElementById('customerLogoMsg').textContent = 'Could not read the file.'; };
+  reader.readAsDataURL(file);
 }
 
 function editFromView(){
