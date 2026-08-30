@@ -40,12 +40,19 @@ Deno.serve(async (req) => {
     if (!product) return jsonResponse({ error: "unknown product_id" }, 400);
 
     const result = await sql.begin(async (tx) => {
-      // A price list stating "FOB City, ST" on this exact line (Smithfield confirmed real shape:
-      // a different city per product) resolves against the same closed city catalog every carrier
-      // rate already uses — same rule as plant_locations, and the one deliberate auto-create
-      // exception in the whole matching system (see matchOrCreateLocationId). No location_name on
-      // this line (or nothing parseable) leaves whatever was already on file untouched via
-      // coalesce below, rather than wiping out a location set by hand on a re-apply.
+      // A price list stating "FOB City, ST" on this exact line (Smithfield/Tyson confirmed real
+      // shape) resolves against the same closed city catalog every carrier rate already uses —
+      // same rule as plant_locations, and the one deliberate auto-create exception in the whole
+      // matching system (see matchOrCreateLocationId).
+      //
+      // Deliberately OVERWRITES location_id every time, never coalesces with the previous value —
+      // confirmed real correction 2026-08-30: "que un producto de Tyson salga hoy de una ciudad no
+      // quiere decir que la siguiente semana no salga de otra... no es que ese producto quede
+      // asociado a una ciudad para siempre." Which of a plant's several real facilities produced a
+      // given batch varies week to week; the ship-from city belongs to THIS price update, not to
+      // the product going forward. A week whose list doesn't restate a city correctly clears it
+      // back to unknown (never silently keeps a stale, possibly wrong city from a prior week) —
+      // rqDefaultUsFreightRateId's highest-known-rate fallback exists exactly for this case.
       const location_id = location_name ? await matchOrCreateLocationId(tx, location_name) : null;
       const [plantProduct] = await tx`
         insert into plant_products (plant_id, product_id, current_price, price_currency_id, price_date, docs_included, notes, location_id)
@@ -56,7 +63,7 @@ Deno.serve(async (req) => {
           price_date = excluded.price_date,
           docs_included = excluded.docs_included,
           notes = excluded.notes,
-          location_id = coalesce(excluded.location_id, plant_products.location_id),
+          location_id = excluded.location_id,
           updated_at = now()
         returning *
       `;
