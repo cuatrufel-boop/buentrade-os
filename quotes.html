@@ -2702,9 +2702,12 @@ async function sendOfferWhatsAppTo(customerId){
   }], true);
 }
 
+// Same fix as rqPriceAgeDays, same reason — this is called with both a bare delivery-date pick
+// ("2026-09-02", .slice is a no-op) AND a real price_date from the API (a full ISO timestamp,
+// where the old code built an invalid double-timestamp string and silently showed "Invalid Date").
 function rqFmtDate(val){
   if (!val) return 'Set date';
-  const d = new Date(val + 'T00:00:00');
+  const d = new Date(String(val).slice(0, 10) + 'T00:00:00');
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
 }
 
@@ -2714,9 +2717,19 @@ const RQ_PRICE_STALE_DAYS = 2;
 // After asking a plant for a price, don't ask again for this many days — plants get annoyed by
 // repeat requests for the same product, especially right after they've just answered.
 const RQ_REQUEST_COOLDOWN_DAYS = 2;
+// Root cause of "Still calculating the sale price..." always firing, confirmed 2026-08-30 (never
+// a real timing issue — retrying any number of times could never have fixed it): price_date comes
+// back from the API as a full ISO timestamp ("2026-08-30T00:00:00.000Z"), not a bare date.
+// Appending 'T00:00:00' to that produced "...000ZT00:00:00" — an invalid string — so `new Date(...)`
+// returned Invalid Date, age came out NaN, and NaN <= RQ_PRICE_STALE_DAYS is always false. Every
+// plant silently failed the staleness filter in rqPricedPlantsSorted on EVERY call, forever, no
+// matter how many times rqSendPlantOffer retried. Same bug shape already fixed once in plants.html
+// (toDateOnly) — slicing to the first 10 characters before appending the time avoids the double
+// timestamp, same fix applied here.
 function rqPriceAgeDays(priceDate){
   if (!priceDate) return null;
-  const ms = new Date().setHours(0,0,0,0) - new Date(priceDate + 'T00:00:00').setHours(0,0,0,0);
+  const dateOnly = String(priceDate).slice(0, 10);
+  const ms = new Date().setHours(0,0,0,0) - new Date(dateOnly + 'T00:00:00').setHours(0,0,0,0);
   return Math.round(ms / 86400000);
 }
 
