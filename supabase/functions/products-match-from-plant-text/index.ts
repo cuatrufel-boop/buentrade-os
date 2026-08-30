@@ -344,19 +344,54 @@ Deno.serve(async (req) => {
     // "Fresh Green Meats — 42 Trim Combos", section header AND "Combos"/"Trim" qualifier baked
     // into the same line by design, so temp/pack detection above has real words to scan) could
     // never satisfy the equality checks above, which require the ENTIRE line to equal a catalog
-    // name exactly — real plant wording never is just the bare name alone. Only applies to the
-    // raw_text-only path (name_en/name_es null) — the block-format path already isolates a clean
-    // name and equality is the right check there. A candidate's name has to appear as a whole
-    // phrase (word-boundaried, same technique already used for temp/pack/variation detection)
-    // somewhere in the line — "42 Trim" inside "Fresh Green Meats — 42 Trim Combos" — not just
-    // share some words with it.
-    if (!nameMatches.length && !name_en && !name_es) {
-      const rawNorm = normalizeForMatch(raw_text);
-      nameMatches = allInCategoryProducts.filter((p: any) => {
-        if (!inCategory(p)) return false;
-        const candidateNames = [normalizeForMatch(p.name_en), normalizeForMatch(p.name)].filter(Boolean);
-        return candidateNames.some((n) => wordBoundary(n).test(rawNorm));
-      });
+    // name exactly — real plant wording never is just the bare name alone. A candidate's name has
+    // to appear as a whole phrase (word-boundaried, same technique already used for temp/pack/
+    // variation detection) somewhere in the line — "42 Trim" inside "Fresh Green Meats — 42 Trim
+    // Combos" — not just share some words with it.
+    //
+    // Second real gap, confirmed live 2026-08-30 against an actual Seaboard list: this contains-
+    // check (and the plural-stemming one right after it) originally only ran for the raw_text-only
+    // path, on the assumption a block-format caller's already-isolated name_en/name_es was "clean"
+    // enough that exact/loose equality alone would do. Confirmed false — "clean" only means
+    // separated from the price/lead-time noise on other lines, not spelled the way the catalog
+    // spells it: Seaboard's own "Frozen Glands" and "Frozen #2 Backribs" never equal the catalog's
+    // "Gland" and "Backribs #2" as whole strings, so every block-format line fell straight through
+    // to zero candidates — the exact opposite of the raw_text path, which already handles this
+    // shape fine. Now runs for both.
+    //
+    // English and Spanish are checked as two SEPARATE passes, never combined into one OR'd filter —
+    // confirmed real cross-language collision live: Seaboard's "Costilla de Lomo" (Backribs) has
+    // "Lomo" as a plain substring, and "Lomo" is also the catalog's own Spanish name for the
+    // unrelated "Loin" cut, so a combined pass matched real Backribs lines to Loin candidates.
+    // English has no such collision here and is this app's leading language throughout (see
+    // project_customer_facing_naming_rule) — so name_en is tried first and, if it alone finds
+    // anything, name_es is never even consulted; only an empty name_en result falls through to it.
+    if (!nameMatches.length) {
+      if (name_en || name_es) {
+        if (name_en) {
+          const enTarget = normalizeForMatch(name_en);
+          nameMatches = allInCategoryProducts.filter((p: any) => {
+            if (!inCategory(p)) return false;
+            const enName = normalizeForMatch(p.name_en);
+            return !!enName && wordBoundary(enName).test(enTarget);
+          });
+        }
+        if (!nameMatches.length && name_es) {
+          const esTarget = normalizeForMatch(name_es);
+          nameMatches = allInCategoryProducts.filter((p: any) => {
+            if (!inCategory(p)) return false;
+            const esName = normalizeForMatch(p.name);
+            return !!esName && wordBoundary(esName).test(esTarget);
+          });
+        }
+      } else {
+        const rawNorm = normalizeForMatch(raw_text);
+        nameMatches = allInCategoryProducts.filter((p: any) => {
+          if (!inCategory(p)) return false;
+          const candidateNames = [normalizeForMatch(p.name_en), normalizeForMatch(p.name)].filter(Boolean);
+          return candidateNames.some((n) => wordBoundary(n).test(rawNorm));
+        });
+      }
     }
 
     // Real gap confirmed live 2026-08-30, same Tyson list: the catalog stores singular cut names
@@ -365,16 +400,38 @@ Deno.serve(async (req) => {
     // Same contains-check as above, one step looser — light regular-plural stemming (drop a
     // trailing "s" from words over 3 letters) applied to BOTH sides before comparing, so "butt"
     // and "butts" line up. Only reached when the exact-phrase contains-check just above found
-    // nothing at all, and only for the raw_text-only path — never loosens the block-format
-    // (name_en/name_es given) equality checks above, which stay strict on purpose.
-    if (!nameMatches.length && !name_en && !name_es) {
+    // nothing at all. Runs for the block-format (name_en/name_es given) path too, same reasoning
+    // as the contains-check above — a plant's own plural wording doesn't stop being a plural just
+    // because it arrived on its own line instead of sharing one with the price. Same English-first,
+    // separate-passes rule as above, same reason (the "Lomo"/Backribs collision doesn't need the
+    // plural form to still be a real risk here).
+    if (!nameMatches.length) {
       const stem = (s: string) => s.split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ");
-      const rawStemmed = stem(normalizeForMatch(raw_text));
-      nameMatches = allInCategoryProducts.filter((p: any) => {
-        if (!inCategory(p)) return false;
-        const candidateNames = [normalizeForMatch(p.name_en), normalizeForMatch(p.name)].filter(Boolean).map(stem);
-        return candidateNames.some((n) => wordBoundary(n).test(rawStemmed));
-      });
+      if (name_en || name_es) {
+        if (name_en) {
+          const enTarget = stem(normalizeForMatch(name_en));
+          nameMatches = allInCategoryProducts.filter((p: any) => {
+            if (!inCategory(p)) return false;
+            const enName = stem(normalizeForMatch(p.name_en));
+            return !!enName && wordBoundary(enName).test(enTarget);
+          });
+        }
+        if (!nameMatches.length && name_es) {
+          const esTarget = stem(normalizeForMatch(name_es));
+          nameMatches = allInCategoryProducts.filter((p: any) => {
+            if (!inCategory(p)) return false;
+            const esName = stem(normalizeForMatch(p.name));
+            return !!esName && wordBoundary(esName).test(esTarget);
+          });
+        }
+      } else {
+        const rawStemmed = stem(normalizeForMatch(raw_text));
+        nameMatches = allInCategoryProducts.filter((p: any) => {
+          if (!inCategory(p)) return false;
+          const candidateNames = [normalizeForMatch(p.name_en), normalizeForMatch(p.name)].filter(Boolean).map(stem);
+          return candidateNames.some((n) => wordBoundary(n).test(rawStemmed));
+        });
+      }
     }
 
     // Rule 1/5 — nothing found means "needs a human to confirm creating something new," never an
