@@ -856,14 +856,35 @@ function titleCaseWords(s){
 // never guessed) if it doesn't have all 4 fields.
 function parseUsFreightLine(line){
   const parts = line.split('\t').map(s => s.trim()).filter(Boolean);
-  if (parts.length < 4) return null;
-  const price = parseFloat(parts[0].replace(/[$,]/g, ''));
-  const [, , city, state] = parts;
-  if (isNaN(price) || !city || !state) return null;
-  return {
-    origin: `${titleCaseWords(city)}, ${state.toUpperCase()}`,
-    price,
-  };
+  if (parts.length >= 4){
+    const price = parseFloat(parts[0].replace(/[$,]/g, ''));
+    const [, , city, state] = parts;
+    if (!isNaN(price) && city && state){
+      return { origin: `${titleCaseWords(city)}, ${state.toUpperCase()}`, price, notes: null };
+    }
+  }
+  // Real second real carrier format, confirmed live 2026-08-30: a blanket rate per ORIGIN STATE
+  // (not a specific city — this carrier quotes one number for the whole state) to a combined
+  // McAllen/Laredo destination, as a bulleted plain-text list ("• IA to mcallen / Laredo - $5200 +
+  // lumper"), copy-pasted straight out of an email/Word doc rather than an Excel sheet — dash
+  // before the price, space before the trailing "+ lumper" note, and even capitalization of
+  // "Mcallen"/"mcallen" all vary line to line, so none of that is load-bearing in the match.
+  // "+ lumper" means a separate, known, fixed lumper fee also applies on top of this base freight
+  // number (confirmed by the user: $120 USD, real cost of loading/unloading) — kept as its own note
+  // rather than added into the freight rate itself, since lumper is already its own real cost type
+  // elsewhere in this system (provider_rates.service_type 'lumper_fee') and folding it silently
+  // into the base number would misrepresent what "freight rate" means the next time this row is
+  // read back.
+  const cleaned = line.replace(/^[•\-\*]\s*/, '').trim();
+  const stateMatch = cleaned.match(/^([A-Za-z]{2})\s+to\s+.+?\$\s*([\d,]+\.?\d*)\s*(\+.*)?$/i);
+  if (stateMatch){
+    const price = parseFloat(stateMatch[2].replace(/,/g, ''));
+    if (!isNaN(price)){
+      const notes = stateMatch[3] && /lumper/i.test(stateMatch[3]) ? '+ Lumper fee ($120 USD)' : (stateMatch[3] ? stateMatch[3].trim() : null);
+      return { origin: stateMatch[1].toUpperCase(), price, notes };
+    }
+  }
+  return null;
 }
 
 // PDF text comes through as "DESTINATION NAME  USD  $ 1,234.00" per line — destination kept
@@ -940,7 +961,7 @@ function renderRateListReview(){
     }
     const place = isUs ? row.origin : row.destination;
     return `<tr>
-      <td><input type="text" value="${escapeHtml(place)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].${isUs ? 'origin' : 'destination'}=this.value"></td>
+      <td><input type="text" value="${escapeHtml(place)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].${isUs ? 'origin' : 'destination'}=this.value">${row.notes ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">${escapeHtml(row.notes)}</div>` : ''}</td>
       <td><input type="number" step="0.01" value="${row.price}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="rateListRows[${i}].price=parseFloat(this.value)||0"></td>
     </tr>`;
   }).join('');
@@ -968,6 +989,7 @@ async function applyRateList(){
       origin: isUs ? row.origin : 'Border',
       destination: isUs ? '' : row.destination,
       rate: row.price,
+      notes: row.notes || null,
     };
     // Same lane (provider+service+origin+destination) can already exist from a prior load —
     // provider-rates-set upserts on that exact key, updating the price instead of erroring (see
@@ -1068,7 +1090,7 @@ function renderRateViewFicha(r, isUs){
   const rateNum = Number(r.rate) || 0;
   return `<div class="pkg-row" id="rateRow_${r.id}">
     <div class="pkg-plant-avatar">🚚</div>
-    <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span></div>
+    <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span>${r.notes ? `<span class="pkg-plant-sub">${escapeHtml(r.notes)}</span>` : ''}</div>
     <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;flex-shrink:0;">$${rateNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
     <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${r.id}')">Edit</button>
     <button class="btn danger" style="padding:5px 8px;font-size:12px;flex-shrink:0;" onclick="deleteRate('${r.id}')">×</button>
