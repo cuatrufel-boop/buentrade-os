@@ -1301,7 +1301,7 @@ function rqPlantFieldsHtml(p){
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
             <option value="">Del Border — $0</option>
-            ${rqUsFreightRatesAll().length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate() || 0).toFixed(2)}</option>` : ''}
+            ${rqUsFreightRatesAll().length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate(p.id) || 0).toFixed(2)}</option>` : ''}
             ${rqUsFreightRatesAll().map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
           </select>
         </div>
@@ -1425,15 +1425,31 @@ function rqCheapestUsFreightForLocation(locationId){
 // explicit real rule: "si no trae ciudad en la lista saca un promedio de flete entre todos los
 // fletes." Not a real provider_rates row (no single id), so callers use the 'AVERAGE' sentinel
 // (see rqDefaultUsFreightRateId/rqFreightForPlant) rather than a rate id.
-function rqAverageUsFreightRate(){
+//
+// Scoped to THIS plant's own known pickup cities when we have any — real correction 2026-08-30:
+// "a tyson solo le deben salir las plantas de tyson... el promedio de todas es por planta no
+// mezclar plantas." Averaging across every carrier rate on file (Sanderson's Gadsden AL alongside
+// Smithfield's Denison IA) mixes in cities a given plant may never actually ship from. rqAllLocations
+// here is plant_locations (each plant's own known pickup points, confusingly named after its own
+// search endpoint) — join through its location_id to find rates for cities THIS plant is known to
+// use. Falls back to the full system-wide average when the plant has no known pickup cities yet
+// (real gap confirmed live: only Smithfield and Sanderson have any plant_locations on file at all —
+// Tyson, Seaboard, Brakebush, Northwood, Peco have zero, so scoping only to their own cities would
+// silently return no estimate at all for the majority of plants, worse than a broad-but-imprecise one).
+function rqAverageUsFreightRate(plantId){
   const rates = rqUsFreightRatesAll();
   if (!rates.length) return null;
-  const sum = rates.reduce((s, r) => s + Number(r.rate), 0);
+  const plantLocationIds = plantId
+    ? [...new Set(rqAllLocations.filter(l => l.plant_id === plantId).map(l => l.location_id).filter(Boolean))]
+    : [];
+  const scoped = plantLocationIds.length ? rates.filter(r => plantLocationIds.includes(r.location_id)) : [];
+  const pool = scoped.length ? scoped : rates;
+  const sum = pool.reduce((s, r) => s + Number(r.rate), 0);
   // Rounded to real money precision at the source — a raw division ("3961.4641176470586") was
   // reaching the Trading Tool's Direct Costs field and every save unrounded (real bug confirmed
   // 2026-08-30). Every caller (the display hint, rqBuildToolParams, the sent_offers save) gets
   // clean money from here on, nothing left to remember to round downstream.
-  return Math.round((sum / rates.length) * 100) / 100;
+  return Math.round((sum / pool.length) * 100) / 100;
 }
 
 // One place both call sites (rqSelectPendingProduct, the batch loader below) use to decide the
@@ -1471,7 +1487,7 @@ function rqSetUsFreightRate(plantId, rateId){
 // rqDefaultUsFreightRateId) — not a real provider_rates row, so it's computed rather than looked up.
 function rqFreightForPlant(p){
   if (!p.rqUsFreightRateId) return null;
-  if (p.rqUsFreightRateId === 'AVERAGE') return rqAverageUsFreightRate();
+  if (p.rqUsFreightRateId === 'AVERAGE') return rqAverageUsFreightRate(p.id);
   const rate = rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId);
   return rate ? rate.rate : null;
 }
