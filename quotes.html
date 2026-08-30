@@ -224,7 +224,15 @@
   .rq-send-offer-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 16px rgba(23,167,106,.38);}
   .rq-send-offer-btn:active{transform:translateY(0);filter:brightness(.98);}
   .rq-send-offer-btn:active{opacity:.9;}
-  .rq-tt-logo{position:absolute;display:none;object-fit:contain;pointer-events:none;z-index:2;filter:drop-shadow(0 2px 6px rgba(0,0,0,.45));}
+  /* Static, in the overlay's own header next to the title — real correction 2026-08-30: the
+     previous version floated over the frozen calculator's internal .quickbar, re-measured every
+     animation frame to track it as the iframe scrolled ("se mueven no estan fijos" — never
+     actually fixed in place, by design, since the bar itself moves). A plain, motionless icon in
+     our own header sidesteps that entirely — nothing to track, nothing to detach. Still
+     mix-blend-mode:multiply since most logo files carry an opaque white background with no real
+     transparency: white pixels multiply out to match the navy header behind them, the logo's own
+     colored/dark pixels stay visible, no image editing needed. */
+  .rq-tt-logo{width:32px;height:32px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply;vertical-align:middle;margin-right:8px;}
 
   .rq-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
   /* Update Purchase Price opens Email + WhatsApp together — side by side, one shared dim behind
@@ -1691,10 +1699,10 @@ function rqToggleCalculator(id){
     const prevOpen = rqSelectedPlants.find(x => x.rqCalculatorOpen);
     if (prevOpen) rqCloseCalculator(prevOpen.id);
     p.rqCalculatorOpen = true;
-    document.getElementById('rq_tt_overlay_title').textContent = `${p.name}${rqProductSpec ? ' — ' + rqProductSpec : ''}`;
+    document.getElementById('rq_tt_overlay_title').innerHTML =
+      `${(p.logo_url_dark || p.logo_url) ? `<img class="rq-tt-logo" src="${escapeHtml(p.logo_url_dark || p.logo_url)}" alt="">` : ''}${escapeHtml(p.name)}${rqProductSpec ? ' — ' + escapeHtml(rqProductSpec) : ''}`;
     document.getElementById('rq_tt_overlay_fields').innerHTML = rqPlantFieldsHtml(p);
     document.getElementById('rq_tt_overlay_body').innerHTML = `
-      ${(p.logo_url_dark || p.logo_url) ? `<img class="rq-tt-logo" id="rq_tt_logo_${id}" src="${escapeHtml(p.logo_url_dark || p.logo_url)}" alt="">` : ''}
       <iframe id="rq_iframe_${id}" src="${rqBuildToolUrl(p)}" onload="rqOnIframeLoaded('${id}')"></iframe>
     `;
     // Full screen covers the row's own Send Offer button along with everything else on the page
@@ -1733,61 +1741,17 @@ let rqPollTimer = null;
 function rqStartPolling(){
   if (rqPollTimer) return;
   rqPollTimer = setInterval(rqRenderFinalList, 1000);
-  rqLogoTrackLoop();
 }
 function rqStopPolling(){
   if (rqPollTimer){ clearInterval(rqPollTimer); rqPollTimer = null; }
-  rqLogoTrackRunning = false;
-}
-
-// The Trading Tool's own .quickbar is a normal element that scrolls with the rest of its page
-// (never touched — trading-tool.html is frozen), not something fixed in place — a once-a-second
-// setInterval snapshot of its position left the overlaid logo visibly lagging/detached the moment
-// the trader scrolled inside the Trading Tool. requestAnimationFrame instead re-measures every
-// frame, so the logo tracks the bar with zero perceptible lag no matter how fast that scroll is.
-let rqLogoTrackRunning = false;
-function rqLogoTrackLoop(){
-  if (rqLogoTrackRunning) return;
-  rqLogoTrackRunning = true;
-  const step = () => {
-    if (!rqLogoTrackRunning) return;
-    rqPositionTtLogos();
-    requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
 }
 
 const RQ_TARGET_PROFIT_USD = 1000;
 
 function rqOnIframeLoaded(id){
   setTimeout(() => {
-    rqPositionTtLogos();
     rqPrefillSellingPrice(id);
   }, 300);
-}
-
-// Real placement, not a guessed offset — the frozen calculator (trading-tool.html) is never
-// touched, so the plant's logo is measured against the live position/height of its own
-// TERMS/FINANCE COST bar (same-origin iframe, safe to read) and overlaid from out here. Reruns on
-// every poll tick (see rqStartPolling) since that bar wraps to a taller shape on narrower widths.
-function rqPositionTtLogos(){
-  rqSelectedPlants.forEach(p => {
-    if (!p.rqCalculatorOpen || !(p.logo_url_dark || p.logo_url)) return;
-    const iframe = document.getElementById('rq_iframe_' + p.id);
-    const logo = document.getElementById('rq_tt_logo_' + p.id);
-    if (!iframe || !logo || !iframe.contentDocument) return;
-    const bar = iframe.contentDocument.querySelector('.quickbar');
-    if (!bar) return;
-    const rect = bar.getBoundingClientRect();
-    if (!rect.height) return;
-    const size = Math.min(rect.height - 16, 60);
-    logo.style.width = size + 'px';
-    logo.style.height = size + 'px';
-    logo.style.left = '20px';
-    logo.style.top = (rect.top + rect.height / 2) + 'px';
-    logo.style.transform = 'translateY(-50%)';
-    logo.style.display = 'block';
-  });
 }
 
 // Starting point for the Selling Price so the trader doesn't open a fresh Trading Tool to a flat
@@ -2312,8 +2276,8 @@ function rqRequireDeliveryDay(){
 // disabled one — there's nothing actionable to disable.
 // The one button this Trading Tool needs, decided by state: no usable price (missing/stale) → ask
 // this exact plant for one; a real calculated sale price on file → send this exact plant's offer.
-// Lives on the TT card itself — the plant's logo already shows in the dark bar above (see
-// rqPositionTtLogos), so there's no separate outside header repeating who this is.
+// Lives on the TT card itself — the plant's logo already shows in the overlay's own header above,
+// so there's no separate outside header repeating who this is.
 function rqTtActionLabel(p){
   const missing = p.rqPrice == null;
   const stale = !missing && (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
