@@ -866,22 +866,38 @@ function parseUsFreightLine(line){
   // Real second real carrier format, confirmed live 2026-08-30: a blanket rate per ORIGIN STATE
   // (not a specific city — this carrier quotes one number for the whole state) to a combined
   // McAllen/Laredo destination, as a bulleted plain-text list ("• IA to mcallen / Laredo - $5200 +
-  // lumper"), copy-pasted straight out of an email/Word doc rather than an Excel sheet — dash
-  // before the price, space before the trailing "+ lumper" note, and even capitalization of
-  // "Mcallen"/"mcallen" all vary line to line, so none of that is load-bearing in the match.
-  // "+ lumper" means a separate, known, fixed lumper fee also applies on top of this base freight
-  // number (confirmed by the user: $120 USD, real cost of loading/unloading) — kept as its own note
-  // rather than added into the freight rate itself, since lumper is already its own real cost type
-  // elsewhere in this system (provider_rates.service_type 'lumper_fee') and folding it silently
-  // into the base number would misrepresent what "freight rate" means the next time this row is
-  // read back.
-  const cleaned = line.replace(/^[•\-\*]\s*/, '').trim();
-  const stateMatch = cleaned.match(/^([A-Za-z]{2})\s+to\s+.+?\$\s*([\d,]+\.?\d*)\s*(\+.*)?$/i);
-  if (stateMatch){
-    const price = parseFloat(stateMatch[2].replace(/,/g, ''));
+  // lumper"), copy-pasted straight out of an email/Word doc rather than an Excel sheet.
+  //
+  // Deliberately NOT one strict regex over the whole line — a first version of this used
+  // `^([A-Za-z]{2})\s+to\s+.+?\$\s*([\d,]+\.?\d*)...$`, confirmed live to fail on the user's own
+  // real paste even though it matched an apparently-identical string typed by hand here: a
+  // screenshot can't show whether the real clipboard has a curly/en/em dash instead of a plain "-",
+  // a non-breaking space, or some other invisible character Word/Outlook love to insert, any one of
+  // which breaks a single all-or-nothing pattern. Extracted in three independent, tolerant steps
+  // instead, so no single unexpected character anywhere in the line can fail the whole match:
+  // normalize the line first (curly/en/em dashes and any unicode whitespace collapsed to plain
+  // ones), pull the state off the very front, confirm "to" appears as a real word somewhere, then
+  // take the LAST dollar-amount-looking number in the line as the price — wherever it sits,
+  // whatever comes immediately before it.
+  const normalized = line
+    .replace(/[‐-―−]/g, '-') // hyphen/en/em/minus variants -> plain hyphen
+    .replace(/\s/g, ' ') // any unicode whitespace (incl. non-breaking space) -> plain space
+    .replace(/^[^A-Za-z]+/, '') // any leading bullet/number/dash/space, whatever glyph it actually is, up to the first letter
+    .trim();
+  const stateOnly = normalized.match(/^([A-Za-z]{2})\b/);
+  const hasTo = /\bto\b/i.test(normalized);
+  const priceMatches = [...normalized.matchAll(/\$?\s*([\d,]+\.\d{2}|[\d,]{2,})/g)];
+  if (stateOnly && hasTo && priceMatches.length){
+    const price = parseFloat(priceMatches[priceMatches.length - 1][1].replace(/,/g, ''));
     if (!isNaN(price)){
-      const notes = stateMatch[3] && /lumper/i.test(stateMatch[3]) ? '+ Lumper fee ($120 USD)' : (stateMatch[3] ? stateMatch[3].trim() : null);
-      return { origin: stateMatch[1].toUpperCase(), price, notes };
+      // "+ lumper" means a separate, known, fixed lumper fee also applies on top of this base
+      // freight number (confirmed by the user: $120 USD, real cost of loading/unloading) — kept as
+      // its own note rather than added into the freight rate itself, since lumper is already its
+      // own real cost type elsewhere in this system (provider_rates.service_type 'lumper_fee') and
+      // folding it silently into the base number would misrepresent what "freight rate" means the
+      // next time this row is read back.
+      const notes = /lumper/i.test(normalized) ? '+ Lumper fee ($120 USD)' : null;
+      return { origin: stateOnly[1].toUpperCase(), price, notes };
     }
   }
   return null;
