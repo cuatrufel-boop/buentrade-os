@@ -649,11 +649,6 @@ auth.onAuthStateChanged(user => {
       </div>
     </div>
 
-    <div class="profile-panel">
-      <div class="profile-heading">Brand</div>
-      <div class="field" style="max-width:280px;"><select id="brand" onchange="handleBrandSelectChange()"><option value="">—</option></select></div>
-    </div>
-
     <div style="display:flex;gap:10px;margin-top:16px;">
       <button class="btn" onclick="saveProduct()">Save</button>
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
@@ -910,44 +905,6 @@ function onPlantCountryChange(prefix){
   else document.getElementById(prefix + '_state').value = '';
 }
 
-let brands = [];
-
-async function loadBrands(){
-  const res = await callApi('brands-search', {});
-  brands = res.results || [];
-  const sel = document.getElementById('brand');
-  sel.innerHTML = '<option value="">—</option>' + brands.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('') + '<option value="__new__">+ Add new brand…</option>';
-}
-
-// The one place free text is still allowed to create a catalog row on the fly — brands genuinely
-// grow over time (a new plant's own private label), so a dead-end closed list would just push
-// people back to typing brand into some other field instead.
-async function handleBrandSelectChange(){
-  const sel = document.getElementById('brand');
-  if (sel.value !== '__new__') return;
-  const entered = await showAddCatalogModal({ title: 'Add new brand', labelEn: 'Brand name' });
-  if (!entered){ sel.value = ''; return; }
-  const name = entered.en;
-  const idempotencyKey = `brands-create|${name}|${new Date().toISOString().slice(0, 16)}`;
-  let result;
-  try {
-    result = await callApi('brands-create', { actor: currentActor(), name, idempotency_key: idempotencyKey });
-  } catch (e) {
-    if (e.data && e.data.error === 'possible_duplicate'){
-      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name}` : ''}\n\nCreate "${name}" as a new brand anyway?`);
-      if (!proceed){ sel.value = ''; return; }
-      result = await callApi('brands-create', { actor: currentActor(), name, override_duplicate_check: true, idempotency_key: idempotencyKey });
-    } else {
-      alert('Error creating brand: ' + e.message);
-      sel.value = '';
-      return;
-    }
-  }
-  await loadBrands();
-  sel.value = result.brand.id;
-}
-
 async function loadEverything(){
   const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes] = await Promise.all([
     callApi('plants-search', {}),
@@ -958,7 +915,6 @@ async function loadEverything(){
     callApi('currencies-search', {}),
     callApi('countries-search', {}),
     callApi('states-search', {}),
-    loadBrands(),
     loadVariations(),
     loadCutNames(),
   ]);
@@ -1765,16 +1721,13 @@ let priceListCreateForRowIndex = null;
 // borders and truckers all see from then on) instead of inheriting an abbreviation, and so
 // temperature/packaging words never end up baked into the free-text name on top of their own
 // dropdowns (e.g. a name that literally says "Combo Frozen" as text AND has Combo/Frozen selected
-// separately). Brand is pre-filled since it's simply a fact already known here — this row came
-// from this exact plant's price list.
+// separately).
 async function startCreateProductForRow(i){
   priceListCreateForRowIndex = i;
   // openProductForm itself now defaults Category to this plant's fixed species (rule 15) before
-  // loading Cut Name/Variation scoped to it — awaited here so brand/temp/packaging below never
-  // race that load.
+  // loading Cut Name/Variation scoped to it — awaited here so temp/packaging below never race
+  // that load.
   await openProductForm(null);
-  const plant = plants.find(p => p.id === currentPlantId);
-  if (plant) document.getElementById('brand').value = plant.name;
   // Temperature/Packaging aren't a judgment call here — if the row's own wording already reads
   // as Frozen/Combo/etc. (the same detection used to match against the catalog), it's already
   // "explicit" in the plant's own text, just not typed into the form yet. Only pre-filled when
@@ -2805,15 +2758,19 @@ async function checkNameDuplicate(){
   await fetchAllCatalogProducts();
   const norm = normalizeProductName(raw);
   const currentId = document.getElementById('prodId').value;
-  const firstWord = norm.split(/\s+/)[0];
+  const categoryId = document.getElementById('category').value;
+  // Category is a hard boundary everywhere else in the catalog (rule: never crosses a plant or a
+  // product), but this check was comparing raw Spanish names with no category filter at all —
+  // confirmed real case: editing a Pork "Recorte 42%" warned about Chicken "Recorte de Pechuga",
+  // purely because both start with the generic word "Recorte" ("Trim"). The old "same first word"
+  // branch is dropped entirely for the same reason — it also flagged genuinely different products
+  // (42% Trim vs 72% Trim) as duplicates of each other just for sharing that one generic word.
   const matches = allCatalogProducts.filter(p => {
     if (p.id === currentId) return false;
+    if (categoryId && p.category_id !== categoryId) return false;
     const pn = normalizeProductName(p.name);
     if (!pn) return false;
-    if (pn === norm) return true;
-    if (pn.startsWith(norm) || norm.startsWith(pn)) return true;
-    const pFirstWord = pn.split(/\s+/)[0];
-    return firstWord.length >= 3 && pFirstWord === firstWord;
+    return pn === norm || pn.startsWith(norm) || norm.startsWith(pn);
   });
   if (!matches.length){ warningEl.style.display = 'none'; return; }
   warningEl.style.display = 'block';
@@ -2832,9 +2789,8 @@ async function checkNameDuplicate(){
 }
 
 async function useExistingProduct(productId){
-  const brand_id = document.getElementById('brand').value || null;
   try {
-    await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId, brand_id });
+    await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId });
   } catch (e) {
     alert('Error linking product: ' + e.message);
     return;
@@ -2851,7 +2807,7 @@ function editProduct(id){
 async function openProductForm(product){
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
-  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','brand','temperature_id','packaging_id','full_name_en','full_name_es'];
+  const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','temperature_id','packaging_id','full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
   document.getElementById('prodLinkId').value = '';
   document.getElementById('cut_name_id').value = '';
@@ -2882,10 +2838,6 @@ async function openProductForm(product){
     document.getElementById('prodLinkId').value = product.linkId || '';
     fields.slice(1).forEach(f => {
       if (f === 'category') return; // already set above
-      if (f === 'brand'){
-        if (product.brand_id) document.getElementById('brand').value = product.brand_id;
-        return;
-      }
       if (f === 'subcategory' || f === 'subcategory_en' || f === 'name' || f === 'name_en'){
         return; // derived from variation_id/cut_name_id below, via updateProfileDisplays() — never set directly
       }
@@ -2978,9 +2930,9 @@ function extractMarkers(text){
 async function saveProduct(forceOverride){
   const id = document.getElementById('prodId').value;
   const linkId = document.getElementById('prodLinkId').value;
-  // Structural identity — shared across every plant that carries this cut. Brand/photo/spec are
-  // NOT here: the same cut sold by two plants has two different brands/photos/specs, so those
-  // live on the plant_products link instead (see linkPayload below).
+  // Structural identity — shared across every plant that carries this cut. Photo/spec are NOT
+  // here: the same cut sold by two plants has two different photos/specs, so those live on the
+  // plant_products link instead (see linkPayload below).
   const payload = {
     name: document.getElementById('name').value,
     name_en: document.getElementById('name_en').value || null,
@@ -2992,14 +2944,12 @@ async function saveProduct(forceOverride){
     full_name_en: document.getElementById('full_name_en').value || null,
     full_name_es: document.getElementById('full_name_es').value || null,
   };
-  const linkPayload = {
-    brand_id: document.getElementById('brand').value || null,
-  };
+  // photo_url/spec_url get added below, once each upload (if any) finishes.
+  const linkPayload = {};
   // Every product on record must be fully specified — a row missing temperature or packaging is
   // exactly the ambiguity that later silently misapplies a price to the wrong variant of a
   // shared name. No partial products, ever, however this form was opened. Full name EN/ES included
   // — the real PO/FO/SO text is written by hand, never auto-composed, so it must exist too.
-  // Brand is deliberately NOT required — a new product is created brand-agnostic on purpose.
   if (!payload.name || !payload.name_en || !payload.category_id || !payload.temperature_id || !payload.packaging_id || !payload.full_name_en || !payload.full_name_es){
     document.getElementById('formMsg').textContent = 'Complete all required fields: name ES, name EN, category, temperature, packaging, full name EN and full name ES.';
     return;
