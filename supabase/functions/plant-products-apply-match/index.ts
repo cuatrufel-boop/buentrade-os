@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     const {
       actor, plant_id, product_id, raw_text, price,
       price_currency_id = null, price_date = null, docs_included = null, notes = null,
-      location_name = null,
+      location_name = null, freight_included = false,
     } = body;
 
     const [plant] = await sql`select id from plants where id = ${plant_id}`;
@@ -54,9 +54,13 @@ Deno.serve(async (req) => {
       // back to unknown (never silently keeps a stale, possibly wrong city from a prior week) —
       // rqDefaultUsFreightRateId's highest-known-rate fallback exists exactly for this case.
       const location_id = location_name ? await matchOrCreateLocationId(tx, location_name) : null;
+      // Same "belongs to THIS price, never sticky" rule as location_id — a block-format list with
+      // two price columns (FOB, Delivered) means the price just saved already has freight baked
+      // in; a single-line list (Smithfield/Tyson-style FOB pricing) doesn't. Overwritten every
+      // apply so a later single-line list for the same product correctly clears it back to false.
       const [plantProduct] = await tx`
-        insert into plant_products (plant_id, product_id, current_price, price_currency_id, price_date, docs_included, notes, location_id)
-        values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${price_date}, ${docs_included}, ${notes}, ${location_id})
+        insert into plant_products (plant_id, product_id, current_price, price_currency_id, price_date, docs_included, notes, location_id, freight_included)
+        values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${price_date}, ${docs_included}, ${notes}, ${location_id}, ${freight_included})
         on conflict (plant_id, product_id) do update set
           current_price = excluded.current_price,
           price_currency_id = excluded.price_currency_id,
@@ -64,6 +68,7 @@ Deno.serve(async (req) => {
           docs_included = excluded.docs_included,
           notes = excluded.notes,
           location_id = excluded.location_id,
+          freight_included = excluded.freight_included,
           updated_at = now()
         returning *
       `;

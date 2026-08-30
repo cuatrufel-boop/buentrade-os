@@ -2285,7 +2285,7 @@ async function processPriceListText(){
 
   const toBlockRow = async item => {
     const rawText = item.nameEs ? `${item.nameEn} — ${item.nameEs}` : item.nameEn;
-    return { rawText, price: item.price, ...(await matchCatalogProduct(rawText, item.nameEn, item.nameEs)) };
+    return { rawText, price: item.price, freightIncluded: item.freightIncluded, ...(await matchCatalogProduct(rawText, item.nameEn, item.nameEs)) };
   };
 
   // Some plants' price lists (Seaboard confirmed) arrive as an HTML table that gets flattened
@@ -2454,7 +2454,13 @@ function detectBlockFormatItems(lines){
     const m = withoutLead.length;
     const nameEn = m >= 2 ? withoutLead[m - 2] : withoutLead[m - 1];
     const nameEs = m >= 2 ? withoutLead[m - 1] : null;
-    if (price != null && nameEn) items.push({ nameEn, nameEs, price });
+    // Two price columns on a block-format row (FOB, then Delivered) means the price just picked
+    // (the last one) is the Delivered figure — freight to the border is already baked in. Real
+    // correction 2026-08-30: this price must never ALSO get an average/cheapest US Freight rate
+    // tacked on top in Quotes, or the deal is double-charged for freight. A row with only one price
+    // column has no such guarantee (freightIncluded stays false, normal FOB freight logic applies).
+    const freightIncluded = prices.length >= 2;
+    if (price != null && nameEn) items.push({ nameEn, nameEs, price, freightIncluded });
     descriptive = [];
   }
   return items;
@@ -2493,6 +2499,7 @@ function renderPriceListReview(){
         <span class="plr-arrow">→</span>
         <span class="plr-matched">${escapeHtml(label)}</span>
         ${row.locationName ? `<span class="plr-price" style="color:var(--ink-soft);font-weight:400;">📍 ${escapeHtml(row.locationName)}</span>` : ''}
+        ${row.freightIncluded ? `<span class="plr-price" style="color:var(--ink-soft);font-weight:400;">🚚 Delivered — freight included</span>` : ''}
         <span class="plr-price">${priceLabel}</span>
         <button type="button" class="plr-change-btn" onclick="reopenRow(${i})">Cambiar</button>
       </div>`;
@@ -2633,6 +2640,7 @@ async function applyPriceList(){
     raw_text: normalizeForMatch(row.rawText), price: row.price,
     price_currency_id: usdCurrencyId, price_date: today,
     location_name: row.locationName || null,
+    freight_included: row.freightIncluded === true,
   })));
   const applied = [];
   let errors = 0;

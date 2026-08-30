@@ -935,9 +935,10 @@ async function qOpenPendingPlantInline(productId, plantId){
     rqLastRequestedAt: link ? link.last_requested_at : null,
     rqDocsOn: plant.docs_included === true,
     rqProductLocationId: link ? link.location_id : null,
+    rqFreightIncluded: link ? link.freight_included === true : false,
   };
   if (!plantObj.rqUsFreightRateId){
-    plantObj.rqUsFreightRateId = rqDefaultUsFreightRateId(plantObj.rqProductLocationId);
+    plantObj.rqUsFreightRateId = rqDefaultUsFreightRateId(plantObj.rqProductLocationId, plantObj.rqFreightIncluded);
   }
   // A fresh, single-plant list — this is a self-contained "work this one row" session, not meant
   // to merge with whatever's separately active over on the Request Quote tab.
@@ -1204,15 +1205,17 @@ async function autoPopulateRqPlants(){
     // the trader isn't re-deciding it by memory on every single quote. A later price list from the
     // same plant can carry a different note next time, which simply updates this default the next
     // time it's loaded. Still a toggle they can flip if a specific deal differs.
-    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true, rqProductLocationId: link.location_id || null };
+    return { ...plant, rqProductId: link.product_id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true, rqProductLocationId: link.location_id || null, rqFreightIncluded: link.freight_included === true };
   }).filter(Boolean);
   // Each price row's own ship-from city (set on Meat Packers' Products & Prices tab) picks the
   // cheapest carrier for that exact city automatically — same rule the user gave 2026-08-30
   // ("Denison IA, KGL $5000 vs EBI $4900, escoge la mas baja"). A price with no city on file yet
-  // falls back to the conservative highest-known-rate default instead, never a number that quietly
-  // ships too cheap. Applies to every plant, not just Tyson.
+  // falls back to the conservative average-of-all-rates default instead, never a number that
+  // quietly ships too cheap. A price whose own list already delivered it to the border
+  // (rqFreightIncluded — a real Seaboard sheet's Delivered column) skips both and stays at $0
+  // additional freight, so it's never double-charged. Applies to every plant, not just Tyson.
   rqSelectedPlants.forEach(p => {
-    if (!p.rqUsFreightRateId) p.rqUsFreightRateId = rqDefaultUsFreightRateId(p.rqProductLocationId);
+    if (!p.rqUsFreightRateId) p.rqUsFreightRateId = rqDefaultUsFreightRateId(p.rqProductLocationId, p.rqFreightIncluded);
   });
   renderRqPlants();
   // Every calculator starts closed on a fresh search, priced or not — same "closed by default,
@@ -1269,7 +1272,7 @@ function rqPlantFieldsHtml(p){
             ${rqUsFreightRatesAll().length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate() || 0).toFixed(2)}</option>` : ''}
             ${rqUsFreightRatesAll().map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
           </select>
-          ${rqUsFreightRatesAll().length === 0 ? `<span class="loc-hint">No location/freight on file yet.</span>` : (() => {
+          ${p.rqFreightIncluded ? `<span class="loc-hint">Delivered price — freight already included, nothing added on top.</span>` : rqUsFreightRatesAll().length === 0 ? `<span class="loc-hint">No location/freight on file yet.</span>` : (() => {
             const cheapest = rqCheapestUsFreightForLocation(p.rqProductLocationId);
             const current = (p.rqUsFreightRateId && p.rqUsFreightRateId !== 'AVERAGE') ? rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId) : null;
             if (cheapest && current && current.id === cheapest.id){
@@ -1413,7 +1416,14 @@ function rqAverageUsFreightRate(){
 // product's own ship-from city is known ("si si trae ciudad escoge el flete mas barato entre los
 // carriers"), else the 'AVERAGE' sentinel. Never overrides a rate the trader already picked
 // (p.rqUsFreightRateId is only set when absent).
-function rqDefaultUsFreightRateId(locationId){
+//
+// freightIncluded short-circuits both of those to null (Del Border, $0 additional) — real
+// correction 2026-08-30, confirmed against a real Seaboard sheet: a block-format price list gives
+// FOB and Delivered-to-border columns, and the Delivered figure (already saved as current_price)
+// already has freight baked in. Defaulting to the average/cheapest lookup on TOP of a price that's
+// already delivered would double-charge freight on the deal.
+function rqDefaultUsFreightRateId(locationId, freightIncluded){
+  if (freightIncluded) return null;
   const cheapest = rqCheapestUsFreightForLocation(locationId);
   if (cheapest) return cheapest.id;
   return rqUsFreightRatesAll().length ? 'AVERAGE' : null;
