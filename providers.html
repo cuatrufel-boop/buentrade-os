@@ -541,9 +541,11 @@ function renderLocationsList(){
   wrap.innerHTML = newRowHtml + allLocations.map(loc => {
     const statusHtml = carriers.length ? carriers.map(c => {
       const rate = allRates.find(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id);
-      return rate
-        ? `<span style="color:var(--green);">${escapeHtml(c.name)}: $${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
-        : `<span style="color:var(--red);">${escapeHtml(c.name)}: Pending</span>`;
+      if (!rate) return `<span style="color:var(--red);">${escapeHtml(c.name)}: Pending</span>`;
+      const isStale = (rateAgeDays(rate.updated_at) || 0) > RATE_STALE_DAYS;
+      const color = isStale ? '#B7791F' : 'var(--green)';
+      const flag = isStale ? ' ⚠ stale' : '';
+      return `<span style="color:${color};">${escapeHtml(c.name)}: $${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${flag}</span>`;
     }).join(' &nbsp;·&nbsp; ') : '<span style="color:var(--ink-soft);">No carriers on file yet</span>';
     return `<div class="pkg-row">
       <div class="pkg-plant-avatar">📍</div>
@@ -1285,7 +1287,7 @@ function renderRateTable(){
     wrap.innerHTML = `<div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
     const catalogRows = allLocations.map(loc => {
       const rate = allRates.find(r => r.provider_id === currentProviderId && r.service_type === 'us_freight' && r.location_id === loc.id);
-      return { locationId: loc.id, place: `${loc.city} ${loc.state}`, rateId: rate ? rate.id : null, rate: rate ? Number(rate.rate) : null, notes: rate ? rate.notes : null };
+      return { locationId: loc.id, place: `${loc.city} ${loc.state}`, rateId: rate ? rate.id : null, rate: rate ? Number(rate.rate) : null, notes: rate ? rate.notes : null, updatedAt: rate ? rate.updated_at : null };
     });
     renderRateRows(catalogRows);
     return;
@@ -1299,7 +1301,7 @@ function renderRateTable(){
   // weight this screen doesn't ask for anymore.
   addSlot.innerHTML = `<button class="btn secondary small" onclick="startAddRate('mexican_freight')">+ Add Destination</button>`;
   wrap.innerHTML = `<div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
-  renderRateRows(sortRatesByPlace(rows, false).map(r => ({ locationId: null, place: r.destination, rateId: r.id, rate: Number(r.rate), notes: r.notes })));
+  renderRateRows(sortRatesByPlace(rows, false).map(r => ({ locationId: null, place: r.destination, rateId: r.id, rate: Number(r.rate), notes: r.notes, updatedAt: r.updated_at })));
 }
 
 // Grouped by state first ("IA together, TX together"), city alphabetical within each state — a
@@ -1342,6 +1344,19 @@ function renderRateRows(rows){
   }).join('');
 }
 
+// A carrier's rate is only as good as the last time they actually confirmed it — same "still
+// shown, just flagged" pattern as a product's stale price (plants.html PRICE_STALE_DAYS), applied
+// here to freight. Confirmed real requirement 2026-08-30: "si actualizamos una lista con algunos
+// fletes y otros no unos estan al dia y otros no pero los sigue sacando, enunciando que no estan
+// al dia." 30 days is a starting assumption (freight lanes move far less often than daily protein
+// prices) — easy to adjust, never blocks the rate from being used either way.
+const RATE_STALE_DAYS = 30;
+function rateAgeDays(updatedAt){
+  if (!updatedAt) return null;
+  const ms = new Date().setHours(0,0,0,0) - new Date(String(updatedAt).slice(0, 10) + 'T00:00:00').setHours(0,0,0,0);
+  return Math.round(ms / 86400000);
+}
+
 function renderRateViewFicha(r, isUs){
   const label = isUs ? `${r.place || '—'} → Border` : `Border → ${r.place || '—'}`;
   const key = r.locationId || r.rateId;
@@ -1353,9 +1368,12 @@ function renderRateViewFicha(r, isUs){
       <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${key}')">Add Price</button>
     </div>`;
   }
+  const age = rateAgeDays(r.updatedAt);
+  const stale = age != null && age > RATE_STALE_DAYS;
+  const staleNote = stale ? `<span class="pkg-plant-sub" style="color:var(--red);">⚠ Stale — last confirmed ${age}d ago</span>` : '';
   return `<div class="pkg-row">
     <div class="pkg-plant-avatar">🚚</div>
-    <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span>${r.notes ? `<span class="pkg-plant-sub">${escapeHtml(r.notes)}</span>` : ''}</div>
+    <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span>${r.notes ? `<span class="pkg-plant-sub">${escapeHtml(r.notes)}</span>` : ''}${staleNote}</div>
     <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;flex-shrink:0;">$${Number(r.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
     <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${key}')">Edit</button>
     ${r.rateId ? `<button class="btn danger" style="padding:5px 8px;font-size:12px;flex-shrink:0;" onclick="deleteRate('${r.rateId}')">×</button>` : ''}

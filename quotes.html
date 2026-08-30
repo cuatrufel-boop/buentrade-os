@@ -1266,16 +1266,17 @@ function rqPlantFieldsHtml(p){
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
             <option value="">Del Border — $0</option>
+            ${rqUsFreightRatesAll().length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate() || 0).toFixed(2)}</option>` : ''}
             ${rqUsFreightRatesAll().map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
           </select>
           ${rqUsFreightRatesAll().length === 0 ? `<span class="loc-hint">No location/freight on file yet.</span>` : (() => {
             const cheapest = rqCheapestUsFreightForLocation(p.rqProductLocationId);
-            const current = p.rqUsFreightRateId ? rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId) : null;
+            const current = (p.rqUsFreightRateId && p.rqUsFreightRateId !== 'AVERAGE') ? rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId) : null;
             if (cheapest && current && current.id === cheapest.id){
               return `<span class="loc-hint">Auto: cheapest for ${escapeHtml(current.origin || 'this city')} (${escapeHtml(current.provider_name || 'carrier')})</span>`;
             }
-            if (!p.rqProductLocationId){
-              return `<span class="loc-hint">No ship-from city on file for this price — using highest known rate as a safe default. Set it in Meat Packers → Products &amp; Prices.</span>`;
+            if (p.rqUsFreightRateId === 'AVERAGE'){
+              return `<span class="loc-hint">No ship-from city on this price yet — using the average of every known carrier rate.</span>`;
             }
             return '';
           })()}
@@ -1393,25 +1394,29 @@ function rqCheapestUsFreightForLocation(locationId){
   return rates.reduce((min, r) => (Number(r.rate) < Number(min.rate) ? r : min), rates[0]);
 }
 
-// No location on file for this specific product (the plant's price list didn't say, or nobody's
-// entered it yet): quote the single highest known US Freight rate on file, on purpose — a
-// deliberate speed/safety overestimate so a bid can go out now rather than waiting on an exact
-// origin, confirmed real business rule 2026-08-30 (see [[project_locations_catalog_next_phase]]).
-function rqHighestKnownUsFreightRate(){
+// No city on file for this specific product (the plant's list didn't say, or hasn't restated it
+// this week — see [[feedback_dont_assume_detected_facts_are_permanent]]): quote the AVERAGE of
+// every known US Freight rate on file, a middle-ground estimate so a bid can go out now rather
+// than waiting on an exact origin. Corrected 2026-08-30 from an earlier "highest known" design —
+// explicit real rule: "si no trae ciudad en la lista saca un promedio de flete entre todos los
+// fletes." Not a real provider_rates row (no single id), so callers use the 'AVERAGE' sentinel
+// (see rqDefaultUsFreightRateId/rqFreightForPlant) rather than a rate id.
+function rqAverageUsFreightRate(){
   const rates = rqUsFreightRatesAll();
   if (!rates.length) return null;
-  return rates.reduce((max, r) => (Number(r.rate) > Number(max.rate) ? r : max), rates[0]);
+  const sum = rates.reduce((s, r) => s + Number(r.rate), 0);
+  return sum / rates.length;
 }
 
 // One place both call sites (rqSelectPendingProduct, the batch loader below) use to decide the
 // starting freight pick for a plant/product that doesn't have one yet — auto-cheapest when the
-// product's own ship-from city is known, else the conservative highest-known fallback. Never
-// overrides a rate the trader already picked (p.rqUsFreightRateId is only set when absent).
+// product's own ship-from city is known ("si si trae ciudad escoge el flete mas barato entre los
+// carriers"), else the 'AVERAGE' sentinel. Never overrides a rate the trader already picked
+// (p.rqUsFreightRateId is only set when absent).
 function rqDefaultUsFreightRateId(locationId){
   const cheapest = rqCheapestUsFreightForLocation(locationId);
   if (cheapest) return cheapest.id;
-  const highest = rqHighestKnownUsFreightRate();
-  return highest ? highest.id : null;
+  return rqUsFreightRatesAll().length ? 'AVERAGE' : null;
 }
 
 // Picking a real origin here both selects the rate AND means "FOB from that plant" — leaving it
@@ -1427,9 +1432,11 @@ function rqSetUsFreightRate(plantId, rateId){
 }
 
 // A location/rate picked (not left on "Del Border") is what determines the US Freight $ — never
-// a static per-plant default.
+// a static per-plant default. 'AVERAGE' is the no-known-city fallback sentinel (see
+// rqDefaultUsFreightRateId) — not a real provider_rates row, so it's computed rather than looked up.
 function rqFreightForPlant(p){
   if (!p.rqUsFreightRateId) return null;
+  if (p.rqUsFreightRateId === 'AVERAGE') return rqAverageUsFreightRate();
   const rate = rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId);
   return rate ? rate.rate : null;
 }
@@ -2471,7 +2478,10 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
         plant_id: plant.id,
         customer_id: c.id,
         purchase_price: plant.rqPrice || null,
-        us_freight_rate_id: plant.rqUsFreightRateId || null,
+        // 'AVERAGE' is a computed fallback (see rqAverageUsFreightRate), never a real provider_rates
+        // row — sending it as an id would break the FK. The actual dollar amount is still saved
+        // correctly below regardless of which case this is.
+        us_freight_rate_id: (plant.rqUsFreightRateId && plant.rqUsFreightRateId !== 'AVERAGE') ? plant.rqUsFreightRateId : null,
         us_freight_amount: rqFreightForPlant(plant) || 0,
         docs_on: plant.rqDocsOn === true,
         inspection_amount: rqInspectionForPlant(plant),

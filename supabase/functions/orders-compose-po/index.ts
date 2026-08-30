@@ -31,7 +31,11 @@ Deno.serve(async (req) => {
     const [offer] = await sql`select * from sent_offers where id = ${po.sent_offer_id}`;
     const [plant] = await sql`select * from plants where id = ${po.plant_id}`;
 
-    const isFob = !!offer?.us_freight_rate_id;
+    // us_freight_amount, not us_freight_rate_id — a quote using the no-known-city AVERAGE fallback
+    // (see quotes.html rqAverageUsFreightRate, 2026-08-30) still charges real freight, it just has
+    // no single provider_rates row to point at, so us_freight_rate_id is null for it too. The
+    // amount actually being > 0 is the real "was a freight leg charged" signal in both cases.
+    const isFob = Number(offer?.us_freight_amount) > 0;
     let shipTo = fmtAddress(plant?.name, plant?.address, plant?.city, plant?.state, plant?.country);
     let incoterms = `FCA – ${plant?.name || "plant"}, ${[plant?.city, plant?.state].filter(Boolean).join(", ")}`;
     let customsAgency = null;

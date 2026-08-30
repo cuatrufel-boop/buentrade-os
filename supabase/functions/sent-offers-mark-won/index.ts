@@ -114,6 +114,12 @@ Deno.serve(async (req) => {
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "sales_orders", record_id: salesOrder.id, after: salesOrder });
 
+      // A quote built on the no-known-city AVERAGE fallback (quotes.html rqAverageUsFreightRate,
+      // 2026-08-30) has no single provider_rates row to attribute — us_freight_rate_id is null for
+      // it same as "Del Border" — so no US-leg freight_orders row auto-creates here. Correct: which
+      // carrier actually books this load is genuinely undecided until Real Costs picks one later,
+      // there's nothing real to pre-fill yet. us_freight_amount (the estimate) still carried on the
+      // sent_offers/purchase_orders rows regardless, via finalUsFreightAmount below.
       let freightOrder = null;
       if (offer.us_freight_rate_id) {
         const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;

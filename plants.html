@@ -907,7 +907,6 @@ let plants = [];
 let temperatures = [];
 let packagings = [];
 let plantProducts = []; // products linked to the currently selected plant
-let allLocations = []; // the real, closed city catalog (see providers.html) — used to set which city a price ships from
 let currentPlantId = null;
 let pendingPhotoFile = null;
 let pendingSpecFile = null;
@@ -958,7 +957,7 @@ function onPlantCountryChange(prefix){
 }
 
 async function loadEverything(){
-  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes, locationsRes] = await Promise.all([
+  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes] = await Promise.all([
     callApi('plants-search', {}),
     callApi('temperature-search', {}),
     callApi('packaging-search', {}),
@@ -967,11 +966,9 @@ async function loadEverything(){
     callApi('currencies-search', {}),
     callApi('countries-search', {}),
     callApi('states-search', {}),
-    callApi('locations-search', {}),
     loadVariations(),
     loadCutNames(),
   ]);
-  allLocations = locationsRes.results || [];
   plants = plantsRes.results || [];
   temperatures = tempRes.results || [];
   packagings = packRes.results || [];
@@ -2841,17 +2838,6 @@ function renderPlantProducts(){
       ? `<div class="pkg-plant-avatar"><img src="${escapeHtml(p.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>`
       : `<div class="pkg-plant-avatar">${escapeHtml((p.full_name_en || p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
     const specLink = p.spec_url ? ` · <a href="${escapeHtml(p.spec_url)}" target="_blank" rel="noopener">Spec sheet</a>` : '';
-    // Which real city THIS current price ships FOB from — feeds the Trading Tool's automatic
-    // cheapest-carrier freight lookup (see [[project_locations_catalog_next_phase]] §2). Optional:
-    // a price with no location falls back to the conservative highest-known-rate default there,
-    // never blocks. Plain <select>, not a click-to-edit ficha — one always-visible control per row
-    // is simpler than 37+ rows each needing their own edit-mode state for a single field.
-    // Not sticky across future price refreshes on purpose — confirmed real correction 2026-08-30:
-    // which of a plant's facilities produced a given batch varies week to week, so the NEXT price
-    // list applied for this product overwrites this value (to whatever it states, or back to
-    // unknown if it states nothing), same as the price itself. A manual pick here only holds until
-    // that next apply, never permanently.
-    const locOptions = allLocations.map(l => `<option value="${l.id}" ${p.location_id === l.id ? 'selected' : ''}>${escapeHtml(l.city)} ${escapeHtml(l.state)}</option>`).join('');
     return `<div class="pkg-row">
       ${avatarHtml}
       <div class="pkg-plant-info">
@@ -2859,23 +2845,9 @@ function renderPlantProducts(){
         <span class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}${specLink}</span>
       </div>
       <div style="text-align:right;flex-shrink:0;">${fmtPriceCell(p)}</div>
-      <select onchange="setPlantProductLocation('${p.linkId}', this.value)" title="Ships FOB from — feeds the Trading Tool's automatic freight lookup" style="font-size:11px;padding:4px 6px;border:1.5px solid var(--line);border-radius:5px;font-family:inherit;max-width:130px;flex-shrink:0;">
-        <option value="">No location</option>
-        ${locOptions}
-      </select>
       <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editProduct('${p.id}')">Edit</button>
     </div>`;
   }).join('');
-}
-
-async function setPlantProductLocation(linkId, locationId){
-  try {
-    await callApi('plant-products-update', { actor: currentActor(), id: linkId, location_id: locationId || null });
-    const p = plantProducts.find(x => x.linkId === linkId);
-    if (p) p.location_id = locationId || null;
-  } catch (e) {
-    alert('Error saving location: ' + e.message);
-  }
 }
 
 function normalizeProductName(s){
