@@ -2045,10 +2045,16 @@ function closeRow(i){
   renderPriceListReview();
 }
 
-// The word-teaching panel is a secondary escape hatch (an arbitrary plant abbreviation no click
-// could ever cover on its own), never the default view — collapsed until asked for.
+// Open BY DEFAULT for any row needing a decision — real correction 2026-08-30: "para aprender
+// debe preguntar no seguir de largo" (to learn, it must ask — never just proceed). An unrecognized
+// word ("Bnls", "SIN Hueso") showing two clickable candidates and nothing else read as the system
+// having quietly picked its own two options, not as it explicitly asking what the word means — the
+// actual reason (an unrecognized word) was one extra click away instead of the first thing shown.
+// _teachOpen undefined (a fresh row) now means open; only an explicit "Ocultar" click sets it false.
 function toggleTeachPanel(i){
-  priceListRows[i]._teachOpen = !priceListRows[i]._teachOpen;
+  const row = priceListRows[i];
+  const isOpen = row._teachOpen !== false;
+  row._teachOpen = isOpen ? false : true;
   renderPriceListReview();
 }
 
@@ -2529,15 +2535,20 @@ function renderPriceListReview(){
 
     const newChip = `<button type="button" class="plr-chip plr-chip-new" onclick="startCreateProductForRow(${i})">+ Crear producto nuevo</button>`;
 
-    const teachOpen = !!row._teachOpen;
+    // Open by default (undefined counts as open — only an explicit "Ocultar" click sets it false)
+    // — real correction 2026-08-30: "para aprender debe preguntar no seguir de largo." Two
+    // clickable candidates with nothing else read as the system quietly presenting its own two
+    // guesses, not as it explicitly asking what an unrecognized word means — that reason is now
+    // the first thing shown on the row, not one extra click away.
+    const teachOpen = row._teachOpen !== false;
     const teachHint = tightIds.length > 1
-      ? `Esta planta usa una palabra que no reconozco para distinguir estos ${tightIds.length} productos.`
+      ? `No reconozco una palabra que esta planta usa — por eso no puedo elegir solo entre estos ${tightIds.length} productos.`
       : tightIds.length === 1
       ? `Algo en esta línea no coincide con el único producto que tengo con ese nombre — podría ser una palabra que no reconozco.`
       : `No reconozco este corte todavía — podría ser la forma en que esta planta abrevia algo que ya está en el catálogo.`;
     const teachPanel = teachOpen ? `
       <div class="plr-teach">
-        ${teachHint}
+        <strong>${teachHint}</strong>
         <div class="plr-teach-row">
           <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. XF">
           <select id="termMeaning_${i}">
@@ -2554,6 +2565,7 @@ function renderPriceListReview(){
 
     return `<div class="plr-row" id="plrRow_${i}">
       <div class="plr-open-rawtext"><strong>${escapeHtml(row.rawText)}</strong> — ${priceLabel}</div>
+      ${teachPanel}
       ${tightChips ? `<div class="plr-candidates">${tightChips}</div>` : ''}
       ${browseChips}
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
@@ -2562,7 +2574,6 @@ function renderPriceListReview(){
         ${row._forceOpen ? `<button type="button" class="plr-browse-toggle" onclick="closeRow(${i})">Cerrar</button>` : ''}
         <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Ocultar' : '¿Es una abreviatura?'}</button>
       </div>
-      ${teachPanel}
     </div>`;
   }).join('');
 }
