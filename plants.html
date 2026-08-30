@@ -2468,7 +2468,15 @@ function renderPriceListReview(){
       const p = allCatalogProducts.find(x => x.id === id);
       if (!p) return '';
       const isCurrent = id === currentId;
-      return `<button type="button" class="plr-chip${isCurrent ? ' plr-chip-current' : ''}" onclick="pickCandidate(${i}, '${id}')">${isCurrent ? '✓ ' : ''}${escapeHtml(plrSpecLabel(p))}</button>`;
+      // Every candidate in this group already shares the same name (that's WHY they're candidates
+      // for the same line) — but showing only the spec that differs ("Frozen, Box, 15%") read as a
+      // fragment with nothing to anchor it to (real feedback: "can be confusing"). Naming the
+      // product on every chip costs a few characters and removes all doubt about what's actually
+      // being picked.
+      const name = p.name_en || p.name;
+      const spec = plrSpecLabel(p);
+      const label = spec !== name ? `${name} — ${spec}` : name;
+      return `<button type="button" class="plr-chip${isCurrent ? ' plr-chip-current' : ''}" onclick="pickCandidate(${i}, '${id}')">${isCurrent ? '✓ ' : ''}${escapeHtml(label)}</button>`;
     }).join('');
 
     const categoryName = priceListCategoryFilter || (currentId && (() => { const p = allCatalogProducts.find(x => x.id === currentId); return p && p.category; })()) || '';
