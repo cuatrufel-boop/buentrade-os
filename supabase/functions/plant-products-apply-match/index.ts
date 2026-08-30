@@ -13,7 +13,7 @@
 // price (a phantom link) can't happen from a partial failure.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { jsonResponse, writeAuditLog, matchOrCreateLocationId } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
     const {
       actor, plant_id, product_id, raw_text, price,
       price_currency_id = null, price_date = null, docs_included = null, notes = null,
+      location_name = null,
     } = body;
 
     const [plant] = await sql`select id from plants where id = ${plant_id}`;
@@ -39,15 +40,23 @@ Deno.serve(async (req) => {
     if (!product) return jsonResponse({ error: "unknown product_id" }, 400);
 
     const result = await sql.begin(async (tx) => {
+      // A price list stating "FOB City, ST" on this exact line (Smithfield confirmed real shape:
+      // a different city per product) resolves against the same closed city catalog every carrier
+      // rate already uses — same rule as plant_locations, and the one deliberate auto-create
+      // exception in the whole matching system (see matchOrCreateLocationId). No location_name on
+      // this line (or nothing parseable) leaves whatever was already on file untouched via
+      // coalesce below, rather than wiping out a location set by hand on a re-apply.
+      const location_id = location_name ? await matchOrCreateLocationId(tx, location_name) : null;
       const [plantProduct] = await tx`
-        insert into plant_products (plant_id, product_id, current_price, price_currency_id, price_date, docs_included, notes)
-        values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${price_date}, ${docs_included}, ${notes})
+        insert into plant_products (plant_id, product_id, current_price, price_currency_id, price_date, docs_included, notes, location_id)
+        values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${price_date}, ${docs_included}, ${notes}, ${location_id})
         on conflict (plant_id, product_id) do update set
           current_price = excluded.current_price,
           price_currency_id = excluded.price_currency_id,
           price_date = excluded.price_date,
           docs_included = excluded.docs_included,
           notes = excluded.notes,
+          location_id = coalesce(excluded.location_id, plant_products.location_id),
           updated_at = now()
         returning *
       `;

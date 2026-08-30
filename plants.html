@@ -2127,6 +2127,30 @@ function detectDocsNote(text){
 // Milan, MO all appearing across different lines of the same paste). Only reads what's literally
 // there — never invents a location — and de-duplicates so "FOB Monmouth, IL" repeated across five
 // lines becomes one entry, not five.
+// Same "FOB City, State" phrase detectPickupLocations looks for across the whole paste — but
+// scoped to ONE line here, so a specific price row can remember exactly which city IT ships from,
+// not just "this plant ships from somewhere in this list." Confirmed real shape: Smithfield states
+// a different FOB city per line ("FOB Denison, IA Backribs $2.48"), not one city for the whole
+// list — so this has to run per line, before matching, and strip the phrase out of the line so it
+// never becomes part of the matched product's name or saved alias.
+// Non-greedy city-word repetition, and REQUIRES the capture to end in a real 2-letter state code —
+// unlike detectPickupLocations' whole-text scan (which can stop anywhere, since it doesn't have to
+// leave a clean remainder), this one feeds a specific line's product name back into matching, so a
+// greedy capture here would swallow the product name too. Caught live before shipping: the naive
+// port of detectPickupLocations' regex turned "FOB Denison, IA Backribs $2.48" into locationName
+// "Denison, IA Backribs" and line "$2.48" — losing the product entirely. Requiring a trailing
+// [A-Z]{2} (the state) is also the correct restriction here, not just a fix: this only ever feeds
+// the US locations catalog (city + 2-letter state), so a country name ("FOB Mexico") correctly
+// stays unmatched instead of being captured as something unusable downstream.
+const LINE_FOB_RE = /\b[Ff][Oo][Bb][ \t]+([A-Z][A-Za-z.]*(?:[ \t]+[A-Z][A-Za-z.]*)*?,?[ \t]+[A-Z]{2})\b/;
+function extractLineFobLocation(line){
+  const m = line.match(LINE_FOB_RE);
+  if (!m) return { line, locationName: null };
+  const locationName = m[1].trim().replace(/[.\s,]+$/, '');
+  const stripped = (line.slice(0, m.index) + line.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim();
+  return { line: stripped, locationName };
+}
+
 function detectPickupLocations(text){
   const found = new Map(); // normalized -> display text
   // Case-insensitive "fob" (confirmed against a real Sanderson list using lowercase "fob") and a
@@ -2284,7 +2308,8 @@ async function processPriceListText(){
         currentSection = line.replace(/:\s*$/, '').trim();
         continue; // the header itself never becomes a row
       }
-      const { rawText: baseText, price } = parsePriceListLine(line);
+      const { line: lineNoFob, locationName } = extractLineFobLocation(line);
+      const { rawText: baseText, price } = parsePriceListLine(lineNoFob);
       // No price found on this line at all — it's a greeting, disclaimer, signature, or a real
       // "N/A" item, none of which can ever be applied (applyPriceList requires both a product and
       // a price). Skipping it here instead of showing it means the review screen is only ever the
@@ -2297,7 +2322,7 @@ async function processPriceListText(){
       // rawText used for both languages here since single-line format never tells us which part
       // of the line is English vs Spanish — matchCatalogProduct falls back to checking it against
       // both catalog fields in that case.
-      singleLineJobs.push((async () => ({ rawText, price, ...(await matchCatalogProduct(rawText)) }))());
+      singleLineJobs.push((async () => ({ rawText, price, locationName, ...(await matchCatalogProduct(rawText)) }))());
     }
     priceListRows = await Promise.all(singleLineJobs);
     // Safety nets for a plant that's neither shape cleanly — never worse than the single-line
@@ -2465,6 +2490,7 @@ function renderPriceListReview(){
         <span class="plr-rawtext" title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</span>
         <span class="plr-arrow">→</span>
         <span class="plr-matched">${escapeHtml(label)}</span>
+        ${row.locationName ? `<span class="plr-price" style="color:var(--ink-soft);font-weight:400;">📍 ${escapeHtml(row.locationName)}</span>` : ''}
         <span class="plr-price">${priceLabel}</span>
         <button type="button" class="plr-change-btn" onclick="reopenRow(${i})">Cambiar</button>
       </div>`;
@@ -2603,6 +2629,7 @@ async function applyPriceList(){
     actor: currentActor(), plant_id: applyPlantId, product_id: row.matchedProductId,
     raw_text: normalizeForMatch(row.rawText), price: row.price,
     price_currency_id: usdCurrencyId, price_date: today,
+    location_name: row.locationName || null,
   })));
   const applied = [];
   let errors = 0;
