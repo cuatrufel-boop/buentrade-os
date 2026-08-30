@@ -2460,12 +2460,6 @@ function detectBlockFormatItems(lines){
   return items;
 }
 
-// One line's spec label — whatever actually distinguishes it (temp/pack/variation), never the
-// bare name every candidate in the same chip group already shares.
-function plrSpecLabel(p){
-  return [tempName(p.temperature_id), packName(p.packaging_id), p.subcategory_en || p.subcategory].filter(Boolean).join(', ') || (p.name_en || p.name);
-}
-
 function renderPriceListReview(){
   const wrap = document.getElementById('priceListReviewWrap');
   const list = document.getElementById('priceListReviewRows');
@@ -2487,7 +2481,12 @@ function renderPriceListReview(){
     // Resolved and not manually reopened — one compact confirmed line, nothing to click.
     if (row.matchedProductId && !row._forceOpen){
       const p = allCatalogProducts.find(x => x.id === row.matchedProductId);
-      const label = p ? `${p.name_en || p.name} — ${plrSpecLabel(p)}` : '(product not found)';
+      // The real, official catalog name (same field Products/Meat Packers/Quotes/POs all show) —
+      // never a label recomposed from name_en+spec here. Real correction 2026-08-30: showing
+      // "Picnic — Fresh, Combo, Boneless" instead of the catalog's actual "Pork Boneless Picnic
+      // Fresh, Combo" read as the system inventing its own name, not pointing at a real existing
+      // row — "debe traer siempre el full name del catalogo."
+      const label = p ? (p.full_name_en || p.name_en || p.name) : '(product not found)';
       return `<div class="plr-row plr-row-resolved" id="plrRow_${i}">
         <span class="plr-check">✓</span>
         <span class="plr-rawtext" title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</span>
@@ -2509,14 +2508,10 @@ function renderPriceListReview(){
       const p = allCatalogProducts.find(x => x.id === id);
       if (!p) return '';
       const isCurrent = id === currentId;
-      // Every candidate in this group already shares the same name (that's WHY they're candidates
-      // for the same line) — but showing only the spec that differs ("Frozen, Box, 15%") read as a
-      // fragment with nothing to anchor it to (real feedback: "can be confusing"). Naming the
-      // product on every chip costs a few characters and removes all doubt about what's actually
-      // being picked.
-      const name = p.name_en || p.name;
-      const spec = plrSpecLabel(p);
-      const label = spec !== name ? `${name} — ${spec}` : name;
+      // The real catalog full name, not a recomposed "name — spec" string — see the resolved-row
+      // fix above, same reasoning. full_name_en already carries everything that used to be spelled
+      // out separately (temp/pack/variation), so it disambiguates Boneless vs Bone-In on its own.
+      const label = p.full_name_en || p.name_en || p.name;
       return `<button type="button" class="plr-chip${isCurrent ? ' plr-chip-current' : ''}" onclick="pickCandidate(${i}, '${id}')">${isCurrent ? '✓ ' : ''}${escapeHtml(label)}</button>`;
     }).join('');
 
@@ -2527,7 +2522,7 @@ function renderPriceListReview(){
     const showBrowse = row._browseAll || !tightIds.length;
     const browseChips = showBrowse ? `
       <div class="plr-candidates plr-browse">
-        ${browseCandidates.map(p => `<button type="button" class="plr-chip" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.name_en || p.name)}${plrSpecLabel(p) !== (p.name_en || p.name) ? ' — ' + escapeHtml(plrSpecLabel(p)) : ''}</button>`).join('')}
+        ${browseCandidates.map(p => `<button type="button" class="plr-chip" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !row._browseAll)
       ? `<button type="button" class="plr-browse-toggle" onclick="toggleBrowseAll(${i})">Ver el resto del catálogo (${browseCandidates.length})</button>`
