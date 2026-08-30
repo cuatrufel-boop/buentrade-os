@@ -1304,17 +1304,6 @@ function rqPlantFieldsHtml(p){
             ${rqUsFreightRatesAll().length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate() || 0).toFixed(2)}</option>` : ''}
             ${rqUsFreightRatesAll().map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
           </select>
-          ${p.rqFreightIncluded ? `<span class="loc-hint">Delivered price — freight already included, nothing added on top.</span>` : rqUsFreightRatesAll().length === 0 ? `<span class="loc-hint">No location/freight on file yet.</span>` : (() => {
-            const cheapest = rqCheapestUsFreightForLocation(p.rqProductLocationId);
-            const current = (p.rqUsFreightRateId && p.rqUsFreightRateId !== 'AVERAGE') ? rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId) : null;
-            if (cheapest && current && current.id === cheapest.id){
-              return `<span class="loc-hint">Auto: cheapest for ${escapeHtml(current.origin || 'this city')} (${escapeHtml(current.provider_name || 'carrier')})</span>`;
-            }
-            if (p.rqUsFreightRateId === 'AVERAGE'){
-              return `<span class="loc-hint">No ship-from city on this price yet — using the average of every known carrier rate.</span>`;
-            }
-            return '';
-          })()}
         </div>
         ${rqIsSeaboard(p) ? '' : `
         <div class="mini-field" style="width:auto;flex:0 0 auto;">
