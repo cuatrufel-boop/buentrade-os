@@ -2054,12 +2054,22 @@ function pickCandidate(i, productId){
 // through the SAME central matcher (products.matchFromPlantText) the initial paste used — never a
 // second, local copy of the matching logic that could quietly drift from the real one over time.
 async function teachTermAlias(i){
-  const term = normalizeForMatch(document.getElementById(`termInput_${i}`).value);
-  const meaningVal = document.getElementById(`termMeaning_${i}`).value;
+  const termInput = document.getElementById(`termInput_${i}`);
+  const meaningSelect = document.getElementById(`termMeaning_${i}`);
+  const term = normalizeForMatch(termInput.value);
+  const meaningVal = meaningSelect.value;
+  // Feedback right at the two fields, not just a message that can sit scrolled out of view below
+  // a long table — a trader mid-review on row 15 of 20 would never see a text change all the way
+  // down at the bottom and would reasonably conclude the button "does nothing" (real complaint).
+  termInput.style.borderColor = term ? '' : 'var(--red)';
+  meaningSelect.style.borderColor = meaningVal ? '' : 'var(--red)';
   if (!term || !meaningVal){
-    document.getElementById('priceListMsg').textContent = 'Type the exact word and pick what it means.';
+    const msg = document.getElementById(`termMsg_${i}`);
+    if (msg) msg.textContent = 'Type the exact word AND pick what it means — both required.';
     return;
   }
+  const msg = document.getElementById(`termMsg_${i}`);
+  if (msg) msg.textContent = '';
   const [meaningType, meaningId] = meaningVal.split(':');
   // A batch upsert errors if the same (plant_id, term, meaning_type) appears twice in one call —
   // drop any earlier pending entry for this exact term+meaning before adding the new one, so
@@ -2461,6 +2471,7 @@ function renderPriceListReview(){
           </select>
           <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Save &amp; Recognize</button>
         </div>
+        <div id="termMsg_${i}" style="font-size:11px;color:var(--red);margin-top:4px;font-weight:600;"></div>
       </div>` : '';
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
