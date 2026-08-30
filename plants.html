@@ -113,8 +113,16 @@
   .profile-row.span2{grid-column:1 / -1;}
   .profile-row .view-label{margin-bottom:0;}
   .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;overflow-wrap:break-word;word-break:break-word;}
-  #formCard{display:none;}
   .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
+  /* Same full-screen overlay pattern as the Trading Tool panel in quotes.html/offers.html (same
+     class names, on purpose) — editing a product used to just unhide a card at the bottom of the
+     page and scroll down to it, easy to lose track of on a long product list. */
+  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
+  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
+  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-body{flex:1;min-height:0;overflow-y:auto;padding:20px;}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
 </style>
 </head>
@@ -547,8 +555,12 @@ auth.onAuthStateChanged(user => {
     <div id="newPlantMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
-  <div class="card" id="formCard">
-    <strong id="formTitle">New product</strong>
+  <div class="tt-overlay" id="formCard">
+    <div class="tt-overlay-head">
+      <div class="tt-overlay-title" id="formTitle">New product</div>
+      <button class="tt-overlay-close" onclick="closeForm()" title="Close">✕</button>
+    </div>
+    <div class="tt-overlay-body">
     <input type="hidden" id="prodId">
     <input type="hidden" id="prodLinkId">
     <div id="priceListRefBanner" style="display:none;margin-top:10px;padding:8px 12px;background:#EEF3FF;border-radius:7px;font-size:12.5px;"></div>
@@ -654,6 +666,7 @@ auth.onAuthStateChanged(user => {
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
   </div>
 </div>
 </div>
@@ -2805,7 +2818,7 @@ function editProduct(id){
 }
 
 async function openProductForm(product){
-  document.getElementById('formCard').style.display = 'block';
+  document.getElementById('formCard').style.display = 'flex';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
   const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','temperature_id','packaging_id','full_name_en','full_name_es'];
   fields.forEach(f => document.getElementById(f).value = '');
@@ -2871,7 +2884,7 @@ async function openProductForm(product){
   updateProfileDisplays();
   document.getElementById('formMsg').textContent = '';
   document.getElementById('priceListRefBanner').style.display = 'none';
-  document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
+  document.getElementById('formCard').querySelector('.tt-overlay-body').scrollTop = 0;
 }
 
 function closeForm(){
