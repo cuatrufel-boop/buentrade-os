@@ -384,7 +384,6 @@ auth.onAuthStateChanged(user => {
 <script>
 let providers = [];
 let providerRolesMap = {}; // provider_id -> [role,...]
-let plantsList = [];
 let allRates = [];
 let currentProviderId = null;
 let currentRateTab = 'us_freight';
@@ -431,15 +430,13 @@ function joinPhone(code, number){
 
 async function loadEverything(){
   try {
-    const [provRes, rolesRes, plantsRes, ratesRes, countriesRes] = await Promise.all([
+    const [provRes, rolesRes, ratesRes, countriesRes] = await Promise.all([
       callApi('providers-search', {}),
       callApi('provider-roles-search', {}),
-      callApi('plants-search', {}),
       callApi('provider-rates-search', {}),
       callApi('countries-search', {}),
     ]);
     providers = provRes.results || [];
-    plantsList = plantsRes.results || [];
     allRates = ratesRes.results || [];
     countries = countriesRes.results || [];
     const countryOptions = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
@@ -801,11 +798,13 @@ function openProviderRates(providerId){
   currentRateTab = visible.us_freight ? 'us_freight' : (visible.mexican_freight ? 'mexican_freight' : 'customs');
   document.querySelectorAll('.tab-btn[data-svc]').forEach(b => b.classList.toggle('active', b.dataset.svc === currentRateTab));
   document.getElementById('loadRatesBtn').style.display = 'inline-block';
+  editingRateId = null;
   renderRateTable();
 }
 
 function switchRateTab(svc){
   currentRateTab = svc;
+  editingRateId = null;
   document.querySelectorAll('.tab-btn[data-svc]').forEach(b => b.classList.toggle('active', b.dataset.svc === svc));
   closeRateListPanel();
   document.getElementById('loadRatesBtn').style.display = 'inline-block';
@@ -1009,35 +1008,99 @@ function renderRateTable(){
     return;
   }
 
+  // Fichas, same pattern as the catalog's own product list — a route + its price, an Edit button
+  // that opens a small inline form (never an always-editable cell), and no Plant picker: a rate is
+  // never plant-specific (confirmed 2026-08-30 — "sin nombre de planta... dos o mas plantas pueden
+  // tener locations en la misma ciudad", one real-world city has one real freight number, shared by
+  // whichever plants happen to be there), so the field this used to set is now display-only dead
+  // weight this screen doesn't ask for anymore.
   const isUs = currentRateTab === 'us_freight';
   wrap.innerHTML = `
-    <table>
-      <thead><tr><th>${isUs ? 'Origin' : 'Destination'}</th><th>Rate (USD)</th>${isUs ? '<th>Plant</th>' : ''}<th></th></tr></thead>
-      <tbody id="rateRowsBody"></tbody>
-    </table>
-    <button class="btn secondary small" style="margin-top:10px;" onclick="addRateRow()">+ Add ${isUs ? 'origin' : 'destination'}</button>`;
-  const tbody = document.getElementById('rateRowsBody');
-  tbody.innerHTML = '';
-  rows.forEach(r => tbody.appendChild(buildLaneRow(r, isUs)));
-  if (!rows.length) tbody.innerHTML = `<tr><td colspan="${isUs?3:2}" class="empty">No rates yet.</td></tr>`;
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn secondary small" onclick="startAddRate('${isUs ? 'us_freight' : 'mexican_freight'}')">+ Add ${isUs ? 'Origin' : 'Destination'}</button>
+    </div>
+    <div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
+  renderRateRows(rows, isUs);
 }
 
-// Plant is kept (US Freight only) — quotes.html looks up a plant's freight rate by this field
-// when building a quote, so it drives real auto-fill logic, not just a label. Currency dropped:
-// every rate loaded so far (both real EBI sheets) is USD, so the editable field was just an
-// extra click that never changed anything — still stored as 'USD' on save, just not shown.
-function buildLaneRow(r, isUs){
-  const tr = document.createElement('tr');
-  tr.dataset.id = r.id;
-  const plantOptions = ['<option value="">—</option>'].concat(
-    plantsList.map(p => `<option value="${p.id}" ${r.plant_id === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`)
-  ).join('');
-  tr.innerHTML = `
-    <td><input class="rate-input" value="${escapeHtml(isUs ? r.origin : r.destination)}" onblur="saveRateField('${r.id}','${isUs ? 'origin' : 'destination'}',this.value,this)"></td>
-    <td style="width:100px;"><input class="rate-input" type="number" step="0.01" value="${r.rate}" onblur="saveRateField('${r.id}','rate',parseFloat(this.value)||0,this)"></td>
-    ${isUs ? `<td style="width:170px;"><select class="rate-input" onchange="saveRateField('${r.id}','plant_id',this.value||null,this)">${plantOptions}</select></td>` : ''}
-    <td><button class="btn danger" onclick="deleteRate('${r.id}')">×</button></td>`;
-  return tr;
+function renderRateRows(rows, isUs){
+  const listWrap = document.getElementById('rateRowsWrap');
+  const newRowHtml = editingRateId === 'NEW' ? renderRateEditFicha({ id: 'NEW', origin: '', destination: '', rate: '' }, isUs) : '';
+  if (!rows.length && !newRowHtml){
+    listWrap.innerHTML = '<div class="empty">No rates yet.</div>';
+    return;
+  }
+  listWrap.innerHTML = newRowHtml + rows.map(r => (editingRateId === r.id ? renderRateEditFicha(r, isUs) : renderRateViewFicha(r, isUs))).join('');
+}
+
+function renderRateViewFicha(r, isUs){
+  const place = isUs ? (r.origin || '—') : (r.destination || '—');
+  const label = isUs ? `${place} → Border` : `Border → ${place}`;
+  const rateNum = Number(r.rate) || 0;
+  return `<div class="pkg-row" id="rateRow_${r.id}">
+    <div class="pkg-plant-avatar">🚚</div>
+    <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span></div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;flex-shrink:0;">$${rateNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+    <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${r.id}')">Edit</button>
+    <button class="btn danger" style="padding:5px 8px;font-size:12px;flex-shrink:0;" onclick="deleteRate('${r.id}')">×</button>
+  </div>`;
+}
+
+function renderRateEditFicha(r, isUs){
+  const place = isUs ? r.origin : r.destination;
+  return `<div class="pkg-row" id="rateRow_${r.id}" style="flex-wrap:wrap;">
+    <input id="rateEdit_place_${r.id}" value="${escapeHtml(place || '')}" placeholder="${isUs ? 'Origin city, state' : 'Destination'}" style="flex:1;min-width:160px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
+    <input id="rateEdit_rate_${r.id}" type="number" step="0.01" value="${r.rate === '' ? '' : r.rate}" placeholder="Rate (USD)" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
+    <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="saveRateInline('${r.id}')">Save</button>
+    <button class="btn secondary" style="padding:6px 12px;font-size:12.5px;" onclick="cancelRateEdit()">Cancel</button>
+  </div>`;
+}
+
+let editingRateId = null;
+
+function editRateInline(id){
+  editingRateId = id;
+  renderRateTable();
+}
+
+function startAddRate(serviceType){
+  editingRateId = 'NEW';
+  currentRateTab = serviceType;
+  renderRateTable();
+}
+
+function cancelRateEdit(){
+  editingRateId = null;
+  renderRateTable();
+}
+
+async function saveRateInline(id){
+  const isUs = currentRateTab === 'us_freight';
+  const placeInput = document.getElementById(`rateEdit_place_${id}`);
+  const rateInput = document.getElementById(`rateEdit_rate_${id}`);
+  const place = placeInput.value.trim();
+  const rate = parseFloat(rateInput.value) || 0;
+  if (!place){ placeInput.style.borderColor = 'var(--red)'; return; }
+  const field = isUs ? 'origin' : 'destination';
+  try {
+    if (id === 'NEW'){
+      const idempotencyKey = `provider-rates-create|${currentProviderId}|${currentRateTab}|${place}|${new Date().toISOString().slice(0, 16)}`;
+      const created = await callApi('provider-rates-create', {
+        actor: currentActor(), provider_id: currentProviderId, service_type: currentRateTab,
+        [field]: place, rate, idempotency_key: idempotencyKey,
+      });
+      allRates.push(created.rate);
+    } else {
+      await callApi('provider-rates-update', { actor: currentActor(), id, [field]: place, rate });
+      const row = allRates.find(r => r.id === id);
+      if (row){ row[field] = place; row.rate = rate; }
+    }
+  } catch (e) {
+    alert('Error saving: ' + e.message);
+    return;
+  }
+  editingRateId = null;
+  renderRateTable();
 }
 
 function buildCustomsRow(r){
