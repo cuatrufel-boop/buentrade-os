@@ -742,7 +742,7 @@ function renderCoverage(){
   const empty = document.getElementById('qCovEmpty');
   const term = document.getElementById('qCovSearch').value.trim().toLowerCase();
   if (!term){ results.innerHTML = ''; empty.style.display = 'block'; empty.textContent = 'Type a product name above to see every catalog row that matches and which plants have priced it.'; return; }
-  const matches = products.filter(p => (p.name || '').toLowerCase().includes(term) || (p.name_en || '').toLowerCase().includes(term));
+  const matches = products.filter(p => (p.name || '').toLowerCase().includes(term) || (p.name_en || '').toLowerCase().includes(term) || (p.full_name_en || '').toLowerCase().includes(term) || (p.full_name_es || '').toLowerCase().includes(term));
   if (!matches.length){ results.innerHTML = ''; empty.style.display = 'block'; empty.textContent = `No catalog product matches "${term}".`; return; }
   empty.style.display = 'none';
   results.innerHTML = matches.map(p => {
@@ -1416,7 +1416,11 @@ function rqAverageUsFreightRate(){
   const rates = rqUsFreightRatesAll();
   if (!rates.length) return null;
   const sum = rates.reduce((s, r) => s + Number(r.rate), 0);
-  return sum / rates.length;
+  // Rounded to real money precision at the source — a raw division ("3961.4641176470586") was
+  // reaching the Trading Tool's Direct Costs field and every save unrounded (real bug confirmed
+  // 2026-08-30). Every caller (the display hint, rqBuildToolParams, the sent_offers save) gets
+  // clean money from here on, nothing left to remember to round downstream.
+  return Math.round((sum / rates.length) * 100) / 100;
 }
 
 // One place both call sites (rqSelectPendingProduct, the batch loader below) use to decide the
@@ -1602,7 +1606,11 @@ function rqBuildToolParams(p){
   // "Del Border" (the default) hides US Freight entirely — it's baked into the one Purchase
   // Price number. Picking an actual origin shows it, pre-filled from that rate.
   const showFreight = !!p.rqUsFreightRateId;
-  const freight = showFreight ? (rqFreightForPlant(p) || 0) : 0;
+  // Rounded to real money precision before it ever reaches the calculator — real bug confirmed
+  // 2026-08-30: the AVERAGE fallback (rqAverageUsFreightRate, a raw division) passed straight
+  // through as "3961.4641176470586" and the frozen calculator just displays whatever string it's
+  // given. A real carrier rate is already clean 2-decimal money, so this is a no-op for that case.
+  const freight = showFreight ? Math.round((rqFreightForPlant(p) || 0) * 100) / 100 : 0;
   const inspection = rqInspectionForPlant(p);
   // "Border" (the default) on Delivery location means no customs, no Mexican Freight — same
   // one-control pattern as US Freight above. Picking an actual destination implies Imported and
@@ -2136,12 +2144,16 @@ async function rqSendPlantOffer(id){
   if (!rqRequireDeliveryDay()) return;
   let entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
   if (!entry){
-    // The calculator is closed by default now (View Offer →) — Send Offer can get clicked before
-    // it's ever been opened, so there's no __calc to read yet. Open it here and give it a moment
-    // to actually compute instead of just telling the trader to go click View Offer themselves.
+    // Missing here for two real reasons, not just one: (a) the calculator's closed-by-default
+    // (View Offer →) and Send Offer got clicked before it was ever opened — no __calc to read yet;
+    // or (b) it was already open but the trader just touched an input a moment ago, which
+    // rqInvalidateCalc cleared (p.rqLastCalc = null) — the iframe needs a beat to recompute and
+    // post the fresh __calc back before rqCalcRow can read it again. Real bug confirmed 2026-08-30:
+    // this used to only wait for case (a) — already-open case (b) alerted instantly with zero
+    // retry, even though the calculator was visibly showing real, correct numbers on screen.
     const p = rqSelectedPlants.find(x => x.id === id);
-    if (p && !p.rqCalculatorOpen){
-      rqToggleCalculator(id);
+    if (p){
+      if (!p.rqCalculatorOpen) rqToggleCalculator(id);
       for (let i = 0; i < 10 && !entry; i++){
         await new Promise(r => setTimeout(r, 300));
         entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
@@ -2224,7 +2236,12 @@ async function rqFindCustomers(){
 
   const productName = document.getElementById('rq_product_name').value.trim();
   const productNameLower = productName.toLowerCase();
-  const matchingProductIds = products.filter(p => (p.name || '').toLowerCase() === productNameLower || (p.name_en || '').toLowerCase() === productNameLower).map(p => p.id);
+  // Real bug confirmed 2026-08-30: this box is always filled with the FULL name now (see
+  // rqProductSuggestions — "Full Name only, never the bare cut name"), but this match only ever
+  // checked the short name/name_en — so searching by full name (the only way the search box works)
+  // never found the product, always showing "Product not in catalog yet." even for a real, priced
+  // product. full_name_en added; short names kept as a fallback for a legacy row missing it.
+  const matchingProductIds = products.filter(p => (p.name || '').toLowerCase() === productNameLower || (p.name_en || '').toLowerCase() === productNameLower || (p.full_name_en || '').toLowerCase() === productNameLower).map(p => p.id);
   if (!matchingProductIds.length){
     container.innerHTML = '<div class="empty">Product not in catalog yet.</div>';
     return;
