@@ -346,13 +346,20 @@ auth.onAuthStateChanged(user => {
 
     <!-- ============ RATES ============ -->
     <div id="provTab_rates" style="display:none;">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-        <button class="btn secondary small" id="loadRatesBtn" onclick="openRateListPanel()">📋 Cargar precios</button>
-      </div>
       <div class="tab-row">
         <button class="tab-btn active" id="rateTabBtn_us_freight" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
         <button class="tab-btn" id="rateTabBtn_mexican_freight" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
         <button class="tab-btn" id="rateTabBtn_customs" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
+      </div>
+      <!-- Same row/alignment as Meat Packers' "Load Prices" + "+ Add New Product" (both left-
+           aligned, together, right under the tabs) — this used to have "Cargar precios" alone,
+           right-aligned, above the tabs, and the per-tab "+ Add" button in a second right-aligned
+           row further down; two separate rows in two different places read as visually inconsistent
+           next to the rest of the app (real feedback: "no lo veo igual"). rateAddBtnSlot is filled
+           in by renderRateTable() per active tab (label/handler differ for US/Mexican/Customs). -->
+      <div style="display:flex;gap:10px;margin:14px 0;">
+        <button class="btn secondary small" id="loadRatesBtn" onclick="openRateListPanel()">📋 Cargar precios</button>
+        <span id="rateAddBtnSlot"></span>
       </div>
 
       <div class="card" id="rateListCard" style="display:none;margin:14px 0;">
@@ -993,14 +1000,19 @@ function ratesForCurrentTab(){
 function renderRateTable(){
   const wrap = document.getElementById('rateTableWrap');
   const rows = ratesForCurrentTab();
+  // Lives in the static "Cargar precios" row right under the tabs (same left-aligned, side-by-side
+  // placement as Meat Packers' "Load Prices" + "+ Add New Product") — never a second, separately
+  // positioned button further down, which is what made this screen look inconsistent with the rest
+  // of the app (real feedback: "no lo veo igual").
+  const addSlot = document.getElementById('rateAddBtnSlot');
 
   if (currentRateTab === 'customs'){
+    addSlot.innerHTML = `<button class="btn secondary small" onclick="addRateRow()">+ Add Cost</button>`;
     wrap.innerHTML = `
       <table>
         <thead><tr><th>Type</th><th>Rate</th><th>Currency</th><th>Notes</th><th></th></tr></thead>
         <tbody id="rateRowsBody"></tbody>
-      </table>
-      <button class="btn secondary small" style="margin-top:10px;" onclick="addRateRow()">+ Add cost</button>`;
+      </table>`;
     const tbody = document.getElementById('rateRowsBody');
     tbody.innerHTML = '';
     rows.forEach(r => tbody.appendChild(buildCustomsRow(r)));
@@ -1015,11 +1027,8 @@ function renderRateTable(){
   // whichever plants happen to be there), so the field this used to set is now display-only dead
   // weight this screen doesn't ask for anymore.
   const isUs = currentRateTab === 'us_freight';
-  wrap.innerHTML = `
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
-      <button class="btn secondary small" onclick="startAddRate('${isUs ? 'us_freight' : 'mexican_freight'}')">+ Add ${isUs ? 'Origin' : 'Destination'}</button>
-    </div>
-    <div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
+  addSlot.innerHTML = `<button class="btn secondary small" onclick="startAddRate('${isUs ? 'us_freight' : 'mexican_freight'}')">+ Add ${isUs ? 'Origin' : 'Destination'}</button>`;
+  wrap.innerHTML = `<div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
   renderRateRows(rows, isUs);
 }
 
