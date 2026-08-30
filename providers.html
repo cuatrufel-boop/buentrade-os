@@ -1029,7 +1029,27 @@ function renderRateTable(){
   const isUs = currentRateTab === 'us_freight';
   addSlot.innerHTML = `<button class="btn secondary small" onclick="startAddRate('${isUs ? 'us_freight' : 'mexican_freight'}')">+ Add ${isUs ? 'Origin' : 'Destination'}</button>`;
   wrap.innerHTML = `<div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
-  renderRateRows(rows, isUs);
+  renderRateRows(sortRatesByPlace(rows, isUs), isUs);
+}
+
+// Grouped by state first ("IA together, TX together"), city alphabetical within each state — a
+// real Excel-paste load has no natural order of its own (arrives sorted however the sheet was),
+// so 21+ scattered rows read as a wall of random cities without this. Mexican Freight destinations
+// don't carry a US state suffix the same way, so those just sort alphabetically by destination.
+function sortRatesByPlace(rows, isUs){
+  const stateOf = (place) => {
+    const parts = (place || '').trim().split(/\s+/);
+    return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
+  };
+  return [...rows].sort((a, b) => {
+    const placeA = isUs ? (a.origin || '') : (a.destination || '');
+    const placeB = isUs ? (b.origin || '') : (b.destination || '');
+    if (isUs){
+      const stateCmp = stateOf(placeA).localeCompare(stateOf(placeB));
+      if (stateCmp !== 0) return stateCmp;
+    }
+    return placeA.localeCompare(placeB);
+  });
 }
 
 function renderRateRows(rows, isUs){
