@@ -2107,7 +2107,12 @@ function detectPickupLocations(text){
   // comma between city/state is optional (Sanderson: "fob Palestine TX", no comma — vs Smithfield's
   // "FOB Denison, IA", with one). The separator only matches spaces/tabs, never newlines, so this
   // can never bleed into the next line's capitalized product name once the city/state ends.
-  const re = /\bfob[ \t]+([A-Z][A-Za-z.]*(?:,?[ \t]+[A-Z][A-Za-z.]*)*)/gi;
+  // Real bug caught live against an actual Tyson list ("*All prices FOB no docs"): the blanket /i
+  // flag made the capture group's [A-Z] match lowercase too, so "no docs" (immediately following
+  // "FOB" in the same clause, nothing to do with a location) got captured as one. "fob" itself
+  // spelled out case-insensitively instead so the flag can come off entirely — the captured text
+  // now has to be genuinely capitalized, a real place name, never a lowercase word that follows it.
+  const re = /\b[Ff][Oo][Bb][ \t]+([A-Z][A-Za-z.]*(?:,?[ \t]+[A-Z][A-Za-z.]*)*)/g;
   let m;
   while ((m = re.exec(text))){
     const name = m[1].trim().replace(/[.\s,]+$/, '');
@@ -2174,11 +2179,15 @@ async function processPriceListText(){
 
   // The product dropdown below draws from the ENTIRE shared catalog — every protein, every plant
   // — so a poultry-only plant would otherwise show pork/beef/etc. options mixed in by default.
-  // Pre-selects the plant's own known protein when it already carries exactly one (a recorded
-  // fact from its existing products, never a guess); otherwise starts on "All categories" and
-  // leaves it to the trader, since a brand-new plant has no history to infer it from yet.
-  const knownProteins = plantProteins[currentPlantId];
-  priceListCategoryFilter = (knownProteins && knownProteins.size === 1) ? [...knownProteins][0] : '';
+  // Real gap caught live: this used to infer the category from the plant's EXISTING linked
+  // products (plantProteins) — which is empty for exactly the case that matters most, a brand-new
+  // plant loading its first-ever price list, so it always fell back to "All categories" right when
+  // narrowing to one species would help most. A plant's species is a fixed fact on the plant record
+  // itself (rule 15 — never guessed, never inferred from something else), known from the moment
+  // the plant was created — read straight from that instead.
+  const currentPlant = plants.find(p => p.id === currentPlantId);
+  const plantCategory = currentPlant && categories.find(c => c.id === currentPlant.category_id);
+  priceListCategoryFilter = plantCategory ? plantCategory.name : '';
   const catNoteEl = document.getElementById('priceListCategoryNote');
   catNoteEl.style.display = 'block';
   catNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Category:
