@@ -1,7 +1,7 @@
 // plant_locations.update — partial update, no duplicate discipline (see create for why).
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { jsonResponse, writeAuditLog, matchOrCreateLocationId } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -22,11 +22,17 @@ Deno.serve(async (req) => {
     for (const f of UPDATABLE_FIELDS) if (f in body) merged[f] = body[f];
 
     const location = await sql.begin(async (tx) => {
+      // Only re-resolves the catalog link when the name itself changed — a rename could point at a
+      // different real city, but touching protein/contact/notes never should.
+      const location_id = ("location_name" in body)
+        ? await matchOrCreateLocationId(tx, merged.location_name)
+        : existing.location_id;
       const [location] = await tx`
         update plant_locations set
           location_name = ${merged.location_name}, protein = ${merged.protein},
           freight_to_border_usd = ${merged.freight_to_border_usd}, delivered_by_plant = ${merged.delivered_by_plant},
           contact_name = ${merged.contact_name}, phone = ${merged.phone}, email = ${merged.email}, notes = ${merged.notes},
+          location_id = ${location_id},
           updated_at = now()
         where id = ${id} returning *
       `;

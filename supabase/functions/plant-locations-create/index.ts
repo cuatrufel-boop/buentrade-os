@@ -3,7 +3,7 @@
 // names on purpose), so no near-duplicate confirmation flow — just requires a real plant_id.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { jsonResponse, writeAuditLog, matchOrCreateLocationId } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -29,9 +29,10 @@ Deno.serve(async (req) => {
     }
 
     const location = await sql.begin(async (tx) => {
+      const location_id = await matchOrCreateLocationId(tx, location_name);
       const [location] = await tx`
-        insert into plant_locations (plant_id, location_name, protein, freight_to_border_usd, delivered_by_plant, contact_name, phone, email, notes, idempotency_key)
-        values (${plant_id}, ${location_name}, ${protein}, ${freight_to_border_usd}, ${delivered_by_plant}, ${contact_name}, ${phone}, ${email}, ${notes}, ${idempotency_key})
+        insert into plant_locations (plant_id, location_name, protein, freight_to_border_usd, delivered_by_plant, contact_name, phone, email, notes, idempotency_key, location_id)
+        values (${plant_id}, ${location_name}, ${protein}, ${freight_to_border_usd}, ${delivered_by_plant}, ${contact_name}, ${phone}, ${email}, ${notes}, ${idempotency_key}, ${location_id})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_locations", record_id: location.id, after: location });

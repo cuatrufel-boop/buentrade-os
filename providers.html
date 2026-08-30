@@ -213,6 +213,7 @@ auth.onAuthStateChanged(user => {
   <div class="tab-row" style="margin-bottom:20px;">
     <button class="tab-btn active" id="tabCarriersBtn" onclick="setProviderTab('carriers')">Carriers</button>
     <button class="tab-btn" id="tabAgenciesBtn" onclick="setProviderTab('agencies')">Customs Agencies</button>
+    <button class="tab-btn" id="tabLocationsBtn" onclick="setProviderTab('locations')">Locations</button>
   </div>
 
   <div class="card" id="providerListCard">
@@ -222,6 +223,22 @@ auth.onAuthStateChanged(user => {
     </div>
     <div id="providerRows" class="pkg-table-wrap"></div>
     <div id="emptyMsg" class="empty" style="display:none;">No providers found.</div>
+  </div>
+
+  <!-- ============ Locations catalog — the same real, closed city list every carrier's US Freight
+       tab already reads from (locations table). This is the master view: one row per real city,
+       showing every carrier's price status side by side, so a gap ("Key Global has no price for
+       Waco TX") is visible here without having to open each carrier one at a time. Confirmed real
+       requirement 2026-08-30: "debe haber un tab que diga locations... asi sabemos cuales de los
+       carriers no tenemos up to date" — same master-catalog-vs-per-entity-status split as
+       Products (products.html) vs each plant's Products & Prices tab. ============ -->
+  <div class="card" id="locationsListCard" style="display:none;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <strong style="font-size:15px;">Locations Catalog</strong>
+      <button class="btn secondary small" style="margin-left:auto;" onclick="startAddLocationMaster()">+ Add New City to Catalog</button>
+    </div>
+    <div id="locationRows" class="pkg-table-wrap"></div>
+    <div id="locationsEmptyMsg" class="empty" style="display:none;">No locations in the catalog yet.</div>
   </div>
 
   <!-- Just enough to create the record — same two-step pattern as Meat Packers' "+ New Plant":
@@ -501,12 +518,77 @@ function setProviderTab(tab){
   providerTab = tab;
   document.getElementById('tabCarriersBtn').classList.toggle('active', tab === 'carriers');
   document.getElementById('tabAgenciesBtn').classList.toggle('active', tab === 'agencies');
+  document.getElementById('tabLocationsBtn').classList.toggle('active', tab === 'locations');
   // Whichever provider's Profile/Rates was open belongs to whichever provider you clicked before
   // switching — leaving it open while browsing the other category is exactly the "mixing
   // everything" bug: you'd see Customs Agencies in the list with a carrier's rates still showing.
   closeProviderCard();
   closeNewProviderForm();
-  renderProviders();
+  document.getElementById('providerListCard').style.display = tab === 'locations' ? 'none' : 'block';
+  document.getElementById('locationsListCard').style.display = tab === 'locations' ? 'block' : 'none';
+  if (tab === 'locations') renderLocationsList(); else renderProviders();
+}
+
+// One row per real catalog city, every carrier's US Freight status shown side by side — the
+// master view that makes a gap visible without opening each carrier one at a time.
+let locationsAddingNew = false;
+
+function renderLocationsList(){
+  const wrap = document.getElementById('locationRows');
+  document.getElementById('locationsEmptyMsg').style.display = allLocations.length ? 'none' : 'block';
+  const carriers = providers.filter(p => (providerRolesMap[p.id] || []).includes('carrier'));
+  const newRowHtml = locationsAddingNew ? renderNewLocationFicha('saveNewLocationMaster', 'cancelLocationsAdd') : '';
+  wrap.innerHTML = newRowHtml + allLocations.map(loc => {
+    const statusHtml = carriers.length ? carriers.map(c => {
+      const rate = allRates.find(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id);
+      return rate
+        ? `<span style="color:var(--green);">${escapeHtml(c.name)}: $${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+        : `<span style="color:var(--red);">${escapeHtml(c.name)}: Pending</span>`;
+    }).join(' &nbsp;·&nbsp; ') : '<span style="color:var(--ink-soft);">No carriers on file yet</span>';
+    return `<div class="pkg-row">
+      <div class="pkg-plant-avatar">📍</div>
+      <div class="pkg-plant-info">
+        <span class="pkg-plant-name">${escapeHtml(loc.city)} ${escapeHtml(loc.state)}</span>
+        <span class="pkg-plant-sub">${statusHtml}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function startAddLocationMaster(){
+  locationsAddingNew = true;
+  renderLocationsList();
+}
+
+function cancelLocationsAdd(){
+  locationsAddingNew = false;
+  renderLocationsList();
+}
+
+async function saveNewLocationMaster(){
+  const cityInput = document.getElementById('newLocationCity');
+  const stateInput = document.getElementById('newLocationState');
+  const city = cityInput.value.trim();
+  const state = stateInput.value.trim();
+  const msgEl = document.getElementById('newLocationMsg');
+  if (!city || state.length !== 2){
+    msgEl.textContent = 'Enter a city name and a 2-letter state.';
+    return;
+  }
+  try {
+    const idempotencyKey = `locations-create|${city}|${state}|${new Date().toISOString().slice(0, 16)}`;
+    const result = await callApi('locations-create', { actor: currentActor(), city, state, idempotency_key: idempotencyKey });
+    allLocations.push(result.location);
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      msgEl.textContent = e.data.message;
+      return;
+    }
+    msgEl.textContent = 'Error: ' + e.message;
+    return;
+  }
+  locationsAddingNew = false;
+  renderLocationsList();
 }
 
 function renderProviders(){
@@ -1364,12 +1446,12 @@ function startAddLocation(){
   renderRateTable();
 }
 
-function renderNewLocationFicha(){
+function renderNewLocationFicha(saveFn = 'saveNewLocation', cancelFn = 'cancelRateEdit'){
   return `<div class="pkg-row" style="flex-wrap:wrap;">
     <input id="newLocationCity" placeholder="City" style="flex:1;min-width:140px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
     <input id="newLocationState" placeholder="State (2 letters)" maxlength="2" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;text-transform:uppercase;">
-    <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="saveNewLocation()">Add to Catalog</button>
-    <button class="btn secondary" style="padding:6px 12px;font-size:12.5px;" onclick="cancelRateEdit()">Cancel</button>
+    <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="${saveFn}()">Add to Catalog</button>
+    <button class="btn secondary" style="padding:6px 12px;font-size:12.5px;" onclick="${cancelFn}()">Cancel</button>
     <div id="newLocationMsg" style="width:100%;font-size:11.5px;color:var(--red);"></div>
   </div>`;
 }
