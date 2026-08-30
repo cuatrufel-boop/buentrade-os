@@ -82,6 +82,44 @@
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
   .tab-btn:focus{outline:none;}
   .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+
+  /* ============ Products they buy — searchable combobox + product cards, replacing a plain
+     native <select> whose only label was the bare cut name (e.g. six identical-looking "Cabeza
+     de lomo" entries with no way to tell them apart). Every option/card now shows the real,
+     already-disambiguated full_name_es a trader typed in at creation — never guessed here, just
+     surfaced. ============ */
+  .cp-add-row{position:relative;display:flex;gap:8px;margin-bottom:16px;}
+  .cp-search-box{position:relative;flex:1;}
+  .cp-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--ink-soft);pointer-events:none;}
+  .cp-search-input{width:100%;padding:11px 14px 11px 40px;border:1.5px solid var(--line);border-radius:10px;font-size:13.5px;font-family:inherit;text-align:left;background:#fff;transition:border-color .15s,box-shadow .15s;}
+  .cp-search-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,106,219,.1);}
+  .cp-suggest-panel{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(15,31,51,.14);max-height:320px;overflow-y:auto;z-index:30;display:none;}
+  .cp-suggest-panel.show{display:block;}
+  .cp-suggest-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 16px;cursor:pointer;border-bottom:1px solid var(--line);transition:background .12s;}
+  .cp-suggest-item:last-child{border-bottom:none;}
+  .cp-suggest-item:hover,.cp-suggest-item.active{background:var(--blue-light);}
+  .cp-suggest-main{min-width:0;}
+  .cp-suggest-title{font-weight:600;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cp-suggest-sub{font-size:11.5px;color:var(--ink-soft);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cp-suggest-empty{padding:20px 16px;text-align:center;color:var(--ink-soft);font-size:13px;}
+  .cp-temp-badge{flex-shrink:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:20px;white-space:nowrap;}
+  .cp-temp-badge.fresh{background:var(--blue-light);color:var(--blue);}
+  .cp-temp-badge.frozen{background:#E5F7FB;color:#0B7285;}
+  .cp-product-list{display:flex;flex-direction:column;gap:8px;}
+  .cp-product-card{display:flex;align-items:center;gap:14px;padding:13px 16px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .cp-product-card:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .cp-product-icon{flex-shrink:0;width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:var(--blue);display:flex;align-items:center;justify-content:center;}
+  .cp-product-icon svg{width:18px;height:18px;}
+  .cp-product-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+  .cp-product-title{font-weight:600;font-size:13.5px;color:var(--ink);}
+  .cp-product-sub{font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .cp-remove-btn{flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:#fff;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s;}
+  .cp-remove-btn:hover{border-color:var(--red);color:var(--red);background:#FCEEEC;}
+  .cp-remove-btn svg{width:13px;height:13px;}
+  .cp-empty-state{display:flex;flex-direction:column;align-items:center;gap:10px;padding:40px 20px;text-align:center;color:var(--ink-soft);}
+  .cp-empty-state svg{width:40px;height:40px;color:#C9D6E8;}
+  .cp-empty-state strong{color:var(--ink);font-size:13.5px;font-weight:600;}
+  .cp-empty-state span{font-size:12.5px;}
 </style>
 </head>
 <body>
@@ -236,17 +274,21 @@ auth.onAuthStateChanged(user => {
     <!-- ============ PRODUCTS THEY BUY — default tab: what does this customer buy, at a
          glance, editable right here. ============ -->
     <div id="custTab_products">
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <select id="custProductInput" style="flex:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
-          <option value="">Choose a product from the catalog…</option>
-        </select>
-        <button class="btn" style="padding:8px 16px;font-size:13px;" onclick="addCustomerProduct()">+ Add</button>
+      <div class="cp-add-row">
+        <div class="cp-search-box">
+          <svg class="cp-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="cp_search_input" class="cp-search-input" placeholder="Buscar producto por nombre…" autocomplete="off"
+            oninput="cpRenderSuggestions()" onfocus="cpRenderSuggestions()" onblur="setTimeout(cpHideSuggestions, 150)"
+            onkeydown="if(event.key==='Enter') cpSelectActiveOrFirst();">
+          <div id="cp_suggest_panel" class="cp-suggest-panel"></div>
+        </div>
       </div>
-      <table>
-        <thead><tr><th>Producto</th><th></th></tr></thead>
-        <tbody id="custProductRows"></tbody>
-      </table>
-      <div id="custProductsEmpty" class="empty" style="display:none;">No products on file for this customer yet.</div>
+      <div id="custProductRows" class="cp-product-list"></div>
+      <div id="custProductsEmpty" class="cp-empty-state" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 12 3 4 7v10l8 4 8-4V7z"/><path d="M12 12 4 7m8 5 8-5m-8 5v9"/></svg>
+        <strong>Sin productos registrados todavía</strong>
+        <span>Busca arriba y selecciónalo para agregarlo a este cliente.</span>
+      </div>
     </div>
 
     <!-- ============ DETAILS — everything else. Switching tabs never leaves the record. ============ -->
@@ -679,21 +721,48 @@ async function loadCustomers(){
 // ===== Products a customer buys — customer_products already existed with real data (id,
 // customer_id, product_id, created_at) from an earlier import; this just adds the UI on top,
 // it doesn't touch the table's shape or the 100+ rows already in it. =====
+//
+// Real gap fixed 2026-08-30: the old picker was a native <select> labelled with the bare cut
+// name only (p.name) — six different Bone-In/Boneless, Fresh/Frozen, Box/VAC variants of "Cabeza
+// de lomo" all read identically, forcing a blind guess. full_name_es/full_name_en are the real,
+// already-disambiguated names the trader typed in at product creation — this just surfaces them
+// instead of hiding them, same "always show the full spec, never a bare name" rule as everywhere
+// else products get listed.
 let allCustProducts = null;
+let temperaturesForCust = null;
 async function fetchAllCustProducts(){
   if (allCustProducts) return allCustProducts;
-  const res = await callApi('products-search', {});
-  allCustProducts = (res.results || []).slice().sort((a, b) => custProductLabel(a).localeCompare(custProductLabel(b)));
-  document.getElementById('custProductInput').innerHTML = '<option value="">Choose a product from the catalog…</option>' +
-    allCustProducts.map(p => `<option value="${p.id}">${escapeHtml(custProductLabel(p))}</option>`).join('');
+  const [prodRes, tempRes] = await Promise.all([
+    callApi('products-search', {}),
+    callApi('temperature-search', {}),
+  ]);
+  allCustProducts = (prodRes.results || []).slice().sort((a, b) => custProductLabel(a).localeCompare(custProductLabel(b)));
+  temperaturesForCust = tempRes.results || [];
   return allCustProducts;
 }
 
 // Some rows are generic (brand null — a canonical cut not tied to one plant), others are a
 // specific plant's catalog row — the brand suffix is what tells them apart in the picker.
 function custProductLabel(p){
-  return p.brand ? `${p.name} (${p.brand})` : p.name;
+  const base = p.full_name_es || p.name;
+  return p.brand ? `${base} (${p.brand})` : base;
 }
+
+// Decorative only (a colored Fresh/Frozen pill) — reads the real temperature catalog rather than
+// pattern-matching the display text, so it can never disagree with the product's actual field.
+function custTempBadgeClass(temperatureId){
+  const t = (temperaturesForCust || []).find(x => x.id === temperatureId);
+  const name = ((t && (t.name_en || t.name)) || '').toLowerCase();
+  if (name.includes('frozen')) return 'frozen';
+  if (name.includes('fresh')) return 'fresh';
+  return null;
+}
+function custTempBadgeHtml(p){
+  const cls = custTempBadgeClass(p.temperature_id);
+  if (!cls) return '';
+  return `<span class="cp-temp-badge ${cls}">${cls === 'fresh' ? 'Fresco' : 'Congelado'}</span>`;
+}
+const CP_PRODUCT_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 12 3 4 7v10l8 4 8-4V7z"/><path d="M12 12 4 7m8 5 8-5m-8 5v9"/></svg>';
 
 let currentCustProducts = [];
 async function loadCustomerProducts(customerId){
@@ -710,33 +779,77 @@ async function loadCustomerProducts(customerId){
 }
 
 function renderCustomerProducts(){
-  const tbody = document.getElementById('custProductRows');
-  document.getElementById('custProductsEmpty').style.display = currentCustProducts.length ? 'none' : 'block';
-  tbody.innerHTML = currentCustProducts
+  const wrap = document.getElementById('custProductRows');
+  document.getElementById('custProductsEmpty').style.display = currentCustProducts.length ? 'none' : 'flex';
+  wrap.innerHTML = currentCustProducts
     .slice()
     .sort((a, b) => custProductLabel(a.product).localeCompare(custProductLabel(b.product)))
-    .map(r => `<tr>
-      <td>${escapeHtml(custProductLabel(r.product))}</td>
-      <td class="row-actions"><button class="btn danger" onclick="removeCustomerProduct('${r.linkId}')">×</button></td>
-    </tr>`).join('');
+    .map(r => {
+      const p = r.product;
+      return `<div class="cp-product-card">
+        <div class="cp-product-icon">${CP_PRODUCT_ICON_SVG}</div>
+        <div class="cp-product-info">
+          <div class="cp-product-title">${escapeHtml(custProductLabel(p))}</div>
+          <div class="cp-product-sub">${custTempBadgeHtml(p)}<span>${escapeHtml(p.full_name_en || '')}</span></div>
+        </div>
+        <button class="cp-remove-btn" title="Quitar" onclick="removeCustomerProduct('${r.linkId}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>`;
+    }).join('');
 }
 
-async function addCustomerProduct(){
-  const select = document.getElementById('custProductInput');
-  const productId = select.value;
-  if (!productId || !viewingCustomerId) return;
-  const match = allCustProducts.find(p => p.id === productId);
-  if (!match) return;
-  if (currentCustProducts.some(r => r.product.id === match.id)){ select.value = ''; return; }
+// ============ Searchable combobox — replaces the old native <select>. Typing filters by the
+// full disambiguated name (ES and EN); clicking a result adds it immediately, one interaction
+// instead of select-then-click-Add. Already-linked products drop out of the results as they're
+// added, so the same product can't be offered twice. ============
+let cpSuggestions = [];
+
+function cpRenderSuggestions(){
+  const panel = document.getElementById('cp_suggest_panel');
+  const term = document.getElementById('cp_search_input').value.trim().toLowerCase();
+  const linkedIds = new Set(currentCustProducts.map(r => r.product.id));
+  const pool = (allCustProducts || []).filter(p => !linkedIds.has(p.id));
+  const matches = (term
+    ? pool.filter(p => custProductLabel(p).toLowerCase().includes(term) || (p.full_name_en || '').toLowerCase().includes(term))
+    : pool
+  ).slice(0, 8);
+  cpSuggestions = matches;
+  if (!matches.length){
+    panel.innerHTML = `<div class="cp-suggest-empty">${term ? 'Sin coincidencias.' : (pool.length ? 'Escribe para buscar…' : 'Ya agregaste todos los productos del catálogo.')}</div>`;
+    panel.classList.add('show');
+    return;
+  }
+  panel.innerHTML = matches.map((p, i) => `
+    <div class="cp-suggest-item" onmousedown="cpSelectSuggestionIdx(${i})">
+      <div class="cp-suggest-main">
+        <div class="cp-suggest-title">${escapeHtml(custProductLabel(p))}</div>
+        <div class="cp-suggest-sub">${escapeHtml(p.full_name_en || '')}</div>
+      </div>
+      ${custTempBadgeHtml(p)}
+    </div>`).join('');
+  panel.classList.add('show');
+}
+
+function cpHideSuggestions(){
+  document.getElementById('cp_suggest_panel').classList.remove('show');
+}
+
+function cpSelectActiveOrFirst(){
+  if (cpSuggestions.length === 1) cpSelectSuggestionIdx(0);
+}
+
+async function cpSelectSuggestionIdx(i){
+  const p = cpSuggestions[i];
+  if (!p || !viewingCustomerId) return;
   try {
-    const res = await callApi('customer-products-add', { actor: currentActor(), customer_id: viewingCustomerId, product_id: match.id });
+    const res = await callApi('customer-products-add', { actor: currentActor(), customer_id: viewingCustomerId, product_id: p.id });
     const link = res.link || res; // already_linked also carries .link
-    currentCustProducts.push({ linkId: link.id, product: match });
+    currentCustProducts.push({ linkId: link.id, product: p });
   } catch (e) {
     alert('Error: ' + e.message);
     return;
   }
-  select.value = '';
+  document.getElementById('cp_search_input').value = '';
+  cpHideSuggestions();
   renderCustomerProducts();
 }
 
