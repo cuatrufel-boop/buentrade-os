@@ -907,6 +907,7 @@ let plants = [];
 let temperatures = [];
 let packagings = [];
 let plantProducts = []; // products linked to the currently selected plant
+let allLocations = []; // the real, closed city catalog (see providers.html) — used to set which city a price ships from
 let currentPlantId = null;
 let pendingPhotoFile = null;
 let pendingSpecFile = null;
@@ -957,7 +958,7 @@ function onPlantCountryChange(prefix){
 }
 
 async function loadEverything(){
-  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes] = await Promise.all([
+  const [plantsRes, tempRes, packRes, catRes, linksRes, currRes, countryRes, statesRes, locationsRes] = await Promise.all([
     callApi('plants-search', {}),
     callApi('temperature-search', {}),
     callApi('packaging-search', {}),
@@ -966,9 +967,11 @@ async function loadEverything(){
     callApi('currencies-search', {}),
     callApi('countries-search', {}),
     callApi('states-search', {}),
+    callApi('locations-search', {}),
     loadVariations(),
     loadCutNames(),
   ]);
+  allLocations = locationsRes.results || [];
   plants = plantsRes.results || [];
   temperatures = tempRes.results || [];
   packagings = packRes.results || [];
@@ -1724,7 +1727,7 @@ async function loadPlantProducts(){
   // now (2026-08-29: moved off the shared product onto plant_products, where they actually vary).
   plantProducts = (res.results || [])
     .filter(r => r.product)
-    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date, brand_id: r.brand_id, photo_url: r.photo_url, spec_url: r.spec_url }))
+    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date, brand_id: r.brand_id, photo_url: r.photo_url, spec_url: r.spec_url, location_id: r.location_id }))
     // Most recently priced first, stale/never-priced ones sinking to the bottom — the trader
     // wants to see what just got loaded, not scroll past it to find it alphabetically.
     .sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
@@ -2811,6 +2814,12 @@ function renderPlantProducts(){
       ? `<div class="pkg-plant-avatar"><img src="${escapeHtml(p.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>`
       : `<div class="pkg-plant-avatar">${escapeHtml((p.full_name_en || p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
     const specLink = p.spec_url ? ` · <a href="${escapeHtml(p.spec_url)}" target="_blank" rel="noopener">Spec sheet</a>` : '';
+    // Which real city this specific price ships FOB from — feeds the Trading Tool's automatic
+    // cheapest-carrier freight lookup (see [[project_locations_catalog_next_phase]] §2). Optional:
+    // a price with no location falls back to the conservative highest-known-rate default there,
+    // never blocks. Plain <select>, not a click-to-edit ficha — one always-visible control per row
+    // is simpler than 37+ rows each needing their own edit-mode state for a single field.
+    const locOptions = allLocations.map(l => `<option value="${l.id}" ${p.location_id === l.id ? 'selected' : ''}>${escapeHtml(l.city)} ${escapeHtml(l.state)}</option>`).join('');
     return `<div class="pkg-row">
       ${avatarHtml}
       <div class="pkg-plant-info">
@@ -2818,9 +2827,23 @@ function renderPlantProducts(){
         <span class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}${specLink}</span>
       </div>
       <div style="text-align:right;flex-shrink:0;">${fmtPriceCell(p)}</div>
+      <select onchange="setPlantProductLocation('${p.linkId}', this.value)" title="Ships FOB from — feeds the Trading Tool's automatic freight lookup" style="font-size:11px;padding:4px 6px;border:1.5px solid var(--line);border-radius:5px;font-family:inherit;max-width:130px;flex-shrink:0;">
+        <option value="">No location</option>
+        ${locOptions}
+      </select>
       <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editProduct('${p.id}')">Edit</button>
     </div>`;
   }).join('');
+}
+
+async function setPlantProductLocation(linkId, locationId){
+  try {
+    await callApi('plant-products-update', { actor: currentActor(), id: linkId, location_id: locationId || null });
+    const p = plantProducts.find(x => x.linkId === linkId);
+    if (p) p.location_id = locationId || null;
+  } catch (e) {
+    alert('Error saving location: ' + e.message);
+  }
 }
 
 function normalizeProductName(s){
