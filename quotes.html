@@ -120,7 +120,13 @@
      moved into the full-screen overlay (see rqToggleCalculator) so the row reads clean like every
      other list in the app, with the actual editing happening centered above the calculator where
      there's real room for it. Same fields, same onchange handlers, just relocated. */
-  .rq-tt-overlay-fields{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-end;padding:14px 20px;background:var(--bg);}
+  /* flex-start, not flex-end — real bug confirmed 2026-08-30: a field with a hint line below it
+     (Location's "Auto: cheapest for..." / "No ship-from city..." note) is taller than a plain
+     label+control field next to it (Documents, Delivery location before a destination is picked).
+     Bottom-aligning made the taller field's own label/control sit HIGHER than its neighbors' —
+     labels and controls never lined up row to row. Top-aligning keeps every label/control at the
+     same height regardless of how much hint text trails underneath. */
+  .rq-tt-overlay-fields{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-start;padding:14px 20px;background:var(--bg);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
   .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
@@ -1273,7 +1279,7 @@ function rqPlantFieldsHtml(p){
           <label>Purchase $/lb</label>
           <input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')">
         </div>
-        <div class="mini-field" style="width:200px;flex:0 0 auto;">
+        <div class="mini-field" style="width:250px;flex:0 0 auto;">
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
             <option value="">Del Border — $0</option>
