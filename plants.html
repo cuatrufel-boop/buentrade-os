@@ -1725,15 +1725,23 @@ async function loadPlantProducts(){
 // A price older than this many days can't be trusted as today's number — pork/beef prices move
 // daily, so quoting off a stale number is a real cost risk, not just a display nicety.
 const PRICE_STALE_DAYS = 2;
+// price_date comes back from the DB as a full timestamp ("2026-08-30T00:00:00.000Z"), not a bare
+// "YYYY-MM-DD" — slicing to the first 10 chars before appending a time-of-day avoids building an
+// invalid double-timestamp string like "...000ZT00:00:00".
+function toDateOnly(priceDate){
+  return priceDate ? String(priceDate).slice(0, 10) : null;
+}
 function priceAgeDays(priceDate){
-  if (!priceDate) return null;
-  const ms = new Date().setHours(0,0,0,0) - new Date(priceDate + 'T00:00:00').setHours(0,0,0,0);
+  const d = toDateOnly(priceDate);
+  if (!d) return null;
+  const ms = new Date().setHours(0,0,0,0) - new Date(d + 'T00:00:00').setHours(0,0,0,0);
   return Math.round(ms / 86400000);
 }
 
 function fmtPriceCell(p){
   if (p.current_price == null) return '<span style="color:var(--ink-soft);">—</span>';
-  const dateStr = p.price_date ? new Date(p.price_date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
+  const dOnly = toDateOnly(p.price_date);
+  const dateStr = dOnly ? new Date(dOnly + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
   const age = priceAgeDays(p.price_date);
   const stale = age != null && age > PRICE_STALE_DAYS;
   const dateColor = stale ? '#C4432E' : 'var(--ink-soft)';
@@ -2545,24 +2553,23 @@ async function applyPriceList(){
     return;
   }
 
-  document.getElementById('priceListMsg').textContent = 'Saving…';
+  document.getElementById('priceListMsg').textContent = `Saving ${toApply.length} price(s)…`;
+  // Rows are independent writes to independent product rows — nothing here depends on another
+  // row's result — so they save in parallel instead of one at a time. With ~1-1.5s per Edge
+  // Function call (this project's established per-invocation overhead), a real 37-row list was
+  // taking 40-55s of silent sequential waiting, which read to the trader as the screen being
+  // stuck. Promise.allSettled (not all) so one row's failure doesn't lose the others' results.
+  const outcomes = await Promise.allSettled(toApply.map(row => callApi('plant-products-apply-match', {
+    actor: currentActor(), plant_id: applyPlantId, product_id: row.matchedProductId,
+    raw_text: normalizeForMatch(row.rawText), price: row.price,
+    price_currency_id: usdCurrencyId, price_date: today,
+  })));
   const applied = [];
   let errors = 0;
-  for (const row of toApply){
-    // Price + alias saved together, one call, one transaction — plant_products.applyMatch is the
-    // ONLY place either of these gets written, closing the loop products.matchFromPlantText
-    // starts (that one only ever proposes, never writes).
-    try {
-      await callApi('plant-products-apply-match', {
-        actor: currentActor(), plant_id: applyPlantId, product_id: row.matchedProductId,
-        raw_text: normalizeForMatch(row.rawText), price: row.price,
-        price_currency_id: usdCurrencyId, price_date: today,
-      });
-      applied.push(row);
-    } catch (e) {
-      errors++;
-    }
-  }
+  outcomes.forEach((outcome, i) => {
+    if (outcome.status === 'fulfilled') applied.push(toApply[i]);
+    else errors++;
+  });
 
   // Save the plant-level docs default once per apply, not once per row — it's the same fact for
   // every product on this plant's sheet.
