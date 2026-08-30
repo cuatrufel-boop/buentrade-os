@@ -49,7 +49,6 @@
   .profile-row .view-label{margin-bottom:0;}
   .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;overflow-wrap:break-word;word-break:break-word;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
-  #formCard{display:none;}
   #searchBox{width:100%;max-width:420px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
@@ -75,6 +74,7 @@
   .save-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;transition:background .2s;}
   .save-dot.saved{background:var(--green);}
   .save-dot.saving{background:var(--blue-bright);}
+  .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -201,107 +201,171 @@ auth.onAuthStateChanged(user => {
     <button class="tab-btn" id="tabAgenciesBtn" onclick="setProviderTab('agencies')">Customs Agencies</button>
   </div>
 
-  <div class="card" id="providerSearchCard">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
-      <button class="btn" onclick="openForm()">+ Add Provider</button>
-    </div>
-  </div>
-
-  <div class="card" id="formCard">
-    <strong id="formTitle">New provider</strong>
-    <input type="hidden" id="providerId">
-
-    <!-- Same format as the other profiles: fill in the fields up top, and the read-only Provider
-         Profile card below consolidates it into one glanceable record as you go — nothing
-         derived/computed here, it's a live mirror of what Save will record. -->
-    <div class="profile-panel" style="margin-top:12px;">
-      <div class="profile-heading">Classification</div>
-      <div class="grid5">
-        <div class="field"><label>Name *</label><input id="p_name" required oninput="updateProviderProfile()"></div>
-        <div class="field"><label>Country</label><select id="p_country_id" onchange="updateProviderProfile()"><option value="">—</option></select></div>
-        <div class="field"><label>City</label><input id="p_city" oninput="updateProviderProfile()"></div>
-        <div class="field"><label>Phone</label><input id="p_phone" placeholder="+52 6621234567" oninput="updateProviderProfile()"></div>
-        <div class="field"><label>Contact Name</label><input id="p_contact_name" oninput="updateProviderProfile()"></div>
-      </div>
-      <div class="field"><label>Contact Email</label><input id="p_email" type="email" oninput="updateProviderProfile()"></div>
-      <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com" oninput="updateProviderProfile()"></div>
-      <div class="field">
-        <label>Roles — a provider can be one or both</label>
-        <div class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;">
-          <label class="role-check"><input type="checkbox" value="carrier" class="role-cb" onchange="updateProviderProfile()"> Carrier</label>
-          <label class="role-check"><input type="checkbox" value="customs_broker" class="role-cb" onchange="updateProviderProfile()"> Customs Broker</label>
-        </div>
-      </div>
-      <div class="field"><label>Notes</label><textarea id="p_notes" rows="2" oninput="updateProviderProfile()"></textarea></div>
-    </div>
-
-    <div class="profile-panel">
-      <div class="profile-heading">Provider Profile</div>
-      <div class="profile-grid">
-        <div class="profile-row"><span class="view-label">Name</span><span class="profile-row-value" id="pv_name">—</span></div>
-        <div class="profile-row"><span class="view-label">Country</span><span class="profile-row-value" id="pv_country">—</span></div>
-        <div class="profile-row"><span class="view-label">City</span><span class="profile-row-value" id="pv_city">—</span></div>
-        <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="pv_phone">—</span></div>
-        <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="pv_contact_name">—</span></div>
-        <div class="profile-row"><span class="view-label">Contact Email</span><span class="profile-row-value" id="pv_email">—</span></div>
-        <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="pv_email_cc">—</span></div>
-        <div class="profile-row"><span class="view-label">Roles</span><span class="profile-row-value" id="pv_roles">—</span></div>
-        <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="pv_notes">—</span></div>
-      </div>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-top:8px;align-items:center;">
-      <button class="btn" onclick="saveProvider()">Save</button>
-      <button class="btn secondary" onclick="closeForm()">Cancel</button>
-      <button class="btn danger" id="formDeleteBtn" style="display:none;margin-left:auto;" onclick="deleteProvider(document.getElementById('providerId').value)">Delete</button>
-    </div>
-    <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
-  </div>
-
   <div class="card" id="providerListCard">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <button class="btn" onclick="openNewProviderForm()">+ Add Provider</button>
+    </div>
     <div id="providerRows" class="pkg-table-wrap"></div>
     <div id="emptyMsg" class="empty" style="display:none;">No providers found.</div>
   </div>
 
-  <div class="card" id="ratesCard" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-      <strong id="ratesTitle" style="font-size:16px;"></strong>
-      <div style="display:flex;gap:8px;">
-        <button class="btn secondary small" id="loadRatesBtn" onclick="openRateListPanel()">📋 Cargar precios</button>
-        <button class="btn secondary small" onclick="closeRates()">Close</button>
+  <!-- Just enough to create the record — same two-step pattern as Meat Packers' "+ New Plant":
+       classify it here, then the full Profile (contact, WhatsApp, address, rates) opens right
+       after for everything else. -->
+  <div class="card" id="newProviderCard" style="display:none;">
+    <strong>New provider</strong>
+    <div class="profile-panel" style="margin-top:12px;">
+      <div class="grid3">
+        <div class="field"><label>Name *</label><input id="np_name"></div>
+        <div class="field"><label>Country</label><select id="np_country_id"><option value="">—</option></select></div>
+        <div class="field"><label>City</label><input id="np_city"></div>
       </div>
-    </div>
-    <div class="tab-row">
-      <button class="tab-btn active" id="rateTabBtn_us_freight" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
-      <button class="tab-btn" id="rateTabBtn_mexican_freight" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
-      <button class="tab-btn" id="rateTabBtn_customs" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
-    </div>
-
-    <div class="card" id="rateListCard" style="display:none;margin:14px 0;">
-      <strong id="rateListTitle">Cargar lista de precios</strong>
-      <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;" id="rateListHint"></p>
-      <textarea id="rateListInput" rows="8" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;"></textarea>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <button class="btn" onclick="processRateListText()">Procesar</button>
-        <button class="btn secondary" onclick="closeRateListPanel()">Cancelar</button>
-      </div>
-      <div id="rateListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
-        <table style="table-layout:fixed;width:100%;min-width:600px;">
-          <thead><tr><th id="rateListColHead" style="width:70%;">Pickup location → Border</th><th style="width:30%;">Precio (USD)</th></tr></thead>
-          <tbody id="rateListReviewRows"></tbody>
-        </table>
-        <div style="display:flex;gap:10px;margin-top:12px;">
-          <button class="btn" onclick="applyRateList()">Aplicar todo</button>
-          <button class="btn secondary" onclick="closeRateListPanel()">Cancelar</button>
+      <div class="field">
+        <label>Roles — a provider can be one or both</label>
+        <div class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;">
+          <label class="role-check"><input type="checkbox" value="carrier" class="np-role-cb"> Carrier</label>
+          <label class="role-check"><input type="checkbox" value="customs_broker" class="np-role-cb"> Customs Broker</label>
         </div>
       </div>
-      <div id="rateListMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn" onclick="saveNewProvider()">Create</button>
+      <button class="btn secondary" onclick="closeNewProviderForm()">Cancel</button>
+    </div>
+    <div id="newProviderMsg" style="font-size:12.5px;margin-top:10px;"></div>
+  </div>
+
+  <!-- ============ Unified Provider Profile — same "always-visible header, tabs below" pattern
+       as Meat Packers' plant card: Edit/Delete never depend on which tab happens to be open. ============ -->
+  <div class="card" id="providerCard" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+      <div>
+        <strong id="providerTitle" style="font-size:22px;"></strong>
+        <div id="providerRolesLine" style="margin-top:6px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" onclick="editProviderProfile()">Edit</button>
+        <button class="btn danger" onclick="deleteProvider(currentProviderId)">Delete</button>
+      </div>
     </div>
 
-    <div id="rateTableWrap"></div>
+    <div class="tab-row" style="margin-top:18px;">
+      <button class="tab-btn active" id="provTabBtn_profile" onclick="setProvCardTab('profile')">Profile</button>
+      <button class="tab-btn" id="provTabBtn_rates" onclick="setProvCardTab('rates')">Rates</button>
+    </div>
+
+    <!-- ============ PROFILE ============ -->
+    <div id="provTab_profile">
+      <div id="profileView">
+        <div class="profile-panel">
+          <div class="profile-heading">Contact</div>
+          <div class="profile-grid">
+            <div class="profile-row"><span class="view-label">Location</span><span class="profile-row-value" id="pv_location">—</span></div>
+            <div class="profile-row"><span class="view-label">Address</span><span class="profile-row-value" id="pv_address">—</span></div>
+            <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="pv_contact_name">—</span></div>
+            <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="pv_phone">—</span></div>
+            <div class="profile-row">
+              <span class="view-label">WhatsApp</span>
+              <button class="wa-btn" id="waBtn" style="display:none;width:fit-content;" onclick="openProviderWhatsApp()"><svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>Chat</button>
+              <span class="profile-row-value" id="pv_no_whatsapp">—</span>
+            </div>
+            <div class="profile-row"><span class="view-label">Contact Email</span><span class="profile-row-value" id="pv_email">—</span></div>
+            <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="pv_email_cc">—</span></div>
+          </div>
+        </div>
+        <div class="profile-panel">
+          <div class="profile-heading">Notes</div>
+          <div class="profile-row"><span class="profile-row-value" id="pv_notes">—</span></div>
+        </div>
+      </div>
+
+      <div id="profileEdit" style="display:none;">
+        <div class="profile-panel" style="margin-top:0;">
+          <div class="profile-heading">Classification</div>
+          <div class="grid3">
+            <div class="field"><label>Name *</label><input id="p_name" required></div>
+            <div class="field"><label>Country</label><select id="p_country_id"><option value="">—</option></select></div>
+            <div class="field"><label>City</label><input id="p_city"></div>
+          </div>
+          <div class="field"><label>Address</label><input id="p_address" placeholder="Street address"></div>
+          <div class="field">
+            <label>Roles — a provider can be one or both</label>
+            <div class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;">
+              <label class="role-check"><input type="checkbox" value="carrier" class="role-cb"> Carrier</label>
+              <label class="role-check"><input type="checkbox" value="customs_broker" class="role-cb"> Customs Broker</label>
+            </div>
+          </div>
+        </div>
+        <div class="profile-panel">
+          <div class="profile-heading">Contact</div>
+          <div class="grid2">
+            <div class="field"><label>Contact Name</label><input id="p_contact_name"></div>
+            <div class="field"><label>Contact Email</label><input id="p_email" type="email"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Phone</label>
+              <div style="display:flex;gap:6px;">
+                <select id="p_phone_code" style="width:88px;flex-shrink:0;"></select>
+                <input id="p_phone_number" placeholder="6621234567" style="flex:1;">
+              </div>
+            </div>
+            <div class="field"><label>WhatsApp</label>
+              <div style="display:flex;gap:6px;">
+                <select id="p_whatsapp_code" style="width:88px;flex-shrink:0;"></select>
+                <input id="p_whatsapp_number" placeholder="6621234567" style="flex:1;">
+              </div>
+            </div>
+          </div>
+          <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com"></div>
+        </div>
+        <div class="profile-panel">
+          <div class="profile-heading">Notes</div>
+          <div class="field"><textarea id="p_notes" rows="2"></textarea></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button class="btn" onclick="saveProviderProfile()">Save</button>
+          <button class="btn secondary" onclick="cancelProviderEdit()">Cancel</button>
+        </div>
+      </div>
+      <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+
+    <!-- ============ RATES ============ -->
+    <div id="provTab_rates" style="display:none;">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <button class="btn secondary small" id="loadRatesBtn" onclick="openRateListPanel()">📋 Cargar precios</button>
+      </div>
+      <div class="tab-row">
+        <button class="tab-btn active" id="rateTabBtn_us_freight" data-svc="us_freight" onclick="switchRateTab('us_freight')">US Freight</button>
+        <button class="tab-btn" id="rateTabBtn_mexican_freight" data-svc="mexican_freight" onclick="switchRateTab('mexican_freight')">Mexican Freight</button>
+        <button class="tab-btn" id="rateTabBtn_customs" data-svc="customs" onclick="switchRateTab('customs')">Customs &amp; Fees</button>
+      </div>
+
+      <div class="card" id="rateListCard" style="display:none;margin:14px 0;">
+        <strong id="rateListTitle">Cargar lista de precios</strong>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;" id="rateListHint"></p>
+        <textarea id="rateListInput" rows="8" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;"></textarea>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="processRateListText()">Procesar</button>
+          <button class="btn secondary" onclick="closeRateListPanel()">Cancelar</button>
+        </div>
+        <div id="rateListReviewWrap" style="display:none;margin-top:16px;overflow-x:auto;">
+          <table style="table-layout:fixed;width:100%;min-width:600px;">
+            <thead><tr><th id="rateListColHead" style="width:70%;">Pickup location → Border</th><th style="width:30%;">Precio (USD)</th></tr></thead>
+            <tbody id="rateListReviewRows"></tbody>
+          </table>
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <button class="btn" onclick="applyRateList()">Aplicar todo</button>
+            <button class="btn secondary" onclick="closeRateListPanel()">Cancelar</button>
+          </div>
+        </div>
+        <div id="rateListMsg" style="font-size:12.5px;margin-top:10px;"></div>
+      </div>
+
+      <div id="rateTableWrap"></div>
+    </div>
   </div>
-</div>
 </div>
 
 <script>
@@ -327,6 +391,31 @@ function countryName(countryId){
   return c ? c.name_en : null;
 }
 
+// Same real E.164 calling codes and split/join helpers as plants.html/customers.html — closed
+// dropdown next to Phone/WhatsApp so the code can never be mistyped, same reason those two pages
+// use it. Providers never had this at all before (2026-08-30 fix) — just a placeholder hint typed
+// into one plain text box, which is exactly why the trader couldn't tell if WhatsApp would work.
+const DIAL_CODES = {
+  US: '+1', CA: '+1', MX: '+52', CL: '+56', BR: '+55', GT: '+502', HN: '+504', SV: '+503',
+  NI: '+505', CR: '+506', PA: '+507', CO: '+57', EC: '+593', PE: '+51', BO: '+591', PY: '+595',
+  UY: '+598', AR: '+54', VE: '+58', DO: '+1',
+};
+function populateDialCodeSelect(selectEl){
+  const uniqueCodes = [...new Set(Object.values(DIAL_CODES))].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+  selectEl.innerHTML = uniqueCodes.map(code => `<option value="${code}">${code}</option>`).join('');
+}
+function splitPhone(full){
+  if (!full) return { code: '', number: '' };
+  const codes = [...new Set(Object.values(DIAL_CODES))].sort((a, b) => b.length - a.length);
+  const match = codes.find(c => full.startsWith(c));
+  if (!match) return { code: '', number: full.replace(/^\+/, '') };
+  return { code: match, number: full.slice(match.length).trim() };
+}
+function joinPhone(code, number){
+  if (!number) return null;
+  return code ? `${code} ${number.trim()}` : number.trim();
+}
+
 async function loadEverything(){
   try {
     const [provRes, rolesRes, plantsRes, ratesRes, countriesRes] = await Promise.all([
@@ -340,8 +429,11 @@ async function loadEverything(){
     plantsList = plantsRes.results || [];
     allRates = ratesRes.results || [];
     countries = countriesRes.results || [];
-    const countrySel = document.getElementById('p_country_id');
-    countrySel.innerHTML = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+    const countryOptions = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+    document.getElementById('p_country_id').innerHTML = countryOptions;
+    document.getElementById('np_country_id').innerHTML = countryOptions;
+    populateDialCodeSelect(document.getElementById('p_phone_code'));
+    populateDialCodeSelect(document.getElementById('p_whatsapp_code'));
     providerRolesMap = {};
     (rolesRes.results || []).forEach(r => {
       if (!providerRolesMap[r.provider_id]) providerRolesMap[r.provider_id] = [];
@@ -362,11 +454,11 @@ function setProviderTab(tab){
   providerTab = tab;
   document.getElementById('tabCarriersBtn').classList.toggle('active', tab === 'carriers');
   document.getElementById('tabAgenciesBtn').classList.toggle('active', tab === 'agencies');
-  // Whatever Rates panel was open belongs to whichever provider you clicked before switching —
-  // leaving it open while browsing the other category is exactly the "mixing everything" bug:
-  // you'd see Customs Agencies in the list with a carrier's freight rates still showing below.
-  closeRates();
-  closeForm();
+  // Whichever provider's Profile/Rates was open belongs to whichever provider you clicked before
+  // switching — leaving it open while browsing the other category is exactly the "mixing
+  // everything" bug: you'd see Customs Agencies in the list with a carrier's rates still showing.
+  closeProviderCard();
+  closeNewProviderForm();
   renderProviders();
 }
 
@@ -391,120 +483,184 @@ function renderProviders(){
     return `<div class="pkg-row">
       <div class="pkg-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>
       <div class="pkg-plant-info">
-        <a class="name-link pkg-plant-name" onclick="openRates('${p.id}')">${escapeHtml(p.name || '')}</a>
+        <a class="name-link pkg-plant-name" onclick="selectProvider('${p.id}')">${escapeHtml(p.name || '')}</a>
         <span class="pkg-plant-sub">${escapeHtml(city || '—')}${p.contact_name ? ' · ' + escapeHtml(p.contact_name) : ''}</span>
       </div>
       <div>${roles.map(r => `<span class="role-badge">${ROLE_LABELS[r] || r}</span>`).join('') || ''}</div>
       <div style="margin-left:auto;flex-shrink:0;white-space:nowrap;display:flex;gap:6px;">
-        <button class="btn secondary small" onclick="editProvider('${p.id}')">Edit</button>
+        <button class="btn secondary small" onclick="selectProvider('${p.id}');editProviderProfile();">Edit</button>
       </div>
     </div>`;
   }).join('');
 }
 
-function openForm(){
-  closeRates();
-  document.getElementById('providerSearchCard').style.display = 'none';
+function openNewProviderForm(){
   document.getElementById('providerListCard').style.display = 'none';
-  document.getElementById('formCard').style.display = 'block';
-  document.getElementById('formTitle').textContent = 'New provider';
-  document.getElementById('formDeleteBtn').style.display = 'none';
-  document.getElementById('providerId').value = '';
-  ['p_name','p_country_id','p_city','p_phone','p_contact_name','p_email','p_email_cc','p_notes'].forEach(f => document.getElementById(f).value = '');
-  // Roles are a property of the provider, not the tab — a provider can hold both and show up in
-  // both tabs (see setProviderTab), so this never forces a choice; it's just a helpful default.
-  // Each tab now maps to exactly one role (freight_forwarder removed 2026-08-30), so pre-checking
-  // whichever role matches the tab you opened the form from is never a guess.
+  document.getElementById('newProviderCard').style.display = 'block';
+  document.getElementById('np_name').value = '';
+  document.getElementById('np_country_id').value = '';
+  document.getElementById('np_city').value = '';
+  // Same reasoning as the old pre-check: each tab now maps to exactly one role
+  // (freight_forwarder removed 2026-08-30), so defaulting to it is never a guess — just a
+  // starting point, never forced (a provider can still hold both).
   const roleForTab = providerTab === 'agencies' ? 'customs_broker' : 'carrier';
-  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = (cb.value === roleForTab));
-  document.getElementById('formMsg').textContent = '';
-  document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
-  updateProviderProfile();
+  document.querySelectorAll('.np-role-cb').forEach(cb => cb.checked = (cb.value === roleForTab));
+  document.getElementById('newProviderMsg').textContent = '';
+  document.getElementById('newProviderCard').scrollIntoView({behavior:'smooth'});
 }
 
-// Same format as the other profile cards: a live, read-only mirror of every field entered above —
-// nothing derived/computed here, just a consolidated glance at what Save will record.
-function updateProviderProfile(){
-  const setV = (id, val) => { document.getElementById(id).textContent = val || '—'; };
-  setV('pv_name', document.getElementById('p_name').value);
-  const countrySel = document.getElementById('p_country_id');
-  setV('pv_country', countrySel.options[countrySel.selectedIndex] ? countrySel.options[countrySel.selectedIndex].textContent : '');
-  setV('pv_city', document.getElementById('p_city').value);
-  setV('pv_phone', document.getElementById('p_phone').value);
-  setV('pv_contact_name', document.getElementById('p_contact_name').value);
-  setV('pv_email', document.getElementById('p_email').value);
-  setV('pv_email_cc', document.getElementById('p_email_cc').value);
-  const checkedRoles = [...document.querySelectorAll('.role-cb:checked')].map(cb => ROLE_LABELS[cb.value] || cb.value);
-  setV('pv_roles', checkedRoles.join(', '));
-  setV('pv_notes', document.getElementById('p_notes').value);
+function closeNewProviderForm(){
+  document.getElementById('newProviderCard').style.display = 'none';
+  document.getElementById('providerListCard').style.display = 'block';
 }
 
-function editProvider(id){
+async function saveNewProvider(){
+  const name = document.getElementById('np_name').value;
+  if (!name){
+    document.getElementById('newProviderMsg').textContent = 'Name is required.';
+    return;
+  }
+  const payload = {
+    name,
+    country_id: document.getElementById('np_country_id').value || null,
+    city: document.getElementById('np_city').value || null,
+  };
+  const idempotencyKey = `providers-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
+  let created;
+  try {
+    created = await callApi('providers-create', { actor: currentActor(), ...payload, idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
+      document.getElementById('newProviderMsg').innerHTML = `
+        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
+          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name)}</strong>` : ''}
+          <div style="margin-top:8px;"><button type="button" class="btn small" onclick="saveNewProvider(true)">Create anyway — this is genuinely different</button></div>
+        </div>`;
+      return;
+    }
+    document.getElementById('newProviderMsg').textContent = 'Error: ' + e.message;
+    return;
+  }
+  const providerId = created.provider.id;
+  const selectedRoles = Array.from(document.querySelectorAll('.np-role-cb:checked')).map(cb => cb.value);
+  for (const role of selectedRoles) await callApi('provider-roles-assign', { actor: currentActor(), provider_id: providerId, role });
+  closeNewProviderForm();
+  await loadEverything();
+  // Straight into editing — a fresh provider still needs phone/WhatsApp/address/email filled in,
+  // exactly what Classification alone never asked for.
+  selectProvider(providerId);
+  editProviderProfile();
+}
+
+// ============ Unified Provider Profile (header always visible, Profile/Rates tabs below) ============
+
+function closeProviderCard(){
+  document.getElementById('providerCard').style.display = 'none';
+  currentProviderId = null;
+}
+
+function renderProviderCardHeader(p){
+  document.getElementById('providerTitle').textContent = p.name || '';
+  const roles = providerRolesMap[p.id] || [];
+  document.getElementById('providerRolesLine').innerHTML = roles.map(r => `<span class="role-badge">${ROLE_LABELS[r] || r}</span>`).join('') || '<span class="profile-row-value" style="color:var(--ink-soft);">No roles set</span>';
+}
+
+// Same read-only view pattern as plants.html's Contact card — a WhatsApp Chat button only when a
+// real number is on file, falling back to the plain phone (same "waNumber = whatsapp || phone"
+// rule plants.html uses), never a dead button.
+function renderProviderProfileView(p){
+  const loc = [p.city, countryName(p.country_id)].filter(Boolean).join(', ');
+  document.getElementById('pv_location').textContent = loc || '—';
+  document.getElementById('pv_address').textContent = p.address || '—';
+  document.getElementById('pv_contact_name').textContent = p.contact_name || '—';
+  document.getElementById('pv_phone').textContent = p.phone || '—';
+  const waNumber = p.whatsapp || p.phone;
+  const waBtn = document.getElementById('waBtn');
+  if (waNumber){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = waNumber; }
+  else { waBtn.style.display = 'none'; waBtn.dataset.number = ''; }
+  document.getElementById('pv_no_whatsapp').style.display = waNumber ? 'none' : 'inline';
+  document.getElementById('pv_email').innerHTML = p.email ? `<a href="mailto:${escapeHtml(p.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.email)}</a>` : '—';
+  document.getElementById('pv_email_cc').textContent = p.email_cc || '—';
+  document.getElementById('pv_notes').textContent = p.notes || '—';
+}
+
+function openProviderWhatsApp(){
+  const raw = document.getElementById('waBtn').dataset.number || '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return;
+  window.open('https://wa.me/' + digits, '_blank');
+}
+
+let providerCardTab = 'profile';
+function setProvCardTab(tab){
+  providerCardTab = tab;
+  document.getElementById('provTabBtn_profile').classList.toggle('active', tab === 'profile');
+  document.getElementById('provTabBtn_rates').classList.toggle('active', tab === 'rates');
+  document.getElementById('provTab_profile').style.display = tab === 'profile' ? 'block' : 'none';
+  document.getElementById('provTab_rates').style.display = tab === 'rates' ? 'block' : 'none';
+  if (tab === 'rates') openProviderRates(currentProviderId);
+}
+
+function selectProvider(id){
   const p = providers.find(x => x.id === id);
   if (!p) return;
-  document.getElementById('providerSearchCard').style.display = 'none';
+  currentProviderId = id;
   document.getElementById('providerListCard').style.display = 'none';
-  document.getElementById('formCard').style.display = 'block';
-  document.getElementById('formTitle').textContent = 'Edit provider';
-  document.getElementById('formDeleteBtn').style.display = 'inline-block';
-  document.getElementById('providerId').value = p.id;
+  document.getElementById('newProviderCard').style.display = 'none';
+  document.getElementById('providerCard').style.display = 'block';
+  renderProviderCardHeader(p);
+  document.getElementById('profileView').style.display = 'block';
+  document.getElementById('profileEdit').style.display = 'none';
+  renderProviderProfileView(p);
+  document.getElementById('formMsg').textContent = '';
+  // Rates is the daily-use tab (same reasoning as Meat Packers defaulting to Products & Prices) —
+  // Profile is set-once information, Rates is what actually gets updated often.
+  setProvCardTab('rates');
+  document.getElementById('providerCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// Edit lives in the always-visible header, same pattern as Meat Packers' plant profile — clicking
+// it from the Rates tab jumps to Profile and enters edit mode in one click.
+function editProviderProfile(){
+  const p = providers.find(x => x.id === currentProviderId);
+  if (!p) return;
+  setProvCardTab('profile');
   document.getElementById('p_name').value = p.name || '';
   document.getElementById('p_country_id').value = p.country_id || '';
   document.getElementById('p_city').value = p.city || '';
-  document.getElementById('p_phone').value = p.phone || '';
+  document.getElementById('p_address').value = p.address || '';
   document.getElementById('p_contact_name').value = p.contact_name || '';
   document.getElementById('p_email').value = p.email || '';
   document.getElementById('p_email_cc').value = p.email_cc || '';
   document.getElementById('p_notes').value = p.notes || '';
-  const roles = providerRolesMap[id] || [];
-  document.querySelectorAll('.role-cb').forEach(cb => cb.checked = roles.includes(cb.value));
+  const pPhone = splitPhone(p.phone);
+  document.getElementById('p_phone_code').value = pPhone.code;
+  document.getElementById('p_phone_number').value = pPhone.number;
+  const pWa = splitPhone(p.whatsapp);
+  document.getElementById('p_whatsapp_code').value = pWa.code;
+  document.getElementById('p_whatsapp_number').value = pWa.number;
+  const roles = providerRolesMap[currentProviderId] || [];
+  document.querySelectorAll('#profileEdit .role-cb').forEach(cb => cb.checked = roles.includes(cb.value));
   document.getElementById('formMsg').textContent = '';
-  document.getElementById('formCard').scrollIntoView({behavior:'smooth'});
-  updateProviderProfile();
+  document.getElementById('profileView').style.display = 'none';
+  document.getElementById('profileEdit').style.display = 'block';
 }
 
-function closeForm(){
-  document.getElementById('formCard').style.display = 'none';
-  document.getElementById('providerSearchCard').style.display = 'block';
-  document.getElementById('providerListCard').style.display = 'block';
+function cancelProviderEdit(){
+  document.getElementById('profileEdit').style.display = 'none';
+  document.getElementById('profileView').style.display = 'block';
 }
 
-// Calls providers-create/providers-update; on a real possible-duplicate response, shows what
-// already exists and a real "Save anyway" action — never a silent override, never a generic
-// OK/Cancel confirm(). Returns the API result on success, or null (already shown the message) on
-// a duplicate that hasn't been confirmed yet or a hard error.
-async function trySaveProvider(fn, payload){
-  try {
-    // Deterministic key — a genuine double-click/double-fire of this exact same save within the
-    // same minute reuses the same key, so the API returns the row it already created instead of a
-    // second one. A 409 possible_duplicate never inserts anything, so an override retry still
-    // creates normally even though it computes the same key.
-    const idempotencyKey = payload.idempotency_key || `${fn}|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
-    return await callApi(fn, { ...payload, idempotency_key: idempotencyKey });
-  } catch (e) {
-    if (e.data && e.data.error === 'possible_duplicate'){
-      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
-      document.getElementById('formMsg').innerHTML = `
-        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
-          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name)}</strong>` : ''}
-          <div style="margin-top:8px;">
-            <button type="button" class="btn small" onclick="saveProvider(true)">Save anyway — this is genuinely different</button>
-          </div>
-        </div>`;
-      return null;
-    }
-    document.getElementById('formMsg').textContent = 'Error: ' + e.message;
-    return null;
-  }
-}
-
-async function saveProvider(forceOverride){
-  const id = document.getElementById('providerId').value;
+async function saveProviderProfile(forceOverride){
+  const id = currentProviderId;
   const payload = {
     name: document.getElementById('p_name').value,
     country_id: document.getElementById('p_country_id').value || null,
     city: document.getElementById('p_city').value || null,
-    phone: document.getElementById('p_phone').value || null,
+    address: document.getElementById('p_address').value || null,
+    phone: joinPhone(document.getElementById('p_phone_code').value, document.getElementById('p_phone_number').value),
+    whatsapp: joinPhone(document.getElementById('p_whatsapp_code').value, document.getElementById('p_whatsapp_number').value),
     contact_name: document.getElementById('p_contact_name').value || null,
     email: document.getElementById('p_email').value || null,
     email_cc: document.getElementById('p_email_cc').value || null,
@@ -514,31 +670,36 @@ async function saveProvider(forceOverride){
     document.getElementById('formMsg').textContent = 'Name is required.';
     return;
   }
-  let providerId = id;
   try {
-    if (id){
-      const updated = await trySaveProvider('providers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride });
-      if (!updated) return;
-    } else {
-      const idempotencyKey = `providers-create|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
-      const created = await trySaveProvider('providers-create', { actor: currentActor(), ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
-      if (!created) return;
-      providerId = created.provider.id;
-    }
-    // Diff against the current roles instead of production's old delete-all-then-reinsert — fewer
-    // writes, and a role that was never touched never gets a spurious delete+recreate.
-    const selectedRoles = Array.from(document.querySelectorAll('.role-cb:checked')).map(cb => cb.value);
-    const currentRoles = providerRolesMap[providerId] || [];
+    const idempotencyKey = `providers-update|${id}|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
+    const updated = await callApi('providers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
+    // Diff against the current roles instead of delete-all-then-reinsert — fewer writes, and a
+    // role that was never touched never gets a spurious delete+recreate.
+    const selectedRoles = Array.from(document.querySelectorAll('#profileEdit .role-cb:checked')).map(cb => cb.value);
+    const currentRoles = providerRolesMap[id] || [];
     const toAdd = selectedRoles.filter(r => !currentRoles.includes(r));
     const toRemove = currentRoles.filter(r => !selectedRoles.includes(r));
-    for (const role of toAdd) await callApi('provider-roles-assign', { actor: currentActor(), provider_id: providerId, role });
-    for (const role of toRemove) await callApi('provider-roles-remove', { actor: currentActor(), provider_id: providerId, role });
+    for (const role of toAdd) await callApi('provider-roles-assign', { actor: currentActor(), provider_id: id, role });
+    for (const role of toRemove) await callApi('provider-roles-remove', { actor: currentActor(), provider_id: id, role });
   } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.exact_match || (e.data.near_duplicate_names && e.data.near_duplicate_names[0]);
+      document.getElementById('formMsg').innerHTML = `
+        <div style="background:#FFF4E5;border:1px solid #F0C36D;border-radius:8px;padding:10px 12px;">
+          ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name)}</strong>` : ''}
+          <div style="margin-top:8px;"><button type="button" class="btn small" onclick="saveProviderProfile(true)">Save anyway — this is genuinely different</button></div>
+        </div>`;
+      return;
+    }
     document.getElementById('formMsg').textContent = 'Error: ' + e.message;
     return;
   }
-  closeForm();
   await loadEverything();
+  const p = providers.find(x => x.id === id);
+  currentProviderId = id;
+  renderProviderCardHeader(p);
+  renderProviderProfileView(p);
+  cancelProviderEdit();
 }
 
 async function deleteProvider(id){
@@ -549,8 +710,7 @@ async function deleteProvider(id){
     alert('Error: ' + e.message);
     return;
   }
-  if (currentProviderId === id) closeRates();
-  closeForm();
+  closeProviderCard();
   await loadEverything();
 }
 
@@ -568,31 +728,20 @@ function ratesTabsForProvider(providerId){
   };
 }
 
-function openRates(providerId){
-  closeForm();
-  currentProviderId = providerId;
+function openProviderRates(providerId){
   const visible = ratesTabsForProvider(providerId);
   ['us_freight', 'mexican_freight', 'customs'].forEach(svc => {
     document.getElementById('rateTabBtn_' + svc).style.display = visible[svc] ? 'inline-block' : 'none';
   });
   currentRateTab = visible.us_freight ? 'us_freight' : (visible.mexican_freight ? 'mexican_freight' : 'customs');
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === currentRateTab));
+  document.querySelectorAll('.tab-btn[data-svc]').forEach(b => b.classList.toggle('active', b.dataset.svc === currentRateTab));
   document.getElementById('loadRatesBtn').style.display = 'inline-block';
-  const p = providers.find(x => x.id === providerId);
-  document.getElementById('ratesTitle').textContent = (p ? p.name : '') + ' — Rates';
-  document.getElementById('ratesCard').style.display = 'block';
   renderRateTable();
-  document.getElementById('ratesCard').scrollIntoView({behavior:'smooth'});
-}
-
-function closeRates(){
-  document.getElementById('ratesCard').style.display = 'none';
-  currentProviderId = null;
 }
 
 function switchRateTab(svc){
   currentRateTab = svc;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.svc === svc));
+  document.querySelectorAll('.tab-btn[data-svc]').forEach(b => b.classList.toggle('active', b.dataset.svc === svc));
   closeRateListPanel();
   document.getElementById('loadRatesBtn').style.display = 'inline-block';
   renderRateTable();
