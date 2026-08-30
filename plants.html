@@ -2168,19 +2168,27 @@ async function processPriceListText(){
   document.getElementById('priceListMsg').textContent = 'Processing…';
 
   // One choice for the whole list, always shown — pre-set from the list's own wording when it
-  // says something, otherwise left for the trader to pick. Sets this plant's current default on
-  // Apply; re-picked fresh every time a new list is processed, never assumed from last time.
-  detectedDocsIncluded = detectDocsNote(text);
+  // says something (each offer is read individually, e.g. Seaboard's own text could in principle
+  // say "no docs" on a one-off list and that's respected). When a list says nothing at all
+  // (confirmed real case: a Sanderson list with no mention of docs), falls back to THIS PLANT's
+  // own standing default (plants.docs_included, set the first time it was ever confirmed for this
+  // plant) — not a blanket guess. Only a plant that has never had a docs default confirmed at all
+  // falls back further, to No Docs (the real-world default for most plants — see
+  // feedback_docs_no_docs_business_rule). Seaboard is the one plant whose standing default is
+  // Docs Included (confirmed by the user 2026-08-30) — that lives entirely in its own
+  // plants.docs_included value, never a hardcoded plant name/id here.
+  // Never blocks Apply All anymore; still overridable per list via the dropdown below.
+  const detectedFromText = detectDocsNote(text);
+  const plantDefault = plants.find(p => p.id === currentPlantId);
+  const plantOwnDefault = plantDefault && plantDefault.docs_included != null ? plantDefault.docs_included : false;
+  detectedDocsIncluded = detectedFromText === null ? plantOwnDefault : detectedFromText;
   const docsNoteEl = document.getElementById('priceListDocsNote');
   docsNoteEl.style.display = 'block';
   docsNoteEl.style.background = 'transparent';
   docsNoteEl.style.color = 'inherit';
   docsNoteEl.style.padding = '0';
-  // Required, not optional — applyPriceList() refuses to save anything while this is still
-  // unset, so the orange border matches every other required-but-unfilled field on this screen.
-  docsNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Docs: *
-    <select id="priceListDocsOverride" style="margin-left:6px;padding:5px 8px;border:1.5px solid ${detectedDocsIncluded === null ? '#e0a030' : 'var(--line)'};border-radius:5px;font-size:12.5px;" onchange="detectedDocsIncluded=this.value===''?null:this.value==='true'; this.style.borderColor=this.value===''?'#e0a030':'var(--line)';">
-      <option value="" ${detectedDocsIncluded === null ? 'selected' : ''}>—</option>
+  docsNoteEl.innerHTML = `<label style="font-weight:600;font-size:13px;">Docs:
+    <select id="priceListDocsOverride" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="detectedDocsIncluded=this.value==='true';">
       <option value="false" ${detectedDocsIncluded === false ? 'selected' : ''}>No Docs</option>
       <option value="true" ${detectedDocsIncluded === true ? 'selected' : ''}>Docs Included</option>
     </select>
@@ -2513,12 +2521,8 @@ function renderPriceListReview(){
 
 async function applyPriceList(){
   // Whether this whole list is Docs or No Docs directly drives the inspection cost in Quotes —
-  // never apply a single price without that decided, rather than silently defaulting to
-  // whatever the plant's default happened to be before.
-  if (detectedDocsIncluded === null){
-    document.getElementById('priceListMsg').textContent = 'Select Docs or No Docs above before applying.';
-    return;
-  }
+  // always has a real value by the time Apply All is clickable (processPriceListText defaults it
+  // to No Docs the moment nothing in the list's own wording says otherwise), never null here.
   // Fixed once, right here — never re-read currentPlantId later in this function. The save loop
   // below awaits a network round-trip per row, and nothing on screen stops the trader from
   // clicking a different plant in the list while that's still running; currentPlantId is a plain
@@ -2584,9 +2588,7 @@ async function applyPriceList(){
 
   // Save the plant-level docs default once per apply, not once per row — it's the same fact for
   // every product on this plant's sheet.
-  if (detectedDocsIncluded !== null){
-    try { await callApi('plants-update', { actor: currentActor(), id: applyPlantId, docs_included: detectedDocsIncluded }); } catch (e) {}
-  }
+  try { await callApi('plants-update', { actor: currentActor(), id: applyPlantId, docs_included: detectedDocsIncluded }); } catch (e) {}
 
   // Any abbreviation the trader taught mid-review (see teachTermAlias) only lived in memory until
   // now — this is the one confirm point the whole screen funnels through, so it's persisted here,
