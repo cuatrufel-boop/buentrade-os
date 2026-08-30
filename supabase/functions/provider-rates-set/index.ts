@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
 
     const {
       actor, provider_id, plant_id = null, service_type,
-      origin = "", destination = "", rate, currency_id = null, notes = null,
+      origin = "", destination = "", rate, currency_id = null, notes = null, location_id = null,
     } = body;
 
     if (!VALID_SERVICE_TYPES.includes(service_type)) {
@@ -49,14 +49,15 @@ Deno.serve(async (req) => {
 
     const providerRate = await sql.begin(async (tx) => {
       const [providerRate] = await tx`
-        insert into provider_rates (provider_id, plant_id, service_type, origin, destination, rate, currency, currency_id, notes)
-        values (${provider_id}, ${plant_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currencyCode ?? 'USD'}, ${currency_id}, ${notes})
+        insert into provider_rates (provider_id, plant_id, service_type, origin, destination, rate, currency, currency_id, notes, location_id)
+        values (${provider_id}, ${plant_id}, ${service_type}, ${origin}, ${destination}, ${rate}, ${currencyCode ?? 'USD'}, ${currency_id}, ${notes}, ${location_id})
         on conflict (provider_id, service_type, origin, destination) do update set
           rate = excluded.rate,
           currency = case when excluded.currency_id is not null then excluded.currency else provider_rates.currency end,
           currency_id = coalesce(excluded.currency_id, provider_rates.currency_id),
           plant_id = coalesce(excluded.plant_id, provider_rates.plant_id),
           notes = excluded.notes,
+          location_id = coalesce(excluded.location_id, provider_rates.location_id),
           updated_at = now()
         returning *
       `;

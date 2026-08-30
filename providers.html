@@ -409,35 +409,13 @@ auth.onAuthStateChanged(user => {
 let providers = [];
 let providerRolesMap = {}; // provider_id -> [role,...]
 let allRates = [];
-// The real, closed catalog of cities doesn't exist as its own table yet (see
-// project_locations_catalog_next_phase) — until it does, this is the practical stand-in: every
-// real city already on file ANYWHERE (any carrier's own rate origins, plus every plant's own
-// pickup locations across every plant), grouped by state. Confirmed real need 2026-08-30: a
-// carrier that quotes one blanket rate per ORIGIN STATE ("IA to McAllen/Laredo - $5200") must have
-// that price applied to every real city already known in that state, not saved as a single
-// literal "IA" row — the whole point being that a future quote for ANY of those cities can find a
-// real freight number, not just the one specific city a carrier happened to name by itself.
-let knownCitiesByState = {};
-async function loadKnownCities(){
-  let plantLocRes;
-  try { plantLocRes = await callApi('plant-locations-search', {}); } catch (e) { plantLocRes = { results: [] }; }
-  const fromPlants = (plantLocRes.results || []).map(l => l.location_name);
-  const fromRates = allRates.filter(r => r.service_type === 'us_freight' && r.origin).map(r => r.origin);
-  const seen = new Map(); // normalized "city|state" -> real display string
-  [...fromPlants, ...fromRates].forEach(name => {
-    const m = (name || '').trim().match(/^(.+?)[,\s]+([A-Za-z]{2})$/);
-    if (!m) return; // not in "City ST" shape (e.g. a bare state code from an earlier expansion) — not a real city on its own
-    const city = m[1].trim();
-    const state = m[2].toUpperCase();
-    const key = `${city.toLowerCase()}|${state}`;
-    if (!seen.has(key)) seen.set(key, `${titleCaseWords(city)} ${state}`);
-  });
-  knownCitiesByState = {};
-  for (const display of seen.values()){
-    const state = display.slice(-2);
-    (knownCitiesByState[state] = knownCitiesByState[state] || []).push(display);
-  }
-  Object.values(knownCitiesByState).forEach(list => list.sort());
+let allLocations = [];
+// A per-STATE carrier quote ("IA to McAllen/Laredo - $5200") expands to every real catalog city in
+// that state (see 20260830040000_create_locations_catalog.sql and rowsForUsFreightCatalog above) —
+// built straight from allLocations (the real table, fetched fresh in loadEverything), grouped by
+// state, so it's always the SAME single source of truth the US Freight tab itself renders from.
+function knownCitiesForState(state){
+  return allLocations.filter(l => l.state === state).map(l => `${l.city} ${l.state}`).sort();
 }
 let currentProviderId = null;
 let currentRateTab = 'us_freight';
@@ -484,15 +462,20 @@ function joinPhone(code, number){
 
 async function loadEverything(){
   try {
-    const [provRes, rolesRes, ratesRes, countriesRes] = await Promise.all([
+    const [provRes, rolesRes, ratesRes, countriesRes, locationsRes] = await Promise.all([
       callApi('providers-search', {}),
       callApi('provider-roles-search', {}),
       callApi('provider-rates-search', {}),
       callApi('countries-search', {}),
+      callApi('locations-search', {}),
     ]);
     providers = provRes.results || [];
     allRates = ratesRes.results || [];
     countries = countriesRes.results || [];
+    // The real, closed city catalog (see 20260830040000_create_locations_catalog.sql) — every
+    // carrier's US Freight tab is built from this SAME list, not from whatever subset of cities
+    // this one carrier happens to already have a price for, so a gap is visible instead of absent.
+    allLocations = locationsRes.results || [];
     const countryOptions = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
     document.getElementById('p_country_id').innerHTML = countryOptions;
     document.getElementById('np_country_id').innerHTML = countryOptions;
@@ -887,11 +870,11 @@ async function openRateListPanel(){
   document.getElementById('rateListMsg').textContent = '';
   rateListRows = [];
   document.getElementById('rateListCard').style.display = 'flex';
-  // The "apply the state's rate to every known real city in it" step (see processRateListText)
-  // needs a live, current picture of every real city already on file anywhere in the system —
-  // fetched fresh each time this opens rather than once at page load, so a location someone just
-  // added a minute ago (in this tab or another) is never missed.
-  await loadKnownCities();
+  // The "apply the state's rate to every real catalog city in it" step (processRateListText) needs
+  // a live, current picture of the real locations table — refetched here rather than trusting
+  // whatever loadEverything() had at page load, so a city someone just added a minute ago (this tab
+  // or another) is never missed.
+  try { allLocations = (await callApi('locations-search', {})).results || allLocations; } catch (e) {}
 }
 
 function closeRateListPanel(){
@@ -1027,7 +1010,7 @@ function processRateListText(){
     // it back to the real origin/destination column names only once, right before saving.
     const place = isUs ? parsed.origin : parsed.destination;
     if (parsed.isState){
-      const cities = knownCitiesByState[place] || [];
+      const cities = knownCitiesForState(place);
       if (cities.length){
         cities.forEach(city => rateListRows.push({ raw: line, place: city, price: parsed.price, notes: parsed.notes }));
       } else {
@@ -1149,6 +1132,11 @@ async function applyRateList(){
       destination: isUs ? '' : row.place,
       rate: row.price,
       notes: row.notes || null,
+      // Every US Freight row here came straight from a real catalog city (either matched directly
+      // or expanded from a per-state quote against the same catalog) — always links to it, so this
+      // load lands on the exact same rows the US Freight tab itself reads from, never a parallel
+      // free-text copy of the same place.
+      location_id: isUs ? (allLocations.find(l => row.place === `${l.city} ${l.state}`) || {}).id || null : null,
     };
     // Same lane (provider+service+origin+destination) can already exist from a prior load —
     // provider-rates-set upserts on that exact key, updating the price instead of erroring (see
@@ -1203,16 +1191,33 @@ function renderRateTable(){
     return;
   }
 
+  const isUs = currentRateTab === 'us_freight';
+
+  // US Freight is built from the REAL, closed city catalog (locations table) — every carrier shows
+  // the exact same 24 cities, priced or "Pending", never just whatever subset this one carrier
+  // happens to have quoted. Confirmed real requirement 2026-08-30: "TODOS los estados TODAS las
+  // ciudades deben estar en TODOS los carriers" — this is what closed the gap that let Key Global
+  // quietly cover only 13 of EBI's 21 cities with nothing anywhere showing the other 8 were missing.
+  if (isUs){
+    addSlot.innerHTML = `<button class="btn secondary small" onclick="startAddLocation()">+ Add New City to Catalog</button>`;
+    wrap.innerHTML = `<div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
+    const catalogRows = allLocations.map(loc => {
+      const rate = allRates.find(r => r.provider_id === currentProviderId && r.service_type === 'us_freight' && r.location_id === loc.id);
+      return { locationId: loc.id, place: `${loc.city} ${loc.state}`, rateId: rate ? rate.id : null, rate: rate ? Number(rate.rate) : null, notes: rate ? rate.notes : null };
+    });
+    renderRateRows(catalogRows);
+    return;
+  }
+
   // Fichas, same pattern as the catalog's own product list — a route + its price, an Edit button
   // that opens a small inline form (never an always-editable cell), and no Plant picker: a rate is
   // never plant-specific (confirmed 2026-08-30 — "sin nombre de planta... dos o mas plantas pueden
   // tener locations en la misma ciudad", one real-world city has one real freight number, shared by
   // whichever plants happen to be there), so the field this used to set is now display-only dead
   // weight this screen doesn't ask for anymore.
-  const isUs = currentRateTab === 'us_freight';
-  addSlot.innerHTML = `<button class="btn secondary small" onclick="startAddRate('${isUs ? 'us_freight' : 'mexican_freight'}')">+ Add ${isUs ? 'Origin' : 'Destination'}</button>`;
+  addSlot.innerHTML = `<button class="btn secondary small" onclick="startAddRate('mexican_freight')">+ Add Destination</button>`;
   wrap.innerHTML = `<div class="pkg-table-wrap" id="rateRowsWrap"></div>`;
-  renderRateRows(sortRatesByPlace(rows, isUs), isUs);
+  renderRateRows(sortRatesByPlace(rows, false).map(r => ({ locationId: null, place: r.destination, rateId: r.id, rate: Number(r.rate), notes: r.notes })));
 }
 
 // Grouped by state first ("IA together, TX together"), city alphabetical within each state — a
@@ -1235,83 +1240,163 @@ function sortRatesByPlace(rows, isUs){
   });
 }
 
-function renderRateRows(rows, isUs){
+// Every row is now {locationId, place, rateId, rate, notes} regardless of tab — locationId is set
+// (and place is fixed, non-editable text) for US Freight rows, since those are always a real
+// catalog row; null for Mexican Freight, which stays free-text since it has no catalog yet.
+// rate === null means "this carrier has no price for this real place yet" (US Freight only, since
+// Mexican/Customs rows only ever exist once someone has actually added one).
+function renderRateRows(rows){
   const listWrap = document.getElementById('rateRowsWrap');
-  const newRowHtml = editingRateId === 'NEW' ? renderRateEditFicha({ id: 'NEW', origin: '', destination: '', rate: '' }, isUs) : '';
+  const isUs = currentRateTab === 'us_freight';
+  const newRowHtml = editingRateKey === 'NEW' ? renderRateEditFicha({ locationId: null, place: '', rateId: null, rate: '' })
+    : editingRateKey === 'NEW_LOCATION' ? renderNewLocationFicha() : '';
   if (!rows.length && !newRowHtml){
     listWrap.innerHTML = '<div class="empty">No rates yet.</div>';
     return;
   }
-  listWrap.innerHTML = newRowHtml + rows.map(r => (editingRateId === r.id ? renderRateEditFicha(r, isUs) : renderRateViewFicha(r, isUs))).join('');
+  listWrap.innerHTML = newRowHtml + rows.map(r => {
+    const key = r.locationId || r.rateId;
+    return editingRateKey === key ? renderRateEditFicha(r) : renderRateViewFicha(r, isUs);
+  }).join('');
 }
 
 function renderRateViewFicha(r, isUs){
-  const place = isUs ? (r.origin || '—') : (r.destination || '—');
-  const label = isUs ? `${place} → Border` : `Border → ${place}`;
-  const rateNum = Number(r.rate) || 0;
-  return `<div class="pkg-row" id="rateRow_${r.id}">
+  const label = isUs ? `${r.place || '—'} → Border` : `Border → ${r.place || '—'}`;
+  const key = r.locationId || r.rateId;
+  const pending = r.rate == null;
+  if (pending){
+    return `<div class="pkg-row">
+      <div class="pkg-plant-avatar">⚠️</div>
+      <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span><span class="pkg-plant-sub" style="color:var(--red);">Pending — no price yet</span></div>
+      <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${key}')">Add Price</button>
+    </div>`;
+  }
+  return `<div class="pkg-row">
     <div class="pkg-plant-avatar">🚚</div>
     <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span>${r.notes ? `<span class="pkg-plant-sub">${escapeHtml(r.notes)}</span>` : ''}</div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;flex-shrink:0;">$${rateNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-    <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${r.id}')">Edit</button>
-    <button class="btn danger" style="padding:5px 8px;font-size:12px;flex-shrink:0;" onclick="deleteRate('${r.id}')">×</button>
+    <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;flex-shrink:0;">$${Number(r.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+    <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="editRateInline('${key}')">Edit</button>
+    ${r.rateId ? `<button class="btn danger" style="padding:5px 8px;font-size:12px;flex-shrink:0;" onclick="deleteRate('${r.rateId}')">×</button>` : ''}
   </div>`;
 }
 
-function renderRateEditFicha(r, isUs){
-  const place = isUs ? r.origin : r.destination;
-  return `<div class="pkg-row" id="rateRow_${r.id}" style="flex-wrap:wrap;">
-    <input id="rateEdit_place_${r.id}" value="${escapeHtml(place || '')}" placeholder="${isUs ? 'Origin city, state' : 'Destination'}" style="flex:1;min-width:160px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
-    <input id="rateEdit_rate_${r.id}" type="number" step="0.01" value="${r.rate === '' ? '' : r.rate}" placeholder="Rate (USD)" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
-    <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="saveRateInline('${r.id}')">Save</button>
+function renderRateEditFicha(r){
+  const isUs = currentRateTab === 'us_freight';
+  const key = r.locationId || r.rateId || 'NEW';
+  // A US Freight row's place is a real, fixed catalog entry — never retyped here, only its price.
+  // Mexican Freight (no catalog yet) keeps the free-text place field.
+  const placeField = (isUs && r.locationId)
+    ? `<div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(r.place)}</span></div>`
+    : `<input id="rateEdit_place_${key}" value="${escapeHtml(r.place || '')}" placeholder="Destination" style="flex:1;min-width:160px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">`;
+  return `<div class="pkg-row" style="flex-wrap:wrap;">
+    ${placeField}
+    <input id="rateEdit_rate_${key}" type="number" step="0.01" value="${r.rate == null ? '' : r.rate}" placeholder="Rate (USD)" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
+    <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="saveRateInline('${key}', ${r.locationId ? `'${r.locationId}'` : 'null'})">Save</button>
     <button class="btn secondary" style="padding:6px 12px;font-size:12.5px;" onclick="cancelRateEdit()">Cancel</button>
   </div>`;
 }
 
-let editingRateId = null;
+let editingRateKey = null;
 
-function editRateInline(id){
-  editingRateId = id;
+function editRateInline(key){
+  editingRateKey = key;
   renderRateTable();
 }
 
+// US Freight no longer needs a generic "+ Add Origin" — every real city already has a row, priced
+// or pending. Only Mexican Freight (no catalog yet) still adds a genuinely new destination this way.
 function startAddRate(serviceType){
-  editingRateId = 'NEW';
+  editingRateKey = 'NEW';
   currentRateTab = serviceType;
   renderRateTable();
 }
 
 function cancelRateEdit(){
-  editingRateId = null;
+  editingRateKey = null;
   renderRateTable();
 }
 
-async function saveRateInline(id){
+async function saveRateInline(key, locationId){
   const isUs = currentRateTab === 'us_freight';
-  const placeInput = document.getElementById(`rateEdit_place_${id}`);
-  const rateInput = document.getElementById(`rateEdit_rate_${id}`);
-  const place = placeInput.value.trim();
+  const rateInput = document.getElementById(`rateEdit_rate_${key}`);
   const rate = parseFloat(rateInput.value) || 0;
-  if (!place){ placeInput.style.borderColor = 'var(--red)'; return; }
-  const field = isUs ? 'origin' : 'destination';
+  const placeInput = document.getElementById(`rateEdit_place_${key}`);
+  const place = locationId ? null : (placeInput ? placeInput.value.trim() : null);
+  if (!locationId && !place){ if (placeInput) placeInput.style.borderColor = 'var(--red)'; return; }
   try {
-    if (id === 'NEW'){
-      const idempotencyKey = `provider-rates-create|${currentProviderId}|${currentRateTab}|${place}|${new Date().toISOString().slice(0, 16)}`;
+    if (isUs){
+      // Always provider-rates-set (upserts on provider+service+origin+destination) — a US Freight
+      // row's place text is derived straight from the real catalog entry, so this naturally lands
+      // on the same lane whether it's the first price ever or the fifth correction.
+      const loc = allLocations.find(l => l.id === locationId);
+      const origin = `${loc.city} ${loc.state}`;
+      const result = await callApi('provider-rates-set', {
+        actor: currentActor(), provider_id: currentProviderId, service_type: 'us_freight',
+        origin, rate, location_id: locationId,
+      });
+      const idx = allRates.findIndex(r => r.id === result.provider_rate.id);
+      if (idx >= 0) allRates[idx] = result.provider_rate; else allRates.push(result.provider_rate);
+    } else if (key === 'NEW'){
+      const idempotencyKey = `provider-rates-create|${currentProviderId}|mexican_freight|${place}|${new Date().toISOString().slice(0, 16)}`;
       const created = await callApi('provider-rates-create', {
-        actor: currentActor(), provider_id: currentProviderId, service_type: currentRateTab,
-        [field]: place, rate, idempotency_key: idempotencyKey,
+        actor: currentActor(), provider_id: currentProviderId, service_type: 'mexican_freight',
+        destination: place, rate, idempotency_key: idempotencyKey,
       });
       allRates.push(created.rate);
     } else {
-      await callApi('provider-rates-update', { actor: currentActor(), id, [field]: place, rate });
-      const row = allRates.find(r => r.id === id);
-      if (row){ row[field] = place; row.rate = rate; }
+      await callApi('provider-rates-update', { actor: currentActor(), id: key, destination: place, rate });
+      const row = allRates.find(r => r.id === key);
+      if (row){ row.destination = place; row.rate = rate; }
     }
   } catch (e) {
     alert('Error saving: ' + e.message);
     return;
   }
-  editingRateId = null;
+  editingRateKey = null;
+  renderRateTable();
+}
+
+// A genuinely new real city — not a price, the catalog entry itself. Rare (the 24-city list is
+// meant to already cover everywhere BuenTrade actually ships from); this is the escape hatch for
+// the day a plant's next price list mentions somewhere nobody has ever priced before.
+function startAddLocation(){
+  editingRateKey = 'NEW_LOCATION';
+  renderRateTable();
+}
+
+function renderNewLocationFicha(){
+  return `<div class="pkg-row" style="flex-wrap:wrap;">
+    <input id="newLocationCity" placeholder="City" style="flex:1;min-width:140px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
+    <input id="newLocationState" placeholder="State (2 letters)" maxlength="2" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;text-transform:uppercase;">
+    <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="saveNewLocation()">Add to Catalog</button>
+    <button class="btn secondary" style="padding:6px 12px;font-size:12.5px;" onclick="cancelRateEdit()">Cancel</button>
+    <div id="newLocationMsg" style="width:100%;font-size:11.5px;color:var(--red);"></div>
+  </div>`;
+}
+
+async function saveNewLocation(){
+  const cityInput = document.getElementById('newLocationCity');
+  const stateInput = document.getElementById('newLocationState');
+  const city = cityInput.value.trim();
+  const state = stateInput.value.trim();
+  const msgEl = document.getElementById('newLocationMsg');
+  if (!city || state.length !== 2){
+    msgEl.textContent = 'Enter a city name and a 2-letter state.';
+    return;
+  }
+  try {
+    const idempotencyKey = `locations-create|${city}|${state}|${new Date().toISOString().slice(0, 16)}`;
+    const result = await callApi('locations-create', { actor: currentActor(), city, state, idempotency_key: idempotencyKey });
+    allLocations.push(result.location);
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      msgEl.textContent = e.data.message;
+      return;
+    }
+    msgEl.textContent = 'Error: ' + e.message;
+    return;
+  }
+  editingRateKey = null;
   renderRateTable();
 }
 
