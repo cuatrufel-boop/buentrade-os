@@ -126,7 +126,16 @@
      Bottom-aligning made the taller field's own label/control sit HIGHER than its neighbors' —
      labels and controls never lined up row to row. Top-aligning keeps every label/control at the
      same height regardless of how much hint text trails underneath. */
-  .rq-tt-overlay-fields{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-start;padding:14px 20px;background:var(--bg);}
+  /* --blue-light, not plain --bg — real correction 2026-08-30: sitting between the navy header
+     above and the dark TERMS/FINANCE COST bar below, a flat neutral gray read as a disconnected
+     strip glued between two dark sections instead of part of the same Trading Tool. blue-light is
+     the same pale-blue-family tone the app already uses for this exact "sits near navy" role
+     (.tt-brand-header) — ties the bar to the header instead of looking like generic page background. */
+  .rq-tt-overlay-fields{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-start;padding:16px 20px;background:var(--blue-light);}
+  .rq-tt-overlay-fields .mini-field input,
+  .rq-tt-overlay-fields .mini-field select{border-color:#C8DCF7;}
+  .rq-tt-overlay-fields .mini-field input:focus,
+  .rq-tt-overlay-fields .mini-field select:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(30,106,219,.12);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
   .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
@@ -204,7 +213,7 @@
   /* Same full-screen Trading Tool viewer as Offers — one shared overlay, not one per plant row. */
   .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
   .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
-  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:10px;}
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
   .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
   .tt-overlay-body{flex:1;min-height:0;position:relative;}
@@ -234,11 +243,15 @@
      previous version floated over the frozen calculator's internal .quickbar, re-measured every
      animation frame to track it as the iframe scrolled ("se mueven no estan fijos" — never
      actually fixed in place, by design, since the bar itself moves). A plain, motionless icon in
-     our own header sidesteps that entirely — nothing to track, nothing to detach. Still
-     mix-blend-mode:multiply since most logo files carry an opaque white background with no real
-     transparency: white pixels multiply out to match the navy header behind them, the logo's own
-     colored/dark pixels stay visible, no image editing needed. */
-  .rq-tt-logo{width:32px;height:32px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply;vertical-align:middle;margin-right:8px;}
+     our own header sidesteps that entirely — nothing to track, nothing to detach.
+     Framed in a small white card, same avatar pattern as .pkg-plant-avatar-logo elsewhere in the
+     app — corrected 2026-08-30, second pass: mix-blend-mode:multiply darkens toward black on a
+     dark backdrop (it only erases white on a LIGHT background), so on this navy header the logo
+     nearly disappeared instead of losing its white background. A white card sidesteps the problem
+     entirely — the logo's own white background blends invisibly into the card instead of fighting
+     the page behind it, and every color in the logo renders true, same as everywhere else in the OS. */
+  .rq-tt-logo{width:32px;height:32px;flex-shrink:0;background:#fff;border-radius:8px;padding:3px;box-shadow:0 1px 4px rgba(0,0,0,.25);}
+  .rq-tt-logo img{width:100%;height:100%;object-fit:contain;display:block;}
 
   .rq-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
   /* Update Purchase Price opens Email + WhatsApp together — side by side, one shared dim behind
@@ -1713,8 +1726,11 @@ function rqToggleCalculator(id){
     const prevOpen = rqSelectedPlants.find(x => x.rqCalculatorOpen);
     if (prevOpen) rqCloseCalculator(prevOpen.id);
     p.rqCalculatorOpen = true;
+    // logo_url (the light-background variant) first now, not logo_url_dark — the logo sits in its
+    // own white card (see .rq-tt-logo), so it wants the same variant every other white-card avatar
+    // in the OS uses, not the one made for sitting directly on a dark bar.
     document.getElementById('rq_tt_overlay_title').innerHTML =
-      `${(p.logo_url_dark || p.logo_url) ? `<img class="rq-tt-logo" src="${escapeHtml(p.logo_url_dark || p.logo_url)}" alt="">` : ''}${escapeHtml(p.name)}${rqProductSpec ? ' — ' + escapeHtml(rqProductSpec) : ''}`;
+      `${(p.logo_url || p.logo_url_dark) ? `<div class="rq-tt-logo"><img src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt=""></div>` : ''}<span>${escapeHtml(p.name)}${rqProductSpec ? ' — ' + escapeHtml(rqProductSpec) : ''}</span>`;
     document.getElementById('rq_tt_overlay_fields').innerHTML = rqPlantFieldsHtml(p);
     document.getElementById('rq_tt_overlay_body').innerHTML = `
       <iframe id="rq_iframe_${id}" src="${rqBuildToolUrl(p)}" onload="rqOnIframeLoaded('${id}')"></iframe>
