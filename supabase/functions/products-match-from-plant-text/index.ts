@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { plant_id, raw_text, name_en, name_es } = await req.json();
+    const { plant_id, raw_text, name_en, name_es, extra_term_aliases } = await req.json();
     if (!plant_id || !raw_text) {
       return new Response(JSON.stringify({ error: "plant_id and raw_text are required" }), {
         status: 400,
@@ -219,6 +219,19 @@ Deno.serve(async (req) => {
       const entry = plantTermAliasMap.get(a.term) || {};
       (entry as any)[a.meaning_type] = a.meaning_id;
       plantTermAliasMap.set(a.term, entry);
+    }
+    // Rule 3 still applies to a word taught THIS SAME review session, not just ones already saved —
+    // the price-list screen teaches a word and instantly re-checks every other pending row against
+    // it, all before "Aplicar todo" persists anything (same single-confirm point as every other
+    // decision on that screen). Merged in here rather than the caller silently trusting its own
+    // copy of the matching logic — same reason this function is the ONLY place this logic lives.
+    if (Array.isArray(extra_term_aliases)) {
+      for (const a of extra_term_aliases) {
+        if (!a?.term || !a?.meaning_type || !a?.meaning_id) continue;
+        const entry = plantTermAliasMap.get(a.term) || {};
+        (entry as any)[a.meaning_type] = a.meaning_id;
+        plantTermAliasMap.set(a.term, entry);
+      }
     }
 
     // Any taught term (of either kind) that appears in this exact line, resolved to real

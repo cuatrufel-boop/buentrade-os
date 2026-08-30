@@ -60,6 +60,15 @@
      inside the select itself where it's easy to never notice. */
   .btn-add-inline{flex-shrink:0;width:38px;height:38px;border:1.5px solid var(--blue);border-radius:7px;background:#fff;color:var(--blue);font-size:19px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s;}
   .btn-add-inline:hover{background:var(--blue-light);}
+  /* Price-list review — clickable candidate chips instead of hunting the full catalog dropdown
+     one row at a time, and one clear "this word means…" picker for teaching a plant's own
+     shorthand (temperature, packaging, variation, or the cut name itself). */
+  .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+  .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:#fff;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
+  .plr-chip:hover{background:var(--blue);color:#fff;}
+  .plr-teach{margin-top:6px;padding:9px 11px;background:#FFF8EC;border:1px solid #F0D9A6;border-radius:8px;font-size:11.5px;color:#7A5300;}
+  .plr-teach-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;}
+  .plr-teach select,.plr-teach input{padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:11.5px;font-family:inherit;}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
   .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
   .wa-btn:hover{background:#1EBE5A;}
@@ -2011,30 +2020,11 @@ function detectTempPackFromLine(line){
   return { tempId, packagingId };
 }
 
-// Rows the plant's own wording never plainly said the temperature/packaging for, and the name
-// alone matched more than one catalog product — narrows the candidate set down using whatever
-// detectTempPackFromLine can read off the line (catalog words, FZ/COV, taught terms, the
-// Combo-is-always-Fresh rule), falling back to "no signal at all ⇒ Fresh" only when Fresh is
-// actually one of the real candidates. Pulled out as its own function so teaching a new
-// abbreviation mid-review can re-run this against every row still waiting on it, not just the
-// one row that prompted the teaching.
-function narrowByTempPack(rawText, candidates){
-  const { tempId, packagingId } = detectTempPackFromLine(rawText);
-  let effectiveTempId = tempId;
-  if (!effectiveTempId){
-    const fresh = temperatures.find(t => (t.name_en || '').toLowerCase() === 'fresh');
-    if (fresh && candidates.some(p => p.temperature_id === fresh.id)) effectiveTempId = fresh.id;
-  }
-  return candidates.filter(p =>
-    (!effectiveTempId || p.temperature_id === effectiveTempId) && (!packagingId || p.packaging_id === packagingId)
-  );
-}
-
 // In-memory dictionary of plant-specific abbreviations the trader has confirmed the meaning of
-// (term -> { temperature?: id, packaging?: id }) — reloaded fresh from plant_term_aliases each
-// time a price list is processed for a plant. Newly taught terms during THIS review are held
-// only here plus pendingTermAliases until "Aplicar todo" persists them, same single-confirm
-// point as every other write this screen makes.
+// (term -> { temperature?: id, packaging?: id, variation?: id, cut_name?: id }) — reloaded fresh
+// from plant_term_aliases each time a price list is processed for a plant. Newly taught terms
+// during THIS review are held only here plus pendingTermAliases until "Aplicar todo" persists
+// them, same single-confirm point as every other write this screen makes.
 let plantTermAliasMap = new Map();
 let pendingTermAliases = []; // [{ term, meaning_type, meaning_id }] taught but not yet applied
 
@@ -2050,43 +2040,53 @@ async function fetchPlantTermAliases(){
   });
 }
 
-// Called from the review table when a row is still ambiguous and the trader tells us what word
-// in the line distinguishes it. Updates matching in memory and re-checks every other row still
-// stuck on the same ambiguity — but does NOT write to the database yet: like every other decision
-// made on this screen, it only gets saved when the trader reviews the whole table and clicks
-// "Aplicar todo".
-function teachTermAlias(i){
-  const term = normalizeForMatch(document.getElementById(`termInput_${i}`).value);
-  const tempVal = document.getElementById(`termTemp_${i}`).value;
-  const packVal = document.getElementById(`termPack_${i}`).value;
-  if (!term || (!tempVal && !packVal)){
-    document.getElementById('priceListMsg').textContent = 'Type the exact word and select what it means (temperature and/or packaging).';
-    return;
-  }
-  // A batch upsert errors if the same (plant_id, term, meaning_type) appears twice in one call —
-  // drop any earlier pending entry for this exact term+meaning before adding the new one, so
-  // re-teaching the same word (e.g. after picking a different temperature by mistake) can't
-  // collide with itself when "Aplicar todo" saves the batch.
-  const replace = (type, val) => {
-    pendingTermAliases = pendingTermAliases.filter(a => !(a.term === term && a.meaning_type === type));
-    if (val) pendingTermAliases.push({ plant_id: currentPlantId, term, meaning_type: type, meaning_id: val });
-  };
-  const entry = plantTermAliasMap.get(term) || {};
-  if (tempVal){ entry.temperature = tempVal; replace('temperature', tempVal); }
-  if (packVal){ entry.packaging = packVal; replace('packaging', packVal); }
-  plantTermAliasMap.set(term, entry);
-  reNarrowPendingRows();
+// One row picked its product directly from the candidate chips — no ambiguity left to teach a
+// word about, so this is a plain assignment, not a re-match.
+function pickCandidate(i, productId){
+  priceListRows[i].matchedProductId = productId;
   renderPriceListReview();
-  document.getElementById('priceListMsg').textContent = `"${term}" applied to pending rows — saved as a known abbreviation once you confirm "Apply All".`;
 }
 
-function reNarrowPendingRows(){
-  priceListRows.forEach(row => {
-    if (row.matchedProductId || !row.candidateIds || !row.candidateIds.length) return;
-    const candidates = allCatalogProducts.filter(p => row.candidateIds.includes(p.id));
-    const narrowed = narrowByTempPack(row.rawText, candidates);
-    if (narrowed.length === 1) row.matchedProductId = narrowed[0].id;
-  });
+// Called from the review table when the trader tells us what a specific word in this plant's own
+// wording means — a Temperature, a Packaging, a Variation ("Bnls" = Boneless), or the Cut Name
+// itself ("XF Trim" = Cutting Fat). Saved in memory (not the database — like every other decision
+// on this screen, that only happens on "Aplicar todo"), then every still-pending row is re-run
+// through the SAME central matcher (products.matchFromPlantText) the initial paste used — never a
+// second, local copy of the matching logic that could quietly drift from the real one over time.
+async function teachTermAlias(i){
+  const term = normalizeForMatch(document.getElementById(`termInput_${i}`).value);
+  const meaningVal = document.getElementById(`termMeaning_${i}`).value;
+  if (!term || !meaningVal){
+    document.getElementById('priceListMsg').textContent = 'Type the exact word and pick what it means.';
+    return;
+  }
+  const [meaningType, meaningId] = meaningVal.split(':');
+  // A batch upsert errors if the same (plant_id, term, meaning_type) appears twice in one call —
+  // drop any earlier pending entry for this exact term+meaning before adding the new one, so
+  // re-teaching the same word (e.g. after picking the wrong meaning by mistake) can't collide with
+  // itself when "Aplicar todo" saves the batch.
+  pendingTermAliases = pendingTermAliases.filter(a => !(a.term === term && a.meaning_type === meaningType));
+  pendingTermAliases.push({ plant_id: currentPlantId, term, meaning_type: meaningType, meaning_id: meaningId });
+  const entry = plantTermAliasMap.get(term) || {};
+  entry[meaningType] = meaningId;
+  plantTermAliasMap.set(term, entry);
+  document.getElementById('priceListMsg').textContent = `Applying "${term}" to every pending row…`;
+  await reMatchPendingRows();
+  renderPriceListReview();
+  document.getElementById('priceListMsg').textContent = `"${term}" applied — saved as a known word for this plant once you confirm "Apply All".`;
+}
+
+// Re-runs the central matcher for every row still waiting on a confirmed match (not just the row
+// that prompted the teaching) — a newly taught word can resolve rows that had zero candidates at
+// all just as easily as ones that were merely ambiguous, so both get a fresh look, in parallel
+// rather than one at a time.
+async function reMatchPendingRows(){
+  await Promise.all(priceListRows.map(async row => {
+    if (row.matchedProductId) return;
+    const result = await matchCatalogProduct(row.rawText);
+    row.matchedProductId = result.matchedProductId;
+    row.candidateIds = result.candidateIds;
+  }));
 }
 
 function detectDocsNote(text){
@@ -2195,8 +2195,22 @@ async function processPriceListText(){
   renderDetectedLocations(detectPickupLocations(text));
 
   // Alias lookup/re-validation now happens server-side, inside products.matchFromPlantText —
-  // nothing to fetch client-side for it anymore.
-  await Promise.all([fetchAllCatalogProducts(), fetchPlantTermAliases()]);
+  // nothing to fetch client-side for it anymore. Cut Name/Variation ARE still needed client-side
+  // for the "teach a word" picker's option lists — scoped to THIS plant's own fixed category, not
+  // whatever the unrelated "Add New Product" form's Category field happens to hold (real bug
+  // caught live: that field is blank until a trader opens that other form, so the teach picker's
+  // Cut Name/Variation groups rendered completely empty). Fetched directly here rather than via
+  // loadCutNames()/loadVariations() — those also repaint the Add New Product form's own <select>/
+  // checkboxes, an unrelated part of the page this flow has no business touching.
+  const plantForCategory = plants.find(p => p.id === currentPlantId);
+  const categoryForTeach = plantForCategory ? plantForCategory.category_id : null;
+  const [, , cutNamesRes, variationsRes] = await Promise.all([
+    fetchAllCatalogProducts(), fetchPlantTermAliases(),
+    categoryForTeach ? callApi('cut-names-search', { category_id: categoryForTeach }) : Promise.resolve({ results: [] }),
+    categoryForTeach ? callApi('variations-search', { category_id: categoryForTeach }) : Promise.resolve({ results: [] }),
+  ]);
+  cutNames = cutNamesRes.results || [];
+  variations = variationsRes.results || [];
   pendingTermAliases = []; // fresh paste, fresh batch of anything taught during this review
 
   const toBlockRow = async item => {
@@ -2301,8 +2315,12 @@ async function processPriceListText(){
 // page just calls it.
 async function matchCatalogProduct(rawText, nameEn, nameEs){
   try {
+    // Words taught mid-review (pendingTermAliases) count immediately for every other row, even
+    // though they haven't been saved yet — only "Aplicar todo" persists them, same as everything
+    // else on this screen.
     const res = await callApi('products-match-from-plant-text', {
       plant_id: currentPlantId, raw_text: rawText, name_en: nameEn || null, name_es: nameEs || null,
+      extra_term_aliases: pendingTermAliases.length ? pendingTermAliases : undefined,
     });
     if (res.matched) return { matchedProductId: res.product.id, candidateIds: null };
     return { matchedProductId: null, candidateIds: (res.candidates || []).map(p => p.id) };
@@ -2392,36 +2410,54 @@ function renderPriceListReview(){
       const label = p.name_en || p.name;
       return `<option value="${p.id}" data-category="${escapeHtml(p.category || '')}" ${row.matchedProductId === p.id ? 'selected' : ''}>${escapeHtml(label)}${p.name_en && p.name ? ' (' + escapeHtml(p.name) + ')' : ''}${spec ? ' — ' + escapeHtml(spec) : ''}</option>`;
     }).join('');
+    // Real candidates the matcher already found (same name, couldn't narrow further from the
+    // line's own wording) get rendered as one-click chips — the whole reason this exists: picking
+    // between 2-3 known real options should never mean scrolling a dropdown of the entire catalog.
+    // Each chip shows exactly what differs between them (temp/pack/variation), never the bare
+    // name they already share.
+    const candidateChips = (!row.matchedProductId && row.candidateIds && row.candidateIds.length && row.candidateIds.length <= 6) ? `
+      <div class="plr-candidates">
+        ${row.candidateIds.map(id => {
+          const p = allCatalogProducts.find(x => x.id === id);
+          if (!p) return '';
+          const spec = [tempName(p.temperature_id), packName(p.packaging_id), p.subcategory_en || p.subcategory].filter(Boolean).join(', ') || (p.name_en || p.name);
+          return `<button type="button" class="plr-chip" onclick="pickCandidate(${i}, '${id}')">${escapeHtml(spec)}</button>`;
+        }).join('')}
+      </div>` : '';
     // A row where the name alone couldn't be resolved with confidence — either several catalog
     // products share this exact name and the line's wording didn't narrow it to one, or exactly
     // one product shares the name but something in the line (a temperature/packaging word) didn't
-    // match what's on file for it — gets an inline prompt to teach the exact word involved.
-    // Confirmed by the trader, reused instantly on every other pending row with the same
-    // ambiguity, and remembered for every future price list from this plant once "Aplicar todo"
-    // is confirmed. Every plant writes its own shorthand, so this is the catch-all for "I don't
-    // understand this plant's wording yet" — nothing gets guessed past it.
-    const teachPrompt = (row.candidateIds && row.candidateIds.length && !row.matchedProductId) ? `
-      <div style="margin-top:6px;padding:7px 9px;background:#FFF4E5;border-radius:5px;font-size:11.5px;color:#8a5a00;">
-        ${row.candidateIds.length > 1
-          ? `This plant uses a word I don't recognize to tell apart ${row.candidateIds.length} products with this same name.`
-          : `This line mentions something about temperature or packaging that doesn't match the only product on file with this name — it could be a new product, or a word I don't recognize.`}
-        <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:center;">
-          <input type="text" id="termInput_${i}" placeholder="exact word, e.g. STL" style="width:110px;padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
-          <select id="termTemp_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
-            <option value="">Temperature —</option>
-            ${temperatures.map(t => `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}
+    // match what's on file for it, or nothing at all matched (a genuine abbreviation the matcher
+    // has never seen) — gets an inline prompt to teach the exact word involved. One word can mean
+    // a Temperature, a Packaging, a Variation (e.g. "Bnls" = Boneless), or the Cut Name itself
+    // (e.g. "XF Trim" = Cutting Fat) — no algorithm can guess these, they're arbitrary per plant,
+    // but once confirmed here they're instantly applied to every other pending row with the same
+    // word, and remembered for every future price list from this plant once "Aplicar todo" is
+    // confirmed — never asked twice.
+    const teachPrompt = (!row.matchedProductId) ? `
+      <div class="plr-teach">
+        ${row.candidateIds && row.candidateIds.length > 1
+          ? `This plant uses a word I don't recognize to tell apart these ${row.candidateIds.length} products.`
+          : row.candidateIds && row.candidateIds.length === 1
+          ? `Something in this line doesn't match the only product on file with this name — could be a word I don't recognize.`
+          : `I don't recognize this cut at all yet — could be this plant's own shorthand for something already in the catalog.`}
+        <div class="plr-teach-row">
+          <input type="text" id="termInput_${i}" placeholder="exact word, e.g. XF">
+          <select id="termMeaning_${i}">
+            <option value="">This word means…</option>
+            <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
+            <optgroup label="Variation">${variations.map(v => `<option value="variation:${v.id}">${escapeHtml(v.name_en)}</option>`).join('')}</optgroup>
+            <optgroup label="Temperature">${temperatures.map(t => `<option value="temperature:${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}</optgroup>
+            <optgroup label="Packaging">${packagings.map(p => `<option value="packaging:${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}</optgroup>
           </select>
-          <select id="termPack_${i}" style="padding:4px 6px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
-            <option value="">Packaging —</option>
-            ${packagings.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}
-          </select>
-          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Save & Recognize</button>
+          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Save &amp; Recognize</button>
         </div>
       </div>` : '';
     return `<tr>
       <td><input type="text" value="${escapeHtml(row.rawText)}" style="width:100%;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].rawText=this.value"></td>
       <td><input type="number" step="0.0001" value="${row.price != null ? row.price : ''}" style="width:100px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12.5px;" onchange="priceListRows[${i}].price=parseFloat(this.value)||null"></td>
       <td>
+        ${candidateChips}
         <input type="text" id="prodSearch_${i}" placeholder="Search product…" oninput="filterProductOptions(${i}, this.value)" style="width:100%;padding:4px 6px;margin-bottom:3px;border:1.5px solid var(--line);border-radius:4px;font-size:11.5px;">
         <select id="prodSelect_${i}" style="width:100%;padding:5px 7px;border:1.5px solid ${row.matchedProductId ? 'var(--line)' : '#e0a030'};border-radius:5px;font-size:12.5px;" onchange="onPriceListProductSelect(${i}, this)">
         <option value="">— select —</option>
