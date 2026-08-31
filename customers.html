@@ -321,7 +321,7 @@ auth.onAuthStateChanged(user => {
       <div class="grid3" style="row-gap:10px;">
         <div><label class="view-label">Payments Contact</label><span id="v_payments_contact_name">—</span></div>
         <div><label class="view-label">Payments Email</label><span id="v_payments_contact_email">—</span></div>
-        <div><label class="view-label">Payments Phone</label><span id="v_payments_contact_phone">—</span></div>
+        <div><label class="view-label">Payments WhatsApp</label><span id="v_payments_contact_phone">—</span></div>
       </div>
       <div class="section-title">Commercial profile</div>
       <div class="grid3" style="row-gap:10px;">
@@ -353,21 +353,17 @@ auth.onAuthStateChanged(user => {
         <div class="field"><label>Legal name</label><input id="legal_name" oninput="updateCustomerProfile()"></div>
         <div class="field"><label>Contact name</label><input id="contact_name" oninput="updateCustomerProfile()"></div>
         <div class="field"><label>Contact role</label><input id="contact_role" oninput="updateCustomerProfile()"></div>
-        <div class="field"><label>Email</label><input type="email" id="email" oninput="updateCustomerProfile()"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label>Phone</label>
-          <div style="display:flex;gap:6px;">
-            <select id="phone_code" style="width:88px;flex-shrink:0;" onchange="updateCustomerProfile()"></select>
-            <input id="phone_number" placeholder="6621234567" style="flex:1;" oninput="updateCustomerProfile()">
-          </div>
-        </div>
         <div class="field"><label>WhatsApp</label>
           <div style="display:flex;gap:6px;">
-            <select id="whatsapp_code" style="width:88px;flex-shrink:0;" onchange="updateCustomerProfile()"></select>
+            <select id="whatsapp_code" style="width:78px;flex-shrink:0;" onchange="updateCustomerProfile()"></select>
             <input id="whatsapp_number" placeholder="6621234567" style="flex:1;" oninput="updateCustomerProfile()">
           </div>
         </div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Email</label><input type="email" id="email" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>Website</label><input id="website" oninput="updateCustomerProfile()"></div>
+        <div class="field"><label>CC Emails (comma-separated)</label><input id="email_cc" placeholder="compras@cliente.com, pagos@cliente.com" oninput="updateCustomerProfile()"></div>
       </div>
 
       <div class="section-title">Address</div>
@@ -422,11 +418,6 @@ auth.onAuthStateChanged(user => {
         </div>
       </div>
 
-      <div class="section-title">Other</div>
-      <div class="grid2">
-        <div class="field"><label>CC Emails (comma-separated)</label><input id="email_cc" placeholder="compras@cliente.com, pagos@cliente.com" oninput="updateCustomerProfile()"></div>
-        <div class="field"><label>Website</label><input id="website" oninput="updateCustomerProfile()"></div>
-      </div>
       <div class="field" style="text-align:left;margin-top:4px;">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;">
           <input type="checkbox" id="paymentsContactDifferent" onchange="togglePaymentsContact();updateCustomerProfile()" style="width:auto;">
@@ -434,10 +425,9 @@ auth.onAuthStateChanged(user => {
         </label>
       </div>
       <div id="paymentsContactBlock" style="display:none;">
-        <div class="grid4">
+        <div class="grid3">
           <div class="field"><label>Payments contact name</label><input id="payments_contact_name" oninput="updateCustomerProfile()"></div>
           <div class="field"><label>Payments contact email</label><input type="email" id="payments_contact_email" oninput="updateCustomerProfile()"></div>
-          <div class="field"><label>Payments contact phone</label><input id="payments_contact_phone" oninput="updateCustomerProfile()"></div>
           <div class="field"><label>Payments contact WhatsApp</label><input id="payments_contact_whatsapp" oninput="updateCustomerProfile()"></div>
         </div>
       </div>
@@ -454,7 +444,6 @@ auth.onAuthStateChanged(user => {
         <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="cv_contact_name">—</span></div>
         <div class="profile-row"><span class="view-label">Contact Role</span><span class="profile-row-value" id="cv_contact_role">—</span></div>
         <div class="profile-row"><span class="view-label">Email</span><span class="profile-row-value" id="cv_email">—</span></div>
-        <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="cv_phone">—</span></div>
         <div class="profile-row"><span class="view-label">WhatsApp</span><span class="profile-row-value" id="cv_whatsapp">—</span></div>
         <div class="profile-row"><span class="view-label">Country</span><span class="profile-row-value" id="cv_country">—</span></div>
         <div class="profile-row"><span class="view-label">State</span><span class="profile-row-value" id="cv_state">—</span></div>
@@ -504,13 +493,11 @@ function openForm(customer){
   document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
   const fields = ['custId','trade_name','legal_name','country_id','state','city','address','postal_code','contact_name',
     'contact_role','email','email_cc','website',
-    'payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp',
+    'payments_contact_name','payments_contact_email','payments_contact_whatsapp',
     'preferred_currency','usual_delivery_type',
     'usual_destination','usual_incoterm_id','usual_incoterm_place','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes'];
   fields.forEach(f => document.getElementById(f).value = '');
-  document.getElementById('phone_number').value = '';
   document.getElementById('whatsapp_number').value = '';
-  document.getElementById('phone_code').value = '';
   document.getElementById('whatsapp_code').value = '';
   onCustomerCountryChange(); // resets state_id/state visibility for the blank country above
   document.getElementById('payment_days').value = '';
@@ -527,12 +514,11 @@ function openForm(customer){
     });
     onCustomerCountryChange(); // now that country_id is set, populate/reveal the right State field
     if (customer.state_id) document.getElementById('state_id').value = customer.state_id;
-    const phoneParts = splitPhone(customer.phone);
-    document.getElementById('phone_code').value = phoneParts.code;
-    document.getElementById('phone_number').value = phoneParts.number;
-    const waParts = splitPhone(customer.whatsapp);
+    // One number per person: prefer whatsapp, fall back to the old phone column for records saved before the merge.
+    const waParts = splitPhone(customer.whatsapp || customer.phone);
     document.getElementById('whatsapp_code').value = waParts.code;
     document.getElementById('whatsapp_number').value = waParts.number;
+    document.getElementById('payments_contact_whatsapp').value = customer.payments_contact_whatsapp || customer.payments_contact_phone || '';
     if (customer.payment_days === 0){
       document.getElementById('payment_terms_type').value = 'advance';
     } else if (customer.payment_days != null){
@@ -560,7 +546,6 @@ function updateCustomerProfile(){
   setV('cv_contact_name', document.getElementById('contact_name').value);
   setV('cv_contact_role', document.getElementById('contact_role').value);
   setV('cv_email', document.getElementById('email').value);
-  setV('cv_phone', joinPhone(document.getElementById('phone_code').value, document.getElementById('phone_number').value));
   setV('cv_whatsapp', joinPhone(document.getElementById('whatsapp_code').value, document.getElementById('whatsapp_number').value));
   setV('cv_country', selText(document.getElementById('country_id')));
   const stateVal = document.getElementById('stateSelectField').style.display !== 'none'
@@ -590,7 +575,7 @@ function updateCustomerProfile(){
   const hasPaymentsContact = document.getElementById('paymentsContactDifferent').checked;
   setV('cv_payments_contact', hasPaymentsContact
     ? [document.getElementById('payments_contact_name').value, document.getElementById('payments_contact_email').value,
-       document.getElementById('payments_contact_phone').value, document.getElementById('payments_contact_whatsapp').value]
+       document.getElementById('payments_contact_whatsapp').value]
         .filter(Boolean).join(' · ')
     : 'Same as buyer');
   setV('cv_notes', document.getElementById('notes').value);
@@ -618,7 +603,7 @@ function togglePaymentsContact(){
   const show = document.getElementById('paymentsContactDifferent').checked;
   document.getElementById('paymentsContactBlock').style.display = show ? 'block' : 'none';
   if (!show){
-    ['payments_contact_name','payments_contact_email','payments_contact_phone','payments_contact_whatsapp']
+    ['payments_contact_name','payments_contact_email','payments_contact_whatsapp']
       .forEach(f => document.getElementById(f).value = '');
   }
 }
@@ -694,7 +679,6 @@ function joinPhone(code, number){
 function applyCountries(){
   const sel = document.getElementById('country_id');
   sel.innerHTML = '<option value="">—</option>' + countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
-  populateDialCodeSelect(document.getElementById('phone_code'));
   populateDialCodeSelect(document.getElementById('whatsapp_code'));
 }
 
@@ -925,7 +909,7 @@ function renderCustomers(){
         <span class="pkg-plant-sub">${escapeHtml(sub || '—')}</span>
       </div>
       <div style="min-width:160px;font-size:12.5px;">${c.contact_name && c.email ? `<a href="mailto:${escapeHtml(c.email)}" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</div>
-      <div style="margin-left:auto;flex-shrink:0;">${c.phone ? `<a class="wa-btn" href="https://wa.me/${escapeHtml(c.phone.replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
+      <div style="margin-left:auto;flex-shrink:0;">${(c.whatsapp || c.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
     </div>`;
   }).join('');
 }
@@ -961,7 +945,7 @@ function viewCustomer(id){
   document.getElementById('v_website').textContent = c.website || '—';
   document.getElementById('v_payments_contact_name').textContent = c.payments_contact_name || '—';
   document.getElementById('v_payments_contact_email').textContent = c.payments_contact_email || '—';
-  document.getElementById('v_payments_contact_phone').textContent = c.payments_contact_phone || '—';
+  document.getElementById('v_payments_contact_phone').textContent = c.payments_contact_whatsapp || c.payments_contact_phone || '—';
   const curr = currencies.find(x => x.id === c.preferred_currency_id);
   document.getElementById('v_preferred_currency').textContent = curr ? curr.code : '—';
   const deliveryLabels = { 'Border': 'Picked up (FOB)', 'Delivered Mexico': 'Delivered' };
@@ -1063,12 +1047,14 @@ async function saveCustomer(forceOverride){
     contact_role: document.getElementById('contact_role').value || null,
     email: document.getElementById('email').value || null,
     email_cc: document.getElementById('email_cc').value || null,
-    phone: joinPhone(document.getElementById('phone_code').value, document.getElementById('phone_number').value),
+    // One number per person: the same value fills both the phone and whatsapp columns, since
+    // some other screens still read `phone` alone and others read `whatsapp` alone.
+    phone: joinPhone(document.getElementById('whatsapp_code').value, document.getElementById('whatsapp_number').value),
     whatsapp: joinPhone(document.getElementById('whatsapp_code').value, document.getElementById('whatsapp_number').value),
     website: document.getElementById('website').value || null,
     payments_contact_name: document.getElementById('payments_contact_name').value || null,
     payments_contact_email: document.getElementById('payments_contact_email').value || null,
-    payments_contact_phone: document.getElementById('payments_contact_phone').value || null,
+    payments_contact_phone: document.getElementById('payments_contact_whatsapp').value || null,
     payments_contact_whatsapp: document.getElementById('payments_contact_whatsapp').value || null,
     preferred_currency_id: (currencyVal && currencyVal !== 'other') ? currencyVal : null,
     usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
@@ -1088,10 +1074,6 @@ async function saveCustomer(forceOverride){
   };
   if (!payload.trade_name){
     document.getElementById('formMsg').textContent = 'Trade name is required.';
-    return;
-  }
-  if (payload.phone && !payload.phone.trim().startsWith('+')){
-    document.getElementById('formMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
     return;
   }
   if (payload.whatsapp && !payload.whatsapp.trim().startsWith('+')){
