@@ -2594,6 +2594,24 @@ function rqChasePendingPrices(plants){
 async function rqHandleStaleOrMissingPrices(){
   const chase = rqPlantsNeedingPriceChase();
   if (chase.length) rqChasePendingPrices(chase);
+  // A plant with a real Purchase price on file has no computed Selling price (rqCalcRow) until its
+  // Trading Tool has actually been opened once — every calculator starts closed after a fresh
+  // search (see autoPopulateRqPlants). Real bug fixed 2026-08-31: "Customers who buy this"'s Email/
+  // WhatsApp buttons called straight into rqPricedPlantsSorted() with no such calculator ever
+  // opened, so it came back empty and alerted "No plant has a current price for this product yet"
+  // even while both plants' prices were plainly showing on screen. Same open-and-wait retry this
+  // file already uses for the single-plant Send Offer button (rqSendPlantOffer) — only one
+  // calculator can be open at a time (rqToggleCalculator closes any other), so each is opened,
+  // given a moment to compute, and closed again before moving to the next.
+  const needsCalc = rqSelectedPlants.filter(p => p.rqPrice && !rqCalcRow(p));
+  for (const p of needsCalc){
+    const wasOpen = p.rqCalculatorOpen;
+    if (!wasOpen) rqToggleCalculator(p.id);
+    for (let i = 0; i < 10 && !rqCalcRow(p); i++){
+      await new Promise(r => setTimeout(r, 300));
+    }
+    if (!wasOpen && p.rqCalculatorOpen) rqToggleCalculator(p.id);
+  }
   if (!rqPricedPlantsSorted().length){
     alert(chase.length
       ? 'No plant has a current price for this product yet — nothing to send to the customer. Asking for fresh prices now.'
