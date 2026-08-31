@@ -2633,19 +2633,31 @@ async function rqHandleStaleOrMissingPrices(){
   // search (see autoPopulateRqPlants). Real bug fixed 2026-08-31: "Customers who buy this"'s Email/
   // WhatsApp buttons called straight into rqPricedPlantsSorted() with no such calculator ever
   // opened, so it came back empty and alerted "No plant has a current price for this product yet"
-  // even while both plants' prices were plainly showing on screen. Same open-and-wait retry this
-  // file already uses for the single-plant Send Offer button (rqSendPlantOffer) — only one
-  // calculator can be open at a time (rqToggleCalculator closes any other), so each is opened,
-  // given a moment to compute, and closed again before moving to the next.
+  // even while both plants' prices were plainly showing on screen. Only one calculator can be open
+  // at a time (rqToggleCalculator closes any other), so each is opened, given time to compute, and
+  // closed again before moving to the next.
+  //
+  // 10 retries at 300ms (3s) — the budget rqSendPlantOffer uses for this same wait — turned out too
+  // short here: real bug confirmed 2026-08-31, a two-plant send only ever included the ONE plant
+  // whose calculator the trader had already opened by hand earlier (its iframe had a head start
+  // loading in the background); the other, opened cold by this loop with no such head start, never
+  // got its first calc back in time and was silently left out of the combined offer. rqSendPlantOffer
+  // gets away with the short budget because its one plant is almost always already sitting open when
+  // that button is clicked — this path is usually opening one cold, on a system with real ~1-1.5s
+  // per Edge Function call and several such calls (freight/customs/exchange rate) before a first
+  // calc lands. Longer budget (20 x 500ms = 10s) plus a visible notice so a real multi-second wait
+  // doesn't just look frozen.
   const needsCalc = rqSelectedPlants.filter(p => p.rqPrice && !rqCalcRow(p));
+  if (needsCalc.length) rqShowNotice(`Calculating offer price${needsCalc.length > 1 ? 's' : ''}…`);
   for (const p of needsCalc){
     const wasOpen = p.rqCalculatorOpen;
     if (!wasOpen) rqToggleCalculator(p.id);
-    for (let i = 0; i < 10 && !rqCalcRow(p); i++){
-      await new Promise(r => setTimeout(r, 300));
+    for (let i = 0; i < 20 && !rqCalcRow(p); i++){
+      await new Promise(r => setTimeout(r, 500));
     }
     if (!wasOpen && p.rqCalculatorOpen) rqToggleCalculator(p.id);
   }
+  if (needsCalc.length) rqCloseNotice();
   if (!rqPricedPlantsSorted().length){
     alert(chase.length
       ? 'No plant has a current price for this product yet — nothing to send to the customer. Asking for fresh prices now.'
