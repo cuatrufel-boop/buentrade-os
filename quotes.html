@@ -261,7 +261,9 @@
      tells them apart at a glance. Real redesign 2026-08-31: the old row was just a square initial,
      a name, and two visually mismatched buttons (a text pill next to a near-circular icon-only
      blob) — genuinely looked unfinished, not styled. */
-  .rq-customer-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .rq-customer-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .rq-customer-avatar.has-logo{background:#fff;border:1px solid var(--line);padding:3px;}
+  .rq-customer-avatar.has-logo img{width:100%;height:100%;object-fit:contain;}
   .rq-customer-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
   .rq-customer-name{font-weight:600;color:var(--ink);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rq-customer-contact{font-size:11.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -2421,7 +2423,7 @@ async function rqFindCustomers(){
   }
   container.innerHTML = rqMatchedCustomers.map(c => `
     <div class="rq-customer-row">
-      <div class="rq-customer-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="rq-customer-avatar${c.logo_url ? ' has-logo' : ''}">${c.logo_url ? `<img src="${escapeHtml(c.logo_url)}" alt="">` : escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
       <div class="rq-customer-info">
         <div class="rq-customer-name">${escapeHtml(c.trade_name)}</div>
         ${c.contact_name ? `<div class="rq-customer-contact">${escapeHtml(c.contact_name)}</div>` : ''}
