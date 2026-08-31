@@ -2328,8 +2328,8 @@ async function rqCopyPhotoToClipboard(fileUrl, filename, btn){
 // real, combined PDF per plant (see rqPrepareOfferFiles/rqBuildCombinedPdf) — attached in email,
 // downloaded-then-dragged-in for WhatsApp — a format that opens the same way everywhere, on any
 // device, instead of two separate files in whatever format happened to get uploaded.
-function buildCustomerOfferText(customerFirstName){
-  const withCalc = rqPricedPlantsSorted();
+function buildCustomerOfferText(customerFirstName, plantsOverride){
+  const withCalc = plantsOverride || rqPricedPlantsSorted();
   const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
   const lines = withCalc.map(({ plant, calc }) => {
     const delivery = rqDeliveryDatesText();
@@ -2352,8 +2352,8 @@ function rqPendingNote(){
 // HTML twin of buildCustomerOfferText — no inline image either now: the photo already ships
 // inside the combined PDF attachment (rqBuildCombinedPdf), so showing it twice (once inline, once
 // in the attachment) was redundant. Email clients list attachments on their own, no extra text needed.
-function buildCustomerOfferHtml(customerFirstName){
-  const withCalc = rqPricedPlantsSorted();
+function buildCustomerOfferHtml(customerFirstName, plantsOverride){
+  const withCalc = plantsOverride || rqPricedPlantsSorted();
   const greeting = customerFirstName ? `Hola ${escapeHtml(customerFirstName)},<br><br>` : '';
   const delivery = rqDeliveryDatesText();
   const blocks = withCalc.map(({ plant, calc }) =>
@@ -2427,20 +2427,58 @@ function rqBytesToBase64(bytes){
 // Runs once per send action (not once per customer/plant pairing) — every priced plant's combined
 // PDF is the same regardless of which customer it's going to, so this builds each one exactly once
 // and both channels reuse the same bytes: attachments for email, downloadFiles for WhatsApp.
-async function rqPrepareOfferFiles(){
+// Built once per plant (not per customer) — PDF generation is real work (fetch + merge), and
+// different customers can end up with different subsets of plants (see rqUnsentPlantsFor), so
+// building all of them up front and letting each customer pick from the same set avoids rebuilding
+// the same plant's PDF once per customer that happens to need it.
+async function rqPrepareOfferFilesByPlant(){
   const withCalc = rqPricedPlantsSorted();
-  const attachments = [];
-  const downloadFiles = [];
+  const byPlant = {};
   for (const { plant, calc } of withCalc){
     const files = rqFindProductFilesFor(plant);
     if (!files.photo_url && !files.spec_url) continue;
     try {
       const built = await rqBuildCombinedPdf(plant, calc);
-      attachments.push({ filename: built.filename, content: rqBytesToBase64(built.bytes) });
-      downloadFiles.push(built);
+      byPlant[plant.id] = {
+        attachment: { filename: built.filename, content: rqBytesToBase64(built.bytes) },
+        downloadFile: built,
+      };
     } catch(e){ /* one plant's PDF failing to build shouldn't block the rest of the offer */ }
   }
-  return { attachments, downloadFiles };
+  return byPlant;
+}
+
+// Explicit ask, confirmed 2026-08-31: "si ya le mandé Tyson y Seaboard a un cliente y Smithfield
+// estaba pending, cuando meto su precio no debería repetir las otras — solo mandar Smithfield."
+// Real behavior before this: every send bundled EVERY currently-priced plant, so a plant that just
+// came back from Pending Quotes re-sent every plant a customer already had, every time. One
+// sent_offers fetch for the whole product (not per customer), sliced per customer below.
+async function rqAlreadySentPlantIdsByCustomer(){
+  let sentRows = [];
+  try { sentRows = (await callApi('sent-offers-search', { product_id: rqMatchedProductId, limit: 500 })).results || []; }
+  catch (e) { return {}; }
+  const byCustomer = {};
+  sentRows.forEach(r => {
+    if (!byCustomer[r.customer_id]) byCustomer[r.customer_id] = {};
+    const prev = byCustomer[r.customer_id][r.plant_id];
+    if (!prev || r.sent_at > prev) byCustomer[r.customer_id][r.plant_id] = r.sent_at;
+  });
+  return byCustomer;
+}
+
+// The plants THIS customer doesn't already have at their current price — a plant counts as
+// "already has it" only if sent at/after that plant's own current price_date (same rule
+// autoPopulateRqPlants uses), so a genuine re-quote (the price changed since the last send) still
+// goes out; a hand-typed price (rqPriceDate cleared — the trader just confirmed it themselves,
+// same convention used everywhere else in this file) is always treated as not yet sent. Empty
+// means this customer already has everything ready for this product — callers skip them rather
+// than sending a repeat or an empty message.
+function rqUnsentPlantsFor(customerId, sentByCustomer){
+  const sentMap = sentByCustomer[customerId] || {};
+  return rqPricedPlantsSorted().filter(({ plant }) => {
+    const sentAt = sentMap[plant.id];
+    return !(sentAt && plant.rqPriceDate && sentAt.slice(0, 10) >= plant.rqPriceDate);
+  });
 }
 
 // Same download-then-drag-in pattern as offers.html's WhatsApp cards — a wa.me link can only
@@ -2940,12 +2978,16 @@ async function sendOfferEmailTo(customerId){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
   if (!c || !c.email) return;
+  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
+  const unsent = rqUnsentPlantsFor(c.id, sentByCustomer);
+  if (!unsent.length){ rqShowNotice(`${c.trade_name} already has every priced plant for this product.`); return; }
   const firstName = rqFirstName(c.contact_name || c.trade_name);
-  const { attachments } = await rqPrepareOfferFiles();
+  const filesByPlant = await rqPrepareOfferFilesByPlant();
+  const attachments = unsent.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean);
   rqOpenEmailModal(`Email offer — ${c.trade_name}`, [{
     id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
-    body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName), attachments,
-    fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
+    body: buildCustomerOfferText(firstName, unsent), html: buildCustomerOfferHtml(firstName, unsent), attachments,
+    fromAlias: 'offers', onSent: () => rqLogSentOffersRows(unsent, [c], 'email'),
   }], true);
 }
 
@@ -2955,45 +2997,66 @@ async function sendOfferWhatsAppTo(customerId){
   if (!c) return;
   const phone = (c.whatsapp || c.phone || '').replace(/\D/g, '');
   if (!phone) return;
-  const { downloadFiles } = await rqPrepareOfferFiles();
+  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
+  const unsent = rqUnsentPlantsFor(c.id, sentByCustomer);
+  if (!unsent.length){ rqShowNotice(`${c.trade_name} already has every priced plant for this product.`); return; }
+  const filesByPlant = await rqPrepareOfferFilesByPlant();
+  const downloadFiles = unsent.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
-    id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
-    onOpened: () => rqLogSentOffers([c], 'whatsapp'),
+    id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name), unsent), downloadFiles,
+    onOpened: () => rqLogSentOffersRows(unsent, [c], 'whatsapp'),
   }], true);
 }
 
 // "Email all" / "WhatsApp all" in the Customers who buy this header — same combined, ranked offer
-// (buildCustomerOfferText/rqPrepareOfferFiles, every priced plant) as the per-customer buttons
-// above, just opened for every matched customer in one click instead of one at a time. Each
-// customer still gets their own reviewable card in the modal (rqOpenEmailModal/rqOpenWaModal
-// already support this — see their own "Send All"/"Make All Offers" button) and its own
-// sent_offers row on send, exactly like clicking each one individually would.
+// as the per-customer buttons above, just opened for every matched customer in one click instead
+// of one at a time. Each customer still gets their own reviewable card in the modal
+// (rqOpenEmailModal/rqOpenWaModal already support this — see their own "Send All"/"Make All
+// Offers" button) and its own sent_offers rows on send, exactly like clicking each one
+// individually would.
+//
+// Explicit ask, confirmed 2026-08-31: a customer who already has Tyson + Seaboard shouldn't get
+// them repeated just because Smithfield's price finally came in — each customer's card here only
+// ever contains the plants THEY don't already have (rqUnsentPlantsFor), a customer with nothing
+// new is skipped entirely rather than sent an empty or repeat message.
 async function sendOfferEmailToAll(){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
+  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
+  const filesByPlant = await rqPrepareOfferFilesByPlant();
   const withEmail = rqMatchedCustomers.filter(c => c.email);
-  if (!withEmail.length){ rqShowNotice('No matched customer has an email on file.'); return; }
-  const { attachments } = await rqPrepareOfferFiles();
-  const items = withEmail.map(c => {
+  const items = [];
+  withEmail.forEach(c => {
+    const unsent = rqUnsentPlantsFor(c.id, sentByCustomer);
+    if (!unsent.length) return; // already has everything ready for this product
     const firstName = rqFirstName(c.contact_name || c.trade_name);
-    return {
+    const attachments = unsent.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean);
+    items.push({
       id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
-      body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName), attachments,
-      fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
-    };
+      body: buildCustomerOfferText(firstName, unsent), html: buildCustomerOfferHtml(firstName, unsent), attachments,
+      fromAlias: 'offers', onSent: () => rqLogSentOffersRows(unsent, [c], 'email'),
+    });
   });
+  if (!items.length){ rqShowNotice('Every matched customer with an email already has every priced plant for this product.'); return; }
   rqOpenEmailModal(`Email offer — All customers (${items.length})`, items, true);
 }
 
 async function sendOfferWhatsAppToAll(){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
+  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
+  const filesByPlant = await rqPrepareOfferFilesByPlant();
   const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
-  if (!withWa.length){ rqShowNotice('No matched customer has a WhatsApp number on file.'); return; }
-  const { downloadFiles } = await rqPrepareOfferFiles();
-  const items = withWa.map(c => ({
-    id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
-    body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
-    onOpened: () => rqLogSentOffers([c], 'whatsapp'),
-  }));
+  const items = [];
+  withWa.forEach(c => {
+    const unsent = rqUnsentPlantsFor(c.id, sentByCustomer);
+    if (!unsent.length) return; // already has everything ready for this product
+    const downloadFiles = unsent.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
+    items.push({
+      id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
+      body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name), unsent), downloadFiles,
+      onOpened: () => rqLogSentOffersRows(unsent, [c], 'whatsapp'),
+    });
+  });
+  if (!items.length){ rqShowNotice('Every matched customer with a WhatsApp number already has every priced plant for this product.'); return; }
   rqOpenWaModal(`WhatsApp offer — All customers (${items.length})`, items, true);
 }
 
