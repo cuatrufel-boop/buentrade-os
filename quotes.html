@@ -142,6 +142,33 @@
      framed fields plus one floating button. */
   .rq-tt-overlay-fields .rq-toggle{height:31px;box-sizing:border-box;display:inline-flex;align-items:center;}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
+
+  /* Custom dropdown for Location / Delivery location — a native <select>'s open option list can't
+     be styled cross-browser (it renders as a plain OS menu, the "feo" look the long US Freight
+     city list was stuck with). Same shell language as the product-search suggestion panel
+     (.cp-suggest-panel in customers.html): a floating white card, soft shadow, hover-highlighted
+     rows — so the whole app's dropdowns read as one family. */
+  .rq-ddown{position:relative;}
+  .rq-ddown-btn{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;box-sizing:border-box;padding:0 10px;height:31px;border:1.5px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;text-align:left;transition:border-color .15s,box-shadow .15s,background .15s;}
+  .rq-ddown-btn:hover{border-color:#B9CFEC;}
+  .rq-ddown-btn:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,106,219,.12);}
+  .rq-ddown-btn.has-value{border-color:#B9D3F5;background:var(--blue-light);}
+  .rq-tt-overlay-fields .rq-ddown-btn{border-color:#C8DCF7;}
+  .rq-tt-overlay-fields .rq-ddown-btn:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,106,219,.12);}
+  .rq-ddown-btn-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .rq-ddown-btn-label .rq-ddown-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue);margin-left:5px;}
+  .rq-ddown-chevron{flex-shrink:0;width:13px;height:13px;color:var(--ink-soft);transition:transform .15s;}
+  .rq-ddown-btn[aria-expanded="true"] .rq-ddown-chevron{transform:rotate(180deg);}
+  .rq-ddown-panel{position:absolute;top:calc(100% + 6px);left:0;width:max-content;min-width:100%;max-width:320px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(15,31,51,.16);max-height:280px;overflow-y:auto;z-index:40;padding:6px;}
+  .rq-ddown-option{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--ink);}
+  .rq-ddown-option:hover{background:var(--blue-light);}
+  .rq-ddown-option.selected{background:var(--blue-light);color:var(--blue);font-weight:600;}
+  .rq-ddown-option-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rq-ddown-option-sub{font-size:10.5px;color:var(--ink-soft);font-weight:500;margin-top:1px;}
+  .rq-ddown-option-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--ink);white-space:nowrap;flex-shrink:0;}
+  .rq-ddown-option.selected .rq-ddown-option-price{color:var(--blue);}
+  .rq-ddown-divider{height:1px;background:var(--line);margin:5px 2px;}
+  .rq-ddown-empty{padding:14px 10px;text-align:center;font-size:11.5px;color:var(--ink-soft);}
   .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
   .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
   .pkg-trigger-btn:active{transform:translateY(0);}
@@ -1292,6 +1319,107 @@ function removeRqPlant(plantId){
 // overlay's own controls bar (see rqToggleCalculator), since rqSetUsFreightRate/rqSetMexicanDest/
 // rqToggleDocs already push live updates into an open calculator via rqSyncOpenCalculator — they
 // were always meant to be adjusted while the Trading Tool is on screen, not before opening it.
+// Custom dropdown state — which one (if any) is open, keyed 'usf:<plantId>' / 'mx:<plantId>' so
+// each plant's Location and Delivery location controls its own panel independently. Closing on
+// blur uses the same delayed-hide trick as the product search suggestions elsewhere (customers.html
+// cp_suggest_panel): the click on an option fires before the delayed close actually hides it.
+let rqOpenDropdownKey = null;
+
+function rqToggleDropdown(key){
+  rqOpenDropdownKey = rqOpenDropdownKey === key ? null : key;
+  renderRqPlants();
+}
+function rqScheduleCloseDropdown(key){
+  setTimeout(() => { if (rqOpenDropdownKey === key) { rqOpenDropdownKey = null; renderRqPlants(); } }, 150);
+}
+function rqPickUsFreightRate(plantId, rateId){
+  rqOpenDropdownKey = null;
+  rqSetUsFreightRate(plantId, rateId);
+}
+function rqPickMexicanDest(plantId, rateId){
+  rqOpenDropdownKey = null;
+  rqSetMexicanDest(plantId, rateId);
+}
+
+const rqDdownChevronSvg = `<svg class="rq-ddown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+
+// Real carrier rates for this plant's own cities only (rqUsFreightRatesForPlant) — replaces the
+// native <select>'s unstyleable open list with a floating panel matching the app's own look.
+function rqUsFreightDropdownHtml(p){
+  const key = 'usf:' + p.id;
+  const isOpen = rqOpenDropdownKey === key;
+  const rates = rqUsFreightRatesForPlant(p.id);
+  const avg = rates.length ? rqAverageUsFreightRate(p.id) : null;
+  const selected = p.rqUsFreightRateId;
+  const hasValue = !!selected;
+  let labelHtml = `Del Border <span class="rq-ddown-price">$0</span>`;
+  if (selected === 'AVERAGE' && avg != null){
+    labelHtml = `Average of all carriers <span class="rq-ddown-price">$${avg.toFixed(2)}</span>`;
+  } else if (selected){
+    const r = rates.find(x => x.id === selected);
+    if (r) labelHtml = `${escapeHtml(r.origin || 'Origin')} <span class="rq-ddown-price">$${Number(r.rate).toFixed(2)}</span>`;
+  }
+  const optionsHtml = `
+    <div class="rq-ddown-option${!selected ? ' selected' : ''}" onclick="rqPickUsFreightRate('${p.id}','')">
+      <span class="rq-ddown-option-name">Del Border</span>
+      <span class="rq-ddown-option-price">$0</span>
+    </div>
+    ${avg != null ? `
+    <div class="rq-ddown-option${selected === 'AVERAGE' ? ' selected' : ''}" onclick="rqPickUsFreightRate('${p.id}','AVERAGE')">
+      <span class="rq-ddown-option-name">Average of all carriers</span>
+      <span class="rq-ddown-option-price">$${avg.toFixed(2)}</span>
+    </div>` : ''}
+    ${rates.length ? `<div class="rq-ddown-divider"></div>${rates.map(r => `
+    <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="rqPickUsFreightRate('${p.id}','${r.id}')">
+      <div>
+        <div class="rq-ddown-option-name">${escapeHtml(r.origin || 'Origin')}</div>
+        ${r.provider_name ? `<div class="rq-ddown-option-sub">${escapeHtml(r.provider_name)}</div>` : ''}
+      </div>
+      <span class="rq-ddown-option-price">$${Number(r.rate).toFixed(2)}</span>
+    </div>`).join('')}` : `<div class="rq-ddown-empty">No carrier rate on file yet for this plant's cities.</div>`}
+  `;
+  return `
+    <div class="rq-ddown">
+      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${isOpen}" onclick="rqToggleDropdown('${key}')" onblur="rqScheduleCloseDropdown('${key}')">
+        <span class="rq-ddown-btn-label">${labelHtml}</span>
+        ${rqDdownChevronSvg}
+      </button>
+      ${isOpen ? `<div class="rq-ddown-panel">${optionsHtml}</div>` : ''}
+    </div>`;
+}
+
+function rqMexicanDestDropdownHtml(p){
+  const key = 'mx:' + p.id;
+  const isOpen = rqOpenDropdownKey === key;
+  const rates = rqMexicanFreightRates();
+  const selected = p.rqMexicanDestRateId;
+  const hasValue = !!selected;
+  let labelHtml = `Border <span class="rq-ddown-price">$0</span>`;
+  if (selected){
+    const r = rates.find(x => x.id === selected);
+    if (r) labelHtml = `${escapeHtml(r.destination || 'Destination')} <span class="rq-ddown-price">$${Number(r.rate).toFixed(2)}</span>`;
+  }
+  const optionsHtml = `
+    <div class="rq-ddown-option${!selected ? ' selected' : ''}" onclick="rqPickMexicanDest('${p.id}','')">
+      <span class="rq-ddown-option-name">Border</span>
+      <span class="rq-ddown-option-price">$0</span>
+    </div>
+    ${rates.length ? `<div class="rq-ddown-divider"></div>${rates.map(r => `
+    <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="rqPickMexicanDest('${p.id}','${r.id}')">
+      <span class="rq-ddown-option-name">${escapeHtml(r.destination || 'Destination')}</span>
+      <span class="rq-ddown-option-price">$${Number(r.rate).toFixed(2)}</span>
+    </div>`).join('')}` : `<div class="rq-ddown-empty">No delivered destinations on file yet.</div>`}
+  `;
+  return `
+    <div class="rq-ddown">
+      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${isOpen}" onclick="rqToggleDropdown('${key}')" onblur="rqScheduleCloseDropdown('${key}')">
+        <span class="rq-ddown-btn-label">${labelHtml}</span>
+        ${rqDdownChevronSvg}
+      </button>
+      ${isOpen ? `<div class="rq-ddown-panel">${optionsHtml}</div>` : ''}
+    </div>`;
+}
+
 function rqPlantFieldsHtml(p){
   const docsOn = p.rqDocsOn === true;
   return `
@@ -1301,11 +1429,7 @@ function rqPlantFieldsHtml(p){
         </div>
         <div class="mini-field" style="width:250px;flex:0 0 auto;">
           <label>Location</label>
-          <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
-            <option value="">Del Border — $0</option>
-            ${rqUsFreightRatesForPlant(p.id).length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate(p.id) || 0).toFixed(2)}</option>` : ''}
-            ${rqUsFreightRatesForPlant(p.id).map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
-          </select>
+          ${rqUsFreightDropdownHtml(p)}
         </div>
         ${rqIsSeaboard(p) ? '' : `
         <div class="mini-field" style="width:auto;flex:0 0 auto;">
@@ -1314,10 +1438,7 @@ function rqPlantFieldsHtml(p){
         </div>`}
         <div class="mini-field" style="width:220px;flex:0 0 auto;">
           <label>Delivery location</label>
-          <select onchange="rqSetMexicanDest('${p.id}', this.value)">
-            <option value="">Border — $0</option>
-            ${rqMexicanFreightRates().map(r => `<option value="${r.id}" ${p.rqMexicanDestRateId === r.id ? 'selected' : ''}>${escapeHtml(r.destination || 'Destination')} — $${r.rate}</option>`).join('')}
-          </select>
+          ${rqMexicanDestDropdownHtml(p)}
           ${p.rqMexicanDestRateId ? (() => {
             const rate = rqMexicanFreightRates().find(r => r.id === p.rqMexicanDestRateId);
             const matches = rate ? rqCustomersForDestination(rate.destination) : [];
