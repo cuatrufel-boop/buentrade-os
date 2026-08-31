@@ -972,7 +972,7 @@ async function qOpenPendingPlantInline(productId, plantId){
     rqFreightIncluded: link ? link.freight_included === true : false,
   };
   if (!plantObj.rqUsFreightRateId){
-    plantObj.rqUsFreightRateId = rqDefaultUsFreightRateId(plantObj.rqProductLocationId, plantObj.rqFreightIncluded);
+    plantObj.rqUsFreightRateId = rqDefaultUsFreightRateId(plantId, plantObj.rqProductLocationId, plantObj.rqFreightIncluded);
   }
   // A fresh, single-plant list — this is a self-contained "work this one row" session, not meant
   // to merge with whatever's separately active over on the Request Quote tab.
@@ -1249,7 +1249,7 @@ async function autoPopulateRqPlants(){
   // (rqFreightIncluded — a real Seaboard sheet's Delivered column) skips both and stays at $0
   // additional freight, so it's never double-charged. Applies to every plant, not just Tyson.
   rqSelectedPlants.forEach(p => {
-    if (!p.rqUsFreightRateId) p.rqUsFreightRateId = rqDefaultUsFreightRateId(p.rqProductLocationId, p.rqFreightIncluded);
+    if (!p.rqUsFreightRateId) p.rqUsFreightRateId = rqDefaultUsFreightRateId(p.id, p.rqProductLocationId, p.rqFreightIncluded);
   });
   renderRqPlants();
   // Every calculator starts closed on a fresh search, priced or not — same "closed by default,
@@ -1303,8 +1303,8 @@ function rqPlantFieldsHtml(p){
           <label>Location</label>
           <select onchange="rqSetUsFreightRate('${p.id}', this.value)">
             <option value="">Del Border — $0</option>
-            ${rqUsFreightRatesAll().length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate(p.id) || 0).toFixed(2)}</option>` : ''}
-            ${rqUsFreightRatesAll().map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
+            ${rqUsFreightRatesForPlant(p.id).length ? `<option value="AVERAGE" ${p.rqUsFreightRateId === 'AVERAGE' ? 'selected' : ''}>Average of all carriers — $${(rqAverageUsFreightRate(p.id) || 0).toFixed(2)}</option>` : ''}
+            ${rqUsFreightRatesForPlant(p.id).map(r => `<option value="${r.id}" ${p.rqUsFreightRateId === r.id ? 'selected' : ''}>${escapeHtml(r.origin || 'Origin')} — $${r.rate}${r.provider_name ? ' (' + escapeHtml(r.provider_name) + ')' : ''}</option>`).join('')}
           </select>
         </div>
         ${rqIsSeaboard(p) ? '' : `
@@ -1398,14 +1398,26 @@ function renderRqPlants(){
 }
 
 // Master Data (provider_rates) is the only source for freight/customs numbers — nothing here is
-// hardcoded. Real check 2026-08-30: provider_rates.plant_id is 0/34 populated on every real US
-// Freight rate on file (it's deliberately not part of the row's uniqueness — one real city's rate
-// is shared across whichever plants ship from there), so a per-plant filter always returned
-// nothing. Every real lane is shown instead, across every carrier and every city — the manual
-// fallback picker (see rqPlantFieldsHtml) needs the full list to be useful at all.
+// hardcoded.
 function rqUsFreightRatesAll(){
   return rqAllProviderRates.filter(r => r.service_type === 'us_freight')
     .slice().sort((a, b) => (a.origin || '').localeCompare(b.origin || '') || a.rate - b.rate);
+}
+
+// Real correction 2026-08-31: provider_rates.plant_id is 0/34 populated (a rate is shared across
+// whichever plants ship from that city, so it was never the right join key), which is why this
+// used to fall back to showing every carrier's rate for every city regardless of plant — a Tyson
+// product's dropdown listed Smithfield's and Sanderson's cities too. The real link is
+// plant_locations: each plant's own known pickup cities, joined through location_id. Strict rule,
+// explicit and final per the user: "el promedio de precio es tomando las tarifas de tyson para
+// tyson... es por planta. no desplegar todas las locations en una planta solo las de la planta."
+// No cross-plant fallback of any kind — a plant with no known cities, or whose known cities have
+// no carrier rate yet, returns an empty list rather than borrowing another plant's data.
+function rqUsFreightRatesForPlant(plantId){
+  if (!plantId) return [];
+  const plantLocationIds = [...new Set(rqAllLocations.filter(l => l.plant_id === plantId).map(l => l.location_id).filter(Boolean))];
+  if (!plantLocationIds.length) return [];
+  return rqUsFreightRatesAll().filter(r => plantLocationIds.includes(r.location_id));
 }
 
 // The automatic pick: once a specific price row (plant_products.location_id) states which real
@@ -1422,30 +1434,13 @@ function rqCheapestUsFreightForLocation(locationId){
 
 // No city on file for this specific product (the plant's list didn't say, or hasn't restated it
 // this week — see [[feedback_dont_assume_detected_facts_are_permanent]]): quote the AVERAGE of
-// every known US Freight rate on file, a middle-ground estimate so a bid can go out now rather
-// than waiting on an exact origin. Corrected 2026-08-30 from an earlier "highest known" design —
-// explicit real rule: "si no trae ciudad en la lista saca un promedio de flete entre todos los
-// fletes." Not a real provider_rates row (no single id), so callers use the 'AVERAGE' sentinel
-// (see rqDefaultUsFreightRateId/rqFreightForPlant) rather than a rate id.
-//
-// Scoped to THIS plant's own known pickup cities when we have any — real correction 2026-08-30:
-// "a tyson solo le deben salir las plantas de tyson... el promedio de todas es por planta no
-// mezclar plantas." Averaging across every carrier rate on file (Sanderson's Gadsden AL alongside
-// Smithfield's Denison IA) mixes in cities a given plant may never actually ship from. rqAllLocations
-// here is plant_locations (each plant's own known pickup points, confusingly named after its own
-// search endpoint) — join through its location_id to find rates for cities THIS plant is known to
-// use. Falls back to the full system-wide average when the plant has no known pickup cities yet
-// (real gap confirmed live: only Smithfield and Sanderson have any plant_locations on file at all —
-// Tyson, Seaboard, Brakebush, Northwood, Peco have zero, so scoping only to their own cities would
-// silently return no estimate at all for the majority of plants, worse than a broad-but-imprecise one).
+// this plant's own known US Freight rates (see rqUsFreightRatesForPlant), a middle-ground estimate
+// so a bid can go out now rather than waiting on an exact origin. Not a real provider_rates row (no
+// single id), so callers use the 'AVERAGE' sentinel (see rqDefaultUsFreightRateId/rqFreightForPlant)
+// rather than a rate id. Strictly per-plant, no cross-plant fallback — see rqUsFreightRatesForPlant.
 function rqAverageUsFreightRate(plantId){
-  const rates = rqUsFreightRatesAll();
-  if (!rates.length) return null;
-  const plantLocationIds = plantId
-    ? [...new Set(rqAllLocations.filter(l => l.plant_id === plantId).map(l => l.location_id).filter(Boolean))]
-    : [];
-  const scoped = plantLocationIds.length ? rates.filter(r => plantLocationIds.includes(r.location_id)) : [];
-  const pool = scoped.length ? scoped : rates;
+  const pool = rqUsFreightRatesForPlant(plantId);
+  if (!pool.length) return null;
   const sum = pool.reduce((s, r) => s + Number(r.rate), 0);
   // Rounded to real money precision at the source — a raw division ("3961.4641176470586") was
   // reaching the Trading Tool's Direct Costs field and every save unrounded (real bug confirmed
@@ -1465,11 +1460,11 @@ function rqAverageUsFreightRate(plantId){
 // FOB and Delivered-to-border columns, and the Delivered figure (already saved as current_price)
 // already has freight baked in. Defaulting to the average/cheapest lookup on TOP of a price that's
 // already delivered would double-charge freight on the deal.
-function rqDefaultUsFreightRateId(locationId, freightIncluded){
+function rqDefaultUsFreightRateId(plantId, locationId, freightIncluded){
   if (freightIncluded) return null;
   const cheapest = rqCheapestUsFreightForLocation(locationId);
   if (cheapest) return cheapest.id;
-  return rqUsFreightRatesAll().length ? 'AVERAGE' : null;
+  return rqUsFreightRatesForPlant(plantId).length ? 'AVERAGE' : null;
 }
 
 // Picking a real origin here both selects the rate AND means "FOB from that plant" — leaving it
