@@ -544,7 +544,7 @@ auth.onAuthStateChanged(user => {
 
     <div id="rq_category_suggestions_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
       <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Other plants that carry this category — never asked for this product</div>
-      <div id="rq_category_suggestions_list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div id="rq_category_suggestions_list" class="pkg-table-wrap"></div>
     </div>
 
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
@@ -1489,31 +1489,63 @@ function rqRenderCategorySuggestions(){
     return;
   }
   wrap.style.display = 'block';
-  list.innerHTML = rqCategorySuggestions.map(pl => `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;">
-      <div style="font-size:13.5px;font-weight:600;">${escapeHtml(pl.name)}</div>
-      <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="rqAskNewPlantForProduct('${pl.id}')">Ask for price →</button>
-    </div>
-  `).join('');
+  // Same .pkg-row/.rq-plant-avatar ficha every priced plant above uses — a suggestion is still a
+  // plant card, just missing the price tag and calculator action, never a visually different list.
+  list.innerHTML = rqCategorySuggestions.map(pl => {
+    const avatarHtml = (pl.logo_url || pl.logo_url_dark)
+      ? `<div class="rq-plant-avatar rq-plant-avatar-logo"><img src="${escapeHtml(pl.logo_url || pl.logo_url_dark)}" alt=""></div>`
+      : `<div class="rq-plant-avatar">${escapeHtml((pl.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+    return `
+      <div class="pkg-row">
+        ${avatarHtml}
+        <div class="pkg-plant-info">
+          <div class="rq-plant-name" style="cursor:default;">${escapeHtml(pl.name)}</div>
+        </div>
+        <button type="button" class="rq-update-price-btn" style="width:auto;min-width:auto;padding:7px 14px;font-size:12px;border-radius:9px;margin-left:auto;" onclick="rqAskNewPlantForProduct('${pl.id}')">Ask for price →</button>
+      </div>
+      `;
+  }).join('');
 }
 
-// A plant that shares this product's category but has never been linked to it at all — clicking
-// creates the real plant_products row (the same bare link plants.html's "+ Add New Product" uses)
-// then reuses rqUpdatePlantPrice's own compose-and-mark-asked flow, so this never becomes a second
-// implementation of "ask a plant for a price."
-async function rqAskNewPlantForProduct(plantId){
+// A plant that shares this product's category but has never been linked to it at all. Real bug
+// fixed 2026-08-31: this used to create the real plant_products row (and, since loadPendingPrices
+// shows ANY unpriced row regardless of whether it was ever asked, jump the plant into Pending
+// Quotes) the instant this button was clicked — before the trader had even opened, let alone
+// sent, an actual ask. Opening this modal must be exactly as non-committal as opening one for an
+// already-known plant (rqUpdatePlantPrice) — closing it without sending leaves no trace. So the
+// real link is now only written inside the onSent callback, at the same moment the "asked" stamp
+// itself is written, never before.
+function rqAskNewPlantForProduct(plantId){
   const plant = rqAllPlants.find(p => p.id === plantId);
   if (!plant || !rqMatchedProductId) return;
-  try {
-    await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: rqMatchedProductId });
-  } catch (e) {
-    alert(`Couldn't link ${plant.name}: ${e.message}`);
-    return;
+  const p = { ...plant, rqProductId: rqMatchedProductId, rqPrice: undefined, rqPriceDate: null, rqLastRequestedAt: null, rqDocsOn: plant.docs_included === true, rqProductLocationId: null, rqFreightIncluded: false };
+  const subject = `${rqProductSpec || ''} — price request`;
+  const body = rqPriceRequestBody(p);
+  const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
+  if (p.email){
+    rqOpenEmailModal(`Ask ${p.name} for a price`, [{ id: p.id, label: p.name, to: p.email, subject, body, fromAlias: 'purchasing', onSent: rqOnAskSentNewPlant(p) }]);
   }
-  rqSelectedPlants.push({ ...plant, rqProductId: rqMatchedProductId, rqPrice: undefined, rqPriceDate: null, rqLastRequestedAt: null, rqDocsOn: plant.docs_included === true, rqProductLocationId: null, rqFreightIncluded: false });
-  rqUpdatePlantPrice(plantId);
-  rqCategorySuggestions = rqCategorySuggestions.filter(p => p.id !== plantId);
-  rqRenderCategorySuggestions();
+  if (phone){
+    rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: rqOnAskSentNewPlant(p) }]);
+  }
+  if (p.email && phone){
+    document.getElementById('rq_email_modal_overlay').classList.add('rq-split-left');
+    document.getElementById('rq_wa_modal_overlay').classList.add('rq-split-right');
+  }
+}
+
+// Only fires on an actual send/open — creates the real bare link (the same one plants.html's
+// "+ Add New Product" writes) right before stamping it asked via rqOnAskSent's own flow, so there
+// is exactly one moment this plant becomes real: the moment it was actually asked, not the moment
+// its compose window was opened.
+function rqOnAskSentNewPlant(p){
+  return async () => {
+    try { await callApi('plant-products-link', { actor: currentActor(), plant_id: p.id, product_id: p.rqProductId }); }
+    catch (e) { alert(`Couldn't save this plant's link: ${e.message}`); return; }
+    rqCategorySuggestions = rqCategorySuggestions.filter(x => x.id !== p.id);
+    rqRenderCategorySuggestions();
+    await rqOnAskSent(p)();
+  };
 }
 
 function removeRqPlant(plantId){
