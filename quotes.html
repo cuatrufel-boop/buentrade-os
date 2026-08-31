@@ -1190,11 +1190,11 @@ async function onRqProductInput(){
     }
     // Fetched as soon as the product is known (not just once a plant is priced) — the Mexican
     // Freight "Customer" picker needs this list right away, well before any Trading Tool opens.
-    // Awaited (not fire-and-forget) because autoPopulateRqPlants now needs the real matched-
-    // customer list to know whether a plant's price has actually been sent to everyone who buys
-    // this product, not just to someone.
+    // Fire-and-forget, same as always — autoPopulateRqPlants below fetches its own matched-customer
+    // list directly off rqMatchedProductId (see real bug note there) rather than depending on this
+    // one's separate, text-based product match finishing first.
     rqCustomersFetchedFor = name;
-    await rqFindCustomers();
+    rqFindCustomers();
     await autoPopulateRqPlants();
   } else {
     rqMatchedProductId = null;
@@ -1254,7 +1254,17 @@ async function autoPopulateRqPlants(){
     const prev = sentByPlant[r.plant_id][r.customer_id];
     if (!prev || r.sent_at > prev) sentByPlant[r.plant_id][r.customer_id] = r.sent_at;
   });
-  const matchedCustomerIds = rqMatchedCustomers.map(c => c.id);
+  // Fetched directly off rqMatchedProductId — the already-resolved, reliable product id — instead
+  // of reading the global rqMatchedCustomers. Real bug fixed 2026-08-31: rqFindCustomers fills that
+  // global via its OWN separate text-match against the search box's current value, which can come
+  // back empty for reasons unrelated to whether this product really has matched customers (a race,
+  // a name that doesn't compare byte-for-byte). When it did, matchedCustomerIds silently read as
+  // zero and every plant with even one past sent_offers row (Tyson, sent to one of five real
+  // customers) got wrongly treated as "sent to everyone" and hidden — the opposite of the fix this
+  // was supposed to be. This fetch cannot be wrong the same way: it's the one product id already
+  // proven correct by every price row rendered above.
+  const matchedCustomers = await rqMatchCustomersForProductIds([rqMatchedProductId]);
+  const matchedCustomerIds = matchedCustomers.map(c => c.id);
   rqSelectedPlants = (data || []).map(link => {
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
