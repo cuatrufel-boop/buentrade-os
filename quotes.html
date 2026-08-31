@@ -256,7 +256,37 @@
   .rq-customer-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;margin-top:8px;transition:border-color .15s,box-shadow .15s;}
   .rq-customer-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
   .rq-customer-row:first-child{margin-top:0;}
-  .rq-customer-name{font-weight:600;color:var(--ink);font-size:13.5px;flex:1;min-width:0;}
+  /* A round avatar (vs. the plant/brand square elsewhere on this page) so a customer reads as a
+     person/company to reach, not a brand carrying a price — same blue family, different shape
+     tells them apart at a glance. Real redesign 2026-08-31: the old row was just a square initial,
+     a name, and two visually mismatched buttons (a text pill next to a near-circular icon-only
+     blob) — genuinely looked unfinished, not styled. */
+  .rq-customer-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .rq-customer-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+  .rq-customer-name{font-weight:600;color:var(--ink);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rq-customer-contact{font-size:11.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rq-customer-actions{display:flex;gap:8px;flex-shrink:0;}
+  /* One shared shape (rounded pill, icon + label) for both channels — only the fill/border tells
+     Email and WhatsApp apart, so the pair reads as one designed control instead of two unrelated
+     buttons that happened to end up side by side. */
+  .rq-customer-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:background .15s,border-color .15s,box-shadow .15s,transform .1s;}
+  .rq-customer-btn svg{width:13px;height:13px;flex-shrink:0;}
+  .rq-customer-btn.email{background:#fff;border-color:var(--line);color:var(--blue);}
+  .rq-customer-btn.email:hover{border-color:var(--blue);background:var(--blue-light);}
+  .rq-customer-btn.whatsapp{background:#25D366;color:#fff;}
+  .rq-customer-btn.whatsapp:hover{background:#20BD5A;box-shadow:0 3px 8px rgba(37,211,102,.35);}
+  .rq-customer-btn:active{transform:translateY(1px);}
+  .rq-customer-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
+  /* The bulk "all customers" pair above the list — same shape/icon language as each row's own
+     buttons (so the whole section reads as one family), just a size step up to read as the
+     section-level action rather than competing with the individual rows below it. */
+  .rq-customer-bulk-btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:20px;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:background .15s,border-color .15s,box-shadow .15s,transform .1s;}
+  .rq-customer-bulk-btn svg{width:14px;height:14px;flex-shrink:0;}
+  .rq-customer-bulk-btn.email{background:#fff;border-color:var(--blue);color:var(--blue);}
+  .rq-customer-bulk-btn.email:hover{background:var(--blue-light);}
+  .rq-customer-bulk-btn.whatsapp{background:#25D366;color:#fff;}
+  .rq-customer-bulk-btn.whatsapp:hover{background:#20BD5A;box-shadow:0 3px 8px rgba(37,211,102,.35);}
+  .rq-customer-bulk-btn:active{transform:translateY(1px);}
   .rq-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:3px;}
   .rq-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
   .rq-update-price-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(180deg,#F7943D,#E8871E);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;padding:12px 18px;border:none;border-radius:11px;cursor:pointer;box-shadow:0 2px 8px rgba(232,135,30,.32);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;animation:rq-urgent-glow 2s ease-in-out infinite;}
@@ -517,8 +547,8 @@ auth.onAuthStateChanged(user => {
              below each row — same combined, ranked offer either way, just fewer clicks when the
              whole list is going out together. -->
         <div style="display:flex;gap:8px;flex-shrink:0;">
-          <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="sendOfferEmailToAll()">✉️ Email all</button>
-          <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="sendOfferWhatsAppToAll()">💬 WhatsApp all</button>
+          <button type="button" class="rq-customer-bulk-btn email" onclick="sendOfferEmailToAll()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>Email all</button>
+          <button type="button" class="rq-customer-bulk-btn whatsapp" onclick="sendOfferWhatsAppToAll()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp all</button>
         </div>
       </div>
       <div id="rq_customers_list"></div>
@@ -2391,11 +2421,14 @@ async function rqFindCustomers(){
   }
   container.innerHTML = rqMatchedCustomers.map(c => `
     <div class="rq-customer-row">
-      <div class="rq-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
-      <div class="rq-customer-name">${escapeHtml(c.trade_name)}</div>
-      <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="sendOfferEmailTo('${c.id}')" ${c.email ? '' : 'disabled title="No email on file"'}>Email</button>
-        <button class="wa-btn" onclick="sendOfferWhatsAppTo('${c.id}')" ${(c.whatsapp || c.phone) ? '' : 'disabled title="No phone on file"'}><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
+      <div class="rq-customer-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="rq-customer-info">
+        <div class="rq-customer-name">${escapeHtml(c.trade_name)}</div>
+        ${c.contact_name ? `<div class="rq-customer-contact">${escapeHtml(c.contact_name)}</div>` : ''}
+      </div>
+      <div class="rq-customer-actions">
+        <button type="button" class="rq-customer-btn email" onclick="sendOfferEmailTo('${c.id}')" ${c.email ? '' : 'disabled title="No email on file"'}><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>Email</button>
+        <button type="button" class="rq-customer-btn whatsapp" onclick="sendOfferWhatsAppTo('${c.id}')" ${(c.whatsapp || c.phone) ? '' : 'disabled title="No phone on file"'}><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp</button>
       </div>
     </div>`).join('');
   // Refresh so the "Customer: ..." match under Delivery location (Mexican Freight) picks up the
