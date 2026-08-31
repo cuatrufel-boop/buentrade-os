@@ -434,6 +434,44 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Real gap confirmed live 2026-08-31, against real unmatched Tyson lines ("Frozen Boxed
+    // Muscles — Tenderloins", "Frozen Boxed Muscles — 2407 Rib Tips Poly – 244M and 244L"): every
+    // pass above requires the candidate's name to appear as one CONTIGUOUS phrase inside the line
+    // — a candidate named "Rib Tips" never matches a line that wraps it in a section header and a
+    // size code ("... — 2407 Rib Tips Poly – 244M and 244L"), even though every word of the real
+    // cut name is genuinely there, unbroken and correctly spelled. Loosest pass yet: EVERY
+    // significant word of the candidate's name (species word stripped, same as
+    // normalizeForMatchLoose; plural-stemmed, same as the pass above) has to appear somewhere in
+    // the line as its own whole word — order and extra words in between no longer matter — but
+    // nothing matches on a SUBSET of a multi-word name: a candidate needs ALL its words present,
+    // so a bare "Rib" line still can't wrongly claim a "Beef Rib Eye" candidate, and a candidate
+    // carrying a word the line never mentions (e.g. catalog "Pork Spare Rib Tips" against a line
+    // that only ever says "Rib Tips", no "Spare") correctly stays unmatched rather than guessed.
+    // Tried only after every stricter, more precise pass above has already found nothing — this
+    // never runs for a line the exact/loose/phrase passes already resolved.
+    if (!nameMatches.length) {
+      const stem = (s: string) => s.split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ");
+      const wordsOf = (s: string) => stem(normalizeForMatchLoose(s || "")).split(" ").filter((w) => w.length > 1);
+      const allWordsPresent = (candidateWords: string[], lineNorm: string): boolean =>
+        candidateWords.length > 0 && candidateWords.every((w) => wordBoundary(w).test(lineNorm));
+
+      if (name_en || name_es) {
+        if (name_en) {
+          const enTarget = stem(normalizeForMatchLoose(name_en));
+          nameMatches = allInCategoryProducts.filter((p: any) => inCategory(p) && allWordsPresent(wordsOf(p.name_en), enTarget));
+        }
+        if (!nameMatches.length && name_es) {
+          const esTarget = stem(normalizeForMatchLoose(name_es));
+          nameMatches = allInCategoryProducts.filter((p: any) => inCategory(p) && allWordsPresent(wordsOf(p.name), esTarget));
+        }
+      } else {
+        const rawTarget = stem(normalizeForMatchLoose(raw_text));
+        nameMatches = allInCategoryProducts.filter((p: any) => inCategory(p) && (
+          allWordsPresent(wordsOf(p.name_en), rawTarget) || allWordsPresent(wordsOf(p.name), rawTarget)
+        ));
+      }
+    }
+
     // Rule 1/5 — nothing found means "needs a human to confirm creating something new," never an
     // auto-create. Returning an empty candidate list, not an error, so the caller can offer
     // "+ Create new product" as an explicit next step.
