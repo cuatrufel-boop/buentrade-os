@@ -802,7 +802,16 @@ function rqReturnCustomersWrapHome(){
   const home = document.getElementById('qPanel_request');
   const wrap = document.getElementById('rq_customers_wrap');
   if (home && wrap && wrap.parentElement !== home) home.appendChild(wrap);
-  if (wrap) wrap.style.display = 'none';
+  // Real bug fixed 2026-08-31, confirmed live: this used to also force wrap.style.display='none'
+  // unconditionally — fine for the one case this function exists for (a plant open in Pending
+  // Quotes closing, or leaving that tab), but this function ALSO runs on the way to ANY non-
+  // pending tab (see setQuoteTab, tab !== 'pending'), including Product Coverage — where the wrap
+  // was never relocated at all, nothing needed hiding, yet it got hidden anyway with nothing left
+  // to un-hide it on return (setQuoteTab's own restore path only re-shows it after an actual
+  // Pending Quotes session). Simply glancing at Coverage, or at Pending without opening anything,
+  // and coming back silently lost "Customers who buy this" for good. qPanel_request's own
+  // display:none while its tab is inactive already hides this wrap along with everything else in
+  // it — no separate, easy-to-strand display toggle needed here at all.
 }
 
 function setQuoteTab(tab){
@@ -844,11 +853,17 @@ function setQuoteTab(tab){
       rqProductSpecEs = rqSavedQuotesSession.productSpecEs;
       rqProductIsCombo = rqSavedQuotesSession.productIsCombo;
       rqSavedQuotesSession = null;
-      rqFindCustomers();
       autoPopulateRqPlants();
     } else {
       renderRqPlants();
     }
+    // Real bug fixed 2026-08-31, confirmed live: rqReturnCustomersWrapHome (called on the way OUT
+    // to ANY other tab, not just Pending) used to unconditionally hide "Customers who buy this" —
+    // simply glancing at Product Coverage, or at Pending Quotes without opening anything, and
+    // coming back left it stuck hidden with no saved session to trigger a re-show. Rebuilding it
+    // here unconditionally (whenever there's an active product) means returning to this tab always
+    // leaves it in the right state, not just after the one specific Pending-session path.
+    if (rqMatchedProductId) rqFindCustomers();
   }
   if (tab === 'pending') loadPendingPrices();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
