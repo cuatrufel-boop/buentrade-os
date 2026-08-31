@@ -510,14 +510,16 @@ auth.onAuthStateChanged(user => {
     <div id="rq_plant_rows" class="pkg-table-wrap" style="margin-top:10px;"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
-    <div id="rq_final_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
-      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Offer list — highest to lowest</div>
-      <div id="rq_final_list" class="pkg-table-wrap"></div>
-    </div>
-
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
         <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
+        <!-- One click for every matched customer at once, in addition to the per-customer buttons
+             below each row — same combined, ranked offer either way, just fewer clicks when the
+             whole list is going out together. -->
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="sendOfferEmailToAll()">✉️ Email all</button>
+          <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="sendOfferWhatsAppToAll()">💬 WhatsApp all</button>
+        </div>
       </div>
       <div id="rq_customers_list"></div>
     </div>
@@ -1507,18 +1509,39 @@ function rqPlantFieldsHtml(p){
         </div>`;
 }
 
+// One row per plant — sorted highest-to-lowest by renderRqPlants once a plant has a real
+// calculated sale price. Real simplification 2026-08-31: this used to show only the plant/
+// Purchase-price, with a SEPARATE "Offer list — highest to lowest" section below repeating the
+// same plant, cost, and delivery date just to add the sort order and the sale-price/total figures
+// — folded directly in here instead of keeping two lists of the same plants in sync.
 function rqPlantRowHtml(p, hasDeliveryDate){
   const showPriceRow = hasDeliveryDate;
   const avatarHtml = (p.logo_url || p.logo_url_dark)
     ? `<div class="rq-plant-avatar rq-plant-avatar-logo"><img src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt=""></div>`
     : `<div class="rq-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+  const calc = rqCalcRow(p);
+  const delivery = calc ? rqDeliveryDatesText() : null;
+  const files = calc ? rqFindProductFilesFor(p) : {};
+  const fileButtonsHtml = (files.photo_url || files.spec_url) ? `
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          ${files.photo_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.photo_url}','Foto-${p.name.replace(/[^a-z0-9]+/gi,'-')}', this)">📋 Foto</button>` : ''}
+          ${files.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.spec_url}','Ficha-tecnica-${p.name.replace(/[^a-z0-9]+/gi,'-')}.pdf', this)">📋 Ficha</button>` : ''}
+        </div>` : '';
+  const saleInfoHtml = calc ? `
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
+          <div style="font-size:11px;color:var(--ink-soft);">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>` : '';
   return `
       <div class="pkg-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};">
         ${avatarHtml}
         <div class="pkg-plant-info">
           <div class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" onclick="rqToggleCalculator('${p.id}')">${escapeHtml(p.name)}</div>
           ${p.rqPrice ? `<span class="pkg-tag price">$${Number(p.rqPrice).toFixed(4)}/lb</span>` : ''}
+          ${calc ? `<span class="pkg-plant-sub">Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</span>` : ''}
         </div>
+        ${fileButtonsHtml}
+        ${saleInfoHtml}
         <div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div>
       </div>
       `;
@@ -1545,8 +1568,22 @@ function renderRqPlants(){
     const id = el.dataset.plantRow;
     if (id && !rqSelectedPlants.some(p => p.id === id)) el.remove();
   });
+  // Highest to lowest sale price once a plant's calculator has actually run (rqCalcRow) — same
+  // ranking the old, separate "Offer list — highest to lowest" section below used to show on its
+  // own copy of these same rows. Real simplification 2026-08-31: that section duplicated every
+  // field already on this row (plant, cost, delivery, sale price) just to add the sort order and
+  // the sale-price/total figures — folded directly in here instead of keeping two lists in sync.
+  // A plant with no calc yet has no real price to rank by, so it sorts after every priced one,
+  // in whatever order it already was.
+  const sorted = rqSelectedPlants.slice().sort((a, b) => {
+    const sa = rqCalcRow(a)?.salePerLb, sb = rqCalcRow(b)?.salePerLb;
+    if (sa == null && sb == null) return 0;
+    if (sa == null) return 1;
+    if (sb == null) return -1;
+    return sb - sa;
+  });
   let anchor = null;
-  rqSelectedPlants.forEach(p => {
+  sorted.forEach(p => {
     const existing = container.querySelector(`[data-plant-row="${p.id}"]`);
     const row = document.createElement('div');
     row.dataset.plantRow = p.id;
@@ -1569,7 +1606,15 @@ function renderRqPlants(){
     }
     anchor = row;
   });
-  rqRenderFinalList();
+  // The moment there's at least one real offer, show who it can go to — no extra click needed,
+  // this is just information (nothing gets sent until a per-customer button is pressed). Only
+  // fetched once per product to avoid re-querying every poll tick. Moved here from the old,
+  // now-removed rqRenderFinalList — same trigger, same condition.
+  const productName = document.getElementById('rq_product_name').value.trim();
+  if (rqCustomersFetchedFor !== productName){
+    rqCustomersFetchedFor = productName;
+    rqFindCustomers();
+  }
 }
 
 // Master Data (provider_rates) is the only source for freight/customs numbers — nothing here is
@@ -1932,20 +1977,22 @@ function rqToggleCalculator(id){
     document.getElementById('rq_tt_overlay_body').innerHTML = `
       <iframe id="rq_iframe_${id}" src="${rqBuildToolUrl(p)}" onload="rqOnIframeLoaded('${id}')"></iframe>
     `;
-    // Full screen covers the row's own Send Offer button along with everything else on the page
-    // — Offers doesn't hit this because Negotiate lives inside the Trading Tool itself, but
-    // Quotes' send (email/WhatsApp compose) is this page's own code, not the frozen calculator's.
-    // A matching action lives in the overlay's own header so there's still a way to send without
-    // leaving full screen.
+    // This overlay's one job is confirming THIS plant's own Selling Price — never sending anything
+    // by itself. Real redesign 2026-08-31, explicit ask: the old "Send Offer" button here actually
+    // sent just this one plant's price to every matched customer, which read as "send the [combined]
+    // offer" but silently left out every other priced plant — the real combined, ranked send lives
+    // below (the plant list itself, and the bulk buttons in "Customers who buy this"). Confirm Price
+    // just closes the calculator — the price it computed is already saved (rqCalcRow/rqLastCalc)
+    // and now round-trips correctly on reopen (see the 'sell' param in rqBuildToolParams).
     document.getElementById('rq_tt_overlay_action').innerHTML =
-      `<button type="button" class="rq-send-offer-btn" style="width:auto;padding:8px 16px;font-size:12.5px;border-radius:9px;" onclick="rqSendPlantOffer('${id}')">✅ Send Offer</button>`;
+      `<button type="button" class="rq-send-offer-btn" style="width:auto;padding:8px 16px;font-size:12.5px;border-radius:9px;" onclick="rqToggleCalculator('${id}')">✅ Confirm Price</button>`;
     document.getElementById('rq_tt_overlay').style.display = 'flex';
     rqStartPolling();
     const nameEl = document.getElementById('rq_plant_name_' + id);
     if (nameEl) nameEl.classList.add('tt-open');
     rqUpdateTtActionButton(id);
   }
-  rqRenderFinalList();
+  renderRqPlants();
 }
 
 // No id when called from the overlay's own ✕ — closes whichever plant is currently open.
@@ -1961,13 +2008,13 @@ function rqCloseCalculator(id){
   if (nameEl) nameEl.classList.remove('tt-open');
   if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
   rqUpdateTtActionButton(p.id);
-  rqRenderFinalList();
+  renderRqPlants();
 }
 
 let rqPollTimer = null;
 function rqStartPolling(){
   if (rqPollTimer) return;
-  rqPollTimer = setInterval(rqRenderFinalList, 1000);
+  rqPollTimer = setInterval(renderRqPlants, 1000);
 }
 function rqStopPolling(){
   if (rqPollTimer){ clearInterval(rqPollTimer); rqPollTimer = null; }
@@ -2136,47 +2183,6 @@ function rqPricedPlantsSorted(){
   return withCalc;
 }
 
-function rqRenderFinalList(){
-  const wrap = document.getElementById('rq_final_wrap');
-  const container = document.getElementById('rq_final_list');
-  const withCalc = rqPricedPlantsSorted();
-  if (!withCalc.length){ wrap.style.display = 'none'; container.innerHTML = ''; return; }
-  wrap.style.display = 'block';
-  // The moment there's at least one real offer, show who it can go to — no extra click needed,
-  // this is just information (nothing gets sent until Open All Emails/WhatsApp or a per-customer
-  // button is pressed). Only fetched once per product to avoid re-querying every poll tick.
-  const productName = document.getElementById('rq_product_name').value.trim();
-  if (rqCustomersFetchedFor !== productName){
-    rqCustomersFetchedFor = productName;
-    rqFindCustomers();
-  }
-  container.innerHTML = withCalc.map(({ plant, calc }) => {
-    const files = rqFindProductFilesFor(plant);
-    const delivery = rqDeliveryDatesText();
-    // Product name/spec already sits in the header above (rq_spec_line) — repeating it on every
-    // row here was the duplicated info; each row only needs to add what's specific to IT: cost,
-    // delivery, sale price.
-    const avatarHtml = files.photo_url
-      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(files.photo_url)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml((plant.name || '?').trim().charAt(0).toUpperCase())}</div>`;
-    return `<div class="pkg-row">
-      ${avatarHtml}
-      <div class="pkg-plant-info">
-        <span class="pkg-plant-name">${escapeHtml(plant.name)}</span>
-        <span class="pkg-plant-sub">Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</span>
-      </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;">
-        ${files.photo_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.photo_url}','Foto-${plant.name.replace(/[^a-z0-9]+/gi,'-')}', this)">📋 Foto</button>` : ''}
-        ${files.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.spec_url}','Ficha-tecnica-${plant.name.replace(/[^a-z0-9]+/gi,'-')}.pdf', this)">📋 Ficha</button>` : ''}
-      </div>
-      <div style="text-align:right;flex-shrink:0;margin-left:8px;">
-        <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${calc.salePerLb.toFixed(4)}/lb</div>
-        <div style="font-size:11px;color:var(--ink-soft);">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
 // WhatsApp's wa.me links can only pre-fill text, never attach a real image. navigator.clipboard.
 // write() was tried here to auto-copy the photo for a Cmd+V paste, but it needs the click's "user
 // activation" to still be live by the time it runs — the fetch()/decode work above reliably burns
@@ -2327,103 +2333,6 @@ async function rqPrepareOfferFiles(){
   return { attachments, downloadFiles };
 }
 
-// Single-plant versions of buildCustomerOfferText/Html/rqPrepareOfferFiles — the package-wide
-// "Customers who buy this" send still bundles every ready plant into one message, but the button
-// living directly on one plant's own Trading Tool sends only THAT plant's price, not the whole
-// package, so a customer isn't offered a plant the trader hasn't actually clicked Send on yet.
-function buildSinglePlantOfferText(plant, calc, customerFirstName){
-  const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
-  const delivery = rqDeliveryDatesText();
-  return greeting + `${plant.name} — ${rqProductSpecEs || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + delivery : ''}`;
-}
-function buildSinglePlantOfferHtml(plant, calc, customerFirstName){
-  const greeting = customerFirstName ? `Hola ${escapeHtml(customerFirstName)},<br><br>` : '';
-  const delivery = rqDeliveryDatesText();
-  return greeting + `<div>${escapeHtml(plant.name)} — ${escapeHtml(rqProductSpecEs || '')} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + escapeHtml(delivery) : ''}</div>`;
-}
-async function rqPrepareOfferFilesFor(plant, calc){
-  const attachments = [];
-  const downloadFiles = [];
-  const files = rqFindProductFilesFor(plant);
-  if (files.photo_url || files.spec_url){
-    try {
-      const built = await rqBuildCombinedPdf(plant, calc);
-      attachments.push({ filename: built.filename, content: rqBytesToBase64(built.bytes) });
-      downloadFiles.push(built);
-    } catch(e){ /* PDF failing to build shouldn't block the send */ }
-  }
-  return { attachments, downloadFiles };
-}
-
-// The button on one plant's own Trading Tool — sends just this plant's price to every matched
-// customer (email if any customer has one on file, otherwise WhatsApp), and once that actually
-// goes out (onSent/onOpened, not just the compose window opening) this plant is done: it comes out
-// of Request Quote the same way removeRqPlant always has, its trail now living in sent_offers.
-async function rqSendPlantOffer(id){
-  if (!rqRequireDeliveryDay()) return;
-  let entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
-  if (!entry){
-    // Missing here for two real reasons, not just one: (a) the calculator's closed-by-default
-    // (View Offer →) and Send Offer got clicked before it was ever opened — no __calc to read yet;
-    // or (b) it was already open but the trader just touched an input a moment ago, which
-    // rqInvalidateCalc cleared (p.rqLastCalc = null) — the iframe needs a beat to recompute and
-    // post the fresh __calc back before rqCalcRow can read it again. Real bug confirmed 2026-08-30:
-    // this used to only wait for case (a) — already-open case (b) alerted instantly with zero
-    // retry, even though the calculator was visibly showing real, correct numbers on screen.
-    const p = rqSelectedPlants.find(x => x.id === id);
-    if (p){
-      if (!p.rqCalculatorOpen) rqToggleCalculator(id);
-      for (let i = 0; i < 10 && !entry; i++){
-        await new Promise(r => setTimeout(r, 300));
-        entry = rqPricedPlantsSorted().find(x => x.plant.id === id);
-      }
-    }
-  }
-  if (!entry){ alert('Still calculating the sale price for this plant — give it a second and try again.'); return; }
-  const { plant, calc } = entry;
-  const withEmail = rqMatchedCustomers.filter(c => c.email);
-  const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
-  if (!withEmail.length && !withWa.length){ rqShowNotice('No matched customer has an email or WhatsApp on file.'); return; }
-  // Only take this plant out of Request Quote once EVERY reachable matched customer has actually
-  // been sent this offer — real bug fixed 2026-08-31: sending to just the first of several matched
-  // customers used to remove the whole plant right away, silently blocking the rest of them from
-  // ever being offered this same price. A customer with both an email and a WhatsApp number counts
-  // once, not twice, toward "everyone's been sent to."
-  const totalTargets = new Set([...withEmail, ...withWa].map(c => c.id)).size;
-  const sentToIds = new Set();
-  const onSentOnce = (customerId) => {
-    sentToIds.add(customerId);
-    if (sentToIds.size >= totalTargets) removeRqPlant(id);
-  };
-  const { attachments, downloadFiles } = await rqPrepareOfferFilesFor(plant, calc);
-  // Same "both windows open at once" pattern as Update Purchase Price — the trader doesn't pick a
-  // channel first, whichever matched customers have either contact method get their own ready
-  // draft immediately.
-  if (withEmail.length){
-    const items = withEmail.map(c => {
-      const firstName = rqFirstName(c.contact_name || c.trade_name);
-      return {
-        id: c.id, label: c.trade_name, to: c.email, subject: 'Cotización — ' + (rqProductSpecEs || ''),
-        body: buildSinglePlantOfferText(plant, calc, firstName), html: buildSinglePlantOfferHtml(plant, calc, firstName), attachments,
-        fromAlias: 'offers', onSent: () => { rqLogSentOfferForPlant(plant, calc, [c], 'email'); onSentOnce(c.id); },
-      };
-    });
-    rqOpenEmailModal(`Email offer — ${plant.name}`, items, true);
-  }
-  if (withWa.length){
-    const items = withWa.map(c => ({
-      id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
-      body: buildSinglePlantOfferText(plant, calc, rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
-      onOpened: () => { rqLogSentOfferForPlant(plant, calc, [c], 'whatsapp'); onSentOnce(c.id); },
-    }));
-    rqOpenWaModal(`WhatsApp offer — ${plant.name}`, items, true);
-  }
-  if (withEmail.length && withWa.length){
-    document.getElementById('rq_email_modal_overlay').classList.add('rq-split-left');
-    document.getElementById('rq_wa_modal_overlay').classList.add('rq-split-right');
-  }
-}
-
 // Same download-then-drag-in pattern as offers.html's WhatsApp cards — a wa.me link can only
 // pre-fill text, never attach a real file, for anyone, ever. This is the closest a browser can
 // get: the actual combined PDF lands in Downloads right as the chat opens, ready to drag in.
@@ -2527,7 +2436,6 @@ function rqRequireDeliveryDay(){
 function rqTtActionLabel(p){
   const missing = p.rqPrice == null;
   const stale = !missing && (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
-  const isReady = rqPricedPlantsSorted().some(x => x.plant.id === p.id);
   const hasPhone = !!(p.whatsapp || p.phone);
   if ((missing || stale) && (p.email || hasPhone)){
     return `<button type="button" class="rq-update-price-btn" style="width:auto;min-width:auto;padding:7px 14px;font-size:12px;border-radius:9px;margin-left:auto;" onclick="rqUpdatePlantPrice('${p.id}')">❌ Update Price</button>`;
@@ -2537,18 +2445,14 @@ function rqTtActionLabel(p){
     // being linked to this product (most products don't have one yet), or on the Trading Tool's
     // own calc having already landed (isReady flips true ~1.5s after this card first renders,
     // which used to leave the button-less "Up to date" text sitting there with nothing to click
-    // until the trader happened to notice it had quietly become a button). rqSendPlantOffer itself
-    // gives a clear, specific reason if either isn't ready yet instead of the button just vanishing.
-    // The Trading Tool now always opens full-screen (see rqToggleCalculator), which builds its
-    // own Send Offer button in the overlay header — so this open-state branch is effectively
+    // until the trader happened to notice it had quietly become a button).
+    // The Trading Tool now always opens full-screen (see rqToggleCalculator), which builds its own
+    // Confirm Price button in the overlay header — so this open-state branch is effectively
     // unreachable in the UI (the row sits hidden behind the overlay whenever it'd show). Left in
-    // place rather than deleted since it's still the technically-correct state for this button
-    // if something ever renders the row while open.
+    // place rather than deleted since it's still the technically-correct state for this button if
+    // something ever renders the row while open.
     if (p.rqCalculatorOpen){
-      return `<div style="display:flex;gap:8px;margin-left:auto;">
-        <button type="button" class="pkg-trigger-btn hot" style="margin-left:0;" onclick="rqSendPlantOffer('${p.id}')">✅ Send Offer</button>
-        <button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="rqToggleCalculator('${p.id}')">✕ Close</button>
-      </div>`;
+      return `<button type="button" class="pkg-trigger-btn" style="margin-left:auto;" onclick="rqToggleCalculator('${p.id}')">✕ Close</button>`;
     }
     return `<button type="button" class="pkg-trigger-btn hot" onclick="rqToggleCalculator('${p.id}')">View Offer →</button>`;
   }
@@ -2943,6 +2847,41 @@ async function sendOfferWhatsAppTo(customerId){
     id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
     onOpened: () => rqLogSentOffers([c], 'whatsapp'),
   }], true);
+}
+
+// "Email all" / "WhatsApp all" in the Customers who buy this header — same combined, ranked offer
+// (buildCustomerOfferText/rqPrepareOfferFiles, every priced plant) as the per-customer buttons
+// above, just opened for every matched customer in one click instead of one at a time. Each
+// customer still gets their own reviewable card in the modal (rqOpenEmailModal/rqOpenWaModal
+// already support this — see their own "Send All"/"Make All Offers" button) and its own
+// sent_offers row on send, exactly like clicking each one individually would.
+async function sendOfferEmailToAll(){
+  if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
+  const withEmail = rqMatchedCustomers.filter(c => c.email);
+  if (!withEmail.length){ rqShowNotice('No matched customer has an email on file.'); return; }
+  const { attachments } = await rqPrepareOfferFiles();
+  const items = withEmail.map(c => {
+    const firstName = rqFirstName(c.contact_name || c.trade_name);
+    return {
+      id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
+      body: buildCustomerOfferText(firstName), html: buildCustomerOfferHtml(firstName), attachments,
+      fromAlias: 'offers', onSent: () => rqLogSentOffers([c], 'email'),
+    };
+  });
+  rqOpenEmailModal(`Email offer — All customers (${items.length})`, items, true);
+}
+
+async function sendOfferWhatsAppToAll(){
+  if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
+  const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
+  if (!withWa.length){ rqShowNotice('No matched customer has a WhatsApp number on file.'); return; }
+  const { downloadFiles } = await rqPrepareOfferFiles();
+  const items = withWa.map(c => ({
+    id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
+    body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
+    onOpened: () => rqLogSentOffers([c], 'whatsapp'),
+  }));
+  rqOpenWaModal(`WhatsApp offer — All customers (${items.length})`, items, true);
 }
 
 // Same fix as rqPriceAgeDays, same reason — this is called with both a bare delivery-date pick
