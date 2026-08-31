@@ -816,6 +816,12 @@ function setQuoteTab(tab){
   document.getElementById('qPanel_request').style.display = tab === 'request' ? 'block' : 'none';
   document.getElementById('qPanel_pending').style.display = tab === 'pending' ? 'block' : 'none';
   document.getElementById('qPanel_coverage').style.display = tab === 'coverage' ? 'block' : 'none';
+  // Real bug fixed 2026-08-31, confirmed by the user leaving and coming back: rq_plant_rows gets
+  // wiped above on the way OUT of this tab (see the comment on that line), but nothing ever
+  // rebuilt it on the way back IN — rqSelectedPlants still held the real, un-cleared session the
+  // whole time, the DOM just never asked it to redraw, so a search the trader had already done
+  // looked like it had vanished the moment they switched tabs and came back.
+  if (tab === 'request') renderRqPlants();
   if (tab === 'pending') loadPendingPrices();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
   // survives leaving the tab (e.g. to load prices in plants.html) and coming back would keep
