@@ -656,6 +656,15 @@ let rqProductSpec = null; // English — plant-facing (name_en, temp_en, pack_en
 let rqProductSpecEs = null; // Spanish twin — customer-facing (name, temp, pack), same product
 let rqProductIsCombo = false; // packaging of the current product — drives the sin-docs inspection $
 let rqMatchedProductId = null; // catalog products.id for the current search, null if typed free-text with no match
+// Real bug fixed 2026-08-31, confirmed live: Pending Quotes' inline panel works one plant at a
+// time by replacing rqSelectedPlants/rqMatchedProductId/etc outright (see qOpenPendingPlantInline)
+// — correct for that panel itself, but it meant a trader with an in-progress Request Quote search
+// (e.g. Tyson + Seaboard both up) who then opened one Pending item came back to Quotes and found
+// their real session gone, silently replaced by whatever single plant Pending had last touched.
+// A snapshot taken the first time Pending starts overwriting these globals, restored the moment
+// the trader actually returns to the Request Quote tab (see setQuoteTab) — so visiting Pending
+// Quotes to chase a price never costs the trader the work already sitting in Quotes.
+let rqSavedQuotesSession = null;
 
 // loadsPhrase already reads e.g. "need 3 loads delivered to the border (McAllen/Laredo) on
 // Aug 22, 26 and 31" — one consolidated ask per plant, never split across separate messages.
@@ -821,7 +830,26 @@ function setQuoteTab(tab){
   // rebuilt it on the way back IN — rqSelectedPlants still held the real, un-cleared session the
   // whole time, the DOM just never asked it to redraw, so a search the trader had already done
   // looked like it had vanished the moment they switched tabs and came back.
-  if (tab === 'request') renderRqPlants();
+  if (tab === 'request'){
+    // The other half of the fix above: if Pending Quotes actually took over these globals for its
+    // own single-plant session (see qOpenPendingPlantInline), restore the real product identity
+    // before redrawing — otherwise this correctly rebuilds rq_plant_rows, just from the wrong
+    // (Pending's) data. Explicit ask, confirmed: Pending Quotes IS this same quote, just parked in
+    // another tab while one plant's price catches up — so this re-fetches fresh (autoPopulateRqPlants)
+    // rather than restoring the stale plant array verbatim, so a plant just confirmed in Pending
+    // shows up here too, merged in alongside whatever was already ready, not overwritten by it.
+    if (rqSavedQuotesSession){
+      rqMatchedProductId = rqSavedQuotesSession.matchedProductId;
+      rqProductSpec = rqSavedQuotesSession.productSpec;
+      rqProductSpecEs = rqSavedQuotesSession.productSpecEs;
+      rqProductIsCombo = rqSavedQuotesSession.productIsCombo;
+      rqSavedQuotesSession = null;
+      rqFindCustomers();
+      autoPopulateRqPlants();
+    } else {
+      renderRqPlants();
+    }
+  }
   if (tab === 'pending') loadPendingPrices();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
   // survives leaving the tab (e.g. to load prices in plants.html) and coming back would keep
@@ -1023,6 +1051,20 @@ async function qOpenPendingPlantInline(productId, plantId){
   const prod = products.find(p => p.id === productId);
   if (!plant || !prod) return;
 
+  // Real bug fixed 2026-08-31, confirmed live: every line below replaces rqSelectedPlants and its
+  // companion globals outright — correct for THIS panel's own single-plant session, but it used to
+  // mean an in-progress Request Quote search (e.g. Tyson + Seaboard both up) got silently lost the
+  // moment the trader opened one Pending item and came back — Quotes showed whatever Pending had
+  // last touched instead of what was actually there. Snapshotted BEFORE any of these globals
+  // change (only if nothing's already saved, so a second Pending item opened right after the first
+  // doesn't overwrite the real original with an intermediate Pending state) — restored in
+  // setQuoteTab the moment the trader actually returns to Request Quote.
+  if (!rqSavedQuotesSession){
+    rqSavedQuotesSession = {
+      matchedProductId: rqMatchedProductId, productSpec: rqProductSpec,
+      productSpecEs: rqProductSpecEs, productIsCombo: rqProductIsCombo,
+    };
+  }
   rqMatchedProductId = productId;
   rqProductSpec = prod.full_name_en || prod.name_en || prod.name;
   rqProductSpecEs = prod.full_name_es || prod.name || prod.name_en;
