@@ -1830,6 +1830,20 @@ function rqBuildToolParams(p){
   const extraFieldKeys = new Set(p.rqExtraFields || []);
   if (lumperFee > 0) extraFieldKeys.add('lumperFee');
   if (inbondRelease > 0) extraFieldKeys.add('inbondRelease');
+  // Real bug fixed 2026-08-31, found by tracing (not guessed): every reopen of a plant's Trading
+  // Tool builds a brand-new iframe from these same params, and this object never included the
+  // Selling Price — trading-tool.html's own product-0 default is sellBorder:0 whenever the URL has
+  // no 'sell' (see its __qp.has('sell') check), so a fresh calculator always started at $0 and this
+  // page's own rqPrefillSellingPrice then re-suggested a fresh "~$1000 profit" number over it,
+  // silently discarding whatever the trader had confirmed the last time this exact plant was open —
+  // "ajusto el precio, lo cierro, y me queda con el original en $1000" was real, not a
+  // misunderstanding. p.rqLastCalc.salePerLb is exactly what was live on screen the last time this
+  // plant's calculator ran (auto-suggested or hand-typed, whichever it actually was) — sending it
+  // back round-trips that state instead of resetting it, and trading-tool.html already treats an
+  // incoming 'sell' as sellManual (a confirmed fact, never touched by its own auto-suggest) once
+  // this exists, so a hand-typed price now survives close/reopen instead of only surviving while
+  // that one iframe session stays alive.
+  const priorSell = p.rqLastCalc && p.rqLastCalc.salePerLb > 0 ? p.rqLastCalc.salePerLb : null;
   const params = new URLSearchParams({
     embed: '1',
     weight: '40000',
@@ -1861,6 +1875,7 @@ function rqBuildToolParams(p){
     freightMx: String(freightMx || 0),
     label: `${rqProductSpec || ''} — ${p.name}`.slice(0, 70),
   });
+  if (priorSell != null) params.set('sell', String(priorSell));
   return params;
 }
 
