@@ -1340,25 +1340,49 @@ function removeRqPlant(plantId){
 // rqToggleDocs already push live updates into an open calculator via rqSyncOpenCalculator — they
 // were always meant to be adjusted while the Trading Tool is on screen, not before opening it.
 // Custom dropdown state — which one (if any) is open, keyed 'usf:<plantId>' / 'mx:<plantId>' so
-// each plant's Location and Delivery location controls its own panel independently. Closing on
-// blur uses the same delayed-hide trick as the product search suggestions elsewhere (customers.html
-// cp_suggest_panel): the click on an option fires before the delayed close actually hides it.
+// each plant's Location and Delivery location controls its own panel independently.
+//
+// Real bug fixed 2026-08-31: closing used to rely on the button's own onblur, the same delayed-
+// hide trick the product search suggestions elsewhere (customers.html cp_suggest_panel) use. It
+// doesn't work here — opening the panel rebuilds this exact button's own HTML (see
+// rqRefreshDropdownHosts below, needed so the button's label/panel actually reflect the new open
+// state at all, since a custom control has no native "already shows itself" behavior a <select>
+// gets for free). Rebuilding destroys the button that currently HAS focus, which fires blur on it
+// as a side effect of being removed — so the dropdown closed itself ~150ms after every single
+// open, before a trader could ever see or click an option. A document-level click-outside check
+// isn't tied to focus at all, so it isn't defeated by the button being replaced mid-click.
 let rqOpenDropdownKey = null;
+
+document.addEventListener('click', (e) => {
+  if (!rqOpenDropdownKey) return;
+  if (e.target.closest && e.target.closest('.rq-ddown')) return; // click was inside a dropdown (button or panel) — its own handler already dealt with it
+  rqOpenDropdownKey = null;
+  rqRefreshDropdownHosts();
+});
+
+// The full-screen Trading Tool overlay (#rq_tt_overlay_fields) is its OWN separate copy of this
+// same fields HTML, set once by rqToggleCalculator and never touched again by renderRqPlants
+// (which only rebuilds the collapsed #rq_plant_rows list) — the native <select> this dropdown
+// replaced never needed a re-render to show its own new selection, but a custom button+panel does.
+function rqRefreshDropdownHosts(){
+  renderRqPlants();
+  const openPlant = rqSelectedPlants.find(p => p.rqCalculatorOpen);
+  if (openPlant) document.getElementById('rq_tt_overlay_fields').innerHTML = rqPlantFieldsHtml(openPlant);
+}
 
 function rqToggleDropdown(key){
   rqOpenDropdownKey = rqOpenDropdownKey === key ? null : key;
-  renderRqPlants();
-}
-function rqScheduleCloseDropdown(key){
-  setTimeout(() => { if (rqOpenDropdownKey === key) { rqOpenDropdownKey = null; renderRqPlants(); } }, 150);
+  rqRefreshDropdownHosts();
 }
 function rqPickUsFreightRate(plantId, rateId){
   rqOpenDropdownKey = null;
-  rqSetUsFreightRate(plantId, rateId);
+  rqSetUsFreightRate(plantId, rateId); // already calls renderRqPlants() + rqSyncOpenCalculator()
+  rqRefreshDropdownHosts();
 }
 function rqPickMexicanDest(plantId, rateId){
   rqOpenDropdownKey = null;
   rqSetMexicanDest(plantId, rateId);
+  rqRefreshDropdownHosts();
 }
 
 const rqDdownChevronSvg = `<svg class="rq-ddown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
@@ -1400,7 +1424,7 @@ function rqUsFreightDropdownHtml(p){
   `;
   return `
     <div class="rq-ddown">
-      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${isOpen}" onclick="rqToggleDropdown('${key}')" onblur="rqScheduleCloseDropdown('${key}')">
+      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${isOpen}" onclick="rqToggleDropdown('${key}')">
         <span class="rq-ddown-btn-label">${labelHtml}</span>
         ${rqDdownChevronSvg}
       </button>
@@ -1432,7 +1456,7 @@ function rqMexicanDestDropdownHtml(p){
   `;
   return `
     <div class="rq-ddown">
-      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${isOpen}" onclick="rqToggleDropdown('${key}')" onblur="rqScheduleCloseDropdown('${key}')">
+      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${isOpen}" onclick="rqToggleDropdown('${key}')">
         <span class="rq-ddown-btn-label">${labelHtml}</span>
         ${rqDdownChevronSvg}
       </button>
