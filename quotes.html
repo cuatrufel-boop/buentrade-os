@@ -1142,11 +1142,6 @@ async function qOpenPendingPlantInline(productId, plantId){
   // date is on file.
   slot.style.display = 'block';
   slot.dataset.open = '1';
-  // Pending's own inline panel is the ONE place these fields still need to render outside the
-  // full-screen overlay — entering a price here is exactly what unlocks opening that overlay
-  // (rqToggleCalculator refuses to open with no price yet), so the field that sets it can't live
-  // only inside the thing it's a precondition for.
-  //
   // Real regression fixed 2026-08-31: this panel's only way to actually message a customer used to
   // be the Trading Tool's own "Send Offer" button — removed in the Request Quote redesign (that
   // button is "Confirm Price" now, on purpose, and sends nothing).
@@ -1157,15 +1152,22 @@ async function qOpenPendingPlantInline(productId, plantId){
   // (rq_customers_wrap) gets relocated into this slot for as long as it's open, so what the trader
   // sees here is pixel-identical to Quotes, not a reduced stand-in — see rqReturnCustomersWrapHome
   // for how it finds its way back when this closes.
-  slot.innerHTML = rqPlantRowHtml(plantObj, true)
-    + `<div class="pkg-row" style="margin-top:8px;justify-content:center;">${rqPlantFieldsHtml(plantObj)}</div>`;
+  //
+  // Real fix 2026-08-31, explicit ask: a plant with no price at all used to get a SECOND, separate
+  // block of bare Purchase $/lb/Location/Documents/Delivery fields rendered right below its own
+  // row — the same plant shown twice, nothing like the one-shape "Confirm Price" experience every
+  // priced plant already gets (that fields block only stayed hidden for a priced plant because the
+  // calculator opened immediately on top of it). Opening the calculator unconditionally instead —
+  // it renders that exact same fields block itself, blank, ready to type into — means every plant
+  // here gets the identical shape, priced or not.
+  slot.innerHTML = rqPlantRowHtml(plantObj, true);
   await rqFindCustomers();
   slot.appendChild(document.getElementById('rq_customers_wrap'));
   // Same spot the trader just clicked becomes the close action — no separate button floating
   // elsewhere on the card to hunt for.
   const trigger = document.getElementById(`q_pending_trigger_${plantId}_${productId}`);
   if (trigger) trigger.textContent = '✕ Close';
-  if (plantObj.rqPrice) rqAutoOpenCalculator(plantObj.id);
+  rqToggleCalculator(plantObj.id);
 }
 
 // Local YYYY-MM-DD for "today" — used as the floor for delivery dates so a trader can't
@@ -2207,7 +2209,14 @@ function rqToggleCalculator(id){
   if (p.rqCalculatorOpen){
     rqCloseCalculator(id);
   } else {
-    if (!p.rqPrice){ alert('Enter a Purchase $/lb first.'); return; }
+    // Real fix 2026-08-31, explicit ask: a plant with no price at all used to be blocked from ever
+    // opening this ("Enter a Purchase $/lb first"), which is why Pending Quotes had to keep a
+    // second, separate raw-fields panel just for that first entry — same plant shown twice
+    // (rqPlantRowHtml's own row, then a duplicate block of bare number fields underneath), nothing
+    // like the one clean "Confirm Price" shape every other plant gets. The overlay already renders
+    // this exact Purchase $/lb field itself (rq_tt_overlay_fields, below) — opening blank and
+    // typing it in right here is the one true first-time-pricing flow now, no separate panel.
+    //
     // No delivery-day gate here — opening the calculator is just reviewing the price build-up,
     // not sending anything. Pending Quotes items for a product that's never been sent before have
     // no prior offer to inherit a date from, so rqDeliveryDates is genuinely empty at this point;
