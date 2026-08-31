@@ -1190,8 +1190,11 @@ async function onRqProductInput(){
     }
     // Fetched as soon as the product is known (not just once a plant is priced) — the Mexican
     // Freight "Customer" picker needs this list right away, well before any Trading Tool opens.
+    // Awaited (not fire-and-forget) because autoPopulateRqPlants now needs the real matched-
+    // customer list to know whether a plant's price has actually been sent to everyone who buys
+    // this product, not just to someone.
     rqCustomersFetchedFor = name;
-    rqFindCustomers();
+    await rqFindCustomers();
     await autoPopulateRqPlants();
   } else {
     rqMatchedProductId = null;
@@ -1230,29 +1233,46 @@ async function autoPopulateRqPlants(){
   }
   // Request Quote is only ever a to-do list — a plant sitting here either hasn't been asked for a
   // price yet, or has a price nobody's acted on. The moment it's asked (→ Pending Quotes) or sent
-  // as an offer (→ Offers), it's done its job here and shouldn't come back on a later search/
-  // reload just because nothing in the DB remembered that. Two DB-backed exclusions, not the
-  // in-memory-only removeRqPlant the trader already saw disappear-then-reappear on them:
+  // as an offer to EVERY customer who buys this product (→ Offers), it's done its job here and
+  // shouldn't come back on a later search/reload just because nothing in the DB remembered that.
+  // Two DB-backed exclusions, not the in-memory-only removeRqPlant the trader already saw
+  // disappear-then-reappear on them:
   //   1. Asked and no newer price has landed since → already belongs in Pending Quotes.
-  //   2. This exact price was already sent as an offer (to anyone) → already belongs in Offers.
+  //   2. This exact price was already sent to every matched customer → already belongs in Offers.
+  // Real bug fixed 2026-08-31: this used to hide the plant the moment it was sent to ANY ONE
+  // matched customer, not all of them — offering Tyson's price to one buyer made it vanish for the
+  // other four who also buy this product, with no way to reach them. Now tracked per customer.
   let sentRows;
   try { sentRows = (await callApi('sent-offers-search', { product_id: rqMatchedProductId, limit: 500 })).results || []; }
   catch (e) {
     alert(`Couldn't check which plants were already offered: ${e.message}\n\nTry reloading the page.`);
     return;
   }
-  const lastSentAtByPlant = {};
+  const sentByPlant = {}; // plant_id -> { customer_id -> latest sent_at }
   sentRows.forEach(r => {
-    const prev = lastSentAtByPlant[r.plant_id];
-    if (!prev || r.sent_at > prev) lastSentAtByPlant[r.plant_id] = r.sent_at;
+    if (!sentByPlant[r.plant_id]) sentByPlant[r.plant_id] = {};
+    const prev = sentByPlant[r.plant_id][r.customer_id];
+    if (!prev || r.sent_at > prev) sentByPlant[r.plant_id][r.customer_id] = r.sent_at;
   });
+  const matchedCustomerIds = rqMatchedCustomers.map(c => c.id);
   rqSelectedPlants = (data || []).map(link => {
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
     const askedNoNewPrice = link.last_requested_at && (!link.price_date || link.price_date <= link.last_requested_at);
     if (askedNoNewPrice) return null;
-    const lastSentAt = lastSentAtByPlant[link.plant_id];
-    const alreadyOffered = lastSentAt && link.price_date && lastSentAt.slice(0, 10) >= link.price_date;
+    const sentMap = sentByPlant[link.plant_id] || {};
+    let alreadyOffered;
+    if (matchedCustomerIds.length){
+      alreadyOffered = !!link.price_date && matchedCustomerIds.every(cid => {
+        const sentAt = sentMap[cid];
+        return sentAt && sentAt.slice(0, 10) >= link.price_date;
+      });
+    } else {
+      // No matched-customer list to check against (none linked to this product yet) — fall back
+      // to "sent to anyone" so a real past send still counts for something.
+      const anySentAt = Object.values(sentMap).sort().pop();
+      alreadyOffered = !!(anySentAt && link.price_date && anySentAt.slice(0, 10) >= link.price_date);
+    }
     if (alreadyOffered) return null;
     const hasPrice = link.current_price != null;
     // Request Quote only ever shows a plant that's actually ready to send — missing or stale
@@ -2315,7 +2335,17 @@ async function rqSendPlantOffer(id){
   const withEmail = rqMatchedCustomers.filter(c => c.email);
   const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   if (!withEmail.length && !withWa.length){ rqShowNotice('No matched customer has an email or WhatsApp on file.'); return; }
-  const onSentOnce = () => removeRqPlant(id);
+  // Only take this plant out of Request Quote once EVERY reachable matched customer has actually
+  // been sent this offer — real bug fixed 2026-08-31: sending to just the first of several matched
+  // customers used to remove the whole plant right away, silently blocking the rest of them from
+  // ever being offered this same price. A customer with both an email and a WhatsApp number counts
+  // once, not twice, toward "everyone's been sent to."
+  const totalTargets = new Set([...withEmail, ...withWa].map(c => c.id)).size;
+  const sentToIds = new Set();
+  const onSentOnce = (customerId) => {
+    sentToIds.add(customerId);
+    if (sentToIds.size >= totalTargets) removeRqPlant(id);
+  };
   const { attachments, downloadFiles } = await rqPrepareOfferFilesFor(plant, calc);
   // Same "both windows open at once" pattern as Update Purchase Price — the trader doesn't pick a
   // channel first, whichever matched customers have either contact method get their own ready
@@ -2326,7 +2356,7 @@ async function rqSendPlantOffer(id){
       return {
         id: c.id, label: c.trade_name, to: c.email, subject: 'Cotización — ' + (rqProductSpecEs || ''),
         body: buildSinglePlantOfferText(plant, calc, firstName), html: buildSinglePlantOfferHtml(plant, calc, firstName), attachments,
-        fromAlias: 'offers', onSent: () => { rqLogSentOfferForPlant(plant, calc, [c], 'email'); onSentOnce(); },
+        fromAlias: 'offers', onSent: () => { rqLogSentOfferForPlant(plant, calc, [c], 'email'); onSentOnce(c.id); },
       };
     });
     rqOpenEmailModal(`Email offer — ${plant.name}`, items, true);
@@ -2335,7 +2365,7 @@ async function rqSendPlantOffer(id){
     const items = withWa.map(c => ({
       id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
       body: buildSinglePlantOfferText(plant, calc, rqFirstName(c.contact_name || c.trade_name)), downloadFiles,
-      onOpened: () => { rqLogSentOfferForPlant(plant, calc, [c], 'whatsapp'); onSentOnce(); },
+      onOpened: () => { rqLogSentOfferForPlant(plant, calc, [c], 'whatsapp'); onSentOnce(c.id); },
     }));
     rqOpenWaModal(`WhatsApp offer — ${plant.name}`, items, true);
   }
