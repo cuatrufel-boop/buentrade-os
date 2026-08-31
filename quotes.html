@@ -542,6 +542,11 @@ auth.onAuthStateChanged(user => {
     <div id="rq_plant_rows" class="pkg-table-wrap" style="margin-top:10px;"></div>
     <div id="rq_empty" class="empty" style="display:none;padding:14px;">No plants added yet.</div>
 
+    <div id="rq_category_suggestions_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
+      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Other plants that carry this category — never asked for this product</div>
+      <div id="rq_category_suggestions_list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
         <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
@@ -652,6 +657,12 @@ let rqAllPlants = [];
 let rqProductSuggestions = []; // [{ label (name + full spec), matchName, productId }]
 let rqPreferredVariantId = null; // set only when a suggestion for a SPECIFIC variant was clicked
 let rqSelectedPlants = [];
+// Plants that share this product's category but have never been linked to it at all (no
+// plant_products row — not priced, not missing, not declined) — see autoPopulateRqPlants and
+// rqRenderCategorySuggestions. Explicit ask 2026-08-31: "Pilgrim's maneja todo lo de pollo... a
+// medida que vayamos pidiendo un producto específico metemos a Pilgrim's" — a plant too large to
+// ask for its whole portfolio at once, surfaced one real product at a time instead.
+let rqCategorySuggestions = [];
 let rqProductSpec = null; // English — plant-facing (name_en, temp_en, pack_en)
 let rqProductSpecEs = null; // Spanish twin — customer-facing (name, temp, pack), same product
 let rqProductIsCombo = false; // packaging of the current product — drives the sin-docs inspection $
@@ -943,6 +954,11 @@ async function loadPendingPrices(){
     const plant = rqAllPlants.find(p => p.id === r.plant_id);
     const prod = products.find(p => p.id === r.product_id);
     if (!plant || !prod) return null;
+    // Explicit ask 2026-08-31: a plant already asked "no lo produce" is a closed, known fact, not
+    // an open task — declined_at set means it stays out of this to-do list for good (see
+    // rqDeclinePlantProduct). Shown instead in the plant's own product list, greyed out, never
+    // re-offered as something to ask again.
+    if (r.declined_at) return null;
     const missing = r.current_price == null;
     const stale = !missing && (rqPriceAgeDays(r.price_date) || 0) > RQ_PRICE_STALE_DAYS;
     if (!missing && !stale) return null;
@@ -995,7 +1011,10 @@ async function loadPendingPrices(){
           <span class="pkg-tag ${missing ? 'missing' : 'stale'}">${missing ? 'Missing' : 'Stale · ' + rqFmtDate(r.price_date)}</span>
           ${reqAge != null ? `<span class="pkg-asof">asked ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>` : `<span class="pkg-asof">never asked</span>`}
         </div>
-        <button type="button" class="pkg-trigger-btn" id="q_pending_trigger_${r.plant_id}_${g.productId}" data-label="${escapeHtml(triggerLabel)}" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">${triggerLabel}</button>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button type="button" class="pkg-trigger-btn" id="q_pending_trigger_${r.plant_id}_${g.productId}" data-label="${escapeHtml(triggerLabel)}" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">${triggerLabel}</button>
+          <button type="button" class="btn secondary" style="padding:0 12px;font-size:12px;color:#C4432E;border-color:#F0C9C2;" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Doesn't produce this</button>
+        </div>
       </div>
       <div class="q-pending-inline-slot" id="q_pending_inline_${r.plant_id}_${g.productId}" style="display:none;padding:0 0 12px;"></div>`;
     }).join('');
@@ -1330,6 +1349,8 @@ async function onRqProductInput(){
     rqProductIsCombo = false;
     specLine.textContent = rqProductSpec ? rqProductSpec + ' (not in catalog — will send as typed)' : '';
     rqSelectedPlants = [];
+    rqCategorySuggestions = [];
+    rqRenderCategorySuggestions();
     if (!name) rqDeliveryDates = [];
     renderRqPlants();
   }
@@ -1395,6 +1416,9 @@ async function autoPopulateRqPlants(){
   rqSelectedPlants = (data || []).map(link => {
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
     if (!plant) return null;
+    // A plant that already told us it doesn't make this is a closed fact, not a ready-to-quote
+    // option — see rqDeclinePlantProduct.
+    if (link.declined_at) return null;
     const askedNoNewPrice = link.last_requested_at && (!link.price_date || link.price_date <= link.last_requested_at);
     if (askedNoNewPrice) return null;
     const sentMap = sentByPlant[link.plant_id] || {};
@@ -1439,11 +1463,58 @@ async function autoPopulateRqPlants(){
     if (!p.rqUsFreightRateId) p.rqUsFreightRateId = rqDefaultUsFreightRateId(p.id, p.rqProductLocationId, p.rqFreightIncluded);
   });
   renderRqPlants();
+  // Suggestion, not a to-do: a plant sharing this product's category but with NO plant_products
+  // row for it at all (never asked, never declined) is worth surfacing as "you could ask them
+  // too" — real gap confirmed 2026-08-31, plants like a new chicken supplier whose whole portfolio
+  // isn't loaded yet. Declined plants never reappear here (they have a row, just a declined one),
+  // matching the whole point of declined_at.
+  const product = products.find(p => p.id === rqMatchedProductId);
+  const linkedPlantIds = new Set((data || []).map(link => link.plant_id));
+  rqCategorySuggestions = product && product.category_id
+    ? rqAllPlants.filter(pl => pl.category_id === product.category_id && !linkedPlantIds.has(pl.id))
+    : [];
+  rqRenderCategorySuggestions();
   // Every calculator starts closed on a fresh search, priced or not — same "closed by default,
   // open the ones you actually want to look at" pattern as Pending Quotes' inline panel (View
   // Offer →), not every priced plant's Trading Tool auto-expanding the instant a product resolves.
 }
 
+
+function rqRenderCategorySuggestions(){
+  const wrap = document.getElementById('rq_category_suggestions_wrap');
+  const list = document.getElementById('rq_category_suggestions_list');
+  if (!rqCategorySuggestions.length){
+    wrap.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'block';
+  list.innerHTML = rqCategorySuggestions.map(pl => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;">
+      <div style="font-size:13.5px;font-weight:600;">${escapeHtml(pl.name)}</div>
+      <button type="button" class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="rqAskNewPlantForProduct('${pl.id}')">Ask for price →</button>
+    </div>
+  `).join('');
+}
+
+// A plant that shares this product's category but has never been linked to it at all — clicking
+// creates the real plant_products row (the same bare link plants.html's "+ Add New Product" uses)
+// then reuses rqUpdatePlantPrice's own compose-and-mark-asked flow, so this never becomes a second
+// implementation of "ask a plant for a price."
+async function rqAskNewPlantForProduct(plantId){
+  const plant = rqAllPlants.find(p => p.id === plantId);
+  if (!plant || !rqMatchedProductId) return;
+  try {
+    await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: rqMatchedProductId });
+  } catch (e) {
+    alert(`Couldn't link ${plant.name}: ${e.message}`);
+    return;
+  }
+  rqSelectedPlants.push({ ...plant, rqProductId: rqMatchedProductId, rqPrice: undefined, rqPriceDate: null, rqLastRequestedAt: null, rqDocsOn: plant.docs_included === true, rqProductLocationId: null, rqFreightIncluded: false });
+  rqUpdatePlantPrice(plantId);
+  rqCategorySuggestions = rqCategorySuggestions.filter(p => p.id !== plantId);
+  rqRenderCategorySuggestions();
+}
 
 function removeRqPlant(plantId){
   // A just-sent (or otherwise removed) plant can't be left sitting full-screen behind — its own
@@ -2654,6 +2725,23 @@ function rqTtActionLabel(p){
     return `<button type="button" class="pkg-trigger-btn hot" onclick="rqToggleCalculator('${p.id}')">View Offer →</button>`;
   }
   return '';
+}
+
+// Explicit ask 2026-08-31: "les molesta mucho a las plantas que uno les pida varias veces un
+// producto que no producen." Permanent, not a soft hide — declined_at set here is what
+// loadPendingPrices/autoPopulateRqPlants/the category-suggestion list all check to never surface
+// this exact plant+product pairing as something to ask again. The link itself is never deleted —
+// still visible, greyed out, in the plant's own Products & Prices tab (plants.html) — this is a
+// known, closed fact about this plant, not erased history.
+async function rqDeclinePlantProduct(linkId, plantName){
+  if (!confirm(`Mark ${plantName} as not producing this product? This is permanent — it won't be asked or suggested for this product again.`)) return;
+  try {
+    await callApi('plant-products-update', { actor: currentActor(), id: linkId, declined_at: new Date().toISOString() });
+  } catch (e) {
+    alert(`Couldn't save: ${e.message}`);
+    return;
+  }
+  loadPendingPrices();
 }
 
 // One click on "Update Purchase Price" opens BOTH compose windows at once (whichever the plant
