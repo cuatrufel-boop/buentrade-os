@@ -41,8 +41,13 @@
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
-  .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
-  .wa-btn:hover{background:#1EBE5A;}
+  /* Real fix 2026-09-02, explicit ask ("unifica no pueden ser distintos colores") — this used to
+     be its own flat solid green, a visibly different shade/finish from rq-customer-bulk-btn's own
+     WhatsApp gradient sitting right next to it in the same modal. Same gradient, same shadow, same
+     family now — just its own smaller size for this denser per-customer card layout. */
+  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#32E67F,#1DA851);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(29,168,81,.25);transition:background .18s,box-shadow .2s,transform .15s;}
+  .wa-btn:hover{background:linear-gradient(180deg,#3EF08C,#20BD5A);box-shadow:0 4px 10px rgba(29,168,81,.35);transform:translateY(-1px);}
+  .wa-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(29,168,81,.25);}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
@@ -169,11 +174,19 @@
   .rq-ddown-option.selected .rq-ddown-option-price{color:var(--blue);}
   .rq-ddown-divider{height:1px;background:var(--line);margin:5px 2px;}
   .rq-ddown-empty{padding:14px 10px;text-align:center;font-size:11.5px;color:var(--ink-soft);}
-  .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
-  .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
-  .pkg-trigger-btn:active{transform:translateY(0);}
-  .pkg-trigger-btn.hot{background:linear-gradient(180deg,#E3F6EC,#D2F0E1);color:#0F8A5F;border-color:rgba(15,138,95,.35);}
-  .pkg-trigger-btn.hot:hover{background:linear-gradient(180deg,#0F8A5F,#0B6B48);color:#fff;border-color:#0B6B48;}
+  /* Real redesign 2026-09-02, explicit ask ("mejora tambien botones de view quotes off spec") —
+     same pass as rq-customer-bulk-btn: a resting shadow so the pill reads as raised even before
+     the trader's mouse gets near it, not just on hover, plus a touch more padding/weight to match. */
+  .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:10px;padding:8px 15px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(22,86,176,.12);transition:background .18s,box-shadow .2s,transform .15s,color .15s,border-color .15s;}
+  .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 5px 14px rgba(30,106,219,.32);transform:translateY(-1px);}
+  .pkg-trigger-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(22,86,176,.2);}
+  .pkg-trigger-btn.hot{background:linear-gradient(180deg,#E3F6EC,#D2F0E1);color:#0F8A5F;border-color:rgba(15,138,95,.35);box-shadow:0 1px 3px rgba(15,138,95,.14);}
+  .pkg-trigger-btn.hot:hover{background:linear-gradient(180deg,#0F8A5F,#0B6B48);color:#fff;border-color:#0B6B48;box-shadow:0 5px 14px rgba(15,138,95,.32);}
+  /* Danger variant — a real, permanent action (Off-Spec, delete, etc.) needing a styled confirm
+     that isn't the browser's own bare confirm() dialog. Same shape/motion as every other trigger
+     pill, red instead of blue so the one irreversible choice in the pair actually reads as one. */
+  .pkg-trigger-btn.danger{background:linear-gradient(180deg,#FBE7E2,#F7D6CE);color:#A6371F;border-color:rgba(196,67,46,.35);box-shadow:0 1px 3px rgba(196,67,46,.14);}
+  .pkg-trigger-btn.danger:hover{background:linear-gradient(180deg,#C4432E,#A6371F);color:#fff;border-color:#A6371F;box-shadow:0 5px 14px rgba(196,67,46,.32);transform:translateY(-1px);}
   .pkg-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   /* ---- Request Quote hero: dark command banner + light KPI strip ---- */
   /* overflow stays visible — the suggestions dropdown (position:absolute, inside this banner)
@@ -271,24 +284,35 @@
   /* One shared shape (rounded pill, icon + label) for both channels — only the fill/border tells
      Email and WhatsApp apart, so the pair reads as one designed control instead of two unrelated
      buttons that happened to end up side by side. */
-  .rq-customer-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:background .15s,border-color .15s,box-shadow .15s,transform .1s;}
+  /* Real fix 2026-09-02, explicit ask ("unifica no pueden ser distintos colores, unifica la
+     imagen") — three different button families (this one, .wa-btn, .rq-customer-bulk-btn) each
+     had their own idea of "the WhatsApp/Email button," different greens and blues sitting side by
+     side depending which screen happened to render them. One real gradient + shadow language now,
+     everywhere a send action shows up — only the size changes per context. */
+  .rq-customer-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:20px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border:none;box-shadow:0 1px 3px rgba(15,31,51,.12);transition:background .18s,box-shadow .2s,transform .15s;}
   .rq-customer-btn svg{width:13px;height:13px;flex-shrink:0;}
-  .rq-customer-btn.email{background:#fff;border-color:var(--line);color:var(--blue);}
-  .rq-customer-btn.email:hover{border-color:var(--blue);background:var(--blue-light);}
-  .rq-customer-btn.whatsapp{background:#25D366;color:#fff;}
-  .rq-customer-btn.whatsapp:hover{background:#20BD5A;box-shadow:0 3px 8px rgba(37,211,102,.35);}
-  .rq-customer-btn:active{transform:translateY(1px);}
+  .rq-customer-btn.email{background:linear-gradient(180deg,#4A90F0,#1656B0);color:#fff;box-shadow:0 1px 3px rgba(22,86,176,.3);}
+  .rq-customer-btn.email:hover{background:linear-gradient(180deg,#5C9CF5,#1D63C4);box-shadow:0 4px 10px rgba(22,86,176,.4);transform:translateY(-1px);}
+  .rq-customer-btn.whatsapp{background:linear-gradient(180deg,#32E67F,#1DA851);color:#fff;box-shadow:0 1px 3px rgba(29,168,81,.3);}
+  .rq-customer-btn.whatsapp:hover{background:linear-gradient(180deg,#3EF08C,#20BD5A);box-shadow:0 4px 10px rgba(29,168,81,.4);transform:translateY(-1px);}
+  .rq-customer-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(15,31,51,.2);}
   .rq-customer-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   /* The bulk "all customers" pair above the list — same shape/icon language as each row's own
      buttons (so the whole section reads as one family), just a size step up to read as the
      section-level action rather than competing with the individual rows below it. */
-  .rq-customer-bulk-btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:20px;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:background .15s,border-color .15s,box-shadow .15s,transform .1s;}
-  .rq-customer-bulk-btn svg{width:14px;height:14px;flex-shrink:0;}
-  .rq-customer-bulk-btn.email{background:#fff;border-color:var(--blue);color:var(--blue);}
-  .rq-customer-bulk-btn.email:hover{background:var(--blue-light);}
-  .rq-customer-bulk-btn.whatsapp{background:#25D366;color:#fff;}
-  .rq-customer-bulk-btn.whatsapp:hover{background:#20BD5A;box-shadow:0 3px 8px rgba(37,211,102,.35);}
-  .rq-customer-bulk-btn:active{transform:translateY(1px);}
+  /* Real redesign 2026-09-02, explicit ask ("muy mediocre, mas diseno, no parches"): the flat
+     white-outline Email + solid-green WhatsApp pair read as an afterthought next to everything
+     else in this app, which is all soft gradients and real depth (.pkg-trigger-btn, .pkg-tag,
+     the send buttons inside the calculator overlay). Same family now — a real gradient each, a
+     resting shadow (not just a hover one) so they read as raised, tappable surfaces at a glance,
+     and a proper lift-on-hover instead of the old press-down-only feedback. */
+  .rq-customer-bulk-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:22px;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;letter-spacing:.1px;cursor:pointer;white-space:nowrap;border:none;transition:background .18s,box-shadow .2s,transform .15s;}
+  .rq-customer-bulk-btn svg{width:15px;height:15px;flex-shrink:0;}
+  .rq-customer-bulk-btn.email{background:linear-gradient(180deg,#4A90F0,#1656B0);color:#fff;box-shadow:0 2px 8px rgba(22,86,176,.35);}
+  .rq-customer-bulk-btn.email:hover{background:linear-gradient(180deg,#5C9CF5,#1D63C4);box-shadow:0 5px 16px rgba(22,86,176,.45);transform:translateY(-1px);}
+  .rq-customer-bulk-btn.whatsapp{background:linear-gradient(180deg,#32E67F,#1DA851);color:#fff;box-shadow:0 2px 8px rgba(29,168,81,.35);}
+  .rq-customer-bulk-btn.whatsapp:hover{background:linear-gradient(180deg,#3EF08C,#20BD5A);box-shadow:0 5px 16px rgba(29,168,81,.45);transform:translateY(-1px);}
+  .rq-customer-bulk-btn:active{transform:translateY(0);box-shadow:0 1px 4px rgba(0,0,0,.2);}
   .rq-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:3px;}
   .rq-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
   .rq-update-price-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(180deg,#F7943D,#E8871E);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;padding:12px 18px;border:none;border-radius:11px;cursor:pointer;box-shadow:0 2px 8px rgba(232,135,30,.32);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;animation:rq-urgent-glow 2s ease-in-out infinite;}
@@ -534,6 +558,16 @@ auth.onAuthStateChanged(user => {
               <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
             </div>
           </div>
+          <!-- Real fix 2026-09-02, explicit ask ("en pending estan en la fila del producto y en
+               quotes abajo... cambiar los botones en quotes a la fila del producto") — same two
+               buttons that used to live down in "Customers who buy this," moved up here so both
+               screens put them in the exact same spot: right on the product's own title row.
+               Hidden by renderRqPlants below until at least one plant is actually priced — nothing
+               real to send before that. -->
+          <div id="rq_send_all_wrap" style="display:none;gap:8px;flex-shrink:0;">
+            <button type="button" class="rq-customer-bulk-btn email" onclick="sendOfferEmailToAll()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>Email all</button>
+            <button type="button" class="rq-customer-bulk-btn whatsapp" onclick="sendOfferWhatsAppToAll()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp all</button>
+          </div>
           <span id="rq_spec_count" class="pending-group-count" style="display:none;"></span>
         </div>
       </div>
@@ -548,15 +582,12 @@ auth.onAuthStateChanged(user => {
     </div>
 
     <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
+      <!-- Real fix 2026-09-02, explicit ask ("cambiar los botones en quotes a la fila del
+           producto no abajo") — Email all/WhatsApp all moved up to the product title row itself
+           (rq_send_all_wrap above), same spot Pending Quotes already puts them. This header is
+           just the label now, no second copy of the same two buttons further down the page. -->
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
         <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
-        <!-- One click for every matched customer at once, in addition to the per-customer buttons
-             below each row — same combined, ranked offer either way, just fewer clicks when the
-             whole list is going out together. -->
-        <div style="display:flex;gap:8px;flex-shrink:0;">
-          <button type="button" class="rq-customer-bulk-btn email" onclick="sendOfferEmailToAll()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>Email all</button>
-          <button type="button" class="rq-customer-bulk-btn whatsapp" onclick="sendOfferWhatsAppToAll()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp all</button>
-        </div>
       </div>
       <div id="rq_customers_list"></div>
     </div>
@@ -589,7 +620,7 @@ auth.onAuthStateChanged(user => {
     <div class="rq-modal-header">
       <h3 id="rq_email_modal_title">Review emails</h3>
       <div style="display:flex;gap:8px;">
-        <button class="btn" id="rq_email_modal_sendall" onclick="rqEmailModalSendAll()">Send All</button>
+        <button class="pkg-trigger-btn" style="font-size:13px;padding:9px 16px;" id="rq_email_modal_sendall" onclick="rqEmailModalSendAll()">Send All</button>
         <button class="btn secondary" onclick="rqEmailModalClose()">Close</button>
       </div>
     </div>
@@ -613,6 +644,20 @@ auth.onAuthStateChanged(user => {
     <div style="text-align:right;display:flex;justify-content:flex-end;gap:10px;">
       <button type="button" class="btn secondary" id="rq_notice_action" style="display:none;"></button>
       <button type="button" class="btn" onclick="rqCloseNotice()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Real replacement 2026-09-01, explicit ask: window.confirm() is the browser's own bare system
+     dialog — "localhost:8901 says", ugly, unstyled, nothing BuenTrade about it. This is the app's
+     own version, same visual family as every other modal here (rq-modal-overlay/box), for any
+     place a real Cancel/confirm choice is needed before an irreversible action. See rqConfirm(). -->
+<div id="rq_confirm_overlay" class="rq-modal-overlay" style="display:none;z-index:2100;">
+  <div class="rq-modal-box" style="max-width:420px;padding:22px 24px;">
+    <div id="rq_confirm_text" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:18px;"></div>
+    <div style="text-align:right;display:flex;justify-content:flex-end;gap:10px;">
+      <button type="button" class="btn secondary" id="rq_confirm_cancel">Cancel</button>
+      <button type="button" class="pkg-trigger-btn danger" id="rq_confirm_ok" style="margin-left:0;">OK</button>
     </div>
   </div>
 </div>
@@ -664,6 +709,25 @@ let rqAllPlants = [];
 let rqProductSuggestions = []; // [{ label (name + full spec), matchName, productId }]
 let rqPreferredVariantId = null; // set only when a suggestion for a SPECIFIC variant was clicked
 let rqSelectedPlants = [];
+// Real fix 2026-09-02, explicit ask repeated many times: "en quotes bien, en pending no hay
+// precio." Quotes' own rows only ever SEEM to show a Selling price for free — what's actually
+// happening is p.rqLastCalc, cached on that plant's own in-memory object the moment its calculator
+// was opened at least once THIS session (see rqCalcRow). A brand-new Quotes search for a plant
+// nobody's opened yet shows exactly as bare as Pending does — there's no persisted Selling price
+// anywhere (plant_products has no such column; it's freight/margin math the frozen calculator
+// computes live, never written to the DB). Pending's own list is a separate fetch
+// (loadPendingPrices' qPendingRows), never the same object rqSelectedPlants holds, so even a
+// calculator opened and confirmed from Pending itself had nowhere for that number to land once
+// the trader closed it. This is that missing landing spot — keyed by plant+product so it survives
+// the row being rebuilt, filled in by rqCloseCalculator every time any calculator closes,
+// anywhere, so Pending benefits from the exact same "already opened once" memory Quotes has.
+let rqPendingCalcCache = {};
+// plant.id of whichever plant currently has a Pending Quotes inline session open (null when
+// none) — the single source of truth for that session's own open/close state, so a click on the
+// outer trigger and the overlay's own Confirm Price/✕ both tear down through the exact same path
+// (rqCloseCalculator) instead of the trigger having a second, separate "just hide this div" close
+// that never touched the overlay it opened. See qOpenPendingPlantInline and rqCloseCalculator.
+let rqPendingInlineOpenId = null;
 // Plants that share this product's category but have never been linked to it at all (no
 // plant_products row — not priced, not missing, not declined) — see autoPopulateRqPlants and
 // rqRenderCategorySuggestions. Explicit ask 2026-08-31: "Pilgrim's maneja todo lo de pollo... a
@@ -841,10 +905,17 @@ function setQuoteTab(tab){
   // "View Offer" in the visible Pending row silently updated the hidden Quotes-tab copy instead —
   // the row on screen never reacted to anything. Clearing whichever tab's dynamic content is
   // being left removes the stale duplicate before it can collide with the next one.
+  // Real bug fixed 2026-09-01, confirmed live: leaving Pending Quotes used to just blank every
+  // .q-pending-inline-slot directly, with no idea whether one of them still had a real Trading
+  // Tool overlay open (rq_tt_overlay is a page-level singleton, not scoped to this tab, so it kept
+  // floating on top of whichever tab the trader switched to). Routing this through the same
+  // rqCloseCalculator every other close uses — fire-and-forget, same pattern as the price-save
+  // inside it — means switching tabs mid-session closes it properly instead of orphaning it.
+  if (tab !== 'pending' && rqPendingInlineOpenId) rqCloseCalculator(rqPendingInlineOpenId);
   if (tab !== 'request') document.getElementById('rq_plant_rows').innerHTML = '';
   if (tab !== 'pending'){
     rqReturnCustomersWrapHome();
-    document.querySelectorAll('.q-pending-inline-slot').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; el.dataset.open = '0'; });
+    document.querySelectorAll('.q-pending-inline-slot').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
   }
   document.getElementById('qTabBtn_request').classList.toggle('active', tab === 'request');
   document.getElementById('qTabBtn_pending').classList.toggle('active', tab === 'pending');
@@ -881,7 +952,17 @@ function setQuoteTab(tab){
     // coming back left it stuck hidden with no saved session to trigger a re-show. Rebuilding it
     // here unconditionally (whenever there's an active product) means returning to this tab always
     // leaves it in the right state, not just after the one specific Pending-session path.
-    if (rqMatchedProductId) rqFindCustomers();
+    //
+    // Real bug fixed 2026-09-01, confirmed live with a screenshot: gating this call on
+    // rqMatchedProductId covered the "show it" half but not the other half — landing back here
+    // with NO product active (fresh tab, or a Pending session that just closed with nothing saved
+    // to restore) did nothing at all, leaving the wrap sitting at whatever display value the just-
+    // closed Pending session left it (visible), pixel-identical to a real match — "Customers who
+    // buy this," Email all/WhatsApp all and all, on the blank "What are we quoting today?" screen.
+    // rqFindCustomers now hides it itself the instant rqMatchedProductId is empty, so calling it
+    // unconditionally here — not gating the call at all — keeps the wrap truthfully in sync with
+    // whatever product is (or isn't) actually active, every single time this tab is shown.
+    rqFindCustomers();
   }
   if (tab === 'pending') loadPendingPrices();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
@@ -960,14 +1041,29 @@ async function loadPendingPrices(){
   // function before it clears slots for the same reason; this list's own rebuild needed the same
   // protection and never had it.
   rqReturnCustomersWrapHome();
+  // This tracker points at a slot id that's about to be destroyed by the rebuild below regardless
+  // — a stale id left pointing at a now-nonexistent element is exactly the same class of bug
+  // rq_customers_wrap itself just got fixed for.
+  rqPendingInlineOpenId = null;
   list.innerHTML = '<div class="empty">Loading…</div>';
   empty.style.display = 'none';
   let raw;
   try { raw = (await callApi('plant-products-search', {})).results || []; }
   catch (e) { list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`; return; }
-  // Every plant missing or stale on price lives here now, whether or not it's ever been asked —
-  // Request Quote only shows plants actually ready to send (see autoPopulateRqPlants), so this is
-  // the one place left for "needs a price," not just the ones already chased once before.
+  // Real redesign 2026-09-01, explicit ask: "confirm price... que me queden con precios listos,
+  // misma dinamica de quotes." A plant used to drop off this list the instant Confirm Price gave
+  // it a real number — correct in the database (it's genuinely not missing/stale anymore), but
+  // from the trader's chair it just vanished mid-session with no visible trace, indistinguishable
+  // from having been sent. It hadn't gone anywhere real — Quotes tab (autoPopulateRqPlants) is the
+  // only other place that shows a priced plant, and only once someone deliberately searches that
+  // exact product there. Now a plant that got priced but was never actually offered to a real
+  // customer stays right here, in the same product card, showing its price — exactly Quotes' own
+  // "priced and ready" shape — until Email all/WhatsApp all (via "Open this product in Quotes" on
+  // the card title) actually sends it, the same "sent" fact Quotes itself already tracks.
+  let sentRows = [];
+  try { sentRows = (await callApi('sent-offers-search', { status: 'sent', limit: 1000 })).results || []; }
+  catch (e) { /* worst case a just-sent plant lingers here one extra reload — never worse than that */ }
+  const sentKeys = new Set(sentRows.map(r => r.plant_id + '|' + r.product_id));
   qPendingRows = raw.map(r => {
     const plant = rqAllPlants.find(p => p.id === r.plant_id);
     const prod = products.find(p => p.id === r.product_id);
@@ -979,8 +1075,9 @@ async function loadPendingPrices(){
     if (r.declined_at) return null;
     const missing = r.current_price == null;
     const stale = !missing && (rqPriceAgeDays(r.price_date) || 0) > RQ_PRICE_STALE_DAYS;
-    if (!missing && !stale) return null;
-    return { ...r, plant, prod };
+    const priced = !missing && !stale;
+    if (priced && sentKeys.has(r.plant_id + '|' + r.product_id)) return null; // actually sent — graduated to Offers history
+    return { ...r, plant, prod, missing, stale, priced };
   }).filter(Boolean);
 
   const countBadge = document.getElementById('qPendingCount');
@@ -994,13 +1091,24 @@ async function loadPendingPrices(){
   qPendingRows.forEach(r => (groups[r.product_id] = groups[r.product_id] || []).push(r));
   const groupList = Object.entries(groups).map(([productId, rows]) => ({
     productId, rows,
-    // Smallest age = most recently touched — that group is what's actually "hot" right now.
-    // A plant that was never individually asked has null age; Math.min coerces null to 0, which
-    // would make a group with even one never-asked plant look "touched today" and jump to the
-    // top regardless of how old its real activity is — filter those out before taking the min.
-    recency: Math.min(...rows.map(r => rqPriceAgeDays(r.last_requested_at)).filter(a => a != null), Infinity),
+    // Real fix 2026-09-01, explicit ask: "pending quotes debe ir siempre la mas reciente arriba."
+    // Real bug this replaces: recency used to key off last_requested_at alone, day-rounded — a
+    // plant that had never been individually asked got null age, which Math.min coerces to
+    // Infinity (filtered out on purpose so it didn't wrongly look "touched today"), sinking it to
+    // the very bottom even if it was the newest thing in the whole list, created minutes ago. And
+    // day-rounding meant every row touched today tied at the same age, leaving them in whatever
+    // arbitrary order Object.entries happened to return, not actually newest-first. This is the
+    // real last-touched moment for the group instead — created_at as a floor so a brand-new,
+    // never-asked link still sorts by how new it actually is, full timestamp precision so same-day
+    // activity still orders correctly, and last_requested_at still wins when it's the newer event
+    // (asking again bumps a group back to the top, same as before).
+    recency: Math.max(...rows.map(r => {
+      const requested = r.last_requested_at ? new Date(r.last_requested_at).getTime() : 0;
+      const created = r.created_at ? new Date(r.created_at).getTime() : 0;
+      return Math.max(requested, created);
+    })),
   }));
-  groupList.sort((a, b) => a.recency - b.recency);
+  groupList.sort((a, b) => b.recency - a.recency);
 
   // A row already asked today isn't a dead end — the cooldown is a default, not a lock. The
   // Ask Price button stays live either way (a real trader decision: nudge again or not), with
@@ -1009,37 +1117,70 @@ async function loadPendingPrices(){
     const prod = products.find(p => p.id === g.productId);
     const name = prod.full_name_en || prod.name_en || prod.name;
     const pendingRowsHtml = g.rows.map(r => {
-      const missing = r.current_price == null;
       const reqAge = rqPriceAgeDays(r.last_requested_at);
       // Explicit ask 2026-09-01: one consistent label for "open this row," same as Quotes' own
       // rows — the trigger's job never changed (it just opens the panel; the real action buttons
       // live inside, once it's open), so varying it by state ("Enter Price"/"Update Price") was
       // its own inconsistency to fix, not a distinction worth keeping.
-      const triggerLabel = 'View Offer →';
+      // Renamed to "View Quote" 2026-09-01, explicit ask: opening this panel never sends anything
+      // to a customer by itself (Confirm Price just closes it) — "Offer" is the wrong word for a
+      // number nobody outside BuenTrade has seen yet. Stays the same label once priced too — it's
+      // still the one way to reopen and adjust the number before it actually goes out.
+      const triggerLabel = 'View Quote →';
       const initial = (r.plant.name || '?').trim().charAt(0).toUpperCase();
       const logo = r.plant.logo_url || r.plant.logo_url_dark;
       const avatarHtml = logo
         ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
         : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
+      // Real addition 2026-09-01, explicit ask: a priced-but-unsent row (see the filter above)
+      // shows its real number here — the same blue $ tag Quotes' own rows use — instead of the
+      // red/amber Missing/Stale tag that no longer describes it.
+      const statusTagHtml = r.priced
+        ? `<span class="pkg-tag price">$${Number(r.current_price).toFixed(4)}/lb</span>`
+        : `<span class="pkg-tag ${r.missing ? 'missing' : 'stale'}">${r.missing ? 'Missing' : 'Stale · ' + rqFmtDate(r.price_date)}</span>`;
+      // Real fix 2026-09-02, see rqPendingCalcCache's own declaration — the Selling price Quotes
+      // shows for free is really just "this plant's calculator was opened at least once this
+      // session," never something persisted. Same cache, same lookup key, same shape
+      // (rqPlantRowHtml's saleInfoHtml) — a row this hasn't happened for yet still shows exactly
+      // like it always has (Purchase price only), not a blank space where a number should be.
+      const cachedCalc = r.priced ? rqPendingCalcCache[r.plant_id + '|' + g.productId] : null;
+      const saleInfoHtml = cachedCalc ? `
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${cachedCalc.salePerLb.toFixed(4)}/lb</div>
+          <div style="font-size:11px;color:var(--ink-soft);">Total $${cachedCalc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>` : '';
       return `<div class="pkg-row">
         ${avatarHtml}
         <div class="pkg-plant-info">
           <span class="pkg-plant">${escapeHtml(r.plant.name)}</span>
-          <span class="pkg-tag ${missing ? 'missing' : 'stale'}">${missing ? 'Missing' : 'Stale · ' + rqFmtDate(r.price_date)}</span>
-          ${reqAge != null ? `<span class="pkg-asof">asked ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>` : `<span class="pkg-asof">never asked</span>`}
+          ${statusTagHtml}
+          ${r.priced ? `<span class="pkg-asof">ready to send</span>` : (reqAge != null ? `<span class="pkg-asof">asked ${reqAge === 0 ? 'today' : reqAge + 'd ago'}</span>` : `<span class="pkg-asof">never asked</span>`)}
         </div>
+        ${saleInfoHtml}
         <div style="display:flex;gap:8px;flex-shrink:0;">
           <button type="button" class="pkg-trigger-btn" id="q_pending_trigger_${r.plant_id}_${g.productId}" data-label="${escapeHtml(triggerLabel)}" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">${triggerLabel}</button>
-          <button type="button" class="btn secondary" style="padding:0 12px;font-size:12px;color:#C4432E;border-color:#F0C9C2;" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Doesn't produce this</button>
+          <button type="button" class="pkg-trigger-btn danger" style="margin-left:0;" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Off-Spec</button>
         </div>
       </div>
       <div class="q-pending-inline-slot" id="q_pending_inline_${r.plant_id}_${g.productId}" style="display:none;padding:0 0 12px;"></div>`;
     }).join('');
+    // Real addition 2026-09-01, explicit ask: "pending es igual a quotes... solo es un paso mas" —
+    // once at least one plant in this card has a real price, the actual send step (Customers who
+    // buy this, Email all/WhatsApp all) belongs right here, not one more click away in a different
+    // tab. Hidden while nothing's priced yet — nothing real to send to anyone.
+    const hasPriced = g.rows.some(r => r.priced);
+    // Real redesign 2026-09-01, explicit ask: same two buttons Quotes' own "Customers who buy
+    // this" header uses (rq-customer-bulk-btn email/whatsapp) — real population + real send in
+    // one click, no separate "open this to reveal the real buttons" step in between.
+    const sendBtnsHtml = hasPriced ? `
+          <button type="button" class="rq-customer-bulk-btn email" onclick="qSendPendingProductEmail('${g.productId}')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>Email all</button>
+          <button type="button" class="rq-customer-bulk-btn whatsapp" onclick="qSendPendingProductWhatsApp('${g.productId}')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp all</button>` : '';
     return `<div class="pending-group">
       <div class="pending-group-head">
         <span class="pending-group-title pending-group-title-link" onclick="qOpenProductInRequest('${g.productId}')" title="Open this product in Quotes">${escapeHtml(name)}</span>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span class="pending-group-count">${g.rows.length} pending</span>
+          ${sendBtnsHtml}
+          ${hasPriced ? '' : `<span class="pending-group-count">${g.rows.length} pending</span>`}
         </div>
       </div>
       <div class="pkg-table-wrap">
@@ -1061,16 +1202,57 @@ async function loadPendingPrices(){
 // out. The one thing worth reusing automatically is the delivery day already on file from the
 // partial offer, since there's no reason to make the trader re-pick something that's already
 // known and correct.
-async function qOpenProductInRequest(productId){
+// Split out of qOpenProductInRequest 2026-09-01 so Pending Quotes' own direct send buttons (see
+// qSendPendingProduct below) can reuse the exact same setup — real delivery dates, real product
+// match, real autoPopulateRqPlants run — without also forcing a tab switch, which is the one part
+// of the old flow that only makes sense when the trader actually wants to leave Pending.
+//
+// Real perf bug caught live, explicit complaint ("se pusieron lentisimos"): renderRqPlants (called
+// inside autoPopulateRqPlants, called inside onRqProductInput below) already fires its own
+// rqFindCustomers() the moment a product's name lands in rq_product_name — fire-and-forget, so it
+// can't be awaited from here. Calling rqFindCustomers() again right after, to have something real
+// to await, used to genuinely run the whole customer-matching query twice, back to back, every
+// single click — rqFindCustomers itself now shares one in-flight request between two callers for
+// the same product (see rqFindCustomersPromise there), so this explicit call below joins that same
+// request instead of starting a second one.
+async function qPopulateProductForSend(productId){
   const prod = products.find(p => p.id === productId);
-  if (!prod) return;
+  if (!prod) return null;
   let recent = [];
   try { recent = (await callApi('sent-offers-search', { product_id: productId, status: 'sent', limit: 100 })).results || []; } catch (e) {}
   recent.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
   const row = recent[0];
   if (row && row.delivery_dates && row.delivery_dates.length) rqDeliveryDates = [...row.delivery_dates];
+  document.getElementById('rq_product_name').value = prod.name_en || prod.name;
+  rqPreferredVariantId = productId;
+  await onRqProductInput();
+  await rqFindCustomers();
+  return prod;
+}
+
+async function qOpenProductInRequest(productId){
   setQuoteTab('request');
-  rqQuickPick(prod.name_en || prod.name, productId);
+  await qPopulateProductForSend(productId);
+}
+
+// Real redesign 2026-09-01, explicit ask: the first version of this put a single "Send Offers"
+// button next to the product name, which opened a whole extra "Customers who buy this" panel
+// inline just to reveal the real Email all/WhatsApp all buttons underneath — "no llenemos eso de
+// botones," one more click and one more visual block for what should just be two live buttons.
+// These now sit directly next to the product name (same spot, same styling Quotes itself uses),
+// active the moment any plant in this card is priced, and do the real population + real send in
+// one click — no intermediate panel, nothing to open first.
+async function qSendPendingProductEmail(productId){
+  if (rqPendingInlineOpenId) await rqCloseCalculator(rqPendingInlineOpenId);
+  const prod = await qPopulateProductForSend(productId);
+  if (!prod) return;
+  await sendOfferEmailToAll();
+}
+async function qSendPendingProductWhatsApp(productId){
+  if (rqPendingInlineOpenId) await rqCloseCalculator(rqPendingInlineOpenId);
+  const prod = await qPopulateProductForSend(productId);
+  if (!prod) return;
+  await sendOfferWhatsAppToAll();
 }
 
 // The actual "enter the price and send it" work, without ever leaving Pending Quotes — same
@@ -1082,21 +1264,25 @@ async function qOpenPendingPlantInline(productId, plantId){
   const slotId = `q_pending_inline_${plantId}_${productId}`;
   const slot = document.getElementById(slotId);
   if (!slot) return;
-  const alreadyOpen = slot.dataset.open === '1';
-  rqReturnCustomersWrapHome();
-  document.querySelectorAll('.q-pending-inline-slot').forEach(el => {
-    el.style.display = 'none';
-    el.innerHTML = '';
-    el.dataset.open = '0';
-  });
-  // The trigger button is the same "❌ Update Price" bar the card itself will show once expanded
-  // — swap it back in on close (or on failure below) so the row never ends up with neither one
-  // visible.
-  document.querySelectorAll('[id^="q_pending_trigger_"]').forEach(btn => {
-    btn.style.display = '';
-    btn.textContent = btn.dataset.label;
-  });
-  if (alreadyOpen) return; // was open — just closed it above, nothing more to do
+
+  // Clicking the row that's already open is the close click — real bug fixed 2026-09-01, confirmed
+  // live: this used to just hide this slot's div and reset the trigger text, completely separate
+  // from the Trading Tool overlay it had opened (rqToggleCalculator/rqCloseCalculator), which never
+  // got told anything closed. The overlay stayed open behind the now-hidden slot — "no confirma
+  // precio no cierra" — and the very next pending row rendered its OWN static plant row
+  // (rqPlantRowHtml) into ITS OWN slot while that orphaned overlay+row from the last one was still
+  // sitting in the DOM, which is exactly the duplicated-ficha screenshot. Routing every close
+  // through rqCloseCalculator — the one real teardown path every other Confirm Price/✕ already
+  // uses — means there is only ever one way this session ends, here or from inside the overlay.
+  if (rqPendingInlineOpenId === plantId){
+    await rqCloseCalculator(plantId);
+    return;
+  }
+  // Switching straight to a different pending item without closing the first one first — same
+  // accordion rule Request Quote's own row list already enforces (see rqToggleCalculator).
+  if (rqPendingInlineOpenId){
+    await rqCloseCalculator(rqPendingInlineOpenId);
+  }
 
   const plant = rqAllPlants.find(p => p.id === plantId);
   const prod = products.find(p => p.id === productId);
@@ -1152,13 +1338,13 @@ async function qOpenPendingPlantInline(productId, plantId){
   // A fresh, single-plant list — this is a self-contained "work this one row" session, not meant
   // to merge with whatever's separately active over on the Request Quote tab.
   rqSelectedPlants = [plantObj];
+  rqPendingInlineOpenId = plantId;
 
   // No delivery-date gate here on purpose — entering a price or asking the plant for one doesn't
   // need it (rqPriceRequestBody never mentions it). The real requirement lives where it actually
   // matters: sendOfferEmailToAll/sendOfferWhatsAppToAll block the customer-facing send until a
   // date is on file.
   slot.style.display = 'block';
-  slot.dataset.open = '1';
   // Real regression fixed 2026-08-31: this panel's only way to actually message a customer used to
   // be the Trading Tool's own "Send Offer" button — removed in the Request Quote redesign (that
   // button is "Confirm Price" now, on purpose, and sends nothing).
@@ -1170,21 +1356,23 @@ async function qOpenPendingPlantInline(productId, plantId){
   // sees here is pixel-identical to Quotes, not a reduced stand-in — see rqReturnCustomersWrapHome
   // for how it finds its way back when this closes.
   //
-  // Real fix 2026-08-31, explicit ask: a plant with no price at all used to get a SECOND, separate
-  // block of bare Purchase $/lb/Location/Documents/Delivery fields rendered right below its own
-  // row — the same plant shown twice, nothing like the one-shape "Confirm Price" experience every
-  // priced plant already gets (that fields block only stayed hidden for a priced plant because the
-  // calculator opened immediately on top of it). Opening the calculator unconditionally instead —
-  // it renders that exact same fields block itself, blank, ready to type into — means every plant
-  // here gets the identical shape, priced or not.
-  slot.innerHTML = rqPlantRowHtml(plantObj, true);
+  // Real bug fixed 2026-09-01, confirmed live with a screenshot: an earlier fix here rendered this
+  // plant's own rqPlantRowHtml row directly into the slot, meaning to give every pending plant the
+  // same "one shape" as a priced Request Quote row. It backfired — rqPlantRowHtml's own action
+  // button (rqTtActionLabel) shows "❌ Update Price" (the separate email-ask flow) whenever a price
+  // is still missing, which is exactly this row's normal state, and nothing ever re-rendered that
+  // static snapshot once the calculator below opened. The trader saw two contradictory rows for the
+  // same plant at once: this outer pkg-row (View Offer/Close, Doesn't produce this) and that inner,
+  // permanently-stale one underneath it. The outer pkg-row already IS this session's row — the slot
+  // only ever needed to hold "Customers who buy this", exactly like Quotes shows it, nothing else.
   await rqFindCustomers();
   slot.appendChild(document.getElementById('rq_customers_wrap'));
   // Same spot the trader just clicked becomes the close action — no separate button floating
-  // elsewhere on the card to hunt for.
+  // elsewhere on the card to hunt for. Kept in sync with the real overlay state by
+  // rqCloseCalculator (see rqPendingInlineOpenId there) whenever this session ends any other way.
   const trigger = document.getElementById(`q_pending_trigger_${plantId}_${productId}`);
   if (trigger) trigger.textContent = '✕ Close';
-  rqToggleCalculator(plantObj.id);
+  await rqToggleCalculator(plantObj.id);
 }
 
 // Local YYYY-MM-DD for "today" — used as the floor for delivery dates so a trader can't
@@ -1388,14 +1576,24 @@ async function autoPopulateRqPlants(){
   // one search = one product, across every brand that carries THAT one — a different variant is
   // its own separate search, never shown mixed in here (this used to surface it as a switchable
   // alternative, which read as "mixing products" and was more confusing than useful).
-  let data;
-  // A failed fetch used to fall through to `data || []` completely silently — the whole plant list
-  // just came back empty with no clue anything went wrong, indistinguishable from "no plant on
-  // file yet." Surfacing the real error is the whole difference between "reload the page" and
-  // "why does this product suddenly have no plants."
-  try { data = (await callApi('plant-products-search', { product_id: rqMatchedProductId })).results || []; }
-  catch (e) {
-    alert(`Couldn't load plants for this product: ${e.message}\n\nTry reloading the page.`);
+  // Real perf fix 2026-09-01, explicit complaint ("se pusieron lentisimos"): these three fetches
+  // never depended on each other's results — each is keyed purely off rqMatchedProductId — but ran
+  // one after another regardless, and each real Edge Function round trip in this staging
+  // environment costs its own ~1-1.3s. Three in a row was 3+ seconds before this function had done
+  // anything with the data; run together, the wait is whichever ONE of the three is slowest, not
+  // the sum of all three.
+  let data, sentRows, matchedCustomers;
+  try {
+    const [plantLinksRes, sentRowsRes, matchedCustomersRes] = await Promise.all([
+      callApi('plant-products-search', { product_id: rqMatchedProductId }),
+      callApi('sent-offers-search', { product_id: rqMatchedProductId, limit: 500 }),
+      rqMatchCustomersForProductIds([rqMatchedProductId]),
+    ]);
+    data = plantLinksRes.results || [];
+    sentRows = sentRowsRes.results || [];
+    matchedCustomers = matchedCustomersRes; // already the unwrapped array — see rqMatchCustomersForProductIds
+  } catch (e) {
+    alert(`Couldn't load this product's plants: ${e.message}\n\nTry reloading the page.`);
     return;
   }
   // Request Quote is only ever a to-do list — a plant sitting here either hasn't been asked for a
@@ -1409,12 +1607,6 @@ async function autoPopulateRqPlants(){
   // Real bug fixed 2026-08-31: this used to hide the plant the moment it was sent to ANY ONE
   // matched customer, not all of them — offering Tyson's price to one buyer made it vanish for the
   // other four who also buy this product, with no way to reach them. Now tracked per customer.
-  let sentRows;
-  try { sentRows = (await callApi('sent-offers-search', { product_id: rqMatchedProductId, limit: 500 })).results || []; }
-  catch (e) {
-    alert(`Couldn't check which plants were already offered: ${e.message}\n\nTry reloading the page.`);
-    return;
-  }
   const sentByPlant = {}; // plant_id -> { customer_id -> latest sent_at }
   sentRows.forEach(r => {
     if (!sentByPlant[r.plant_id]) sentByPlant[r.plant_id] = {};
@@ -1430,7 +1622,6 @@ async function autoPopulateRqPlants(){
   // customers) got wrongly treated as "sent to everyone" and hidden — the opposite of the fix this
   // was supposed to be. This fetch cannot be wrong the same way: it's the one product id already
   // proven correct by every price row rendered above.
-  const matchedCustomers = await rqMatchCustomersForProductIds([rqMatchedProductId]);
   const matchedCustomerIds = matchedCustomers.map(c => c.id);
   rqSelectedPlants = (data || []).map(link => {
     const plant = rqAllPlants.find(p => p.id === link.plant_id);
@@ -1438,7 +1629,20 @@ async function autoPopulateRqPlants(){
     // A plant that already told us it doesn't make this is a closed fact, not a ready-to-quote
     // option — see rqDeclinePlantProduct.
     if (link.declined_at) return null;
-    const askedNoNewPrice = link.last_requested_at && (!link.price_date || link.price_date <= link.last_requested_at);
+    // Real bug caught 2026-09-01 testing a Pending Quotes change, confirmed live: price_date is a
+    // bare date ("2026-09-01"), last_requested_at a full timestamp ("2026-09-01 17:31:11...") — a
+    // raw string <= compared a date string against a timestamp string that starts with that exact
+    // same date, and a shorter string that's a prefix of a longer one always sorts first in plain
+    // string comparison. So price_date <= last_requested_at was true on same-day noticing every
+    // single time, no matter which one actually happened first that day — a price the trader had
+    // just typed in and confirmed looked exactly like "still waiting on this plant," and vanished
+    // from here as if it were never priced at all. Comparing date-only slices instead, and treating
+    // a same-day tie as fresh (a price confirmed today can't be proven to predate a request also
+    // made today, and a trader who just typed one in did so on purpose) — only a price dated
+    // strictly before the day it was last asked for still counts as "asked, nothing new since."
+    const priceDay = link.price_date ? String(link.price_date).slice(0, 10) : null;
+    const requestedDay = link.last_requested_at ? String(link.last_requested_at).slice(0, 10) : null;
+    const askedNoNewPrice = link.last_requested_at && (!priceDay || priceDay < requestedDay);
     if (askedNoNewPrice) return null;
     const sentMap = sentByPlant[link.plant_id] || {};
     let alreadyOffered;
@@ -1520,7 +1724,7 @@ function rqRenderCategorySuggestions(){
         <div class="pkg-plant-info">
           <div class="rq-plant-name" style="cursor:default;">${escapeHtml(pl.name)}</div>
         </div>
-        <button type="button" class="pkg-trigger-btn" onclick="rqAskNewPlantForProduct('${pl.id}')">Ask for price →</button>
+        <button type="button" class="pkg-trigger-btn" onclick="rqAskNewPlantForProduct('${pl.id}')">Quote Plant →</button>
       </div>
       `;
   }).join('');
@@ -1530,38 +1734,43 @@ function rqRenderCategorySuggestions(){
 // fixed 2026-08-31: this used to create the real plant_products row (and, since loadPendingPrices
 // shows ANY unpriced row regardless of whether it was ever asked, jump the plant into Pending
 // Quotes) the instant this button was clicked — before the trader had even opened, let alone
-// sent, an actual ask. Explicit ask 2026-09-01: email now opens Gmail directly (see
-// rqUpdatePlantPrice) instead of an in-app preview — the real link is written the moment Gmail
-// actually opens, which is still the earliest point that's true ("the trader really did ask"),
-// just one click sooner than before.
-function rqAskNewPlantForProduct(plantId){
+// sent, an actual ask.
+//
+// Real redesign 2026-09-02, explicit ask, confirmed with a real DB check: this used to fire an
+// email/WhatsApp ask immediately on click, no calculator involved at all — a trader who typed a
+// real purchase price right after clicking "Quote Plant →" (reasonably expecting the same thing
+// "View Quote →" does for every other plant) had that number go nowhere, because this button
+// never opened anything for it to go into; the click itself had already fired off an email and
+// moved on. Confirmed live: a plant clicked this way sat with current_price still null days
+// later, tagged "Missing... asked," while the trader was certain they'd priced it. Now this
+// creates the same real link (idempotent — already_linked comes back the same shape) and opens
+// the exact same calculator overlay "View Quote" does, so typing a price here works exactly the
+// same way it does everywhere else. A trader who genuinely wants to email-ask instead of typing a
+// number themselves still can — once the plant is showing here, its own row's action button
+// (rqTtActionLabel) offers "❌ Update Price" for exactly that, same as any other missing plant.
+async function rqAskNewPlantForProduct(plantId){
   const plant = rqAllPlants.find(p => p.id === plantId);
   if (!plant || !rqMatchedProductId) return;
-  const p = { ...plant, rqProductId: rqMatchedProductId, rqPrice: undefined, rqPriceDate: null, rqLastRequestedAt: null, rqDocsOn: plant.docs_included === true, rqProductLocationId: null, rqFreightIncluded: false };
-  const subject = `${rqProductSpec || ''} — price request`;
-  const body = rqPriceRequestBody(p);
-  const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
-  if (p.email){
-    rqOpenGmail(p.email, subject, body);
-    rqOnAskSentNewPlant(p)();
+  let link;
+  try {
+    const res = await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: rqMatchedProductId });
+    link = res.plant_product;
+  } catch (e) {
+    alert(`Couldn't save this plant's link: ${e.message}`);
+    return;
   }
-  if (phone){
-    rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: rqOnAskSentNewPlant(p) }]);
-  }
-}
-
-// Only fires on an actual send/open — creates the real bare link (the same one plants.html's
-// "+ Add New Product" writes) right before stamping it asked via rqOnAskSent's own flow, so there
-// is exactly one moment this plant becomes real: the moment it was actually asked, not the moment
-// its compose window was opened.
-function rqOnAskSentNewPlant(p){
-  return async () => {
-    try { await callApi('plant-products-link', { actor: currentActor(), plant_id: p.id, product_id: p.rqProductId }); }
-    catch (e) { alert(`Couldn't save this plant's link: ${e.message}`); return; }
-    rqCategorySuggestions = rqCategorySuggestions.filter(x => x.id !== p.id);
-    rqRenderCategorySuggestions();
-    await rqOnAskSent(p)();
+  rqCategorySuggestions = rqCategorySuggestions.filter(x => x.id !== plantId);
+  rqRenderCategorySuggestions();
+  const plantObj = {
+    ...plant, rqProductId: rqMatchedProductId, rqLinkId: link.id,
+    rqPrice: link.current_price != null ? link.current_price : undefined,
+    rqPriceDate: link.price_date || null, rqLastRequestedAt: link.last_requested_at || null,
+    rqDocsOn: plant.docs_included === true, rqProductLocationId: link.location_id || null,
+    rqFreightIncluded: link.freight_included === true,
   };
+  rqSelectedPlants.push(plantObj);
+  renderRqPlants();
+  await rqToggleCalculator(plantObj.id);
 }
 
 function removeRqPlant(plantId){
@@ -1723,13 +1932,16 @@ function rqMexicanDestDropdownHtml(p){
     </div>`;
 }
 
+// Real simplification 2026-09-01, explicit ask repeated several times: this used to also render
+// its own separate "Purchase $/lb" field up here, a second input for the exact same number the
+// Trading Tool's own Purchase $/lb (prodCost0, inside the card below) already shows and already
+// accepts typing into — one real price, shown editable in two different places at once. Removed;
+// rqCalcRow now reads that one real field directly (see the products[0].cost read there) the same
+// way it already read the Selling Price, so there is exactly one place to type a purchase price,
+// same as every other number in the calculator.
 function rqPlantFieldsHtml(p){
   const docsOn = p.rqDocsOn === true;
   return `
-        <div class="mini-field" style="width:130px;flex:0 0 auto;">
-          <label>Purchase $/lb</label>
-          <input type="number" step="0.0001" id="rq_price_${p.id}" value="${p.rqPrice || ''}" placeholder="0.00" oninput="rqUpdatePlantField('${p.id}','rqPrice',this.value)" onblur="rqAutoOpenCalculator('${p.id}')">
-        </div>
         <div class="mini-field" style="width:250px;flex:0 0 auto;">
           <label>Location</label>
           ${rqUsFreightDropdownHtml(p)}
@@ -1767,8 +1979,12 @@ function rqPlantRowHtml(p, hasDeliveryDate){
     ? `<div class="rq-plant-avatar rq-plant-avatar-logo"><img src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt=""></div>`
     : `<div class="rq-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
   const calc = rqCalcRow(p);
-  const delivery = calc ? rqDeliveryDatesText() : null;
   const files = calc ? rqFindProductFilesFor(p) : {};
+  // Real simplification 2026-09-01, explicit ask: this row's own "Cost $X/lb" sub-label used to
+  // append " — Delivery [date]" here too — but rqDeliveryDates is one shared list for the whole
+  // request (see its own declaration below), so every plant's row printed the exact same date,
+  // word for word. It's already shown once, up top on the product group itself (the "Sep 2 ×"
+  // pill) — repeating it per plant added nothing, just the same fact printed N times.
   // A stale price still shows here (see autoPopulateRqPlants) — tagged, with an opt-in toggle
   // instead of being silently included or silently hidden. Purely a display/inclusion state; never
   // written back to the DB, so this plant keeps showing in Pending Quotes for a real update
@@ -1794,7 +2010,7 @@ function rqPlantRowHtml(p, hasDeliveryDate){
           <div class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" onclick="rqToggleCalculator('${p.id}')">${escapeHtml(p.name)}</div>
           ${p.rqPrice ? `<span class="pkg-tag price">$${Number(p.rqPrice).toFixed(4)}/lb</span>` : ''}
           ${staleTagHtml}
-          ${calc ? `<span class="pkg-plant-sub">Cost $${calc.costPerLb.toFixed(4)}/lb${delivery ? ' — Delivery ' + delivery : ''}</span>` : ''}
+          ${calc ? `<span class="pkg-plant-sub">Cost $${calc.costPerLb.toFixed(4)}/lb</span>` : ''}
         </div>
         ${fileButtonsHtml}
         ${saleInfoHtml}
@@ -1809,6 +2025,10 @@ function renderRqPlants(){
   const emptyEl = document.getElementById('rq_empty');
   emptyEl.textContent = 'No plants added yet.';
   emptyEl.style.display = (hasProduct && !rqSelectedPlants.length) ? 'block' : 'none';
+  // Real fix 2026-09-02, explicit ask — same rule Pending Quotes' own cards already use
+  // (hasPriced): nothing to send until at least one plant here actually has a price.
+  const sendAllWrap = document.getElementById('rq_send_all_wrap');
+  sendAllWrap.style.display = rqSelectedPlants.some(p => p.rqPrice != null) ? 'flex' : 'none';
   const specCount = document.getElementById('rq_spec_count');
   if (hasProduct && rqSelectedPlants.length){
     specCount.style.display = '';
@@ -2284,12 +2504,20 @@ async function rqCloseCalculator(id){
   // captured — the sale price then silently vanishes from the row. One last synchronous read here,
   // before any teardown, guarantees the number on screen when they clicked is the one that's kept.
   rqCalcRow(p);
+  // Real fix 2026-09-02, explicit ask repeated many times ("en quotes bien, en pending nada") —
+  // see rqPendingCalcCache's own declaration for the full story. Stashed here, the one real close
+  // path every calculator (manual View Quote, or the automatic pass rqHandleStaleOrMissingPrices
+  // runs right before any send) already goes through — so Pending Quotes' own list can show the
+  // exact same Selling price Quotes does, the moment it's known, from wherever it became known.
+  if (p.rqLastCalc && p.rqProductId){
+    rqPendingCalcCache[p.id + '|' + p.rqProductId] = p.rqLastCalc;
+  }
   // Real gap fixed 2026-09-01, confirmed live: a price typed by hand here (phoned in, or a plant's
   // first-ever price with nothing on file yet) used to live only in this in-memory object — nothing
   // ever wrote it back to plant_products, so it vanished on reload and the plant kept showing up in
   // Pending Quotes forever even after being "confirmed" and sent. rqPriceDate is null exactly when
-  // the trader typed over whatever was there (see rqUpdatePlantField) — that's the real signal this
-  // number was never actually saved. Fire-and-forget on purpose (same pattern as onSent elsewhere)
+  // the trader typed over whatever was there (see the live Purchase $/lb read in rqCalcRow) — that's
+  // the real signal this number was never actually saved. Fire-and-forget on purpose (same pattern as onSent elsewhere)
   // — closing the overlay shouldn't wait on a network round trip, and renderRqPlants below already
   // re-reads p.rqPriceDate once this resolves.
   if (p.rqPrice && p.rqPriceDate == null && p.rqLinkId){
@@ -2309,6 +2537,22 @@ async function rqCloseCalculator(id){
   if (nameEl) nameEl.classList.remove('tt-open');
   if (!rqSelectedPlants.some(x => x.rqCalculatorOpen)) rqStopPolling();
   rqUpdateTtActionButton(p.id);
+  // The other half of the fix in qOpenPendingPlantInline: this is the one real close path the
+  // overlay's own Confirm Price/✕ AND the outer pending trigger both funnel through now, so
+  // whichever one the trader actually clicked, the pending session ends the same way — slot
+  // hidden, rq_customers_wrap back home (before anything clears the slot's innerHTML around it,
+  // same rule loadPendingPrices already follows), trigger label restored, and the outer list
+  // re-pulled from the DB so the price/tag just saved above actually shows there instead of
+  // waiting for an unrelated reload.
+  if (rqPendingInlineOpenId === p.id){
+    rqPendingInlineOpenId = null;
+    rqReturnCustomersWrapHome();
+    const slot = document.getElementById(`q_pending_inline_${p.id}_${p.rqProductId}`);
+    if (slot){ slot.style.display = 'none'; slot.innerHTML = ''; }
+    const trigger = document.getElementById(`q_pending_trigger_${p.id}_${p.rqProductId}`);
+    if (trigger) trigger.textContent = trigger.dataset.label;
+    loadPendingPrices();
+  }
   renderRqPlants();
 }
 
@@ -2375,6 +2619,24 @@ function rqPrefillSellingPrice(id){
 function rqCalcRow(p){
   const iframe = document.getElementById('rq_iframe_' + p.id);
   const win = iframe && iframe.contentWindow;
+  // Real simplification 2026-09-01, explicit ask repeated several times: Purchase $/lb used to
+  // have its own separate input up in rqPlantFieldsHtml, mirroring this exact same number — one
+  // real price shown editable in two different places. Removed that field; this is the one real
+  // read now, straight off the Trading Tool's own Purchase $/lb input (prodCost0) — same pattern
+  // already used for Selling Price (rqPrefillSellingPrice reads prodSellBorder0's .value the same
+  // way). Real bug caught testing this exact change, confirmed live: the iframe's top-level
+  // `products` array (window.products) is declared with `let`, which — unlike `var` — never
+  // becomes a property of window, so win.products was always undefined from out here; reading the
+  // actual input element's .value is the only thing that ever worked for prodSellBorder0 too. A
+  // change here is exactly what "the trader typed over the price on file" means — clears
+  // rqPriceDate so rqCloseCalculator's save check (below) and rqPricedPlantsSorted's staleness
+  // check both see a fresh, just-confirmed number, never a stale-looking one.
+  const costInp = win && win.document && win.document.getElementById('prodCost0');
+  const rawCost = costInp ? parseFloat(costInp.value) || 0 : 0;
+  if (rawCost > 0 && rawCost !== p.rqPrice){
+    p.rqPrice = rawCost;
+    p.rqPriceDate = null;
+  }
   const calc = win && win.__calc;
   if (calc && calc.totalWeight){
     p.rqLastCalc = {
@@ -2412,42 +2674,6 @@ function rqUpdateTtActionButton(id){
   el.innerHTML = rqTtActionLabel(p);
 }
 
-const rqAutoOpenTimers = {};
-
-function rqUpdatePlantField(id, field, val){
-  const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p) return;
-  p[field] = parseFloat(val) || 0;
-  // The "as of [date]" hint only makes sense for a price pulled straight from the plant's
-  // catalog record — the moment the trader types over it by hand, that date no longer describes
-  // what's in the box.
-  if (field === 'rqPrice') p.rqPriceDate = null;
-  rqInvalidateCalc(p);
-  // Deliberately not a full renderRqPlants() here — that would rebuild the input the user is
-  // actively typing into and steal focus after every keystroke. Just update the bits that need
-  // to react live.
-  rqUpdateActionButtons();
-  if (field === 'rqPrice') rqUpdateTtActionButton(id);
-  // Auto-open the Trading Tool a beat after typing stops — not on blur, which only fired once
-  // the trader happened to click somewhere else (usually the freight dropdown next to it), so
-  // it looked like "setting freight" was what opened it rather than the price itself.
-  if (field === 'rqPrice'){
-    if (p.rqCalculatorOpen) rqSyncOpenCalculator(p); // already open: keep its price live, no reload
-    clearTimeout(rqAutoOpenTimers[id]);
-    if (p.rqPrice) rqAutoOpenTimers[id] = setTimeout(() => rqAutoOpenCalculator(id), 700);
-  }
-}
-
-// Leaving the Purchase $/lb field with a real number typed in opens that plant's Trading Tool
-// automatically — no separate click needed. Defaults (No Docs, Delivered) already mean $0 in
-// extra costs, so this just shows the trader the resulting margin right away; the toggles are
-// still right there to flip if this plant's terms are actually different.
-function rqAutoOpenCalculator(id){
-  const p = rqSelectedPlants.find(x => x.id === id);
-  if (!p || !p.rqPrice || p.rqCalculatorOpen) return;
-  rqToggleCalculator(id);
-}
-
 // Deliberately no cross-plant fallback — a photo/spec on file for Tyson's cut doesn't represent
 // Indiana's, so showing it as if it did would misrepresent what a customer is actually buying.
 // If this specific plant has nothing on file, that just means no attachment goes out for them.
@@ -2474,7 +2700,7 @@ function rqPricedPlantsSorted(){
     .filter(({ calc }) => calc && calc.salePerLb > 0) // only plants where a Selling price was actually set in their calculator
     // A price older than RQ_PRICE_STALE_DAYS never reaches a customer by default — see
     // rqHandleStaleOrMissingPrices, which chases a fresh number from the plant instead of quoting
-    // a stale one. A manually-typed price (rqPriceDate cleared, see rqUpdatePlantField) is never
+    // a stale one. A manually-typed price (rqPriceDate cleared, see rqCalcRow) is never
     // stale — the trader just confirmed it themselves. Explicit ask 2026-08-31: a stale plant is
     // still includable if the trader opted in (rqIncludeStale, the "Include in send" toggle on its
     // row) — "puedo mandar o no mandar, siempre viendo la fecha de vencimiento." Sending it never
@@ -2714,12 +2940,27 @@ async function rqMatchCustomersForProductIds(matchingProductIds){
   return customers;
 }
 
+// Real perf bug caught live, explicit complaint ("se pusieron lentisimos"): renderRqPlants fires
+// this itself, fire-and-forget, the moment a product resolves (see its own rqCustomersFetchedFor
+// guard) — a caller that also wants to await real completion (Pending Quotes' send buttons) had no
+// way to reuse that in-flight call, so it ran the exact same customer-matching query a second
+// time, back to back, roughly doubling the wait every click. This tracks whichever fetch is
+// currently in flight, keyed by product id, so a second caller for the SAME product joins the one
+// real network round trip already running instead of starting its own.
+let rqFindCustomersPromise = null;
+let rqFindCustomersPromiseFor = null;
 async function rqFindCustomers(){
   const wrap = document.getElementById('rq_customers_wrap');
   const container = document.getElementById('rq_customers_list');
-  wrap.style.display = 'block';
-  container.innerHTML = '<div class="empty">Searching…</div>';
 
+  // Real bug fixed 2026-09-01, confirmed live with a screenshot: wrap.style.display used to be
+  // forced to 'block' unconditionally, before this even checked whether a real product was
+  // matched — so "Customers who buy this," with its live Email all/WhatsApp all buttons, showed
+  // up on the blank "What are we quoting today?" screen with nothing searched yet, just printing
+  // "Product not in catalog yet." as filler text inside an otherwise-real, otherwise-clickable
+  // section. No product resolved means there is nothing here to show at all — hide the whole
+  // section instead of showing it empty.
+  //
   // Real bug fixed 2026-08-31 (found while reusing this from Pending Quotes, where the search box
   // this used to re-match against is always empty): this used to re-derive the product by
   // re-parsing document.getElementById('rq_product_name')'s current text against the catalog, a
@@ -2729,10 +2970,19 @@ async function rqFindCustomers(){
   // rqMatchedProductId is already the one product id every caller (Request Quote's own search,
   // Pending Quotes' inline panel) sets correctly before calling this — use it directly.
   if (!rqMatchedProductId){
-    container.innerHTML = '<div class="empty">Product not in catalog yet.</div>';
+    wrap.style.display = 'none';
     return;
   }
-  rqMatchedCustomers = await rqMatchCustomersForProductIds([rqMatchedProductId]);
+  wrap.style.display = 'block';
+  if (rqFindCustomersPromiseFor === rqMatchedProductId && rqFindCustomersPromise){
+    await rqFindCustomersPromise;
+    return;
+  }
+  container.innerHTML = '<div class="empty">Searching…</div>';
+  rqFindCustomersPromiseFor = rqMatchedProductId;
+  rqFindCustomersPromise = rqMatchCustomersForProductIds([rqMatchedProductId]);
+  rqMatchedCustomers = await rqFindCustomersPromise;
+  rqFindCustomersPromise = null;
   if (!rqMatchedCustomers.length){
     container.innerHTML = '<div class="empty">No customers linked to this product yet.</div>';
     return;
@@ -2805,7 +3055,17 @@ function rqTtActionLabel(p){
     if (p.rqCalculatorOpen){
       return `<button type="button" class="pkg-trigger-btn" style="margin-left:auto;" onclick="rqToggleCalculator('${p.id}')">✕ Close</button>`;
     }
-    return `<button type="button" class="pkg-trigger-btn hot" onclick="rqToggleCalculator('${p.id}')">View Offer →</button>`;
+    // Renamed to "View Quote" 2026-09-01, explicit ask: this only opens the calculator to review/
+    // confirm a price — nothing goes to a customer until a real Send Offer click elsewhere — so
+    // "Offer" was the wrong word for a number nobody outside BuenTrade has seen yet.
+    //
+    // Dropped the "hot" (green) styling the same day, explicit ask: it used to mark "this one
+    // already has a price, ready to look at" versus Pending Quotes' plain blue trigger for a
+    // plant still missing one — a real distinction back when the labels themselves also differed
+    // ("Enter Price" vs "Update Price" vs "View Offer"). Now that both are the identical "View
+    // Quote →" opening the identical panel, two different colors for the same button read as
+    // broken, not as a signal — one color for one action, same as everywhere else this trigger appears.
+    return `<button type="button" class="pkg-trigger-btn" onclick="rqToggleCalculator('${p.id}')">View Quote →</button>`;
   }
   return '';
 }
@@ -2817,7 +3077,7 @@ function rqTtActionLabel(p){
 // still visible, greyed out, in the plant's own Products & Prices tab (plants.html) — this is a
 // known, closed fact about this plant, not erased history.
 async function rqDeclinePlantProduct(linkId, plantName){
-  if (!confirm(`Mark ${plantName} as not producing this product? This is permanent — it won't be asked or suggested for this product again.`)) return;
+  if (!(await rqConfirm(`Mark ${plantName} as Off-Spec for this product? This is permanent — it won't be asked or suggested for this product again.`))) return;
   try {
     await callApi('plant-products-update', { actor: currentActor(), id: linkId, declined_at: new Date().toISOString() });
   } catch (e) {
@@ -2947,6 +3207,16 @@ async function rqHandleStaleOrMissingPrices(){
     if (!wasOpen && p.rqCalculatorOpen) await rqToggleCalculator(p.id);
   }
   if (needsCalc.length) rqCloseNotice();
+  // Real bug caught live, explicit complaint ("esto no puede pasar"): this loop's own closes go
+  // through rqCloseCalculator, which now caches each Selling price for Pending Quotes' list too
+  // (see rqPendingCalcCache) — but nothing told that list to actually redraw with the numbers it
+  // just cached, so a trader sitting on Pending watching this run saw nothing happen until some
+  // unrelated later action happened to redraw it, at which point every plant's price seemed to
+  // appear out of nowhere at once. One deliberate refresh, the moment this loop is actually done,
+  // instead of leaving it to chance.
+  if (needsCalc.length && document.getElementById('qPanel_pending') && document.getElementById('qPanel_pending').style.display !== 'none'){
+    loadPendingPrices();
+  }
   if (!rqPricedPlantsSorted().length){
     alert(chase.length
       ? 'No plant has a current price for this product yet — nothing to send to the customer. Asking for fresh prices now.'
@@ -3055,7 +3325,10 @@ async function sendEmailApiRaw(fromAlias, to, subject, text, html, attachments, 
 // replaces the old browser confirm() (plain text, one recipient at a time, nothing editable).
 // A card that already sent stays visible (greyed out, fields locked) so the trader can see the
 // whole batch's status at a glance instead of it vanishing the moment it goes out.
-const RQ_EMAIL_ICON = `<svg viewBox="0 0 24 24" fill="#fff" style="width:13px;height:13px;flex-shrink:0;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>`;
+// currentColor, not a hardcoded white — this icon now sits on the same light pill (.pkg-trigger-
+// btn) as every other trigger in the app, dark blue text on a light blue gradient, not white on
+// solid blue, so a fixed white fill went invisible the moment this button's style changed.
+const RQ_EMAIL_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;flex-shrink:0;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>`;
 let rqEmailModalItems = [];
 let rqEmailModalIsOffer = false;
 function rqOpenEmailModal(title, items, isOffer){
@@ -3101,7 +3374,7 @@ function rqRenderEmailModal(){
   // nothing sent automatically on their behalf). An offer still needs the API send — that's the
   // only way the PDF attachments and correct BuenTrade alias actually go out; Gmail's compose
   // screen can't carry a file.
-  const sendLabel = rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make an Offer` : `${RQ_EMAIL_ICON} Open Email`;
+  const sendLabel = rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make an Offer` : `${RQ_EMAIL_ICON} Emailing`;
   list.innerHTML = rqEmailModalItems.map((it, i) => {
     // Real gap found 2026-09-01, confirmed live with a screenshot: target="_blank" opens a brand
     // new, cold tab every single time — Gmail has to load the whole inbox from scratch behind the
@@ -3124,10 +3397,10 @@ function rqRenderEmailModal(){
     const actionHtml = it.sent
       ? ''
       : (it.gmailFallbackUrl
-        ? `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(it.gmailFallbackUrl)}" target="bt_gmail" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">⚠ Open in Gmail →</a></div>`
+        ? `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="pkg-trigger-btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(it.gmailFallbackUrl)}" target="bt_gmail" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">⚠ Open in Gmail →</a></div>`
         : (rqEmailModalIsOffer
-          ? `<div class="rq-email-card-actions"><button id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>`
-          : `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(rqEmailModalGmailUrl(it))}" target="bt_gmail" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">${sendLabel}</a></div>`));
+          ? `<div class="rq-email-card-actions"><button id="rq_email_action_${i}" class="pkg-trigger-btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>`
+          : `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="pkg-trigger-btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(rqEmailModalGmailUrl(it))}" target="bt_gmail" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">${sendLabel}</a></div>`));
     return `
     <div class="rq-email-card${it.sent ? ' sent' : ''}">
       <div class="rq-email-card-head">
@@ -3141,6 +3414,7 @@ function rqRenderEmailModal(){
       <div class="rq-email-field"><label>Subject</label><input type="text" ${it.sent ? 'disabled' : ''} value="${escapeHtml(it.subject)}" oninput="rqEmailModalItems[${i}].subject=this.value" autocomplete="off" name="bt-subj-${i}"></div>
       <div class="rq-email-field"><label>Message</label><textarea ${it.sent ? 'disabled' : ''} oninput="rqEmailModalItems[${i}].body=this.value" autocomplete="off">${escapeHtml(it.body)}</textarea></div>
       ${it.attachments && it.attachments.length ? `<div class="rq-email-field"><label>Attachments</label><div style="display:flex;flex-wrap:wrap;gap:6px;">${it.attachments.map(a => `<span class="chip" style="cursor:default;">📎 ${escapeHtml(a.filename)}</span>`).join('')}</div></div>` : ''}
+      ${it.downloadFiles && it.downloadFiles.length ? `<div class="loc-hint" style="margin-top:4px;">📎 ${it.downloadFiles.length} file${it.downloadFiles.length > 1 ? 's' : ''} will download automatically — drag ${it.downloadFiles.length > 1 ? 'them' : 'it'} into the Gmail window that opens</div>` : ''}
       ${actionHtml}
     </div>`;
   }).join('');
@@ -3153,7 +3427,7 @@ function rqRenderEmailModal(){
   sendAllBtn.style.gap = '5px';
   const remaining = rqEmailModalItems.filter(it => !it.sent).length;
   sendAllBtn.innerHTML = rqEmailModalItems.length > 1
-    ? (rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make All Offers (${remaining})` : `${RQ_EMAIL_ICON} Open All (${remaining})`)
+    ? (rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make All Offers (${remaining})` : `${RQ_EMAIL_ICON} Emailing All (${remaining})`)
     : sendLabel;
 }
 async function rqEmailModalSendOne(i){
@@ -3186,6 +3460,14 @@ async function rqEmailModalSendOne(i){
 async function rqEmailModalOpenFallback(i){
   const it = rqEmailModalItems[i];
   if (!it || it.sent) return;
+  // Real ask 2026-09-01, explicit and repeated: a Gmail compose link can never carry a real file —
+  // no URL param does that, for any mail provider, on purpose (a page could otherwise force-attach
+  // arbitrary remote files to an email the trader never chose). Same fix already proven live for
+  // WhatsApp (see rqWaModalOpenOne/downloadFiles): trigger the real download the instant this real
+  // link is clicked, so the file is already sitting in Downloads by the time Gmail's compose window
+  // finishes opening — one drag-and-drop into it is the actual attach step, same motion WhatsApp
+  // already asks for.
+  (it.downloadFiles || []).forEach(f => rqDownloadBytes(f.bytes, f.filename));
   it.sent = true;
   if (it.onSent) await it.onSent();
   rqRenderEmailModal();
@@ -3262,6 +3544,16 @@ function rqWaModalClose(){
   overlay.classList.remove('rq-split-left', 'rq-split-right');
 }
 
+// Real redesign 2026-09-01, explicit ask, repeated several times: one click here used to open an
+// in-app editable preview with its own "Make an Offer" button — a real API send (Resend) happening
+// behind that button, invisible until it either worked or silently failed. Explicit ask: every send
+// anywhere in the OS should land the trader directly in their own real Gmail instead — they can see,
+// edit, and CC people right there, and a real Sent-folder copy is proof it went out, which the old
+// API path never gave them. Gmail's own compose can't carry a file attachment (no URL param does,
+// for any mail provider — allowing that would let any page silently attach arbitrary files to an
+// email the trader never chose) — the real, already-proven fix (see rqWaModalOpenOne's
+// downloadFiles) is triggering the actual file download the instant Gmail opens, so it's sitting in
+// Downloads ready to drag into the compose window that just appeared.
 async function sendOfferEmailTo(customerId){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
@@ -3271,12 +3563,18 @@ async function sendOfferEmailTo(customerId){
   if (!unsent.length){ rqShowNotice(`${c.trade_name} already has every priced plant for this product.`); return; }
   const firstName = rqFirstName(c.contact_name || c.trade_name);
   const filesByPlant = await rqPrepareOfferFilesByPlant();
-  const attachments = unsent.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean);
-  rqOpenEmailModal(`Email offer — ${c.trade_name}`, [{
-    id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
-    body: buildCustomerOfferText(firstName, unsent), html: buildCustomerOfferHtml(firstName, unsent), attachments,
-    fromAlias: 'offers', onSent: () => rqLogSentOffersRows(unsent, [c], 'email'),
-  }], true);
+  const downloadFiles = unsent.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
+  downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
+  // Real bug caught testing this exact change, confirmed live: rqOpenGmail's click can navigate
+  // THIS SAME tab (confirmed live — the "bt_gmail" target didn't always open a separate one),
+  // which tears down this page's whole JS context the instant it commits. Anything called after
+  // that click was a coin flip whether it ever actually ran. Logging the send first, before the
+  // click that might immediately end this page, is the only order that's reliably real.
+  rqLogSentOffersRows(unsent, [c], 'email');
+  rqOpenGmail(c.email, `Cotización — ${rqProductSpecEs || ''}`, buildCustomerOfferText(firstName, unsent));
+  if (downloadFiles.length){
+    rqShowNotice(`Gmail se abrió — ${downloadFiles.length} archivo${downloadFiles.length > 1 ? 's' : ''} descargado${downloadFiles.length > 1 ? 's' : ''}, arrástra${downloadFiles.length > 1 ? 'los' : 'lo'} a la ventana de Gmail.`, 'OK', () => {});
+  }
 }
 
 async function sendOfferWhatsAppTo(customerId){
@@ -3307,6 +3605,12 @@ async function sendOfferWhatsAppTo(customerId){
 // them repeated just because Smithfield's price finally came in — each customer's card here only
 // ever contains the plants THEY don't already have (rqUnsentPlantsFor), a customer with nothing
 // new is skipped entirely rather than sent an empty or repeat message.
+// Real redesign 2026-09-01, explicit ask: same "straight to real Gmail, no in-app API preview"
+// rule as sendOfferEmailTo above — several real Gmail tabs can't all open from one click (Chrome
+// blocks a burst of auto-opened windows the same way it always has), so this still shows one real
+// link per customer, but clicking any one of them now goes straight to that customer's own real
+// Gmail compose (downloadFiles triggers the actual attachment download first, same as WhatsApp) —
+// never the old API "Make an Offer" button hiding a send behind it.
 async function sendOfferEmailToAll(){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
   const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
@@ -3317,15 +3621,42 @@ async function sendOfferEmailToAll(){
     const unsent = rqUnsentPlantsFor(c.id, sentByCustomer);
     if (!unsent.length) return; // already has everything ready for this product
     const firstName = rqFirstName(c.contact_name || c.trade_name);
-    const attachments = unsent.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean);
+    const downloadFiles = unsent.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
     items.push({
       id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${rqProductSpecEs || ''}`,
-      body: buildCustomerOfferText(firstName, unsent), html: buildCustomerOfferHtml(firstName, unsent), attachments,
-      fromAlias: 'offers', onSent: () => rqLogSentOffersRows(unsent, [c], 'email'),
+      body: buildCustomerOfferText(firstName, unsent), downloadFiles,
+      onSent: () => rqLogSentOffersRows(unsent, [c], 'email'),
     });
   });
-  if (!items.length){ rqShowNotice('Every matched customer with an email already has every priced plant for this product.'); return; }
-  rqOpenEmailModal(`Email offer — All customers (${items.length})`, items, true);
+  // Real bug caught live, explicit complaint ("no manda las pending offers"): this same message
+  // fired whether zero customers were linked to this product at all, or real customers existed
+  // but had genuinely already been sent everything — two very different situations, one real
+  // fact-check away (Customers module) from the other being nothing to worry about. A trader
+  // reading "already has every priced plant" for a product with NO customer at all had every
+  // reason to think the send was broken instead of missing a linked customer.
+  if (!items.length){
+    rqShowNotice(withEmail.length
+      ? 'Every matched customer with an email already has every priced plant for this product.'
+      : 'No customer with an email is linked to this product yet — link one in Customers first.');
+    return;
+  }
+  // Real bug caught live, explicit complaint ("sigue sacando ese preview"): exactly one real
+  // recipient still went through the same editable-fields-then-a-real-link modal built for the
+  // genuine multi-recipient case (several real Gmail tabs can't all auto-open from one click —
+  // that part's still true). With only one customer there's no such constraint — this is now the
+  // exact same one-click-straight-to-Gmail path sendOfferEmailTo already uses, not a smaller
+  // version of the modal.
+  if (items.length === 1){
+    const it = items[0];
+    it.downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
+    await it.onSent();
+    rqOpenGmail(it.to, it.subject, it.body);
+    if (it.downloadFiles.length){
+      rqShowNotice(`Gmail se abrió — ${it.downloadFiles.length} archivo${it.downloadFiles.length > 1 ? 's' : ''} descargado${it.downloadFiles.length > 1 ? 's' : ''}, arrástra${it.downloadFiles.length > 1 ? 'los' : 'lo'} a la ventana de Gmail.`, 'OK', () => {});
+    }
+    return;
+  }
+  rqOpenEmailModal(`Email offer — All customers (${items.length})`, items, false);
 }
 
 async function sendOfferWhatsAppToAll(){
@@ -3344,7 +3675,12 @@ async function sendOfferWhatsAppToAll(){
       onOpened: () => rqLogSentOffersRows(unsent, [c], 'whatsapp'),
     });
   });
-  if (!items.length){ rqShowNotice('Every matched customer with a WhatsApp number already has every priced plant for this product.'); return; }
+  if (!items.length){
+    rqShowNotice(withWa.length
+      ? 'Every matched customer with a WhatsApp number already has every priced plant for this product.'
+      : 'No customer with a WhatsApp number is linked to this product yet — link one in Customers first.');
+    return;
+  }
   rqOpenWaModal(`WhatsApp offer — All customers (${items.length})`, items, true);
 }
 
@@ -3451,6 +3787,23 @@ function rqShowNotice(message, actionLabel, actionFn){
 }
 function rqCloseNotice(){
   document.getElementById('rq_notice_overlay').style.display = 'none';
+}
+
+// Real replacement 2026-09-01, explicit ask: window.confirm() is a bare browser system dialog —
+// "localhost:8901 says", no BuenTrade styling reaches it at all. This is the app's own version —
+// same async/boolean contract as confirm() itself (await it, true means OK), so every call site
+// that used to say `if (!confirm(...)) return;` only has to become `if (!(await rqConfirm(...)))
+// return;`, nothing else about the surrounding function changes.
+function rqConfirm(message){
+  return new Promise(resolve => {
+    document.getElementById('rq_confirm_text').textContent = message;
+    const overlay = document.getElementById('rq_confirm_overlay');
+    overlay.style.display = 'flex';
+    const finish = (result) => { overlay.style.display = 'none'; resolve(result); };
+    document.getElementById('rq_confirm_ok').onclick = () => finish(true);
+    document.getElementById('rq_confirm_cancel').onclick = () => finish(false);
+    overlay.onclick = (e) => { if (e.target === overlay) finish(false); };
+  });
 }
 
 function rqCloseCalendarModal(){

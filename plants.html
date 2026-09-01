@@ -96,8 +96,11 @@
   .plr-browse{max-height:210px;overflow-y:auto;padding:2px;}
   .plr-browse-toggle,.plr-teach-toggle{background:none;border:none;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px;}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
-  .wa-btn{display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;}
-  .wa-btn:hover{background:#1EBE5A;}
+  /* Real fix 2026-09-02, explicit ask ("unifica... revisa todos los tabs") — same gradient+shadow
+     every WhatsApp button across the OS now uses, not this page's own flat green. */
+  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#32E67F,#1DA851);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(29,168,81,.25);transition:background .18s,box-shadow .2s,transform .15s;}
+  .wa-btn:hover{background:linear-gradient(180deg,#3EF08C,#20BD5A);box-shadow:0 4px 10px rgba(29,168,81,.35);transform:translateY(-1px);}
+  .wa-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(29,168,81,.25);}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:center;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
@@ -1752,7 +1755,7 @@ function fmtPriceCell(p){
   // simply has no price yet, a plain "—" — no visual difference at all, even though the whole
   // point of declined_at is that this is a known, closed fact, not an open "still needs a price"
   // question. See renderPlantProducts for the matching row-level shading.
-  if (p.declined_at) return '<span style="color:var(--red);font-weight:600;font-size:12px;">✕ Doesn\'t produce this</span>';
+  if (p.declined_at) return '<span style="color:var(--red);font-weight:600;font-size:12px;">✕ Off-Spec</span>';
   if (p.current_price == null) return '<span style="color:var(--ink-soft);">—</span>';
   const dOnly = toDateOnly(p.price_date);
   const dateStr = dOnly ? new Date(dOnly + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
