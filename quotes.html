@@ -3027,21 +3027,21 @@ function rqOpenEmailModal(title, items, isOffer){
   rqRenderEmailModal();
   document.getElementById('rq_email_modal_overlay').style.display = 'flex';
 }
-// Opens Gmail's own compose screen instead of a mailto: link — mailto: hands off to whatever the
-// OS has registered as the default mail app, which for a trader who actually works out of Gmail
-// in the browser is the wrong app entirely (or nothing, if none is registered). No fs=1 param —
-// that forces Gmail's bare standalone compose page with no inbox/account chrome around it; without
-// it, this opens as the normal compose popup inside the trader's actual signed-in Gmail inbox.
+// Real reversal 2026-09-01, confirmed live: the mail.google.com/?view=cm quick-compose URL opens
+// a reduced card (no "From" alias picker, no toolbar) EVEN in a normal, already-open tab — that's
+// not a cold-load or app-window artifact, it's what that specific Gmail feature is designed to
+// render, period. mailto:, when Chrome has Gmail registered as its handler for it, instead routes
+// to Gmail's own real "Compose" action — the actual full window a trader gets clicking Compose by
+// hand, alias picker included. Needs the one-time chrome://settings/handlers permission on the
+// trader's machine; nothing this code can do about that part.
 function rqGmailComposeUrl(to, subject, body, cc){
-  const params = new URLSearchParams({ view: 'cm', to, su: subject, body });
-  if (cc) params.set('cc', cc);
-  return `https://mail.google.com/mail/?${params.toString()}`;
+  let url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  if (cc) url += `&cc=${encodeURIComponent(cc)}`;
+  return url;
 }
 // Explicit ask 2026-09-01: one click on "Ask/Update Price" should land directly in Gmail, no
 // in-app preview screen first. A real, synchronously-clicked anchor (not window.open()) is what
-// actually survives Chrome's pop-up permission — see rqRenderEmailModal's own notes on this — and
-// the fixed "bt_gmail" target reuses the same tab across clicks instead of always cold-opening a
-// new one (a cold Gmail load renders a reduced compose with no "From" alias picker).
+// actually survives Chrome's pop-up permission — see rqRenderEmailModal's own notes on this.
 function rqOpenGmail(to, subject, body, cc){
   const a = document.createElement('a');
   a.href = rqGmailComposeUrl(to, subject, body, cc || '');
