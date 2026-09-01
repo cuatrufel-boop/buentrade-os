@@ -3045,7 +3045,7 @@ function rqGmailComposeUrl(to, subject, body, cc){
 function rqOpenGmail(to, subject, body, cc){
   const a = document.createElement('a');
   a.href = rqGmailComposeUrl(to, subject, body, cc || '');
-  a.target = '_blank';
+  a.target = 'bt_gmail';
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
@@ -3065,12 +3065,13 @@ function rqRenderEmailModal(){
   // screen can't carry a file.
   const sendLabel = rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make an Offer` : `${RQ_EMAIL_ICON} Open Email`;
   list.innerHTML = rqEmailModalItems.map((it, i) => {
-    // Real bug fixed 2026-09-01, confirmed live with a screenshot: a fixed named target (tried as
-    // a tab-reuse trick for a since-abandoned theory) opened a blank tab with the raw mailto: text
-    // sitting unresolved in the address bar — Chrome only redirects a mailto: click to its
-    // registered handler (chrome://settings/handlers → Gmail) when it's a direct top-level
-    // navigation, not one routed through a named/reused browsing context. Plain target="_blank" is
-    // what actually lets that registered-handler redirect fire.
+    // Real gap found 2026-09-01, confirmed live with a screenshot: target="_blank" opens a brand
+    // new, cold tab every single time — Gmail has to load the whole inbox from scratch behind the
+    // compose card, and in that cold-start it renders a reduced compose (no "From" alias picker)
+    // instead of the full one a trader gets composing by hand in an already-open Gmail tab. A
+    // fixed target name ("bt_gmail") makes every click after the first reuse that same tab —
+    // once Gmail has actually finished loading in it, later compose links opened into it should
+    // get the full experience instead of the bare one.
     //
     // Real bug fixed 2026-09-01, confirmed live with a screenshot: a window.open() call — even
     // one fired synchronously inside a real click — can still be silently killed by Chrome's own
@@ -3085,10 +3086,10 @@ function rqRenderEmailModal(){
     const actionHtml = it.sent
       ? ''
       : (it.gmailFallbackUrl
-        ? `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(it.gmailFallbackUrl)}" target="_blank" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">⚠ Open in Gmail →</a></div>`
+        ? `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(it.gmailFallbackUrl)}" target="bt_gmail" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">⚠ Open in Gmail →</a></div>`
         : (rqEmailModalIsOffer
           ? `<div class="rq-email-card-actions"><button id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>`
-          : `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(rqEmailModalGmailUrl(it))}" target="_blank" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">${sendLabel}</a></div>`));
+          : `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(rqEmailModalGmailUrl(it))}" target="bt_gmail" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">${sendLabel}</a></div>`));
     return `
     <div class="rq-email-card${it.sent ? ' sent' : ''}">
       <div class="rq-email-card-head">
