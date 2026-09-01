@@ -1520,10 +1520,10 @@ function rqRenderCategorySuggestions(){
 // fixed 2026-08-31: this used to create the real plant_products row (and, since loadPendingPrices
 // shows ANY unpriced row regardless of whether it was ever asked, jump the plant into Pending
 // Quotes) the instant this button was clicked — before the trader had even opened, let alone
-// sent, an actual ask. Opening this modal must be exactly as non-committal as opening one for an
-// already-known plant (rqUpdatePlantPrice) — closing it without sending leaves no trace. So the
-// real link is now only written inside the onSent callback, at the same moment the "asked" stamp
-// itself is written, never before.
+// sent, an actual ask. Explicit ask 2026-09-01: email now opens Gmail directly (see
+// rqUpdatePlantPrice) instead of an in-app preview — the real link is written the moment Gmail
+// actually opens, which is still the earliest point that's true ("the trader really did ask"),
+// just one click sooner than before.
 function rqAskNewPlantForProduct(plantId){
   const plant = rqAllPlants.find(p => p.id === plantId);
   if (!plant || !rqMatchedProductId) return;
@@ -1532,14 +1532,11 @@ function rqAskNewPlantForProduct(plantId){
   const body = rqPriceRequestBody(p);
   const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
   if (p.email){
-    rqOpenEmailModal(`Ask ${p.name} for a price`, [{ id: p.id, label: p.name, to: p.email, subject, body, fromAlias: 'purchasing', onSent: rqOnAskSentNewPlant(p) }]);
+    rqOpenGmail(p.email, subject, body);
+    rqOnAskSentNewPlant(p)();
   }
   if (phone){
     rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: rqOnAskSentNewPlant(p) }]);
-  }
-  if (p.email && phone){
-    document.getElementById('rq_email_modal_overlay').classList.add('rq-split-left');
-    document.getElementById('rq_wa_modal_overlay').classList.add('rq-split-right');
   }
 }
 
@@ -2792,9 +2789,12 @@ async function rqDeclinePlantProduct(linkId, plantName){
   loadPendingPrices();
 }
 
-// One click on "Update Purchase Price" opens BOTH compose windows at once (whichever the plant
-// actually has on file) — the trader doesn't pick a channel first, both are ready to fire, and
-// whichever one they actually send from marks this plant as asked (rqOnAskSent), same as before.
+// Explicit ask 2026-09-01: one click on "Update Purchase Price" goes straight to Gmail, no
+// editable in-app preview first — email never needed the preview (it's the exact same body
+// either way, nothing to review that isn't just as visible in Gmail itself), so opening it IS
+// the ask, same as it always assumed "clicked Open Email" meant "asked" even with the preview
+// step in between. WhatsApp keeps its own preview — that one's actually useful (the trader can
+// still edit the message before it's opened), and this ask was specifically about Gmail.
 function rqUpdatePlantPrice(id){
   // Asking a plant "what's your current price" never mentions a delivery date (see
   // rqPriceRequestBody) — requiring one here just blocked a simple price ask for no functional
@@ -2805,16 +2805,11 @@ function rqUpdatePlantPrice(id){
   const body = rqPriceRequestBody(p);
   const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
   if (p.email){
-    rqOpenEmailModal(`Ask ${p.name} for a price`, [{ id: p.id, label: p.name, to: p.email, subject, body, fromAlias: 'purchasing', onSent: rqOnAskSent(p) }]);
+    rqOpenGmail(p.email, subject, body);
+    rqOnAskSent(p)();
   }
   if (phone){
     rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: rqOnAskSent(p) }]);
-  }
-  // Both open at once — side by side under one shared dim, not two full-screen overlays stacked
-  // on top of each other (which just hid the first one and doubled the darkened background).
-  if (p.email && phone){
-    document.getElementById('rq_email_modal_overlay').classList.add('rq-split-left');
-    document.getElementById('rq_wa_modal_overlay').classList.add('rq-split-right');
   }
 }
 
@@ -3041,6 +3036,20 @@ function rqGmailComposeUrl(to, subject, body, cc){
   const params = new URLSearchParams({ view: 'cm', to, su: subject, body });
   if (cc) params.set('cc', cc);
   return `https://mail.google.com/mail/?${params.toString()}`;
+}
+// Explicit ask 2026-09-01: one click on "Ask/Update Price" should land directly in Gmail, no
+// in-app preview screen first. A real, synchronously-clicked anchor (not window.open()) is what
+// actually survives Chrome's pop-up permission — see rqRenderEmailModal's own notes on this — and
+// the fixed "bt_gmail" target reuses the same tab across clicks instead of always cold-opening a
+// new one (a cold Gmail load renders a reduced compose with no "From" alias picker).
+function rqOpenGmail(to, subject, body, cc){
+  const a = document.createElement('a');
+  a.href = rqGmailComposeUrl(to, subject, body, cc || '');
+  a.target = 'bt_gmail';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 function rqEmailModalGmailUrl(it){
   const ccJoined = (it.cc || '').split(',').map(s => s.trim()).filter(Boolean).join(',');
