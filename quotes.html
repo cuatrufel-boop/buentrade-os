@@ -650,6 +650,13 @@ auth.onAuthStateChanged(user => {
 </div>
 
 <script>
+// Real gap fixed 2026-09-01: the Resend API path (netlify/functions/send-email.js) already
+// appends its own copy of this exact signature to every send — but the manual Gmail-compose
+// fallback (used whenever the API isn't reachable, or for a plain plant ask that never calls the
+// API at all) builds its body entirely client-side and never got one. Kept byte-for-byte
+// identical to SIGNATURE_TEXT in that file so a plant/customer sees the same sign-off no matter
+// which path actually sent it.
+const RQ_EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
 let products = [];
 let temperatures = [];
 let packagings = [];
@@ -2814,9 +2821,13 @@ function rqUpdatePlantPrice(id){
 function rqPriceRequestBody(p){
   const contact = rqFirstName(p.contact_name || p.name);
   const missing = p.rqPrice == null;
-  return missing
+  const body = missing
     ? `Hi ${contact},\n\nWe don't have a current price on file for ${rqProductSpec || 'this product'} — could you send your current price?`
     : `Hi ${contact},\n\nOur price on file for ${rqProductSpec || 'this product'} is from ${rqFmtDate(p.rqPriceDate)} and needs updating — could you send your current price?`;
+  // This path never touches the Resend API (plant asks carry no attachment worth an API round
+  // trip), so it's the one message type that would otherwise go out with no signature at all —
+  // see RQ_EMAIL_SIGNATURE above.
+  return body + RQ_EMAIL_SIGNATURE;
 }
 
 // Same missing/stale test rqTtActionLabel uses to decide whether to show its own Ask button on a
@@ -3106,7 +3117,11 @@ async function rqEmailModalSendOne(i){
     // it just surfaces a real link (see rqRenderEmailModal) for the trader to click themselves —
     // guaranteed to work since it's their own direct click, not the page acting on their behalf.
     it.autoSendFailed = true;
-    it.gmailFallbackUrl = rqEmailModalGmailUrl(it);
+    // it.body itself stays clean (it's what the API attempt above just sent, and Resend already
+    // appends its own copy of this signature server-side) — only this manual fallback link, which
+    // never goes anywhere near the API, needs it added here.
+    const ccJoined = ccList.join(',');
+    it.gmailFallbackUrl = rqGmailComposeUrl(it.to, it.subject, it.body + RQ_EMAIL_SIGNATURE, ccJoined);
   }
   rqRenderEmailModal();
 }

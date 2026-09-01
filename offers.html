@@ -1459,6 +1459,11 @@ async function sendEmailApi(fromAlias, to, subject, text, attachments){
 function gmailComposeUrl(emails, subject, body){
   return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: emails.join(','), su: subject, body }).toString()}`;
 }
+// Real gap fixed 2026-09-01: netlify/functions/send-email.js already appends this exact signature
+// server-side on every successful Resend send — but this fallback link never goes near that
+// function, so without this it would go out with no sign-off at all. Kept byte-for-byte identical
+// to that file's SIGNATURE_TEXT so a plant/customer/carrier sees the same one either way.
+const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
 // Real bug fixed 2026-09-01, confirmed live with a screenshot: a window.open() call here — even
 // one opened synchronously at the very top of the caller, before any await — can still be
 // silently killed by Chrome's own per-site pop-up permission for this page, with no error and no
@@ -1466,7 +1471,7 @@ function gmailComposeUrl(emails, subject, body){
 // subject to that same block, so the fallback is now a real link inside the toast (see showToast)
 // instead of anything JS-driven opening a window on the trader's behalf.
 function gmailFallbackLinkHtml(emails, subject, body){
-  const url = gmailComposeUrl(emails, subject, body);
+  const url = gmailComposeUrl(emails, subject, body + EMAIL_SIGNATURE);
   return `<br><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
 }
 

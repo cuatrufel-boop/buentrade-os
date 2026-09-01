@@ -3261,6 +3261,11 @@ async function sendEmailApi(fromAlias, to, subject, text){
 function gmailComposeUrl(to, subject, body){
   return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to, su: subject, body }).toString()}`;
 }
+// Real gap fixed 2026-09-01: netlify/functions/send-email.js already appends this exact signature
+// server-side on every successful Resend send — but the Gmail fallback below never goes near that
+// function, so without this it would go out with no sign-off at all. Kept byte-for-byte identical
+// to that file's SIGNATURE_TEXT so a plant sees the same one either way.
+const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
 
 // English — plant-facing, same rule as everything else sent to a US plant. Falls back to the
 // plant's own general contact when this specific location doesn't have one on file yet (e.g. one
@@ -3285,7 +3290,7 @@ async function emailPlantLocation(locId){
     // this same button into a real <a href target="_blank"> instead — a link the trader clicks
     // themselves is not subject to that block, since it's their own direct navigation, not the
     // page opening something on their behalf.
-    const url = gmailComposeUrl(email, subject, body);
+    const url = gmailComposeUrl(email, subject, body + EMAIL_SIGNATURE);
     const btn = document.getElementById(`loc_email_btn_${locId}`);
     if (btn){
       const a = document.createElement('a');
