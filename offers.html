@@ -1452,12 +1452,12 @@ async function sendEmailApi(fromAlias, to, subject, text, attachments){
   return res.json();
 }
 
-// Opens Gmail's own compose screen instead of a mailto: link — same fix as quotes.html's
-// rqGmailComposeUrl. mailto: hands off to whatever the OS has registered as the default mail
-// app, which for a trader who actually works out of Gmail in the browser is the wrong app
-// entirely (or nothing, if none is registered).
+// Real reversal 2026-09-01, confirmed live — see quotes.html's rqGmailComposeUrl: the
+// mail.google.com/?view=cm quick-compose renders a reduced card (no "From" alias picker) no
+// matter what, even in an already-open normal tab. mailto:, with Gmail registered as Chrome's
+// handler for it, routes to Gmail's actual "Compose" action instead — the full window.
 function gmailComposeUrl(emails, subject, body){
-  return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: emails.join(','), su: subject, body }).toString()}`;
+  return `mailto:${encodeURIComponent(emails.join(','))}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 // Real gap fixed 2026-09-01: netlify/functions/send-email.js already appends this exact signature
 // server-side on every successful Resend send — but this fallback link never goes near that
