@@ -3021,16 +3021,48 @@ function rqOpenEmailModal(title, items, isOffer){
   rqRenderEmailModal();
   document.getElementById('rq_email_modal_overlay').style.display = 'flex';
 }
+// Opens Gmail's own compose screen instead of a mailto: link — mailto: hands off to whatever the
+// OS has registered as the default mail app, which for a trader who actually works out of Gmail
+// in the browser is the wrong app entirely (or nothing, if none is registered). No fs=1 param —
+// that forces Gmail's bare standalone compose page with no inbox/account chrome around it; without
+// it, this opens as the normal compose popup inside the trader's actual signed-in Gmail inbox.
+function rqGmailComposeUrl(to, subject, body, cc){
+  const params = new URLSearchParams({ view: 'cm', to, su: subject, body });
+  if (cc) params.set('cc', cc);
+  return `https://mail.google.com/mail/?${params.toString()}`;
+}
+function rqEmailModalGmailUrl(it){
+  const ccJoined = (it.cc || '').split(',').map(s => s.trim()).filter(Boolean).join(',');
+  return rqGmailComposeUrl(it.to, it.subject, it.body, ccJoined);
+}
 function rqRenderEmailModal(){
   const list = document.getElementById('rq_email_modal_list');
   // Same reasoning as the WhatsApp modal: sending a customer offer logs a live, followable row in
   // sent_offers, so that button says so — plant asks (stale-price refresh) don't create anything
   // trackable and match WhatsApp's own "Open WhatsApp" wording (opens the trader's own client,
   // nothing sent automatically on their behalf). An offer still needs the API send — that's the
-  // only way the PDF attachments and correct BuenTrade alias actually go out; mailto: can't carry
-  // a file.
+  // only way the PDF attachments and correct BuenTrade alias actually go out; Gmail's compose
+  // screen can't carry a file.
   const sendLabel = rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make an Offer` : `${RQ_EMAIL_ICON} Open Email`;
-  list.innerHTML = rqEmailModalItems.map((it, i) => `
+  list.innerHTML = rqEmailModalItems.map((it, i) => {
+    // Real bug fixed 2026-09-01, confirmed live with a screenshot: a window.open() call — even
+    // one fired synchronously inside a real click — can still be silently killed by Chrome's own
+    // per-site pop-up permission for this page, with no error and no visible feedback at all. A
+    // real <a href target="_blank"> the trader clicks themselves is not subject to that same
+    // block — anchor navigation is treated as the trader directly asking for it, not the page
+    // opening something on their behalf. So the action here is a genuine link, computed fresh on
+    // every render straight from this card's own (live-editable) fields, never a JS-driven
+    // window.open(). The offer path still has to try the real API send first (only that path can
+    // carry the PDF + correct BuenTrade alias) — if it fails, the card re-renders showing this
+    // same kind of real link as the fallback, instead of trying to pop one open in code.
+    const actionHtml = it.sent
+      ? ''
+      : (it.gmailFallbackUrl
+        ? `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(it.gmailFallbackUrl)}" target="_blank" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">⚠ Open in Gmail →</a></div>`
+        : (rqEmailModalIsOffer
+          ? `<div class="rq-email-card-actions"><button id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>`
+          : `<div class="rq-email-card-actions"><a id="rq_email_action_${i}" class="btn" style="display:inline-flex;align-items:center;gap:5px;" href="${escapeHtml(rqEmailModalGmailUrl(it))}" target="_blank" rel="noopener" onclick="rqEmailModalOpenFallback(${i})">${sendLabel}</a></div>`));
+    return `
     <div class="rq-email-card${it.sent ? ' sent' : ''}">
       <div class="rq-email-card-head">
         <strong>${escapeHtml(it.label)}</strong>
@@ -3043,9 +3075,13 @@ function rqRenderEmailModal(){
       <div class="rq-email-field"><label>Subject</label><input type="text" ${it.sent ? 'disabled' : ''} value="${escapeHtml(it.subject)}" oninput="rqEmailModalItems[${i}].subject=this.value" autocomplete="off" name="bt-subj-${i}"></div>
       <div class="rq-email-field"><label>Message</label><textarea ${it.sent ? 'disabled' : ''} oninput="rqEmailModalItems[${i}].body=this.value" autocomplete="off">${escapeHtml(it.body)}</textarea></div>
       ${it.attachments && it.attachments.length ? `<div class="rq-email-field"><label>Attachments</label><div style="display:flex;flex-wrap:wrap;gap:6px;">${it.attachments.map(a => `<span class="chip" style="cursor:default;">📎 ${escapeHtml(a.filename)}</span>`).join('')}</div></div>` : ''}
-      ${!it.sent ? `<div class="rq-email-card-actions"><button class="btn" style="display:inline-flex;align-items:center;gap:5px;" onclick="rqEmailModalSendOne(${i})">${sendLabel}</button></div>` : ''}
-    </div>`).join('');
+      ${actionHtml}
+    </div>`;
+  }).join('');
   const sendAllBtn = document.getElementById('rq_email_modal_sendall');
+  // "Send/Open All" stays button+JS (there's no single link to click for a whole batch) — it just
+  // drives rqEmailModalSendOne/rqEmailModalOpenFallback per item exactly as if the trader had
+  // clicked each item's own real link or button in turn.
   sendAllBtn.style.display = rqEmailModalItems.every(it => it.sent) ? 'none' : 'inline-flex';
   sendAllBtn.style.alignItems = 'center';
   sendAllBtn.style.gap = '5px';
@@ -3054,55 +3090,51 @@ function rqRenderEmailModal(){
     ? (rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make All Offers (${remaining})` : `${RQ_EMAIL_ICON} Open All (${remaining})`)
     : sendLabel;
 }
-// Opens Gmail's own compose screen instead of a mailto: link — mailto: hands off to whatever the
-// OS has registered as the default mail app, which for a trader who actually works out of Gmail
-// in the browser is the wrong app entirely (or nothing, if none is registered). No fs=1 param —
-// that forces Gmail's bare standalone compose page with no inbox/account chrome around it; without
-// it, this opens as the normal compose popup inside the trader's actual signed-in Gmail inbox.
-function rqGmailComposeUrl(to, subject, body, cc){
-  const params = new URLSearchParams({ view: 'cm', to, su: subject, body });
-  if (cc) params.set('cc', cc);
-  return `https://mail.google.com/mail/?${params.toString()}`;
-}
 async function rqEmailModalSendOne(i){
   const it = rqEmailModalItems[i];
-  if (!it || it.sent) return;
+  if (!it || it.sent || it.gmailFallbackUrl) return;
+  if (!rqEmailModalIsOffer) return; // the plain-ask case is a real <a> now — nothing for JS to do
   const ccList = (it.cc || '').split(',').map(s => s.trim()).filter(Boolean);
-  const ccJoined = ccList.join(',');
-  if (rqEmailModalIsOffer){
-    // Real bug fixed 2026-09-01, confirmed live: window.open() called from inside this catch
-    // block — AFTER an awaited fetch — silently gets killed by the browser's popup blocker, even
-    // on a real click, because the async gap breaks the "this came from a genuine user gesture"
-    // chain Chrome checks. It reproduces 100% of the time while the Resend API is unreachable
-    // (e.g. Netlify suspended), since every send then falls into this exact path. Opening a blank
-    // tab synchronously, right here, before the first await, keeps it tied to the real click; it
-    // only gets navigated to the Gmail fallback if the send actually fails, and closed quietly if
-    // it succeeds.
-    const fallbackTab = window.open('', '_blank');
-    try {
-      await sendEmailApiRaw(it.fromAlias, it.to, it.subject, it.body, it.html, it.attachments, ccList);
-      if (fallbackTab) fallbackTab.close();
-    } catch(e){
-      // No alert() here — sending a batch of offers to several customers used to pop a blocking
-      // dialog per FAILED recipient, so one bad batch meant clicking through several stacked
-      // "OK"s in a row. The card's own badge below (see rqRenderEmailModal) already shows which
-      // ones fell back to Gmail, no popup needed to notice it.
-      it.autoSendFailed = true;
-      const url = rqGmailComposeUrl(it.to, it.subject, it.body, ccJoined);
-      if (fallbackTab) fallbackTab.location.href = url; else window.open(url, '_blank');
-    }
-  } else {
-    // Plant asks never carry attachments — same as WhatsApp's "Open WhatsApp", this just opens
-    // Gmail with everything pre-filled; nothing sent on the trader's behalf.
-    window.open(rqGmailComposeUrl(it.to, it.subject, it.body, ccJoined), '_blank');
+  try {
+    await sendEmailApiRaw(it.fromAlias, it.to, it.subject, it.body, it.html, it.attachments, ccList.join(','));
+    it.sent = true;
+    if (it.onSent) await it.onSent();
+  } catch(e){
+    // Real bug fixed 2026-09-01: this used to call window.open() right here to fall back to
+    // Gmail — but this point in the code is deep inside an awaited catch block, and a plain,
+    // fully-blocked Chrome pop-up permission for this site kills that regardless of timing. Now
+    // it just surfaces a real link (see rqRenderEmailModal) for the trader to click themselves —
+    // guaranteed to work since it's their own direct click, not the page acting on their behalf.
+    it.autoSendFailed = true;
+    it.gmailFallbackUrl = rqEmailModalGmailUrl(it);
   }
+  rqRenderEmailModal();
+}
+// Fires when the trader actually clicks the real <a> — either the plain-ask link or the post-
+// failure Gmail fallback link. The anchor's own href+target already does the real navigation;
+// this just finishes the bookkeeping (mark sent, run onSent, refresh the card).
+async function rqEmailModalOpenFallback(i){
+  const it = rqEmailModalItems[i];
+  if (!it || it.sent) return;
   it.sent = true;
   if (it.onSent) await it.onSent();
   rqRenderEmailModal();
 }
+// The plain-ask and post-failure fallback actions are now real <a> elements (see
+// rqRenderEmailModal) — rqEmailModalSendOne no-ops for those on purpose, so "Open/Send All" has
+// to trigger a real click on each one's actual anchor instead, the same way the trader would by
+// hand. A .click() on a genuine DOM anchor is honored by the browser as real navigation, unlike
+// window.open() called from a loop.
 async function rqEmailModalSendAll(){
   for (let i = 0; i < rqEmailModalItems.length; i++){
-    if (!rqEmailModalItems[i].sent) await rqEmailModalSendOne(i);
+    const it = rqEmailModalItems[i];
+    if (it.sent) continue;
+    if (rqEmailModalIsOffer && !it.gmailFallbackUrl){
+      await rqEmailModalSendOne(i);
+    } else {
+      const el = document.getElementById(`rq_email_action_${i}`);
+      if (el) el.click();
+    }
   }
 }
 function rqEmailModalClose(){
