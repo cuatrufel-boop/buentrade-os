@@ -3070,15 +3070,26 @@ async function rqEmailModalSendOne(i){
   const ccList = (it.cc || '').split(',').map(s => s.trim()).filter(Boolean);
   const ccJoined = ccList.join(',');
   if (rqEmailModalIsOffer){
+    // Real bug fixed 2026-09-01, confirmed live: window.open() called from inside this catch
+    // block — AFTER an awaited fetch — silently gets killed by the browser's popup blocker, even
+    // on a real click, because the async gap breaks the "this came from a genuine user gesture"
+    // chain Chrome checks. It reproduces 100% of the time while the Resend API is unreachable
+    // (e.g. Netlify suspended), since every send then falls into this exact path. Opening a blank
+    // tab synchronously, right here, before the first await, keeps it tied to the real click; it
+    // only gets navigated to the Gmail fallback if the send actually fails, and closed quietly if
+    // it succeeds.
+    const fallbackTab = window.open('', '_blank');
     try {
       await sendEmailApiRaw(it.fromAlias, it.to, it.subject, it.body, it.html, it.attachments, ccList);
+      if (fallbackTab) fallbackTab.close();
     } catch(e){
       // No alert() here — sending a batch of offers to several customers used to pop a blocking
       // dialog per FAILED recipient, so one bad batch meant clicking through several stacked
       // "OK"s in a row. The card's own badge below (see rqRenderEmailModal) already shows which
       // ones fell back to Gmail, no popup needed to notice it.
       it.autoSendFailed = true;
-      window.open(rqGmailComposeUrl(it.to, it.subject, it.body, ccJoined), '_blank');
+      const url = rqGmailComposeUrl(it.to, it.subject, it.body, ccJoined);
+      if (fallbackTab) fallbackTab.location.href = url; else window.open(url, '_blank');
     }
   } else {
     // Plant asks never carry attachments — same as WhatsApp's "Open WhatsApp", this just opens

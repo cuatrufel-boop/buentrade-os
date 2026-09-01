@@ -344,8 +344,13 @@ function buildFlashText(lang) {
 
 function updateShareLinks() {
   const text = buildFlashText(currentLang);
+  // Gmail's own compose screen instead of mailto: — mailto: hands off to whatever the OS has
+  // registered as the default mail app, which for a trader working out of Gmail in the browser
+  // is the wrong app entirely (or nothing, if none is registered). A genuine anchor click, so no
+  // popup-blocker risk here.
   document.getElementById('share-email').href =
-    `mailto:?subject=${encodeURIComponent('⚡ Market Flash')}&body=${encodeURIComponent(text)}`;
+    `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', su: '⚡ Market Flash', body: text }).toString()}`;
+  document.getElementById('share-email').target = '_blank';
   document.getElementById('share-whatsapp').href =
     `https://wa.me/?text=${encodeURIComponent(text)}`;
 }

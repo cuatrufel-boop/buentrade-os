@@ -1452,8 +1452,24 @@ async function sendEmailApi(fromAlias, to, subject, text, attachments){
   return res.json();
 }
 
-function mailtoFallback(emails, subject, body){
-  window.open(`mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+// Opens Gmail's own compose screen instead of a mailto: link — same fix as quotes.html's
+// rqGmailComposeUrl. mailto: hands off to whatever the OS has registered as the default mail
+// app, which for a trader who actually works out of Gmail in the browser is the wrong app
+// entirely (or nothing, if none is registered).
+function gmailComposeUrl(emails, subject, body){
+  return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: emails.join(','), su: subject, body }).toString()}`;
+}
+// Real bug fixed 2026-09-01, confirmed live: every caller reaches this fallback deep inside a
+// catch block, after several awaited calls (building the PDF, uploading it, and sendEmailApi's
+// own preview-modal confirmation + fetch) — by then the original click that started the whole
+// flow no longer counts as a "real user gesture" to the browser, so a window.open() called here
+// gets silently killed by the popup blocker. `tab`, when passed, is a blank window each caller
+// opened synchronously at its own very first line (before any await) — reusing that already-open
+// handle keeps the popup tied to the real click instead of opening a fresh (and blockable) one
+// down here. Falls back to a plain window.open() only if no tab was pre-opened.
+function gmailFallback(tab, emails, subject, body){
+  const url = gmailComposeUrl(emails, subject, body);
+  if (tab) tab.location.href = url; else window.open(url, '_blank');
 }
 
 // ============ WHATSAPP CARD (PO/SO/FO as an image, never a PDF link) ============
@@ -1604,13 +1620,17 @@ function showToast(title, detail, isError){
 }
 
 async function sharePO(orderNumber){
+  // Opened synchronously, before any await, so it's still tied to the real click that started
+  // this function — see gmailFallback above. Closed at every early exit so a normal/successful
+  // send never leaves a stray blank tab behind.
+  const fallbackTab = window.open('', '_blank');
   let built;
-  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildPODoc(orderNumber); } catch(e){ if (fallbackTab) fallbackTab.close(); alert(e.message); return; }
   const emails = collectEmails(built.plant);
-  if (!emails.length){ alert('This plant has no email on file.'); return; }
+  if (!emails.length){ if (fallbackTab) fallbackTab.close(); alert('This plant has no email on file.'); return; }
   const filename = `PO-${orderNumber}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ if (fallbackTab) fallbackTab.close(); alert('Upload error: ' + e.message); return; }
   const subject = `${orderNumber} — Purchase Order`;
   const po = built.po;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
@@ -1621,13 +1641,14 @@ async function sharePO(orderNumber){
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
   try {
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)]);
+    if (fallbackTab) fallbackTab.close();
     showToast('PO sent', emails.join(', '));
   } catch(e){
-    if (e.cancelled) return;
+    if (e.cancelled) { if (fallbackTab) fallbackTab.close(); return; }
     showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
-    // mailto: genuinely can't carry a file attachment, so the fallback is the one place a link
-    // is unavoidable — the API path above always sends the real PDF.
-    mailtoFallback(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`);
+    // Gmail's compose screen genuinely can't carry a file attachment, so the fallback is the one
+    // place a link is unavoidable — the API path above always sends the real PDF.
+    gmailFallback(fallbackTab, emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`);
   }
 }
 
@@ -1698,13 +1719,14 @@ async function exportSO(orderNumber){
 }
 
 async function shareSO(orderNumber){
+  const fallbackTab = window.open('', '_blank');
   let built;
-  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildSODoc(orderNumber); } catch(e){ if (fallbackTab) fallbackTab.close(); alert(e.message); return; }
   const emails = collectEmails(built.customer);
-  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  if (!emails.length){ if (fallbackTab) fallbackTab.close(); alert('This customer has no email on file.'); return; }
   const filename = `SO-${orderNumber}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ if (fallbackTab) fallbackTab.close(); alert('Upload error: ' + e.message); return; }
   const subject = `${orderNumber} — Confirmación de Venta`;
   const so = built.so;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
@@ -1715,11 +1737,12 @@ async function shareSO(orderNumber){
     + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)]);
+    if (fallbackTab) fallbackTab.close();
     showToast('SO sent', emails.join(', '));
   } catch(e){
-    if (e.cancelled) return;
+    if (e.cancelled) { if (fallbackTab) fallbackTab.close(); return; }
     showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
-    mailtoFallback(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`);
+    gmailFallback(fallbackTab, emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`);
   }
 }
 
@@ -1796,8 +1819,16 @@ async function exportFO(orderNumber){
 }
 
 async function shareFO(orderNumber){
+  // Only the FIRST leg's tab is reliably tied to this click — by the time later legs in this
+  // loop reach their own await, the browser has already stopped treating this as a live user
+  // gesture no matter where a window.open() happens. Each leg still gets its own best-effort
+  // attempt (never worse than before, where none of them were pre-opened), same accepted
+  // limitation as batch sends elsewhere in this app.
+  const fallbackTab = window.open('', '_blank');
+  let usedFallbackTab = false;
   let built;
-  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildFODocs(orderNumber); } catch(e){ if (fallbackTab) fallbackTab.close(); alert(e.message); return; }
+  if (!built.length && fallbackTab) fallbackTab.close();
   for (const b of built){
     const emails = collectEmails(b.carrier);
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
@@ -1814,20 +1845,24 @@ async function shareFO(orderNumber){
     } catch(e){
       if (e.cancelled) continue;
       showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
-      mailtoFallback(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`);
+      const thisTab = usedFallbackTab ? window.open('', '_blank') : fallbackTab;
+      usedFallbackTab = true;
+      gmailFallback(thisTab, emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`);
     }
   }
+  if (fallbackTab && !usedFallbackTab) fallbackTab.close();
 }
 
 // Border customs paperwork isn't its own document — the broker just needs whatever of
 // PO/SO/FO already exist for this order, so this bundles links to all of them in one email
 // instead of asking the trader to forward each separately.
 async function shareCustoms(orderNumber){
+  const fallbackTab = window.open('', '_blank');
   const sentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
-  if (!sentOffer || !sentOffer.customs_agency_provider_id){ alert('No customs agency on file for this order.'); return; }
+  if (!sentOffer || !sentOffer.customs_agency_provider_id){ if (fallbackTab) fallbackTab.close(); alert('No customs agency on file for this order.'); return; }
   const agency = ((await callApi('providers-search', { id: sentOffer.customs_agency_provider_id })).results || [])[0];
   const emails = collectEmails(agency);
-  if (!emails.length){ alert('This customs agency has no email on file.'); return; }
+  if (!emails.length){ if (fallbackTab) fallbackTab.close(); alert('This customs agency has no email on file.'); return; }
 
   const docs = []; // { label, doc, filename }
   try {
@@ -1837,26 +1872,27 @@ async function shareCustoms(orderNumber){
     if (so) docs.push({ label: 'Sales Order', doc: so.doc, filename: `SO-${orderNumber}.pdf` });
     const fos = await buildFODocs(orderNumber).catch(() => []);
     for (const b of fos) docs.push({ label: 'Freight Confirmation', doc: b.doc, filename: b.filename });
-  } catch(e){ alert('Error preparing documents: ' + e.message); return; }
-  if (!docs.length){ alert('No documents available yet for this order.'); return; }
+  } catch(e){ if (fallbackTab) fallbackTab.close(); alert('Error preparing documents: ' + e.message); return; }
+  if (!docs.length){ if (fallbackTab) fallbackTab.close(); alert('No documents available yet for this order.'); return; }
 
-  // Links only get built for the mailto: fallback body (mailto: can't carry attachments) — the
-  // API send below always attaches the real PDFs instead.
+  // Links only get built for the Gmail fallback body (Gmail's compose screen can't carry
+  // attachments) — the API send below always attaches the real PDFs instead.
   const links = [];
   for (const d of docs){
-    try { links.push([d.label, await uploadOrderPdf(d.doc, d.filename)]); } catch(e){ alert('Upload error: ' + e.message); return; }
+    try { links.push([d.label, await uploadOrderPdf(d.doc, d.filename)]); } catch(e){ if (fallbackTab) fallbackTab.close(); alert('Upload error: ' + e.message); return; }
   }
 
   const subject = `${orderNumber} — Documentos`;
   const body = `Adjuntamos documentación de la orden ${orderNumber}: ${docs.map(d => d.label).join(', ')}.`;
   try {
     await sendEmailApi('logistics', emails, subject, body, docs.map(d => pdfAttachment(d.doc, d.filename)));
+    if (fallbackTab) fallbackTab.close();
     showToast('Customs documents sent', emails.join(', '));
   } catch(e){
-    if (e.cancelled) return;
+    if (e.cancelled) { if (fallbackTab) fallbackTab.close(); return; }
     showToast('Automatic send failed', e.message + ' — opening your email client instead.', true);
     const fallbackBody = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
-    mailtoFallback(emails, subject, fallbackBody);
+    gmailFallback(fallbackTab, emails, subject, fallbackBody);
   }
 }
 
