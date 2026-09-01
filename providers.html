@@ -548,7 +548,7 @@ function renderLocationsList(){
       if (!rate) return `<span style="color:var(--red);">${escapeHtml(c.name)}: Pending</span>`;
       const isStale = (rateAgeDays(rate.updated_at) || 0) > RATE_STALE_DAYS;
       const color = isStale ? '#B7791F' : 'var(--green)';
-      const flag = isStale ? ' ⚠ stale' : '';
+      const flag = isStale ? ' ⚠ expired' : '';
       return `<span style="color:${color};">${escapeHtml(c.name)}: $${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${flag}</span>`;
     }).join(' &nbsp;·&nbsp; ') : '<span style="color:var(--ink-soft);">No carriers on file yet</span>';
     return `<div class="pkg-row">
@@ -1378,7 +1378,7 @@ function renderRateViewFicha(r, isUs){
   }
   const age = rateAgeDays(r.updatedAt);
   const stale = age != null && age > RATE_STALE_DAYS;
-  const staleNote = stale ? `<span class="pkg-plant-sub" style="color:var(--red);">⚠ Stale — last confirmed ${age}d ago</span>` : '';
+  const staleNote = stale ? `<span class="pkg-plant-sub" style="color:var(--red);">⚠ Expired — last confirmed ${age}d ago</span>` : '';
   return `<div class="pkg-row">
     <div class="pkg-plant-avatar">🚚</div>
     <div class="pkg-plant-info"><span class="pkg-plant-name">${escapeHtml(label)}</span>${r.notes ? `<span class="pkg-plant-sub">${escapeHtml(r.notes)}</span>` : ''}${staleNote}</div>

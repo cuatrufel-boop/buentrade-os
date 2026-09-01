@@ -1137,7 +1137,7 @@ async function loadPendingPrices(){
       // red/amber Missing/Stale tag that no longer describes it.
       const statusTagHtml = r.priced
         ? `<span class="pkg-tag price">$${Number(r.current_price).toFixed(4)}/lb</span>`
-        : `<span class="pkg-tag ${r.missing ? 'missing' : 'stale'}">${r.missing ? 'Missing' : 'Stale · ' + rqFmtDate(r.price_date)}</span>`;
+        : `<span class="pkg-tag ${r.missing ? 'missing' : 'stale'}">${r.missing ? 'Missing' : 'Expired · ' + rqFmtDate(r.price_date)}</span>`;
       // Real fix 2026-09-02, see rqPendingCalcCache's own declaration — the Selling price Quotes
       // shows for free is really just "this plant's calculator was opened at least once this
       // session," never something persisted. Same cache, same lookup key, same shape
@@ -1991,7 +1991,7 @@ function rqPlantRowHtml(p, hasDeliveryDate){
   // regardless of whether the trader sends it anyway from here.
   const isStale = !!p.rqPriceDate && (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
   const staleTagHtml = isStale ? `
-          <span class="pkg-tag stale">Stale · ${escapeHtml(rqFmtDate(p.rqPriceDate) || '')}</span>
+          <span class="pkg-tag stale">Expired · ${escapeHtml(rqFmtDate(p.rqPriceDate) || '')}</span>
           <button type="button" class="rq-toggle${p.rqIncludeStale ? ' on' : ''}" style="height:auto;padding:4px 10px;font-size:10.5px;" onclick="rqToggleIncludeStale('${p.id}')">${p.rqIncludeStale ? '✓ Send anyway' : 'Include in send'}</button>` : '';
   const fileButtonsHtml = (files.photo_url || files.spec_url) ? `
         <div style="display:flex;gap:6px;flex-shrink:0;">
