@@ -1723,7 +1723,7 @@ async function loadPlantProducts(){
   // now (2026-08-29: moved off the shared product onto plant_products, where they actually vary).
   plantProducts = (res.results || [])
     .filter(r => r.product)
-    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date, brand_id: r.brand_id, photo_url: r.photo_url, spec_url: r.spec_url, location_id: r.location_id }))
+    .map(r => ({ ...r.product, linkId: r.id, current_price: r.current_price, price_currency: r.price_currency, price_date: r.price_date, brand_id: r.brand_id, photo_url: r.photo_url, spec_url: r.spec_url, location_id: r.location_id, declined_at: r.declined_at }))
     // Most recently priced first, stale/never-priced ones sinking to the bottom — the trader
     // wants to see what just got loaded, not scroll past it to find it alphabetically.
     .sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
@@ -1747,6 +1747,12 @@ function priceAgeDays(priceDate){
 }
 
 function fmtPriceCell(p){
+  // Real gap fixed 2026-09-01, confirmed live: a declined product (this plant told us they don't
+  // make it — see quotes.html's rqDeclinePlantProduct) rendered identically to a product that
+  // simply has no price yet, a plain "—" — no visual difference at all, even though the whole
+  // point of declined_at is that this is a known, closed fact, not an open "still needs a price"
+  // question. See renderPlantProducts for the matching row-level shading.
+  if (p.declined_at) return '<span style="color:var(--red);font-weight:600;font-size:12px;">✕ Doesn\'t produce this</span>';
   if (p.current_price == null) return '<span style="color:var(--ink-soft);">—</span>';
   const dOnly = toDateOnly(p.price_date);
   const dateStr = dOnly ? new Date(dOnly + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
@@ -2851,7 +2857,10 @@ function renderPlantProducts(){
       ? `<div class="pkg-plant-avatar"><img src="${escapeHtml(p.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>`
       : `<div class="pkg-plant-avatar">${escapeHtml((p.full_name_en || p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
     const specLink = p.spec_url ? ` · <a href="${escapeHtml(p.spec_url)}" target="_blank" rel="noopener">Spec sheet</a>` : '';
-    return `<div class="pkg-row">
+    // Shaded, not hidden — a declined product is a known, closed fact worth keeping visible on
+    // this plant's own list ("we asked, they don't make it"), just visually out of the way so it
+    // doesn't compete with products that still need attention.
+    return `<div class="pkg-row"${p.declined_at ? ' style="opacity:.5;"' : ''}>
       ${avatarHtml}
       <div class="pkg-plant-info">
         <a class="name-link pkg-plant-name" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a>
