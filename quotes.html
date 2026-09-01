@@ -1011,12 +1011,11 @@ async function loadPendingPrices(){
     const pendingRowsHtml = g.rows.map(r => {
       const missing = r.current_price == null;
       const reqAge = rqPriceAgeDays(r.last_requested_at);
-      // The trigger only ever opens the panel — it never sends anything itself (that's the real
-      // Update Price button inside). But its label still tells the truth about this row's state:
-      // never asked yet vs already asked and just waiting on a number to come back and get typed
-      // in — so a row nobody ever asked doesn't blend in as "just needs entering."
-      const neverAsked = reqAge == null;
-      const triggerLabel = neverAsked ? 'Update Price →' : 'Enter Price →';
+      // Explicit ask 2026-09-01: one consistent label for "open this row," same as Quotes' own
+      // rows — the trigger's job never changed (it just opens the panel; the real action buttons
+      // live inside, once it's open), so varying it by state ("Enter Price"/"Update Price") was
+      // its own inconsistency to fix, not a distinction worth keeping.
+      const triggerLabel = 'View Offer →';
       const initial = (r.plant.name || '?').trim().charAt(0).toUpperCase();
       const logo = r.plant.logo_url || r.plant.logo_url_dark;
       const avatarHtml = logo
