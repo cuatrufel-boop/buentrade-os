@@ -2272,6 +2272,14 @@ function rqToggleCalculator(id){
 async function rqCloseCalculator(id){
   const p = id ? rqSelectedPlants.find(x => x.id === id) : rqSelectedPlants.find(x => x.rqCalculatorOpen);
   if (!p || !p.rqCalculatorOpen) return;
+  // Real bug fixed 2026-09-01, confirmed live: rqCalcRow(p) only ever reads a live Selling Price
+  // out of the iframe's own window.__calc while that iframe still exists — the code below destroys
+  // it (rq_tt_overlay_body.innerHTML = '') a few lines down. The 1s poll timer (rqStartPolling)
+  // normally keeps p.rqLastCalc fresh while the calculator is open, but a trader who types a price
+  // and clicks Confirm Price before the next tick closes this before that last edit was ever
+  // captured — the sale price then silently vanishes from the row. One last synchronous read here,
+  // before any teardown, guarantees the number on screen when they clicked is the one that's kept.
+  rqCalcRow(p);
   // Real gap fixed 2026-09-01, confirmed live: a price typed by hand here (phoned in, or a plant's
   // first-ever price with nothing on file yet) used to live only in this in-memory object — nothing
   // ever wrote it back to plant_products, so it vanished on reload and the plant kept showing up in
