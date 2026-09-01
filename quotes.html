@@ -949,6 +949,17 @@ let qPendingRows = [];
 async function loadPendingPrices(){
   const list = document.getElementById('qPendingList');
   const empty = document.getElementById('qPendingEmpty');
+  // Real bug fixed 2026-09-01, confirmed live with a screenshot: rebuilding this list's innerHTML
+  // while a plant's inline session is open destroys whatever is currently inside its
+  // .q-pending-inline-slot — including rq_customers_wrap, if it's living there at the moment
+  // (qOpenPendingPlantInline moved it in and never got a chance to move it back). Once that shared
+  // node is gone, document.getElementById('rq_customers_wrap') returns null forever after, which is
+  // exactly what broke rqFindCustomers mid-open and left the calculator never actually appearing —
+  // just the bare, unstyled row underneath it, i.e. the "duplicated ficha" this was supposed to
+  // have already been fixed to never show again. qOpenPendingPlantInline already calls this same
+  // function before it clears slots for the same reason; this list's own rebuild needed the same
+  // protection and never had it.
+  rqReturnCustomersWrapHome();
   list.innerHTML = '<div class="empty">Loading…</div>';
   empty.style.display = 'none';
   let raw;
