@@ -2217,11 +2217,15 @@ function rqOnPlantNameClick(id){
 // the Trading Tool always gets the whole viewport instead of being cramped inside a plant row.
 // Same trading-tool.html file, same rqBuildToolUrl params either way; only where the iframe
 // gets mounted changed. Only one plant's calculator can be on screen at a time.
-function rqToggleCalculator(id){
+async function rqToggleCalculator(id){
   const p = rqSelectedPlants.find(x => x.id === id);
   if (!p) return;
   if (p.rqCalculatorOpen){
-    rqCloseCalculator(id);
+    // Real bug fixed 2026-09-01, confirmed live: rqCloseCalculator became async (it needs to await
+    // saving a hand-typed price) but this caller never awaited it — the renderRqPlants() below ran
+    // immediately, before rqCloseCalculator had even reached p.rqCalculatorOpen = false, so the row
+    // rebuilt itself still showing the stale "✕ Close" button instead of the real one.
+    await rqCloseCalculator(id);
   } else {
     // Real fix 2026-08-31, explicit ask: a plant with no price at all used to be blocked from ever
     // opening this ("Enter a Purchase $/lb first"), which is why Pending Quotes had to keep a
@@ -2936,11 +2940,11 @@ async function rqHandleStaleOrMissingPrices(){
   if (needsCalc.length) rqShowNotice(`Calculating offer price${needsCalc.length > 1 ? 's' : ''}…`);
   for (const p of needsCalc){
     const wasOpen = p.rqCalculatorOpen;
-    if (!wasOpen) rqToggleCalculator(p.id);
+    if (!wasOpen) await rqToggleCalculator(p.id);
     for (let i = 0; i < 20 && !rqCalcRow(p); i++){
       await new Promise(r => setTimeout(r, 500));
     }
-    if (!wasOpen && p.rqCalculatorOpen) rqToggleCalculator(p.id);
+    if (!wasOpen && p.rqCalculatorOpen) await rqToggleCalculator(p.id);
   }
   if (needsCalc.length) rqCloseNotice();
   if (!rqPricedPlantsSorted().length){
