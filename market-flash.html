@@ -344,12 +344,13 @@ function buildFlashText(lang) {
 
 function updateShareLinks() {
   const text = buildFlashText(currentLang);
-  // Real reversal 2026-09-01, confirmed live — see quotes.html's rqGmailComposeUrl: the
-  // mail.google.com/?view=cm quick-compose renders a reduced card (no "From" alias picker) no
-  // matter what. mailto:, with Gmail registered as Chrome's handler for it, routes to Gmail's
-  // actual "Compose" action instead — the full window.
+  // Gmail's own compose screen instead of mailto: — mailto: hands off to whatever the OS has
+  // registered as the default mail app, which for a trader working out of Gmail in the browser
+  // is the wrong app entirely (or nothing, if none is registered). A genuine anchor click, so no
+  // popup-blocker risk here.
   document.getElementById('share-email').href =
-    `mailto:?subject=${encodeURIComponent('⚡ Market Flash')}&body=${encodeURIComponent(text)}`;
+    `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', su: '⚡ Market Flash', body: text }).toString()}`;
+  document.getElementById('share-email').target = '_blank';
   document.getElementById('share-whatsapp').href =
     `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
