@@ -315,14 +315,6 @@
   .rq-customer-bulk-btn:active{transform:translateY(0);box-shadow:0 1px 4px rgba(0,0,0,.2);}
   .rq-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:3px;}
   .rq-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
-  .rq-update-price-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(180deg,#F7943D,#E8871E);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;padding:12px 18px;border:none;border-radius:11px;cursor:pointer;box-shadow:0 2px 8px rgba(232,135,30,.32);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;animation:rq-urgent-glow 2s ease-in-out infinite;}
-  .rq-update-price-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 16px rgba(232,135,30,.4);}
-  .rq-update-price-btn:active{transform:translateY(0);filter:brightness(.98);}
-  @keyframes rq-urgent-glow{0%,100%{box-shadow:0 2px 8px rgba(232,135,30,.32);}50%{box-shadow:0 2px 8px rgba(232,135,30,.32),0 0 0 4px rgba(232,135,30,.16);}}
-  @media (prefers-reduced-motion:reduce){.rq-update-price-btn{animation:none;}}
-  /* Same shape/motion language as Update Purchase Price (solid gradient fill, rounded, soft glow
-     shadow, emoji) so the two read as one matched pair of actions — just green instead of orange,
-     since this one is "ready," not "needs attention." */
   .rq-send-offer-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(180deg,#28C583,#17A76A);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;padding:12px 18px;border:none;border-radius:11px;cursor:pointer;box-shadow:0 2px 8px rgba(23,167,106,.32);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;}
   .rq-send-offer-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 16px rgba(23,167,106,.38);}
   .rq-send-offer-btn:active{transform:translateY(0);filter:brightness(.98);}
@@ -3047,7 +3039,7 @@ function rqTtActionLabel(p){
   const stale = !missing && (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
   const hasPhone = !!(p.whatsapp || p.phone);
   if ((missing || stale) && (p.email || hasPhone)){
-    return `<button type="button" class="rq-update-price-btn" style="width:auto;min-width:auto;padding:7px 14px;font-size:12px;border-radius:9px;margin-left:auto;" onclick="rqUpdatePlantPrice('${p.id}')">❌ Update Price</button>`;
+    return `<button type="button" class="pkg-trigger-btn" onclick="rqUpdatePlantPrice('${p.id}')">Update Price →</button>`;
   }
   if (!missing && !stale){
     // Always a live button once the price itself is fresh — no longer gated on a customer already
