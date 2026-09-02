@@ -3,9 +3,12 @@
 // (see _shared/priceListLine.ts, both ported faithfully from Load Prices, same order it already
 // uses — block-format checked first): single-line "name + $price" (form #1), or block-format
 // (Seaboard-style: name-line(s) then a price PER price column below — last column = Delivered,
-// so freight_included is set and Quotes never double-charges freight on top of it). Any other real
-// shape (casual short lines, category-header folding, prose sentences with multiple items) is
-// deliberately NOT handled yet — those lines are simply skipped, never guessed.
+// so freight_included is set and Quotes never double-charges freight on top of it). A real .xlsx
+// attachment is a third, separate source (see extractXlsxItems below) — currently scoped to
+// Wholestone Prestage's real "Freezer List" column layout specifically, not generic. Any other
+// real shape (casual short lines, category-header folding, prose sentences with multiple items,
+// an HTML table embedded in the body with no plain-text equivalent — confirmed real for
+// Wholestone's own "fresh" offers) is deliberately NOT handled yet — skipped, never guessed.
 //   - a confident catalog match applies straight to plant_products via the SAME endpoint Load
 //     Prices already uses (plant-products-apply-match), including the plant's own docs_included
 //     default — never a second copy of that write logic.
@@ -17,8 +20,76 @@
 // it — no plant, no safe place to apply anything.
 
 import postgres from "npm:postgres@3.4.4";
+import * as XLSX from "npm:xlsx@0.18.5";
 import { jsonResponse, normalize } from "../_shared/matching.ts";
 import { detectBlockFormatItems, looksLikeBlockFormat, parsePriceListLineBasic } from "../_shared/priceListLine.ts";
+
+// Wholestone Prestage-specific: their frozen list arrives as a real .xlsx attachment (columns
+// WHS/CATEGORY/CODE/DESC/CASES/LBS/PRICE/Avg Age, confirmed against a real "Freezer List" file) —
+// nothing about this is generic to every plant yet, this is the first real attachment-reading
+// case, scoped narrowly rather than guessed at for plants that don't do this. Explicit real
+// business rule (not inferred from the file): only a row with 40,000+ lbs on hand (a full
+// truckload) is worth offering — anything less stays out, never applied, never even queued as a
+// pending match (there's nothing wrong to review, it's just not enough volume to sell as a load).
+const MIN_LOAD_LBS = 40000;
+
+// The Excel's own WHS column is a bare city name ("Fremont", "Eagle Grove") — plant-products-
+// apply-match's location matching needs "City, ST" (see _shared/matching.ts parseCityState), and
+// there's no state in the file to read this from. Both are real, confirmed facilities already in
+// the locations catalog (verified live), not guessed here.
+const WHOLESTONE_FACILITY_STATE: Record<string, string> = { Fremont: "NE", "Eagle Grove": "IA" };
+
+async function extractXlsxItems(
+  payload: any, msgId: string, authHeaders: Record<string, string>,
+): Promise<{ rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]> {
+  const findXlsxPart = (p: any): any => {
+    if (p.filename && p.filename.toLowerCase().endsWith(".xlsx")) return p;
+    for (const part of p.parts || []) {
+      const found = findXlsxPart(part);
+      if (found) return found;
+    }
+    return null;
+  };
+  const part = findXlsxPart(payload);
+  if (!part || !part.body?.attachmentId) return [];
+
+  const attRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${part.body.attachmentId}`,
+    { headers: authHeaders },
+  );
+  const attData = await attRes.json();
+  if (!attRes.ok || !attData.data) return [];
+  const b64 = attData.data.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const wb = XLSX.read(bytes, { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  if (!rows.length) return [];
+
+  const header = rows[0].map((h: any) => String(h || "").trim().toUpperCase());
+  const col = (name: string) => header.indexOf(name);
+  const whsCol = col("WHS"), descCol = col("DESC"), lbsCol = col("LBS"), priceCol = col("PRICE");
+  if (descCol === -1 || lbsCol === -1 || priceCol === -1) return [];
+
+  const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[] = [];
+  for (const row of rows.slice(1)) {
+    const lbs = Number(row[lbsCol]);
+    const price = Number(row[priceCol]);
+    const desc = String(row[descCol] || "").trim();
+    if (!desc || !Number.isFinite(lbs) || !Number.isFinite(price) || lbs < MIN_LOAD_LBS) continue;
+    const whs = whsCol !== -1 ? String(row[whsCol] || "").trim() : "";
+    const state = WHOLESTONE_FACILITY_STATE[whs];
+    items.push({
+      rawText: desc, price,
+      freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
+      locationName: state ? `${whs}, ${state}` : null,
+    });
+  }
+  return items;
+}
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -145,7 +216,7 @@ Deno.serve(async (req) => {
       // price-line-below list can fool the single-line scanner into latching onto false "prices"
       // like a lead-time line), only falling back to the single-line scan when it doesn't look
       // like a block-format list at all.
-      type Item = { rawText: string; nameEn?: string; nameEs?: string | null; price: number; freightIncluded: boolean };
+      type Item = { rawText: string; nameEn?: string; nameEs?: string | null; price: number; freightIncluded: boolean; locationName?: string | null };
       let items: Item[] = [];
       if (looksLikeBlockFormat(lines)) {
         items = detectBlockFormatItems(lines).map((it) => ({
@@ -159,7 +230,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      let applied = 0, pending = 0, skipped = lines.length - items.length;
+      // A real .xlsx attachment (confirmed: Wholestone Prestage's "Freezer List") is a completely
+      // separate item source from the body text — a message can have both real text-line items
+      // AND a real spreadsheet attached, so this adds to `items` rather than replacing them.
+      const xlsxItems = await extractXlsxItems(msgData.payload, m.id, authHeaders);
+      items.push(...xlsxItems);
+
+      let applied = 0, pending = 0, skipped = lines.length - (items.length - xlsxItems.length);
       const errors: string[] = [];
       for (const item of items) {
         let matchRes;
@@ -175,6 +252,7 @@ Deno.serve(async (req) => {
               raw_text: normalize(item.rawText), price: item.price,
               price_currency_id: usdCurrencyId, price_date: today,
               docs_included: plant.docs_included === true, freight_included: item.freightIncluded,
+              location_name: item.locationName || null,
             });
             applied++;
           } else {

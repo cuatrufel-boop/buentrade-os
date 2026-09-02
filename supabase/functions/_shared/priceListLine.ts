@@ -18,12 +18,26 @@ export function cleanNameText(s: string): string {
   return s.trim().replace(/[-–—:.\s@]+$/, "").replace(/^\*+|\*+$/g, "").trim();
 }
 
+// Real noise confirmed against a live Wholestone email that mixes prose with its price list (not
+// a clean line-per-item paste like Tyson's): a courtesy sentence ("...please let me know if you
+// have any interest. Fresh COV $0.95/lb") got read as one giant fake "name"; a phone number in a
+// signature ("m: (913) 300-0063") got read as "m: (913) 300" — $0.63; a legal disclaimer's phone
+// number did the same. None of these got misapplied (the catalog matcher correctly found nothing
+// for garbage text) — but each still landed as a real Pending Match a human has to notice and
+// dismiss. Two real, evidence-based guards: a genuine product-name line is always short (never a
+// full sentence), and always has more than a couple of real letters in it (a phone number doesn't).
+const MAX_NAME_LENGTH = 80;
+const MIN_LETTER_COUNT = 4;
+
 export function parsePriceListLineBasic(line: string): { rawText: string; price: number } | null {
   const m = line.match(/\$\s*(\.?\d+(?:[.,]\d+)?)/) || line.match(/[-–—]\s*(\.?\d+(?:[.,]\d+)?)\b/);
   if (!m) return null;
   const price = priceFromRaw(m[1]);
   const rawText = cleanNameText(line.slice(0, m.index));
   if (!rawText) return null; // whole line is just the price, nothing to attach it to — skip
+  if (rawText.length > MAX_NAME_LENGTH) return null; // a real product name is never a full sentence
+  const letterCount = (rawText.match(/[A-Za-z]/g) || []).length;
+  if (letterCount < MIN_LETTER_COUNT) return null; // a phone number/artifact, not a name
   return { rawText, price };
 }
 
