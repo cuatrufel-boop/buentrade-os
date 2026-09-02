@@ -2504,6 +2504,17 @@ async function rqCloseCalculator(id){
   // captured — the sale price then silently vanishes from the row. One last synchronous read here,
   // before any teardown, guarantees the number on screen when they clicked is the one that's kept.
   rqCalcRow(p);
+  // Real bug caught live, explicit ask: closing (Confirm Price or ✕) on a plant that never had a
+  // real Purchase price — and still doesn't, nothing was typed — used to just close silently. The
+  // ficha stayed "Missing" with no price and no signal anything had even been attempted, reading as
+  // orphaned/broken rather than "correctly still needs a price." Only gates the genuinely-empty
+  // case (p.rqPrice still null after rqCalcRow's live read above) — a plant that already has a real
+  // price on file, being reopened just to look at it, is never blocked. Safe against the automated
+  // rqHandleStaleOrMissingPrices pass too: that loop only ever opens/closes a calculator for a
+  // plant that already has p.rqPrice set, so this check never fires there.
+  if (p.rqPrice == null){
+    if (!(await rqConfirm(`No has puesto un precio de compra para ${p.name}. ¿Cerrar de todas formas sin guardar nada?`))) return;
+  }
   // Real fix 2026-09-02, explicit ask repeated many times ("en quotes bien, en pending nada") —
   // see rqPendingCalcCache's own declaration for the full story. Stashed here, the one real close
   // path every calculator (manual View Quote, or the automatic pass rqHandleStaleOrMissingPrices
