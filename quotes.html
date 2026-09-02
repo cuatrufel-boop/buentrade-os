@@ -3087,12 +3087,17 @@ async function rqDeclinePlantProduct(linkId, plantName){
   loadPendingPrices();
 }
 
-// Explicit ask 2026-09-01: one click on "Update Purchase Price" goes straight to Gmail, no
-// editable in-app preview first — email never needed the preview (it's the exact same body
-// either way, nothing to review that isn't just as visible in Gmail itself), so opening it IS
-// the ask, same as it always assumed "clicked Open Email" meant "asked" even with the preview
-// step in between. WhatsApp keeps its own preview — that one's actually useful (the trader can
-// still edit the message before it's opened), and this ask was specifically about Gmail.
+// Real redesign 2026-09-02, explicit ask: back to a real, editable, API-confirmed send — the
+// direct-to-Gmail version (2026-09-01) meant "asked" (last_requested_at) got marked the instant
+// this button was clicked, whether or not the trader ever actually hit Send in the Gmail tab
+// that opened; the app has no way to see into a separate browser tab to know. That gap matters
+// now that the plant's next reply needs to be matched back to a real, trustworthy "we asked"
+// record. This reuses the exact same editable modal/API path Offers already uses (To/CC/Subject/
+// Body editable, real Resend send, "asked" only recorded once the API actually confirms) — see
+// rqOnAskSent, only ever called from onSent/onOpened now, never called optimistically up front.
+// WhatsApp still can't be sent through the API (opens as its own desktop app, no send API wired)
+// — its own already-editable modal is unaffected, just sequenced to open after the email modal
+// closes instead of both fighting for the same full-screen overlay at once.
 function rqUpdatePlantPrice(id){
   // Asking a plant "what's your current price" never mentions a delivery date (see
   // rqPriceRequestBody) — requiring one here just blocked a simple price ask for no functional
@@ -3102,12 +3107,18 @@ function rqUpdatePlantPrice(id){
   const subject = `${rqProductSpec || ''} — ${p.rqPrice == null ? 'price request' : 'updated price request'}`;
   const body = rqPriceRequestBody(p);
   const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
+  const openWa = () => {
+    if (phone){
+      rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: rqOnAskSent(p) }]);
+    }
+  };
   if (p.email){
-    rqOpenGmail(p.email, subject, body);
-    rqOnAskSent(p)();
-  }
-  if (phone){
-    rqOpenWaModal(`WhatsApp — ${p.name}`, [{ id: p.id, label: p.name, phone, body, onOpened: rqOnAskSent(p) }]);
+    rqEmailModalOnClose = openWa;
+    rqOpenEmailModal(`Ask for price — ${p.name}`, [{
+      id: p.id, label: p.name, to: p.email, subject, body, fromAlias: 'purchasing', onSent: rqOnAskSent(p),
+    }], true, 'Ask for Price');
+  } else {
+    openWa();
   }
 }
 
@@ -3331,9 +3342,17 @@ async function sendEmailApiRaw(fromAlias, to, subject, text, html, attachments, 
 const RQ_EMAIL_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;flex-shrink:0;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>`;
 let rqEmailModalItems = [];
 let rqEmailModalIsOffer = false;
-function rqOpenEmailModal(title, items, isOffer){
+// Custom send-button wording for a real-API send that isn't a customer offer (e.g. "Ask for
+// Price" for a plant price request) — falls back to the offer/ask default below when not set.
+let rqEmailModalSendLabel = null;
+// Runs once, the moment this modal closes — lets a caller chain a second modal (e.g. WhatsApp)
+// right after, instead of both trying to show as full-screen overlays at the same time. Never
+// persists across opens on its own; each rqOpenEmailModal call sets (or clears) it explicitly.
+let rqEmailModalOnClose = null;
+function rqOpenEmailModal(title, items, isOffer, sendLabel){
   rqEmailModalItems = items.map(it => ({ ...it, sent: false }));
   rqEmailModalIsOffer = !!isOffer;
+  rqEmailModalSendLabel = sendLabel || null;
   document.getElementById('rq_email_modal_title').textContent = title;
   rqRenderEmailModal();
   document.getElementById('rq_email_modal_overlay').style.display = 'flex';
@@ -3374,7 +3393,7 @@ function rqRenderEmailModal(){
   // nothing sent automatically on their behalf). An offer still needs the API send — that's the
   // only way the PDF attachments and correct BuenTrade alias actually go out; Gmail's compose
   // screen can't carry a file.
-  const sendLabel = rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make an Offer` : `${RQ_EMAIL_ICON} Emailing`;
+  const sendLabel = `${RQ_EMAIL_ICON} ${rqEmailModalSendLabel || (rqEmailModalIsOffer ? 'Make an Offer' : 'Emailing')}`;
   list.innerHTML = rqEmailModalItems.map((it, i) => {
     // Real gap found 2026-09-01, confirmed live with a screenshot: target="_blank" opens a brand
     // new, cold tab every single time — Gmail has to load the whole inbox from scratch behind the
@@ -3493,6 +3512,11 @@ function rqEmailModalClose(){
   const overlay = document.getElementById('rq_email_modal_overlay');
   overlay.style.display = 'none';
   overlay.classList.remove('rq-split-left', 'rq-split-right');
+  if (rqEmailModalOnClose){
+    const fn = rqEmailModalOnClose;
+    rqEmailModalOnClose = null;
+    fn();
+  }
 }
 
 // ---- Editable WhatsApp preview modal ------------------------------------------------------
