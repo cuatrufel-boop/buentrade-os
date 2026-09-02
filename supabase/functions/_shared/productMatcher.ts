@@ -53,7 +53,10 @@ function detectTempPackFromLine(
     const frozen = temperatures.find((t) => (t.name_en || "").toLowerCase() === "frozen");
     if (frozen) tempId = frozen.id;
   }
-  if (!packagingId && wordBoundary("COV").test(norm)) {
+  // VAC is the only packaging value that will ever exist in BuenTrade's catalog for vacuum-sealed
+  // product — VP, CVP, COV and "Vacuum" are all plant wording for the exact same thing, never a
+  // separate catalog entry (explicit, standing rule, confirmed multiple times).
+  if (!packagingId && (wordBoundary("COV").test(norm) || wordBoundary("VP").test(norm) || wordBoundary("CVP").test(norm) || wordBoundary("Vacuum").test(norm) || wordBoundary("Cryol").test(norm) || wordBoundary("Cryl").test(norm))) {
     const vac = packagings.find((p) => (p.name_en || "").toLowerCase() === "vac");
     if (vac) packagingId = vac.id;
   }
