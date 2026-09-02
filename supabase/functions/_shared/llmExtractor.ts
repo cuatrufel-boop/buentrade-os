@@ -85,3 +85,83 @@ export async function extractItemsWithLLM(bodyText: string): Promise<ExtractedIt
   const parsed = JSON.parse(textBlock.text);
   return (parsed.items || []) as ExtractedItem[];
 }
+
+// A second, real shape confirmed live: Wholestone's "fresh offers" aren't text or an HTML table at
+// all — the email body embeds a PICTURE of a price grid (item / pack-style / FOB price / a
+// per-plant, per-date load-availability calendar). No text extractor can see a word of that; this
+// reads the image directly with Claude's vision input, same Structured Outputs approach as the
+// text path. Deliberately scoped to just item + pack-style + price — the date-by-date load
+// calendar (fractional loads like 0.5) is real but explicitly out of scope for now (real, standing
+// call: BuenTrade can always float a price as if it were a full load and negotiate the actual
+// quantity once a bid comes back, rather than the system pre-filtering on a load calendar it would
+// have to track and refresh constantly).
+export interface ExtractedImageItem {
+  item: string; // the row's item name/code, exactly as printed (e.g. "BI Sirloins 12118")
+  packStyle: string; // the row's pack-style code, exactly as printed (e.g. "VP 4/4", "CBO")
+  price: number | null; // USD/lb as a decimal; null when isFormula is true
+  isFormula: boolean; // true when the price cell is a formula (e.g. "DPS*1.2+0.12"), not a number
+}
+
+const IMAGE_EXTRACTION_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          item: { type: "string", description: "The row's item name/code exactly as printed, including any numeric code (e.g. 'BI Sirloins 12118')." },
+          packStyle: { type: "string", description: "The row's pack-style code exactly as printed (e.g. 'VP 4/4', 'CBO')." },
+          price: { type: "number", description: "The price in USD per lb as a decimal (e.g. 0.92). Use 0 when isFormula is true." },
+          isFormula: { type: "boolean", description: "true when the price cell shows a formula (e.g. 'DPS*1.2+0.12') instead of a plain number — price is meaningless in that case, ignore it downstream." },
+        },
+        required: ["item", "packStyle", "price", "isFormula"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["items"],
+  additionalProperties: false,
+};
+
+const IMAGE_SYSTEM_PROMPT = `You read a price-list image from a meat-packing plant. It is a grid with one row per product: an item name/code column, a pack-style column, a price column, and (often) a block of per-date availability columns on the right showing how many loads are available on each date.
+
+Rules:
+- Extract ONE item per product row: its item name/code, its pack-style code, and its price.
+- Ignore the per-date availability columns entirely — do not extract dates, load counts, or plant/facility sub-rows. Only the item, pack-style, and price matter.
+- If a row appears twice (e.g. once per facility) with the identical item, pack-style, and price, extract it only once.
+- If the price cell contains a formula (e.g. "DPS*1.2+0.12") instead of a plain number, set isFormula true and price 0 — never invent a numeric value for a formula.
+- Transcribe the item name and pack-style exactly as printed, including abbreviations — do not expand or translate them.
+- Never invent a row that isn't actually in the image.`;
+
+export async function extractItemsFromImage(base64Data: string, mediaType: string): Promise<ExtractedImageItem[]> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "structured-outputs-2025-11-13",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 4096,
+      system: IMAGE_SYSTEM_PROMPT,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+          { type: "text", text: "Extract every product row from this price list image." },
+        ],
+      }],
+      output_format: { type: "json_schema", schema: IMAGE_EXTRACTION_SCHEMA },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Anthropic API failed: ${JSON.stringify(data)}`);
+
+  const textBlock = (data.content || []).find((b: any) => b.type === "text");
+  if (!textBlock) throw new Error(`No text content in Anthropic response: ${JSON.stringify(data)}`);
+  const parsed = JSON.parse(textBlock.text);
+  return (parsed.items || []) as ExtractedImageItem[];
+}

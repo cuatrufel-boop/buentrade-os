@@ -57,6 +57,17 @@ function detectTempPackFromLine(
     const vac = packagings.find((p) => (p.name_en || "").toLowerCase() === "vac");
     if (vac) packagingId = vac.id;
   }
+  // Real bug, confirmed live against a real Wholestone email: the catalog's packaging term is
+  // "Poly Bag" (two words), but plants write it as just "Poly" (e.g. "Poly soldier-pack") — the
+  // word-boundary check above requires the full phrase, so it never matched, packagingId stayed
+  // null, and narrowByTempPack's "no packaging detected → don't filter on packaging" rule let a
+  // Frozen-only match through unfiltered, silently applying to a Box candidate when the line
+  // explicitly said Poly. Same fix pattern as COV/FZ above — a known plant-wording synonym for an
+  // existing catalog term, never a new packaging value.
+  if (!packagingId && wordBoundary("Poly").test(norm)) {
+    const polyBag = packagings.find((p) => (p.name_en || "").toLowerCase() === "poly bag");
+    if (polyBag) packagingId = polyBag.id;
+  }
 
   if (!tempId || !packagingId) {
     for (const [term, meaning] of plantTermAliasMap) {

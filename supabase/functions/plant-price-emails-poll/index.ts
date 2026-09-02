@@ -40,7 +40,7 @@ import { detectBlockFormatItems, isSectionHeaderLine, looksLikeBlockFormat, pars
 import { matchProductFromPlantText } from "../_shared/productMatcher.ts";
 import { applyPlantProductMatch } from "../_shared/applyPlantProductMatch.ts";
 import { createPendingMatch } from "../_shared/pendingMatch.ts";
-import { extractItemsWithLLM } from "../_shared/llmExtractor.ts";
+import { extractItemsFromImage, extractItemsWithLLM } from "../_shared/llmExtractor.ts";
 
 // Wholestone Prestage-specific: their frozen list arrives as a real .xlsx attachment (columns
 // WHS/CATEGORY/CODE/DESC/CASES/LBS/PRICE/Avg Age, confirmed against a real "Freezer List" file) —
@@ -105,6 +105,47 @@ async function extractXlsxItems(
       freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
       locationName: state ? `${whs}, ${state}` : null,
     });
+  }
+  return items;
+}
+
+// A real, confirmed shape (Wholestone's own "fresh offers"): the price list isn't text or an HTML
+// table, it's a picture embedded in the body — a small logo is usually embedded too, so every
+// inline image is sent through vision extraction rather than guessing which one is the real list;
+// an image with no product rows (the logo) just costs one extra Anthropic call and returns nothing.
+async function extractImageItems(
+  payload: any, msgId: string, authHeaders: Record<string, string>,
+): Promise<{ rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]> {
+  const findImageParts = (p: any): any[] => {
+    const out: any[] = [];
+    if (p.mimeType?.startsWith("image/") && p.body?.attachmentId) out.push(p);
+    for (const part of p.parts || []) out.push(...findImageParts(part));
+    return out;
+  };
+  const parts = findImageParts(payload);
+  const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[] = [];
+  for (const part of parts) {
+    const attRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${part.body.attachmentId}`,
+      { headers: authHeaders },
+    );
+    const attData = await attRes.json();
+    if (!attRes.ok || !attData.data) continue;
+    const b64 = (attData.data as string).replace(/-/g, "+").replace(/_/g, "/");
+    let extracted;
+    try {
+      extracted = await extractItemsFromImage(b64, part.mimeType);
+    } catch {
+      continue; // one image failing (e.g. not actually a price list) never blocks the others
+    }
+    for (const it of extracted) {
+      if (it.isFormula) continue; // same rule as text extraction: never guess a formula's value
+      items.push({
+        rawText: `${it.item} ${it.packStyle}`.trim(), price: it.price,
+        freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
+        locationName: null, // this table's price is the same across every facility it lists
+      });
+    }
   }
   return items;
 }
@@ -233,6 +274,35 @@ Deno.serve(async (req) => {
 
       if (debugMessageId === m.id) {
         const html = extractHtml(msgData.payload);
+        const listImageParts = (p: any): any[] => {
+          const out: any[] = [];
+          if (p.mimeType?.startsWith("image/") && p.body?.attachmentId) {
+            out.push({ partId: p.partId, mimeType: p.mimeType, filename: p.filename, attachmentId: p.body.attachmentId, size: p.body.size, headers: p.headers });
+          }
+          for (const part of p.parts || []) out.push(...listImageParts(part));
+          return out;
+        };
+        const imageParts = listImageParts(msgData.payload);
+        // Gmail's attachmentId is only valid for the messages.get call that returned it, not
+        // reusable across a later request — fetch within this same execution's listing, by index,
+        // rather than accepting one from a prior debug call (confirmed real: a stale id from an
+        // earlier call silently matched nothing).
+        let fetchedImage: { filename: string; mimeType: string; base64: string } | null = null;
+        let imageExtraction: any = null;
+        if (typeof body.fetch_image_index === "number" && imageParts[body.fetch_image_index]) {
+          const target = imageParts[body.fetch_image_index];
+          const attRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}/attachments/${target.attachmentId}`, { headers: authHeaders });
+          const attData = await attRes.json();
+          fetchedImage = { filename: target.filename, mimeType: target.mimeType, base64: attData.data };
+          if (body.extract_image) {
+            const b64 = (attData.data as string).replace(/-/g, "+").replace(/_/g, "/");
+            try {
+              imageExtraction = await extractItemsFromImage(b64, target.mimeType);
+            } catch (e) {
+              imageExtraction = { error: String(e) };
+            }
+          }
+        }
         return jsonResponse({
           debug: true, bodyTextLength: bodyText.length, lineCount: lines.length,
           looksLikeBlockFormat: looksLikeBlockFormat(lines),
@@ -240,6 +310,9 @@ Deno.serve(async (req) => {
           first20Lines: lines.slice(0, 20),
           htmlLength: html.length,
           htmlSnippet: html.slice(0, 6000),
+          imageParts,
+          fetchedImage: fetchedImage ? { filename: fetchedImage.filename, mimeType: fetchedImage.mimeType, size: fetchedImage.base64.length } : null,
+          imageExtraction,
         });
       }
 
@@ -322,7 +395,12 @@ Deno.serve(async (req) => {
       // separate item source from the body text, always read deterministically (a spreadsheet is
       // already structured data — no LLM needed) — so this adds to whichever text-source won above.
       const xlsxItems = await extractXlsxItems(msgData.payload, m.id, authHeaders);
-      const items: Item[] = [...textItems, ...xlsxItems];
+      // A real third source, separate from both body text and the xlsx: an embedded picture of a
+      // price grid (confirmed real for Wholestone's "fresh offers" — no plain-text or HTML-table
+      // equivalent exists for it at all). extractImageItems no-ops (empty array, no API call) for
+      // any message with no inline images, so this costs nothing for every other plant's mail.
+      const imageItems = await extractImageItems(msgData.payload, m.id, authHeaders);
+      const items: Item[] = [...textItems, ...xlsxItems, ...imageItems];
 
       let applied = 0, pending = 0, skipped = lines.length - textItems.length;
       const errors: string[] = llmError ? [`llm extraction: ${llmError}`] : [];
