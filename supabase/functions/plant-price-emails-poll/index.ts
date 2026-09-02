@@ -14,20 +14,32 @@
 // other real shape (casual short lines, prose sentences with multiple items, an HTML table
 // embedded in the body with no plain-text equivalent — confirmed real for Wholestone's own
 // "fresh" offers) is deliberately NOT handled yet — skipped, never guessed.
-//   - a confident catalog match applies straight to plant_products via the SAME endpoint Load
-//     Prices already uses (plant-products-apply-match), including the plant's own docs_included
-//     default — never a second copy of that write logic.
+//   - a confident catalog match applies straight to plant_products via the exact same logic Load
+//     Prices already uses (_shared/applyPlantProductMatch.ts — also still the real, unchanged HTTP
+//     endpoint plant-products-apply-match wraps), including the plant's own docs_included default
+//     — never a second copy of that write logic.
 //   - an unsure match becomes a plant_pending_matches row for a human to resolve once (see
-//     plant-pending-matches-create) — never auto-applied, never guessed.
+//     _shared/pendingMatch.ts) — never auto-applied, never guessed.
 // plant_price_emails_processed makes every run idempotent — a message already seen is skipped, so
 // re-polling never re-applies or re-queues the same line twice. A message from an address that
 // doesn't match any plant's email is recorded (so it isn't invisible) but nothing is guessed from
 // it — no plant, no safe place to apply anything.
+//
+// Matching/applying/queuing all run IN-PROCESS now (see the three _shared/ imports below), sharing
+// this function's own single Postgres connection — not one HTTP call (and one fresh connection)
+// per line via the sibling Edge Functions. Real fix, not premature optimization: a real 51-item
+// Tyson list opened ~100 fresh connections in quick succession the old way and hit a genuine rate
+// limit partway through. The sibling Edge Functions (products-match-from-plant-text,
+// plant-products-apply-match, plant-pending-matches-create) still exist, unchanged in external
+// behavior, for Load Prices and anything else that calls them over HTTP.
 
 import postgres from "npm:postgres@3.4.4";
 import * as XLSX from "npm:xlsx@0.18.5";
 import { jsonResponse, normalize } from "../_shared/matching.ts";
 import { detectBlockFormatItems, isSectionHeaderLine, looksLikeBlockFormat, parsePriceListLineBasic } from "../_shared/priceListLine.ts";
+import { matchProductFromPlantText } from "../_shared/productMatcher.ts";
+import { applyPlantProductMatch } from "../_shared/applyPlantProductMatch.ts";
+import { createPendingMatch } from "../_shared/pendingMatch.ts";
 
 // Wholestone Prestage-specific: their frozen list arrives as a real .xlsx attachment (columns
 // WHS/CATEGORY/CODE/DESC/CASES/LBS/PRICE/Avg Age, confirmed against a real "Freezer List" file) —
@@ -101,11 +113,7 @@ const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max:
 const GMAIL_CLIENT_ID = Deno.env.get("GMAIL_CLIENT_ID")!;
 const GMAIL_CLIENT_SECRET = Deno.env.get("GMAIL_CLIENT_SECRET")!;
 const GMAIL_REFRESH_TOKEN = Deno.env.get("GMAIL_REFRESH_TOKEN")!;
-// Same API_ROOT + non-secret publishable key every page's own callApi() already uses (see
-// plants.html) — not sensitive (it's already public in the client-side HTML), used here so this
-// function calls its sibling functions exactly the same way the frontend does.
-const SUPABASE_URL = "https://geqhjykbxvxugvnpnygn.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
+const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 const EMAIL_AUTOMATION_ACTOR = "email-automation@buentradegroup.com";
 
 async function getAccessToken(): Promise<string> {
@@ -150,33 +158,6 @@ function extractPlainText(payload: any): string {
     if (found) return found;
   }
   return "";
-}
-
-// Real, confirmed necessity (not defensive guesswork): a real 51-item Tyson list hit a genuine
-// database connection rate limit partway through, from calling sibling functions back-to-back with
-// no pause — several real items were never evaluated at all (neither applied nor queued) as a
-// result, silently landing in the generic "skipped" bucket alongside actual junk lines, which is
-// exactly the kind of gap that must not happen for the items most likely to need it (a Fresh/Frozen
-// pair with no existing alias yet). Retries a rate-limited call a few times with the server's own
-// requested wait (falls back to a short fixed delay if it doesn't say), instead of giving up once.
-async function callSibling(fn: string, body: Record<string, unknown>, attempt = 1): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`, apikey: SUPABASE_PUBLISHABLE_KEY },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const message = String(data.error || `${fn} failed with ${res.status}`);
-    const retryMatch = message.match(/retry after (\d+)ms/i);
-    if (/rate limit/i.test(message) && attempt <= 4) {
-      const waitMs = retryMatch ? parseInt(retryMatch[1], 10) : 500 * attempt;
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-      return callSibling(fn, body, attempt + 1);
-    }
-    throw new Error(message);
-  }
-  return data;
 }
 
 Deno.serve(async (req) => {
@@ -283,24 +264,23 @@ Deno.serve(async (req) => {
 
       let applied = 0, pending = 0, skipped = lines.length - (items.length - xlsxItems.length);
       const errors: string[] = [];
-      // Confirmed real (not defensive): firing all of a real 51-item Tyson list's calls back-to-
-      // back tripped a rate limit that got WORSE on retry within the same run (later items' waits
-      // grew, not shrank) — this is a per-invocation budget, not a one-off blip a retry alone can
-      // outrun. Spacing every item out keeps the whole run under it in the first place; the retry
-      // in callSibling stays as a second layer, not the only one.
-      const ITEM_DELAY_MS = 60;
-      for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
-        const item = items[itemIdx];
-        if (itemIdx > 0) await new Promise((resolve) => setTimeout(resolve, ITEM_DELAY_MS));
+      // Real fix for a real 51-item Tyson list hitting a Postgres connection rate limit partway
+      // through: these three now run IN-PROCESS (see _shared/productMatcher.ts,
+      // applyPlantProductMatch.ts, pendingMatch.ts) sharing this function's own single `sql`
+      // connection, instead of one fresh HTTP call — and one fresh Postgres connection — per line
+      // via the sibling Edge Functions. No per-item delay needed anymore; that was only ever
+      // working around the connection explosion this removes at the root.
+      for (const item of items) {
         let matchRes;
         try {
-          matchRes = await callSibling("products-match-from-plant-text", {
+          matchRes = await matchProductFromPlantText(sql, {
             plant_id: plant.id, raw_text: item.rawText, name_en: item.nameEn || null, name_es: item.nameEs || null,
           });
         } catch (e) { skipped++; errors.push(`match ${item.rawText}: ${e}`); continue; }
+        if ("error" in matchRes) { skipped++; errors.push(`match ${item.rawText}: ${matchRes.error}`); continue; }
         try {
           if (matchRes.matched) {
-            await callSibling("plant-products-apply-match", {
+            await applyPlantProductMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, product_id: matchRes.product.id,
               raw_text: normalize(item.rawText), price: item.price,
               price_currency_id: usdCurrencyId, price_date: today,
@@ -309,9 +289,9 @@ Deno.serve(async (req) => {
             });
             applied++;
           } else {
-            await callSibling("plant-pending-matches-create", {
+            await createPendingMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, raw_text: item.rawText,
-              detected_price: item.price, candidate_product_ids: (matchRes.candidates || []).map((p: any) => p.id),
+              detected_price: item.price, candidate_product_ids: matchRes.candidates.map((p: any) => p.id),
               idempotency_key: `${m.id}|${normalize(item.rawText)}`,
             });
             pending++;

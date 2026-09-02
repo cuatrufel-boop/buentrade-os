@@ -60,6 +60,23 @@ def find_functions_that_insert():
         if not index_file.exists():
             continue
         text = index_file.read_text(encoding="utf-8")
+        # Real gap found 2026-09-02: several functions moved their actual write logic into
+        # _shared/*.ts (so plant-price-emails-poll can call it in-process, sharing one Postgres
+        # connection, instead of one HTTP call per line — see that function's own header) — after
+        # that, index.ts is a thin wrapper with no "insert into" text of its own, so this scan
+        # stopped seeing the insert AND its protection pattern entirely, silently. Pull in any
+        # local _shared/ file the index.ts imports so the scan still sees the real SQL.
+        # matching.ts is excluded on purpose — it's imported almost everywhere for generic helpers
+        # (jsonResponse, normalize, writeAuditLog), and writeAuditLog's own `insert into audit_log`
+        # has no dedup protection by design (append-only event log, same accepted shape as the
+        # EXEMPT table names above) — pulling it in would make nearly every function in the codebase
+        # look like it "has protection" via that unrelated insert, masking a real gap in its own.
+        for m in re.finditer(r"""from\s+["']\.\./_shared/([\w.-]+)["']""", text):
+            if m.group(1) == "matching.ts":
+                continue
+            shared_file = FUNCTIONS_DIR / "_shared" / m.group(1)
+            if shared_file.exists():
+                text += "\n" + shared_file.read_text(encoding="utf-8")
         if re.search(r"\binsert\s+into\b", text, re.IGNORECASE):
             results[fn_dir.name] = text
     return results
