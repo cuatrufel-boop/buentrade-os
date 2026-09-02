@@ -3,12 +3,17 @@
 // (see _shared/priceListLine.ts, both ported faithfully from Load Prices, same order it already
 // uses — block-format checked first): single-line "name + $price" (form #1), or block-format
 // (Seaboard-style: name-line(s) then a price PER price column below — last column = Delivered,
-// so freight_included is set and Quotes never double-charges freight on top of it). A real .xlsx
-// attachment is a third, separate source (see extractXlsxItems below) — currently scoped to
-// Wholestone Prestage's real "Freezer List" column layout specifically, not generic. Any other
-// real shape (casual short lines, category-header folding, prose sentences with multiple items,
-// an HTML table embedded in the body with no plain-text equivalent — confirmed real for
-// Wholestone's own "fresh" offers) is deliberately NOT handled yet — skipped, never guessed.
+// so freight_included is set and Quotes never double-charges freight on top of it). The
+// single-line scan folds each item's section header into its raw_text ("Frozen Boxed Muscles —
+// Bone in Loins" vs "Fresh Boxed Muscles — Bone in Loins") — confirmed real necessity against an
+// actual Tyson list, where the same item name appears under both a Fresh and a Frozen header at
+// different prices with no other signal to tell them apart; without this, the catalog matcher has
+// no way to avoid confusing the two (or worse, silently applying to whichever one has an existing
+// alias). A real .xlsx attachment is a third, separate source (see extractXlsxItems below) —
+// currently scoped to Wholestone Prestage's real "Freezer List" column layout, not generic. Any
+// other real shape (casual short lines, prose sentences with multiple items, an HTML table
+// embedded in the body with no plain-text equivalent — confirmed real for Wholestone's own
+// "fresh" offers) is deliberately NOT handled yet — skipped, never guessed.
 //   - a confident catalog match applies straight to plant_products via the SAME endpoint Load
 //     Prices already uses (plant-products-apply-match), including the plant's own docs_included
 //     default — never a second copy of that write logic.
@@ -22,7 +27,7 @@
 import postgres from "npm:postgres@3.4.4";
 import * as XLSX from "npm:xlsx@0.18.5";
 import { jsonResponse, normalize } from "../_shared/matching.ts";
-import { detectBlockFormatItems, looksLikeBlockFormat, parsePriceListLineBasic } from "../_shared/priceListLine.ts";
+import { detectBlockFormatItems, isSectionHeaderLine, looksLikeBlockFormat, parsePriceListLineBasic } from "../_shared/priceListLine.ts";
 
 // Wholestone Prestage-specific: their frozen list arrives as a real .xlsx attachment (columns
 // WHS/CATEGORY/CODE/DESC/CASES/LBS/PRICE/Avg Age, confirmed against a real "Freezer List" file) —
@@ -147,14 +152,30 @@ function extractPlainText(payload: any): string {
   return "";
 }
 
-async function callSibling(fn: string, body: Record<string, unknown>) {
+// Real, confirmed necessity (not defensive guesswork): a real 51-item Tyson list hit a genuine
+// database connection rate limit partway through, from calling sibling functions back-to-back with
+// no pause — several real items were never evaluated at all (neither applied nor queued) as a
+// result, silently landing in the generic "skipped" bucket alongside actual junk lines, which is
+// exactly the kind of gap that must not happen for the items most likely to need it (a Fresh/Frozen
+// pair with no existing alias yet). Retries a rate-limited call a few times with the server's own
+// requested wait (falls back to a short fixed delay if it doesn't say), instead of giving up once.
+async function callSibling(fn: string, body: Record<string, unknown>, attempt = 1): Promise<any> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`, apikey: SUPABASE_PUBLISHABLE_KEY },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `${fn} failed with ${res.status}`);
+  if (!res.ok) {
+    const message = String(data.error || `${fn} failed with ${res.status}`);
+    const retryMatch = message.match(/retry after (\d+)ms/i);
+    if (/rate limit/i.test(message) && attempt <= 4) {
+      const waitMs = retryMatch ? parseInt(retryMatch[1], 10) : 500 * attempt;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      return callSibling(fn, body, attempt + 1);
+    }
+    throw new Error(message);
+  }
   return data;
 }
 
@@ -164,13 +185,22 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const maxResults = body.max_results || 20;
     const debugMessageId = body.debug_message_id || null;
+    // Verification aid: process one specific message by id, regardless of how far back it is in
+    // the inbox — the normal recency scan would need a huge (slow) maxResults to reach an old real
+    // test email. Goes through the real apply/pending pipeline exactly like any other message.
+    const testMessageId = body.test_message_id || null;
 
     const accessToken = await getAccessToken();
     const authHeaders = { Authorization: `Bearer ${accessToken}` };
 
-    const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`, { headers: authHeaders });
-    const listData = await listRes.json();
-    if (!listRes.ok) throw new Error(`Gmail list failed: ${JSON.stringify(listData)}`);
+    let listData: { messages?: { id: string }[] };
+    if (testMessageId) {
+      listData = { messages: [{ id: testMessageId }] };
+    } else {
+      const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`, { headers: authHeaders });
+      listData = await listRes.json();
+      if (!listRes.ok) throw new Error(`Gmail list failed: ${JSON.stringify(listData)}`);
+    }
 
     const [{ id: usdCurrencyId }] = await sql`select id from currencies where code = 'USD'`;
     const today = new Date().toISOString().slice(0, 10);
@@ -224,9 +254,24 @@ Deno.serve(async (req) => {
           nameEn: it.nameEn, nameEs: it.nameEs, price: it.price, freightIncluded: it.freightIncluded,
         }));
       } else {
+        // Real, confirmed risk (not theoretical): a real Tyson list has "Bone in Loins" listed
+        // TWICE, once under "Fresh Boxed Muscles:" at one price and once under "Frozen Boxed
+        // Muscles:" at a different price — identical text, no other signal to tell them apart. A
+        // section header is skipped as its own row (it never has a price) but its text folds into
+        // every item under it until the next header, exactly like Load Prices already does — this
+        // is what lets the catalog matcher's own temp/pack detection actually disambiguate Fresh
+        // from Frozen instead of guessing (or worse, silently matching whichever alias exists).
+        let currentSection: string | null = null;
         for (const line of lines) {
+          if (isSectionHeaderLine(line)) {
+            currentSection = line.replace(/:\s*$/, "").trim();
+            continue;
+          }
           const parsed = parsePriceListLineBasic(line);
-          if (parsed) items.push({ rawText: parsed.rawText, price: parsed.price, freightIncluded: false });
+          if (parsed) {
+            const rawText = currentSection ? `${currentSection} — ${parsed.rawText}` : parsed.rawText;
+            items.push({ rawText, price: parsed.price, freightIncluded: false });
+          }
         }
       }
 
@@ -238,7 +283,15 @@ Deno.serve(async (req) => {
 
       let applied = 0, pending = 0, skipped = lines.length - (items.length - xlsxItems.length);
       const errors: string[] = [];
-      for (const item of items) {
+      // Confirmed real (not defensive): firing all of a real 51-item Tyson list's calls back-to-
+      // back tripped a rate limit that got WORSE on retry within the same run (later items' waits
+      // grew, not shrank) — this is a per-invocation budget, not a one-off blip a retry alone can
+      // outrun. Spacing every item out keeps the whole run under it in the first place; the retry
+      // in callSibling stays as a second layer, not the only one.
+      const ITEM_DELAY_MS = 60;
+      for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+        const item = items[itemIdx];
+        if (itemIdx > 0) await new Promise((resolve) => setTimeout(resolve, ITEM_DELAY_MS));
         let matchRes;
         try {
           matchRes = await callSibling("products-match-from-plant-text", {
