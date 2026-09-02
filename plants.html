@@ -129,6 +129,10 @@
   .pkg-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
   .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
   .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
+  /* Same amber "needs attention" pill quotes.html already uses for a stale price — kept visually
+     identical on purpose, same alert language across the whole system. */
+  .pkg-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
+  .pkg-tag.stale{background:#FFF8E8;color:#B7791F;}
   .pkg-plant-info{display:flex;flex-direction:column;gap:1px;flex:1;min-width:120px;}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   /* Profile tab — a real info panel instead of a loose grid, so rows stay aligned no matter how
@@ -311,6 +315,7 @@ auth.onAuthStateChanged(user => {
       <button type="button" class="tab-btn" id="plantTabBtn_details" onclick="setPlantTab('details')">Profile</button>
       <button type="button" class="tab-btn active" id="plantTabBtn_products" onclick="setPlantTab('products')">Products &amp; Prices</button>
       <button type="button" class="tab-btn" id="plantTabBtn_locations" onclick="setPlantTab('locations')">Locations</button>
+      <button type="button" class="tab-btn" id="plantTabBtn_pending" onclick="setPlantTab('pending')">Pending Matches<span id="plantPendingTabBadge" style="display:none;"></span></button>
     </div>
 
     <!-- ============ PRODUCTS & PRICES — default tab; this is the daily action, always the
@@ -409,6 +414,17 @@ auth.onAuthStateChanged(user => {
         <tbody id="plantLocationRows"></tbody>
       </table>
       <div id="plantLocationsEmpty" class="empty" style="display:none;">No locations added for this plant yet.</div>
+    </div>
+
+    <!-- ============ PENDING MATCHES — price lines from an incoming plant email the automatic
+         matcher couldn't confidently resolve to one catalog product. A confident match never
+         shows up here at all; it applies itself straight to Products & Prices. ============ -->
+    <div id="plantTab_pending" style="display:none;">
+      <table>
+        <thead><tr><th>From the plant's email</th><th>Price detected</th><th>Match to product</th><th></th></tr></thead>
+        <tbody id="plantPendingMatchRows"></tbody>
+      </table>
+      <div id="plantPendingMatchesEmpty" class="empty" style="display:none;">Nothing waiting on a match for this plant.</div>
     </div>
 
     <!-- ============ DETAILS — contact/logistics terms, set-once fields. Switching to this tab
@@ -916,6 +932,13 @@ let pendingSpecFile = null;
 
 let plantProteins = {};
 
+// Email-ingestion review queue (see supabase/functions/plant-pending-matches-*): lines a price
+// email couldn't be confidently matched to a catalog product. plantPendingMatchCounts (plant_id ->
+// count) drives the badge on both the plants list and this plant's own tab button; the full list
+// for whichever plant is currently open lives in plantPendingMatches.
+let plantPendingMatchCounts = {};
+let plantPendingMatches = [];
+
 let categories = [];
 let usdCurrencyId = null;
 
@@ -964,14 +987,19 @@ async function loadEverything(){
   // call — real fix 2026-08-31: every Edge Function call measured ~1-1.5s regardless of query
   // size (the cost is the Postgres connection itself, not the query), so 6 separate small lookups
   // paid that fixed cost 6 times on every single page load. Same data, same shape, one round trip.
-  const [plantsRes, lookupsRes, linksRes] = await Promise.all([
+  const [plantsRes, lookupsRes, linksRes, pendingMatchesRes] = await Promise.all([
     callApi('plants-search', {}),
     callApi('lookups-search', {}),
     callApi('plant-products-search', {}),
+    callApi('plant-pending-matches-search', {}),
     loadVariations(),
     loadCutNames(),
   ]);
   plants = plantsRes.results || [];
+  plantPendingMatchCounts = {};
+  (pendingMatchesRes.results || []).forEach(m => {
+    plantPendingMatchCounts[m.plant_id] = (plantPendingMatchCounts[m.plant_id] || 0) + 1;
+  });
   temperatures = lookupsRes.temperatures || [];
   packagings = lookupsRes.packagings || [];
   categories = lookupsRes.categories || [];
@@ -1282,11 +1310,15 @@ function renderPlants(){
     const avatarHtml = p.logo_url
       ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(p.logo_url)}" alt=""></div>`
       : `<div class="pkg-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
+    const pendingCount = plantPendingMatchCounts[p.id] || 0;
+    const pendingBadgeHtml = pendingCount
+      ? `<span class="pkg-tag stale" style="margin-left:6px;">${pendingCount} pending match${pendingCount > 1 ? 'es' : ''}</span>` : '';
     return `<div class="pkg-row">
       ${avatarHtml}
       <div class="pkg-plant-info">
         <a class="name-link pkg-plant-name" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a>
         <span class="pkg-plant-sub">${escapeHtml(proteins)}</span>
+        ${pendingBadgeHtml}
       </div>
       <div style="min-width:160px;font-size:12.5px;">${p.contact_name && p.email ? `<a href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(p.email))}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.contact_name)}</a>` : escapeHtml(p.contact_name || '—')}</div>
       <div style="margin-left:auto;flex-shrink:0;display:flex;align-items:center;gap:6px;">${(p.whatsapp || p.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.phone || p.whatsapp || '')}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
@@ -1486,6 +1518,7 @@ async function selectPlant(id){
   await loadPlantLocations();
   await loadPlantProducts();
   await loadPlantDocuments();
+  await loadPlantPendingMatches();
   document.getElementById('plantCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
@@ -1611,7 +1644,65 @@ async function deletePlantDocument(id){
   await loadPlantDocuments();
 }
 
-const PLANT_TABS = ['details', 'products', 'locations'];
+async function loadPlantPendingMatches(){
+  try {
+    const res = await callApi('plant-pending-matches-search', { plant_id: currentPlantId });
+    plantPendingMatches = res.results || [];
+  } catch (e) {
+    plantPendingMatches = [];
+  }
+  plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
+  await fetchAllCatalogProducts();
+  renderPlantPendingMatches();
+}
+
+function renderPlantPendingMatches(){
+  const badge = document.getElementById('plantPendingTabBadge');
+  const count = plantPendingMatches.length;
+  badge.style.display = count ? 'inline' : 'none';
+  badge.textContent = count ? ` (${count})` : '';
+
+  const tbody = document.getElementById('plantPendingMatchRows');
+  document.getElementById('plantPendingMatchesEmpty').style.display = count ? 'none' : 'block';
+  tbody.innerHTML = plantPendingMatches.map(m => {
+    const candidateIds = Array.isArray(m.candidate_product_ids) ? m.candidate_product_ids : [];
+    const optionsHtml = allCatalogProducts.map(p =>
+      `<option value="${p.id}"${candidateIds.length === 1 && candidateIds[0] === p.id ? ' selected' : ''}>${escapeHtml(p.name_en || p.name)}</option>`
+    ).join('');
+    return `<tr>
+      <td style="max-width:280px;">${escapeHtml(m.raw_text)}</td>
+      <td>${m.detected_price != null ? '$' + Number(m.detected_price).toFixed(4) : '—'}</td>
+      <td><select id="ppm_select_${m.id}" style="width:100%;"><option value="">— pick the real product —</option>${optionsHtml}</select></td>
+      <td class="row-actions"><button class="btn" onclick="resolvePlantPendingMatch('${m.id}')">Match</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// Applies the price the same way Load Prices always has (plant-products-apply-match — the one
+// path that writes plant_products AND teaches the alias), then closes this row out of the pending
+// queue. Two calls, not one merged endpoint, so the price-write logic stays in exactly one place.
+async function resolvePlantPendingMatch(id){
+  const match = plantPendingMatches.find(m => m.id === id);
+  if (!match) return;
+  const select = document.getElementById(`ppm_select_${id}`);
+  const productId = select.value;
+  if (!productId){ alert('Pick a product first.'); return; }
+  try {
+    await callApi('plant-products-apply-match', {
+      actor: currentActor(), plant_id: currentPlantId, product_id: productId,
+      raw_text: normalizeForMatch(match.raw_text), price: match.detected_price,
+      price_currency_id: usdCurrencyId, price_date: new Date().toISOString().slice(0, 10),
+    });
+    await callApi('plant-pending-matches-update', { actor: currentActor(), id, product_id: productId });
+  } catch (e) {
+    alert(`Couldn't save this match: ${e.message}`);
+    return;
+  }
+  await loadPlantProducts();
+  await loadPlantPendingMatches();
+}
+
+const PLANT_TABS = ['details', 'products', 'locations', 'pending'];
 function setPlantTab(tab){
   PLANT_TABS.forEach(t => {
     document.getElementById('plantTab_' + t).style.display = (t === tab) ? 'block' : 'none';
