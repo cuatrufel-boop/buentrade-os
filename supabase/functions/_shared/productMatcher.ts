@@ -107,15 +107,30 @@ function candidateVariationSet(p: any): Set<string> {
   );
 }
 
-function narrowByVariation(rawText: string, candidates: any[], variationNames: string[], taughtNames: Set<string> = new Set()) {
+// Real bug found and fixed 2026-09-02, confirmed live against a real Wholestone email: when
+// temp+pack narrowing already leaves exactly ONE candidate, and the line's own text names a real
+// variation (e.g. "Bone-in") that candidate does NOT have (the catalog only has a Boneless variant
+// at that temperature), the old version's "never narrow to zero" fallback returned that one WRONG
+// candidate unchanged — which then read as narrowed.length === 1 to the caller and applied with
+// full confidence to the wrong variant. The "never narrow to zero" rule (comment below) was always
+// meant to keep MULTIPLE real candidates in play for a human to pick between, not to launder a
+// single conflicting candidate into a confident match. Now reports the conflict explicitly so the
+// caller can refuse to treat a size-1 result as confident when it only got there via this fallback.
+function narrowByVariation(
+  rawText: string, candidates: any[], variationNames: string[], taughtNames: Set<string> = new Set(),
+): { candidates: any[]; conflicted: boolean } {
   const lineVariations = new Set([...detectVariationNamesFromLine(rawText, variationNames), ...taughtNames]);
-  if (lineVariations.size === 0) return candidates;
+  if (lineVariations.size === 0) return { candidates, conflicted: false };
   const narrowed = candidates.filter((p) => {
     const pVariations = candidateVariationSet(p);
     for (const v of lineVariations) if (!pVariations.has(v)) return false;
     return true;
   });
-  return narrowed.length ? narrowed : candidates;
+  // Rule 5 — never narrow to zero silently. If nothing on file actually has the variation the line
+  // names, that's real information to surface (as candidates, still requiring a human pick), not a
+  // reason to pretend the variation signal didn't exist.
+  if (narrowed.length) return { candidates: narrowed, conflicted: false };
+  return { candidates, conflicted: true };
 }
 
 function productSummary(p: any): ProductRow {
@@ -343,9 +358,13 @@ export async function matchProductFromPlantText(
   if (!nameMatches.length) return { matched: false, candidates: [] };
 
   const tempPackNarrowed = narrowByTempPack(raw_text, nameMatches, temperatures, packagings, plantTermAliasMap);
-  const narrowed = narrowByVariation(raw_text, tempPackNarrowed, variationNames, taughtVariationNamesFromLine(raw_text));
+  const variationResult = narrowByVariation(raw_text, tempPackNarrowed, variationNames, taughtVariationNamesFromLine(raw_text));
+  const narrowed = variationResult.candidates;
 
-  if (narrowed.length === 1) {
+  // conflicted === true means the line named a real variation nothing on file actually has at
+  // this temp/pack — even if that leaves exactly one candidate, it's a known mismatch, never a
+  // confident match (see narrowByVariation's own note above).
+  if (narrowed.length === 1 && !variationResult.conflicted) {
     return { matched: true, source: "name_and_spec", product: productSummary(narrowed[0]) };
   }
 

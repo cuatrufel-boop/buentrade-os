@@ -40,6 +40,7 @@ import { detectBlockFormatItems, isSectionHeaderLine, looksLikeBlockFormat, pars
 import { matchProductFromPlantText } from "../_shared/productMatcher.ts";
 import { applyPlantProductMatch } from "../_shared/applyPlantProductMatch.ts";
 import { createPendingMatch } from "../_shared/pendingMatch.ts";
+import { extractItemsWithLLM } from "../_shared/llmExtractor.ts";
 
 // Wholestone Prestage-specific: their frozen list arrives as a real .xlsx attachment (columns
 // WHS/CATEGORY/CODE/DESC/CASES/LBS/PRICE/Avg Age, confirmed against a real "Freezer List" file) —
@@ -160,6 +161,22 @@ function extractPlainText(payload: any): string {
   return "";
 }
 
+// Temporary inspection helper only (debug_message_id path) — same walk as extractPlainText but
+// for the text/html part, so a real HTML-table email (confirmed real for Wholestone's "fresh"
+// offers) can actually be looked at before deciding how/whether to parse it. Not used by the
+// real apply/pending pipeline.
+function extractHtml(payload: any): string {
+  if (!payload) return "";
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+  for (const part of payload.parts || []) {
+    const found = extractHtml(part);
+    if (found) return found;
+  }
+  return "";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
@@ -215,25 +232,31 @@ Deno.serve(async (req) => {
       const lines = bodyText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
       if (debugMessageId === m.id) {
+        const html = extractHtml(msgData.payload);
         return jsonResponse({
           debug: true, bodyTextLength: bodyText.length, lineCount: lines.length,
           looksLikeBlockFormat: looksLikeBlockFormat(lines),
           blockItems: detectBlockFormatItems(lines),
           first20Lines: lines.slice(0, 20),
+          htmlLength: html.length,
+          htmlSnippet: html.slice(0, 6000),
         });
       }
 
-      // Same order Load Prices already uses: block-format is checked FIRST (a name-line-then-
-      // price-line-below list can fool the single-line scanner into latching onto false "prices"
-      // like a lead-time line), only falling back to the single-line scan when it doesn't look
-      // like a block-format list at all.
       type Item = { rawText: string; nameEn?: string; nameEs?: string | null; price: number; freightIncluded: boolean; locationName?: string | null };
-      let items: Item[] = [];
+
+      // Rule-based extraction (block-format checked first, same order Load Prices already uses —
+      // a name-line-then-price-line-below list can fool the single-line scanner into latching onto
+      // false "prices" like a lead-time line). Kept and run on EVERY email now, alongside the LLM
+      // extractor below, purely so text_items_regex vs text_items_llm is a real, standing
+      // comparison in the data — not a one-time demo — and so this is the automatic fallback the
+      // moment the LLM call fails for any reason (no credit, API outage, etc).
+      const regexTextItems: Item[] = [];
       if (looksLikeBlockFormat(lines)) {
-        items = detectBlockFormatItems(lines).map((it) => ({
+        regexTextItems.push(...detectBlockFormatItems(lines).map((it) => ({
           rawText: it.nameEs ? `${it.nameEn} — ${it.nameEs}` : it.nameEn,
           nameEn: it.nameEn, nameEs: it.nameEs, price: it.price, freightIncluded: it.freightIncluded,
-        }));
+        })));
       } else {
         // Real, confirmed risk (not theoretical): a real Tyson list has "Bone in Loins" listed
         // TWICE, once under "Fresh Boxed Muscles:" at one price and once under "Frozen Boxed
@@ -251,19 +274,58 @@ Deno.serve(async (req) => {
           const parsed = parsePriceListLineBasic(line);
           if (parsed) {
             const rawText = currentSection ? `${currentSection} — ${parsed.rawText}` : parsed.rawText;
-            items.push({ rawText, price: parsed.price, freightIncluded: false });
+            regexTextItems.push({ rawText, price: parsed.price, freightIncluded: false });
           }
         }
       }
 
-      // A real .xlsx attachment (confirmed: Wholestone Prestage's "Freezer List") is a completely
-      // separate item source from the body text — a message can have both real text-line items
-      // AND a real spreadsheet attached, so this adds to `items` rather than replacing them.
-      const xlsxItems = await extractXlsxItems(msgData.payload, m.id, authHeaders);
-      items.push(...xlsxItems);
+      // LLM extraction (see _shared/llmExtractor.ts) — real replacement for the regex step's
+      // actual blind spots, confirmed against real mail: a Wholestone email folded three separate
+      // product+price pairs into one prose sentence ("Fresh COV $0.95/lb, Frozen COV $0.98/lb,
+      // Frozen Poly $0.96/lb") that the regex scanner above cannot split at all (0 items found);
+      // the LLM extractor correctly found all 3, right names, right temperatures, right prices,
+      // verified live. Never decides which catalog SKU anything maps to — that's still entirely
+      // the deterministic matcher below; this only replaces "where is the price in this text."
+      let llmTextItems: Item[] | null = null;
+      let llmError: string | null = null;
+      try {
+        const extracted = await extractItemsWithLLM(bodyText);
+        const mapped = extracted.map((it) => ({
+          rawText: it.temperature === "Unknown" ? it.name : `${it.temperature} — ${it.name}`,
+          price: it.price, freightIncluded: it.delivered,
+        }));
+        // Real bug, caught live against a real Seaboard email: a block-format line quoting both an
+        // FOB and a Delivered price for the same product makes the LLM correctly emit two items —
+        // same name, one freightIncluded:false, one freightIncluded:true (this is the intended,
+        // schema-documented shape, not a mistake in extraction). But applying both in sequence
+        // overwrote the same plant_products row twice, so the price that stuck was whichever ran
+        // last — not deliberately the Delivered one. Confirmed real: "Frozen Skinless Bellies
+        // 13/15" got written at $1.95 then, two seconds later, $2.05 in the same run. The
+        // regex/block-format path never had this problem — detectBlockFormatItems already
+        // collapses an FOB+Delivered pair into a single item, last column wins. Match that here:
+        // when the same rawText appears more than once, keep only the Delivered one if any exists.
+        const byName = new Map<string, typeof mapped[number]>();
+        for (const it of mapped) {
+          const key = normalize(it.rawText);
+          const existing = byName.get(key);
+          if (!existing || (it.freightIncluded && !existing.freightIncluded)) byName.set(key, it);
+        }
+        llmTextItems = [...byName.values()];
+      } catch (e) {
+        llmError = String(e);
+      }
 
-      let applied = 0, pending = 0, skipped = lines.length - (items.length - xlsxItems.length);
-      const errors: string[] = [];
+      const textItems = llmTextItems ?? regexTextItems;
+      const extractionMethod = llmTextItems ? "llm" : "regex_fallback";
+
+      // A real .xlsx attachment (confirmed: Wholestone Prestage's "Freezer List") is a completely
+      // separate item source from the body text, always read deterministically (a spreadsheet is
+      // already structured data — no LLM needed) — so this adds to whichever text-source won above.
+      const xlsxItems = await extractXlsxItems(msgData.payload, m.id, authHeaders);
+      const items: Item[] = [...textItems, ...xlsxItems];
+
+      let applied = 0, pending = 0, skipped = lines.length - textItems.length;
+      const errors: string[] = llmError ? [`llm extraction: ${llmError}`] : [];
       // Real fix for a real 51-item Tyson list hitting a Postgres connection rate limit partway
       // through: these three now run IN-PROCESS (see _shared/productMatcher.ts,
       // applyPlantProductMatch.ts, pendingMatch.ts) sharing this function's own single `sql`
@@ -300,11 +362,16 @@ Deno.serve(async (req) => {
       }
 
       await sql`
-        insert into plant_price_emails_processed (message_id, plant_id, from_email, subject, lines_applied, lines_pending, lines_skipped)
-        values (${m.id}, ${plant.id}, ${fromEmail}, ${subject}, ${applied}, ${pending}, ${skipped})
+        insert into plant_price_emails_processed
+          (message_id, plant_id, from_email, subject, lines_applied, lines_pending, lines_skipped, text_items_regex, text_items_llm, extraction_method)
+        values
+          (${m.id}, ${plant.id}, ${fromEmail}, ${subject}, ${applied}, ${pending}, ${skipped}, ${regexTextItems.length}, ${llmTextItems ? llmTextItems.length : null}, ${extractionMethod})
         on conflict (message_id) do nothing
       `;
-      results.push({ id: m.id, plant: plant.name, applied, pending, skipped, errors: errors.slice(0, 5) });
+      results.push({
+        id: m.id, plant: plant.name, applied, pending, skipped, errors: errors.slice(0, 5),
+        text_items_regex: regexTextItems.length, text_items_llm: llmTextItems ? llmTextItems.length : null, extraction_method: extractionMethod,
+      });
     }
 
     return jsonResponse({ results });
