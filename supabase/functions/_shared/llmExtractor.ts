@@ -100,6 +100,7 @@ export interface ExtractedImageItem {
   packStyle: string; // the row's pack-style code, exactly as printed (e.g. "VP 4/4", "CBO")
   price: number | null; // USD/lb as a decimal; null when isFormula is true
   isFormula: boolean; // true when the price cell is a formula (e.g. "DPS*1.2+0.12"), not a number
+  temperature: "Fresh" | "Frozen" | "Unknown"; // from the image itself, or from the surrounding email text passed as context
 }
 
 const IMAGE_EXTRACTION_SCHEMA = {
@@ -114,8 +115,9 @@ const IMAGE_EXTRACTION_SCHEMA = {
           packStyle: { type: "string", description: "The row's pack-style code exactly as printed (e.g. 'VP 4/4', 'CBO')." },
           price: { type: "number", description: "The price in USD per lb as a decimal (e.g. 0.92). Use 0 when isFormula is true." },
           isFormula: { type: "boolean", description: "true when the price cell shows a formula (e.g. 'DPS*1.2+0.12') instead of a plain number — price is meaningless in that case, ignore it downstream." },
+          temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if the image itself states it (a column, a header) OR if the surrounding email text (given as context) says what this whole picture is — e.g. an email saying 'below are our fresh offers, attached is our frozen list' means every row in the image is Fresh. Unknown only if genuinely neither says." },
         },
-        required: ["item", "packStyle", "price", "isFormula"],
+        required: ["item", "packStyle", "price", "isFormula", "temperature"],
         additionalProperties: false,
       },
     },
@@ -126,15 +128,17 @@ const IMAGE_EXTRACTION_SCHEMA = {
 
 const IMAGE_SYSTEM_PROMPT = `You read a price-list image from a meat-packing plant. It is a grid with one row per product: an item name/code column, a pack-style column, a price column, and (often) a block of per-date availability columns on the right showing how many loads are available on each date.
 
+You are also given the plain-text body of the email this image came from, for context only — not to extract items from (a separate step already reads that text). Use it only to figure out things the image itself doesn't state, most importantly temperature: if the email says something like "below are our fresh offers, attached is our frozen list," that tells you every row in this image is Fresh even though the image has no Fresh/Frozen column.
+
 Rules:
-- Extract ONE item per product row: its item name/code, its pack-style code, and its price.
-- Ignore the per-date availability columns entirely — do not extract dates, load counts, or plant/facility sub-rows. Only the item, pack-style, and price matter.
+- Extract ONE item per product row: its item name/code, its pack-style code, its price, and its temperature.
+- Ignore the per-date availability columns entirely — do not extract dates, load counts, or plant/facility sub-rows. Only the item, pack-style, price, and temperature matter.
 - If a row appears twice (e.g. once per facility) with the identical item, pack-style, and price, extract it only once.
 - If the price cell contains a formula (e.g. "DPS*1.2+0.12") instead of a plain number, set isFormula true and price 0 — never invent a numeric value for a formula.
 - Transcribe the item name and pack-style exactly as printed, including abbreviations — do not expand or translate them.
 - Never invent a row that isn't actually in the image.`;
 
-export async function extractItemsFromImage(base64Data: string, mediaType: string): Promise<ExtractedImageItem[]> {
+export async function extractItemsFromImage(base64Data: string, mediaType: string, emailContext: string): Promise<ExtractedImageItem[]> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -151,7 +155,7 @@ export async function extractItemsFromImage(base64Data: string, mediaType: strin
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
-          { type: "text", text: "Extract every product row from this price list image." },
+          { type: "text", text: `Email body text (context only, do not extract items from this):\n\n${emailContext}\n\nExtract every product row from the price list image above.` },
         ],
       }],
       output_format: { type: "json_schema", schema: IMAGE_EXTRACTION_SCHEMA },

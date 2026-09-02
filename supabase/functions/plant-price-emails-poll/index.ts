@@ -113,8 +113,12 @@ async function extractXlsxItems(
 // table, it's a picture embedded in the body — a small logo is usually embedded too, so every
 // inline image is sent through vision extraction rather than guessing which one is the real list;
 // an image with no product rows (the logo) just costs one extra Anthropic call and returns nothing.
+// Not Wholestone-specific by design: emailContext (the same plain-text body every other extractor
+// already reads) goes along with every image so the model can pick up the same kind of "this whole
+// picture is our fresh offers, the attachment is frozen" framing text ANY plant might use — not
+// just Wholestone's.
 async function extractImageItems(
-  payload: any, msgId: string, authHeaders: Record<string, string>,
+  payload: any, msgId: string, authHeaders: Record<string, string>, emailContext: string,
 ): Promise<{ rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]> {
   const findImageParts = (p: any): any[] => {
     const out: any[] = [];
@@ -134,14 +138,22 @@ async function extractImageItems(
     const b64 = (attData.data as string).replace(/-/g, "+").replace(/_/g, "/");
     let extracted;
     try {
-      extracted = await extractItemsFromImage(b64, part.mimeType);
+      extracted = await extractItemsFromImage(b64, part.mimeType, emailContext);
     } catch {
       continue; // one image failing (e.g. not actually a price list) never blocks the others
     }
     for (const it of extracted) {
       if (it.isFormula) continue; // same rule as text extraction: never guess a formula's value
+      // Real gap, caught live: the grid image itself never printed the word "Fresh" anywhere (no
+      // per-row temperature column) — only the surrounding email prose said so. Without folding
+      // that in, the deterministic matcher had no temperature signal at all and returned every
+      // temp/pack combination of a name as a candidate. extractItemsFromImage now reads the same
+      // email body every other extractor sees and resolves temperature from it when the image
+      // itself doesn't state one — same idea as the text path's section-header folding, general to
+      // any plant's wording, not hardcoded to Wholestone's.
+      const rawText = it.temperature === "Unknown" ? `${it.item} ${it.packStyle}` : `${it.temperature} — ${it.item} ${it.packStyle}`;
       items.push({
-        rawText: `${it.item} ${it.packStyle}`.trim(), price: it.price,
+        rawText: rawText.trim(), price: it.price,
         freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
         locationName: null, // this table's price is the same across every facility it lists
       });
@@ -399,7 +411,7 @@ Deno.serve(async (req) => {
       // price grid (confirmed real for Wholestone's "fresh offers" — no plain-text or HTML-table
       // equivalent exists for it at all). extractImageItems no-ops (empty array, no API call) for
       // any message with no inline images, so this costs nothing for every other plant's mail.
-      const imageItems = await extractImageItems(msgData.payload, m.id, authHeaders);
+      const imageItems = await extractImageItems(msgData.payload, m.id, authHeaders, bodyText);
       const items: Item[] = [...textItems, ...xlsxItems, ...imageItems];
 
       let applied = 0, pending = 0, skipped = lines.length - textItems.length;
