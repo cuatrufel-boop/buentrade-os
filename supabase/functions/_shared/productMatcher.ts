@@ -185,8 +185,14 @@ export async function matchProductFromPlantText(
   const cutNameRows = await sql`select id, name_es, name_en from cut_names`;
   const cutNameById = new Map(cutNameRows.map((c: any) => [c.id, c.name_en]));
 
+  // Global (plant_id null) rows are industry-standard shorthand any plant could use (confirmed
+  // real: BI/BNLS/LGT/MED/SPARES/CBO were first taught scoped to one plant, then explicitly
+  // corrected — "esas abreviaciones las puede usar cualquiera... buentrade tiene que match con un
+  // solo full name"). Loaded first so a plant-specific row for the same term overrides it.
   const termAliasRows = await sql`
-    select term, meaning_type, meaning_id from plant_term_aliases where plant_id = ${plant_id}
+    select term, meaning_type, meaning_id, plant_id from plant_term_aliases
+    where plant_id = ${plant_id} or plant_id is null
+    order by plant_id nulls first
   `;
   const plantTermAliasMap = new Map<string, { temperature?: string; packaging?: string; variation?: string; cut_name?: string }>();
   for (const a of termAliasRows) {
