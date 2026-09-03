@@ -103,11 +103,21 @@ function narrowByTempPack(
   );
 }
 
+// Real bug, confirmed live against real Tyson data: a variation registered as "72%" never matched
+// a plant writing the bare number with no percent sign ("72 trim combos") — detectVariationNamesFromLine
+// found nothing, narrowByVariation's "no variation named in the line" rule then applied no filter
+// at all, and the line silently matched the catalog's ONLY Fresh+Combo Trim product ("42% Trim")
+// even though the line said 72, not 42. Confirmed real: BuenTrade's own catalog has both "Pork 42%
+// Trim Fresh, Combo" and "Pork 72% Trim Frozen, Box" as genuinely different products — a percent
+// variation also needs to be recognized by its bare number, not just the exact "NN%" spelling.
 function detectVariationNamesFromLine(line: string, variationNames: string[]): Set<string> {
   const norm = line.toLowerCase();
   const matched = new Set<string>();
   for (const name of variationNames) {
-    if (name && wordBoundary(name).test(norm)) matched.add(name.toLowerCase());
+    if (!name) continue;
+    if (wordBoundary(name).test(norm)) { matched.add(name.toLowerCase()); continue; }
+    const bareNumber = name.match(/^(\d+)%$/)?.[1];
+    if (bareNumber && wordBoundary(bareNumber).test(norm)) matched.add(name.toLowerCase());
   }
   return matched;
 }
