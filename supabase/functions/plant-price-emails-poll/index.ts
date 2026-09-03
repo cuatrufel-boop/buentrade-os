@@ -51,6 +51,16 @@ import { extractItemsFromImage, extractItemsWithLLM } from "../_shared/llmExtrac
 // pending match (there's nothing wrong to review, it's just not enough volume to sell as a load).
 const MIN_LOAD_LBS = 40000;
 
+// Real, explicit rule: "no puede leer data vieja" — a plant's price is only good as of the date
+// they sent it, and this changes fast: some plants (Seaboard) send daily, prices move within the
+// same week (Mondays often price higher as the market resets), and different plants update on
+// different real cadences (confirmed by the user, describing the system's rule in general — not
+// one plant's behavior). 3 days is the system-wide default. An email older than this is skipped,
+// never applied and never even queued to pending — there's nothing to review, it's simply too
+// stale to act on. test_message_id bypasses this on purpose (verifying against a real but old
+// email is exactly what testing needs) — only the real recency scan enforces it.
+const MAX_EMAIL_AGE_DAYS = 3;
+
 // The Excel's own WHS column is a bare city name ("Fremont", "Eagle Grove") — plant-products-
 // apply-match's location matching needs "City, ST" (see _shared/matching.ts parseCityState), and
 // there's no state in the file to read this from. Both are real, confirmed facilities already in
@@ -265,6 +275,15 @@ Deno.serve(async (req) => {
       const msgData = await msgRes.json();
       if (!msgRes.ok) { results.push({ id: m.id, skipped: "gmail_fetch_failed" }); continue; }
 
+      if (!testMessageId && msgData.internalDate) {
+        const ageDays = (Date.now() - Number(msgData.internalDate)) / 86400000;
+        if (ageDays > MAX_EMAIL_AGE_DAYS) {
+          await sql`insert into plant_price_emails_processed (message_id, subject) values (${m.id}, ${headerValue(msgData.payload.headers, "Subject")}) on conflict (message_id) do nothing`;
+          results.push({ id: m.id, skipped: "too_old", age_days: Math.round(ageDays) });
+          continue;
+        }
+      }
+
       const fromHeader = headerValue(msgData.payload.headers, "From");
       const subject = headerValue(msgData.payload.headers, "Subject");
       const emailMatch = fromHeader.match(/<([^>]+)>/);
@@ -320,6 +339,7 @@ Deno.serve(async (req) => {
           looksLikeBlockFormat: looksLikeBlockFormat(lines),
           blockItems: detectBlockFormatItems(lines),
           first20Lines: lines.slice(0, 20),
+          allLines: lines,
           htmlLength: html.length,
           htmlSnippet: html.slice(0, 6000),
           imageParts,
