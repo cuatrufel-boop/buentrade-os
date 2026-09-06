@@ -251,7 +251,12 @@
   .rq-ddown-btn-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
   .rq-ddown-chevron{flex-shrink:0;width:13px;height:13px;color:var(--ink-soft);transition:transform .15s;}
   .rq-ddown-btn[aria-expanded="true"] .rq-ddown-chevron{transform:rotate(180deg);}
-  .rq-ddown-panel{position:absolute;top:calc(100% + 6px);left:0;width:max-content;min-width:100%;max-width:320px;background:rgba(15,31,51,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);max-height:280px;overflow-y:auto;z-index:40;padding:6px;}
+  /* position:fixed with inline top/left (set in JS from the button's real screen position, see
+     ttToggleFreightDdown) — NOT position:absolute. Direct Costs' .card has overflow:hidden (to
+     clip its own rounded corners), which silently clips an absolutely-positioned descendant too;
+     position:fixed escapes that since it's not part of the card's normal layout/clipping box.
+     Real bug, reported live: "ahora se corto" — text was being cut off at the card edge. */
+  .rq-ddown-panel{position:fixed;width:max-content;min-width:240px;max-width:min(320px, calc(100vw - 24px));background:rgba(15,31,51,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);max-height:280px;overflow-y:auto;z-index:500;padding:6px;}
   .rq-ddown-option{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--ink);}
   .rq-ddown-option:hover{background:rgba(255,255,255,.08);}
   .rq-ddown-option.selected{background:rgba(232,181,76,.14);color:var(--ink);font-weight:600;}
@@ -1594,6 +1599,7 @@ let ttFreightLocations = [];
 let ttFreightRates = [];
 let ttFreightSelectedId = '';
 let ttFreightDdownOpen = false;
+let ttFreightDdownRect = null; // button's screen position when opened — see ttToggleFreightDdown
 // window.__ttFreightRateId — same read pattern as window.__calc: a top-level `let` never becomes
 // a window property (see the products/__calc comment below), so quotes.html needs this explicit
 // mirror to read which real provider_rates row was picked (or '' for Del Border) when it builds
@@ -1674,13 +1680,23 @@ function ttFreightDdownHtml(){
     </div>
     ${locations.length ? `<div class="rq-ddown-divider"></div>${locationOptionsHtml}` : `<div class="rq-ddown-empty">No locations on file yet for this plant.</div>`}
   `;
+  // position:fixed panel, positioned in screen coordinates from ttFreightDdownRect (captured in
+  // ttToggleFreightDdown right before this re-render) — NOT relative to the button, since Direct
+  // Costs' .card clips absolute/relative-positioned descendants via its own overflow:hidden.
+  // Clamped so it can never run off the right edge on a narrow phone screen.
+  let panelStyle = '';
+  if (ttFreightDdownOpen && ttFreightDdownRect){
+    const panelWidth = Math.min(320, window.innerWidth - 24);
+    const left = Math.min(ttFreightDdownRect.left, window.innerWidth - panelWidth - 12);
+    panelStyle = `top:${Math.round(ttFreightDdownRect.bottom + 6)}px;left:${Math.round(Math.max(12, left))}px;`;
+  }
   return `
     <div class="rq-ddown">
       <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${ttFreightDdownOpen}" onclick="ttToggleFreightDdown()">
         <span class="rq-ddown-btn-label">${ttEscapeHtml(nameText)}</span>
         ${ttDdownChevronSvg}
       </button>
-      ${ttFreightDdownOpen ? `<div class="rq-ddown-panel">${optionsHtml}</div>` : ''}
+      ${ttFreightDdownOpen ? `<div class="rq-ddown-panel" style="${panelStyle}">${optionsHtml}</div>` : ''}
     </div>
     <div class="inputwrap rq-ddown-amount"><span class="pfx">$</span><input type="number" id="freightAmountInput" value="${amount}" oninput="ttFreightManualEdit(this.value)"></div>`;
 }
@@ -1690,6 +1706,10 @@ function ttRenderFreightDdown(){
 }
 function ttToggleFreightDdown(){
   ttFreightDdownOpen = !ttFreightDdownOpen;
+  if (ttFreightDdownOpen){
+    const btn = document.querySelector('#freightDdownWrap .rq-ddown-btn');
+    ttFreightDdownRect = btn ? btn.getBoundingClientRect() : null;
+  }
   ttRenderFreightDdown();
 }
 function ttPickFreightRate(value){
