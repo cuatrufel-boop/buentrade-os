@@ -236,6 +236,29 @@
   }
   .chip.on{background:var(--teal); border-color:var(--teal); color:#fff;}
 
+  /* Freight rate dropdown — same component/markup/colors as quotes.html's rq-ddown (fixed
+     2026-09-07: text must be hardcoded dark, never var(--ink), since this page's --ink is white
+     for its own dark theme and a white-on-white bug is exactly what broke this the first time). */
+  .rq-ddown{position:relative;flex:1 1 auto;}
+  .rq-ddown-btn{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;box-sizing:border-box;padding:0 10px;height:var(--field-h);border:1.5px solid var(--line);border-radius:var(--radius);background:#fff;font-family:inherit;font-size:12.5px;color:#0F1F33;cursor:pointer;text-align:left;}
+  .rq-ddown-btn:hover{border-color:#B9CFEC;}
+  .rq-ddown-btn:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,106,219,.12);}
+  .rq-ddown-btn.has-value{border-color:#B9D3F5;background:var(--blue-light);}
+  .rq-ddown-btn-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .rq-ddown-btn-label .rq-ddown-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue);margin-left:5px;}
+  .rq-ddown-chevron{flex-shrink:0;width:13px;height:13px;color:#64748B;transition:transform .15s;}
+  .rq-ddown-btn[aria-expanded="true"] .rq-ddown-chevron{transform:rotate(180deg);}
+  .rq-ddown-panel{position:absolute;top:calc(100% + 6px);left:0;width:max-content;min-width:100%;max-width:320px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.35);max-height:280px;overflow-y:auto;z-index:40;padding:6px;}
+  .rq-ddown-option{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;color:#0F1F33;}
+  .rq-ddown-option:hover{background:var(--blue-light);}
+  .rq-ddown-option.selected{background:var(--blue-light);color:var(--blue);font-weight:600;}
+  .rq-ddown-option-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rq-ddown-option-sub{font-size:10.5px;color:#64748B;font-weight:500;margin-top:1px;}
+  .rq-ddown-option-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0F1F33;white-space:nowrap;flex-shrink:0;}
+  .rq-ddown-option.selected .rq-ddown-option-price{color:var(--blue);}
+  .rq-ddown-divider{height:1px;background:#E2E8F2;margin:5px 2px;}
+  .rq-ddown-empty{padding:14px 10px;text-align:center;font-size:11.5px;color:#64748B;}
+
   .section-label{
     font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
     color:var(--ink-soft); margin:2px 0 10px;
@@ -775,7 +798,8 @@ if (FIREBASE_READY) {
           <div class="section-label">Shared — applies to both</div>
           <div class="field" id="freightField">
             <label>US Freight (USD)</label>
-            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
+            <div class="inputwrap" id="freightPlainWrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
+            <div id="freightDdownWrap" style="display:none;flex:1 1 auto;"></div>
           </div>
           <div class="field" id="mexicanFreightField">
             <label>Mexican Freight</label>
@@ -1535,6 +1559,128 @@ buildProductRows();
 calc();
 fetchExchangeRate();
 
+// ===== US Freight rate picker — same component/markup/filter logic as quotes.html's
+// rqUsFreightDropdownHtml (copied here, quotes.html itself is untouched). Activates only once a
+// real plantId is known — from ?plantId= (Quotes' embed, or the Offers "TT" button) or, when only
+// an offerId was given, from the offer's own plant_id once negoInit resolves it below. Additive
+// only: still just sets the same #freight input's value and calls calc(), so the frozen
+// calculator logic itself is never touched, and any flow with no plantId keeps the plain $ input
+// exactly as it always has.
+const ttDdownChevronSvg = `<svg class="rq-ddown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+let ttFreightPlantId = null;
+let ttFreightLocations = [];
+let ttFreightRates = [];
+let ttFreightSelectedId = '';
+let ttFreightDdownOpen = false;
+
+function ttEscapeHtml(str){
+  return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function ttRatesForPlant(plantId){
+  if (!plantId) return [];
+  const locIds = [...new Set(ttFreightLocations.filter(l => l.plant_id === plantId).map(l => l.location_id).filter(Boolean))];
+  if (!locIds.length) return [];
+  return ttFreightRates.filter(r => r.service_type === 'us_freight' && locIds.includes(r.location_id))
+    .slice().sort((a, b) => (a.origin || '').localeCompare(b.origin || '') || a.rate - b.rate);
+}
+function ttAverageFreight(plantId){
+  const pool = ttRatesForPlant(plantId);
+  if (!pool.length) return null;
+  return pool.reduce((sum, r) => sum + Number(r.rate), 0) / pool.length;
+}
+function ttFreightDdownHtml(){
+  const rates = ttRatesForPlant(ttFreightPlantId);
+  const avg = rates.length ? ttAverageFreight(ttFreightPlantId) : null;
+  const selected = ttFreightSelectedId;
+  const hasValue = !!selected;
+  let labelHtml = `Del Border <span class="rq-ddown-price">$0</span>`;
+  if (selected === 'AVERAGE' && avg != null){
+    labelHtml = `Average of all carriers <span class="rq-ddown-price">$${avg.toFixed(2)}</span>`;
+  } else if (selected){
+    const r = rates.find(x => x.id === selected);
+    if (r) labelHtml = `${ttEscapeHtml(r.origin || 'Origin')} <span class="rq-ddown-price">$${Number(r.rate).toFixed(2)}</span>`;
+  }
+  const optionsHtml = `
+    <div class="rq-ddown-option${!selected ? ' selected' : ''}" onclick="ttPickFreightRate('')">
+      <span class="rq-ddown-option-name">Del Border</span>
+      <span class="rq-ddown-option-price">$0</span>
+    </div>
+    ${avg != null ? `
+    <div class="rq-ddown-option${selected === 'AVERAGE' ? ' selected' : ''}" onclick="ttPickFreightRate('AVERAGE')">
+      <span class="rq-ddown-option-name">Average of all carriers</span>
+      <span class="rq-ddown-option-price">$${avg.toFixed(2)}</span>
+    </div>` : ''}
+    ${rates.length ? `<div class="rq-ddown-divider"></div>${rates.map(r => `
+    <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="ttPickFreightRate('${r.id}')">
+      <div>
+        <div class="rq-ddown-option-name">${ttEscapeHtml(r.origin || 'Origin')}</div>
+        ${r.provider_name ? `<div class="rq-ddown-option-sub">${ttEscapeHtml(r.provider_name)}</div>` : ''}
+      </div>
+      <span class="rq-ddown-option-price">$${Number(r.rate).toFixed(2)}</span>
+    </div>`).join('')}` : `<div class="rq-ddown-empty">No carrier rate on file yet for this plant's cities.</div>`}
+  `;
+  return `
+    <div class="rq-ddown">
+      <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${ttFreightDdownOpen}" onclick="ttToggleFreightDdown()">
+        <span class="rq-ddown-btn-label">${labelHtml}</span>
+        ${ttDdownChevronSvg}
+      </button>
+      ${ttFreightDdownOpen ? `<div class="rq-ddown-panel">${optionsHtml}</div>` : ''}
+    </div>`;
+}
+function ttRenderFreightDdown(){
+  const el = document.getElementById('freightDdownWrap');
+  if (el) el.innerHTML = ttFreightDdownHtml();
+}
+function ttToggleFreightDdown(){
+  ttFreightDdownOpen = !ttFreightDdownOpen;
+  ttRenderFreightDdown();
+}
+function ttPickFreightRate(value){
+  ttFreightSelectedId = value;
+  ttFreightDdownOpen = false;
+  let amount = 0;
+  if (value === 'AVERAGE'){
+    amount = ttAverageFreight(ttFreightPlantId) || 0;
+  } else if (value){
+    const r = ttFreightRates.find(x => x.id === value);
+    amount = r ? Number(r.rate) : 0;
+  }
+  document.getElementById('freight').value = Math.round(amount * 100) / 100;
+  ttRenderFreightDdown();
+  calc();
+}
+// capture:true — must run BEFORE the button's own onclick (which re-renders and detaches
+// itself), otherwise e.target.closest() on the now-detached button always returns null and the
+// dropdown closes itself the instant it opens. Confirmed live with a real click, not just a DOM
+// check — see the 2026-09-07 CSS bug for why that distinction mattered here.
+document.addEventListener('click', (e) => {
+  if (ttFreightDdownOpen && !(e.target.closest && e.target.closest('#freightDdownWrap'))){
+    ttFreightDdownOpen = false;
+    ttRenderFreightDdown();
+  }
+}, true);
+
+async function ttInitFreightPicker(plantId){
+  if (!plantId || ttFreightPlantId === plantId) return;
+  ttFreightPlantId = plantId;
+  try {
+    const [locRes, rateRes] = await Promise.all([
+      callApi('plant-locations-search', {}),
+      callApi('provider-rates-search', {}),
+    ]);
+    ttFreightLocations = locRes.results || [];
+    ttFreightRates = rateRes.results || [];
+  } catch (e) {
+    ttFreightPlantId = null; // fetch failed — keep the plain input, never show a broken picker
+    return;
+  }
+  document.getElementById('freightPlainWrap').style.display = 'none';
+  document.getElementById('freightDdownWrap').style.display = '';
+  ttRenderFreightDdown();
+}
+if (__qp.get('plantId')) ttInitFreightPicker(__qp.get('plantId'));
+
 // Quotes pushes freight/docs/destination/extra-cost changes here live once this Trading Tool is
 // already open, instead of reloading the iframe (which would wipe out any negotiation already
 // happening on screen). Also keeps Purchase $/lb in sync if it's edited from the Quotes side
@@ -1577,6 +1723,7 @@ async function negoInit(){
   const plantId = __qp.get('plantId') || offer.plant_id;
   if (plantId){
     try { negoPlant = ((await callApi('plants-search', { id: plantId })).results || [])[0] || null; } catch (e) { negoPlant = null; }
+    ttInitFreightPicker(plantId);
   }
   if (offer.customer_id){
     try { negoCustomer = ((await callApi('customers-search', { ids: [offer.customer_id] })).results || [])[0] || null; } catch (e) { negoCustomer = null; }
