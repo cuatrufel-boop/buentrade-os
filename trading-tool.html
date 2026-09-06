@@ -947,6 +947,12 @@ function ttConfirmResolve(val){
 // if the user had typed them in themselves; never touches the calc() formula below.
 const __qp = new URLSearchParams(location.search);
 if (__qp.get('embed') === '1') document.documentElement.classList.add('embed-mode');
+// Set before applyEmbedParams's first call below (needs to exist that early) — true once a real
+// per-plant freight rate picker has taken over the US Freight field, so Quotes' own freight/
+// hideFreight params (still sent on every sync for other reasons — Docs toggle, delivery
+// location, etc.) stop overwriting what the trader picked here. See ttInitFreightPicker further
+// down for where this actually gets set.
+let ttFreightPlantId = null;
 let products = [
   {
     name: __qp.get('label') || 'Product 1',
@@ -1448,10 +1454,16 @@ function rqShow(id, visible){ document.getElementById(id).style.display = visibl
 // AND hide) for the same reason — otherwise a field hidden once could never come back once the
 // trader picks a location/destination that should reveal it.
 function applyEmbedParams(qp){
-  if (qp.has('freight')) document.getElementById('freight').value = Number(qp.get('freight')) || 0;
-  // Quotes hides this field when the plant delivers to the border itself — there's no US Freight
-  // for the trader to pay or edit in that case. Pure visibility toggle, same as Inspection.
-  rqShow('freightField', qp.get('hideFreight') !== '1');
+  // Once the real per-plant rate picker owns this field (ttFreightPlantId set — see
+  // ttInitFreightPicker), Quotes' own freight/hideFreight params are stale by construction (Quotes
+  // no longer has a UI that sets a real rate) and must not stomp the trader's live pick on every
+  // sync (Docs toggle, delivery location, Purchase Price edit all trigger a sync).
+  if (!ttFreightPlantId){
+    if (qp.has('freight')) document.getElementById('freight').value = Number(qp.get('freight')) || 0;
+    // Quotes hides this field when the plant delivers to the border itself — there's no US Freight
+    // for the trader to pay or edit in that case. Pure visibility toggle, same as Inspection.
+    rqShow('freightField', qp.get('hideFreight') !== '1');
+  }
   // Re-opening an existing offer's negotiation only has one historical total on file
   // (inspection_amount predates the Cases/Combos split) — lands it in Cases rather than silently
   // dropping it; the trader can move it to Combos if that's what the load actually was.
@@ -1567,11 +1579,15 @@ fetchExchangeRate();
 // calculator logic itself is never touched, and any flow with no plantId keeps the plain $ input
 // exactly as it always has.
 const ttDdownChevronSvg = `<svg class="rq-ddown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
-let ttFreightPlantId = null;
 let ttFreightLocations = [];
 let ttFreightRates = [];
 let ttFreightSelectedId = '';
 let ttFreightDdownOpen = false;
+// window.__ttFreightRateId — same read pattern as window.__calc: a top-level `let` never becomes
+// a window property (see the products/__calc comment below), so quotes.html needs this explicit
+// mirror to read which real provider_rates row was picked (or '' for Del Border) when it builds
+// the sent_offer — see rqCalcRow in quotes.html.
+window.__ttFreightRateId = '';
 
 function ttEscapeHtml(str){
   return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -1583,33 +1599,22 @@ function ttRatesForPlant(plantId){
   return ttFreightRates.filter(r => r.service_type === 'us_freight' && locIds.includes(r.location_id))
     .slice().sort((a, b) => (a.origin || '').localeCompare(b.origin || '') || a.rate - b.rate);
 }
-function ttAverageFreight(plantId){
-  const pool = ttRatesForPlant(plantId);
-  if (!pool.length) return null;
-  return pool.reduce((sum, r) => sum + Number(r.rate), 0) / pool.length;
-}
 function ttFreightDdownHtml(){
   const rates = ttRatesForPlant(ttFreightPlantId);
-  const avg = rates.length ? ttAverageFreight(ttFreightPlantId) : null;
   const selected = ttFreightSelectedId;
   const hasValue = !!selected;
   let labelHtml = `Del Border <span class="rq-ddown-price">$0</span>`;
-  if (selected === 'AVERAGE' && avg != null){
-    labelHtml = `Average of all carriers <span class="rq-ddown-price">$${avg.toFixed(2)}</span>`;
-  } else if (selected){
+  if (selected){
     const r = rates.find(x => x.id === selected);
     if (r) labelHtml = `${ttEscapeHtml(r.origin || 'Origin')} <span class="rq-ddown-price">$${Number(r.rate).toFixed(2)}</span>`;
   }
+  // No "average" fallback, ever — explicit, repeated instruction: a real per-carrier rate or
+  // "Del Border" ($0, freight already inside the Purchase Price), nothing computed in between.
   const optionsHtml = `
     <div class="rq-ddown-option${!selected ? ' selected' : ''}" onclick="ttPickFreightRate('')">
       <span class="rq-ddown-option-name">Del Border</span>
       <span class="rq-ddown-option-price">$0</span>
     </div>
-    ${avg != null ? `
-    <div class="rq-ddown-option${selected === 'AVERAGE' ? ' selected' : ''}" onclick="ttPickFreightRate('AVERAGE')">
-      <span class="rq-ddown-option-name">Average of all carriers</span>
-      <span class="rq-ddown-option-price">$${avg.toFixed(2)}</span>
-    </div>` : ''}
     ${rates.length ? `<div class="rq-ddown-divider"></div>${rates.map(r => `
     <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="ttPickFreightRate('${r.id}')">
       <div>
@@ -1638,11 +1643,10 @@ function ttToggleFreightDdown(){
 }
 function ttPickFreightRate(value){
   ttFreightSelectedId = value;
+  window.__ttFreightRateId = value;
   ttFreightDdownOpen = false;
   let amount = 0;
-  if (value === 'AVERAGE'){
-    amount = ttAverageFreight(ttFreightPlantId) || 0;
-  } else if (value){
+  if (value){
     const r = ttFreightRates.find(x => x.id === value);
     amount = r ? Number(r.rate) : 0;
   }
@@ -1675,6 +1679,7 @@ async function ttInitFreightPicker(plantId){
     ttFreightPlantId = null; // fetch failed — keep the plain input, never show a broken picker
     return;
   }
+  document.getElementById('freightField').style.display = ''; // Quotes may have hidden the whole field via hideFreight before this resolved
   document.getElementById('freightPlainWrap').style.display = 'none';
   document.getElementById('freightDdownWrap').style.display = '';
   ttRenderFreightDdown();

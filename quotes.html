@@ -130,7 +130,7 @@
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
-  .date-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:13.5px;font-family:inherit;color:var(--ink-soft);cursor:pointer;text-align:left;}
+  .date-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;background:#fff;font-size:13.5px;font-family:inherit;color:#64748B;cursor:pointer;text-align:left;}
   .date-btn:hover{border-color:var(--blue);}
   @keyframes rqDatePulse{0%,100%{box-shadow:0 0 0 0 rgba(196,67,46,.4);}50%{box-shadow:0 0 0 6px rgba(196,67,46,0);}}
   .date-btn.needs-date{border-color:#C4432E;animation:rqDatePulse 1.1s ease-in-out 3;}
@@ -150,11 +150,17 @@
   .name-link:hover{text-decoration:underline;}
   .mini-field{display:flex;flex-direction:column;gap:3px;}
   .mini-field label{font-size:10.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
-  .mini-field input,.mini-field select{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;background:#fff;color:var(--ink);height:31px;}
+  /* Real bug found 2026-09-07, same white-on-white family: color:var(--ink) is #FFFFFF on this
+     page's dark theme — WHITE text typed into a WHITE input, invisible while typing. */
+  .mini-field input,.mini-field select{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;background:#fff;color:#0F1F33;height:31px;}
   .mini-field select{cursor:pointer;}
-  .chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;}
+  .chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);cursor:pointer;user-select:none;color:#64748B;background:#fff;white-space:nowrap;}
   .chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
-  .rq-toggle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;user-select:none;color:var(--ink-soft);background:#fff;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
+  /* Same white-on-white family as the rq-ddown fix (2026-09-07): this pill has a hardcoded white
+     background, but its text color was var(--ink-soft) — rgba(255,255,255,.55), i.e. translucent
+     WHITE — near-invisible on white. This is the real cause of the "blank Documents box"
+     screenshot. Hardcoded to a real dark-on-white muted tone instead. */
+  .rq-toggle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:20px;border:1.5px solid var(--line);cursor:pointer;user-select:none;color:#64748B;background:#fff;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
   .rq-toggle.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .rq-plant-name{cursor:pointer;user-select:none;display:inline-block;text-align:left;font-size:13px;font-weight:700;color:#fff;letter-spacing:.02em;}
   .rq-plant-name.tt-open{color:var(--blue-bright);}
@@ -2551,11 +2557,12 @@ function rqMexicanDestDropdownHtml(p){
 // same as every other number in the calculator.
 function rqPlantFieldsHtml(p){
   const docsOn = p.rqDocsOn === true;
+  // US Freight moved into the Trading Tool's own Direct Costs field (2026-09-07) — it's a real
+  // per-plant rate picker there now (plantId is passed to the iframe), so there's no reason to
+  // also show a second, separate picker up here floating over the calculator. This function no
+  // longer renders it; rqUsFreightDropdownHtml/rqPickUsFreightRate/rqSetUsFreightRate are left
+  // defined but unused rather than deleted, since nothing here was asked to change beyond this.
   return `
-        <div class="mini-field" style="width:250px;flex:0 0 auto;">
-          <label>US Freight — pick a rate</label>
-          ${rqUsFreightDropdownHtml(p)}
-        </div>
         ${rqIsSeaboard(p) ? '' : `
         <div class="mini-field" style="width:auto;flex:0 0 auto;">
           <label>Documents</label>
@@ -3362,6 +3369,17 @@ function rqCalcRow(p){
       totalSale: calc.totalSaleBorder,
       weight: calc.totalWeight,
     };
+  }
+  // US Freight now lives in the Trading Tool's own Direct Costs field (real per-plant rate
+  // picker there, see trading-tool.html's ttPickFreightRate) — same read pattern as costInp/calc
+  // above: read it straight off the live iframe, cache it so it survives the calculator closing.
+  // window.__ttFreightRateId is '' for "Del Border", a real provider_rates.id, or undefined on
+  // any flow that never activated the picker (no plantId) — that last case keeps whatever
+  // rqUsFreightRateId/rqFreightForPlant already had, so nothing here changes for those flows.
+  const freightInp = win && win.document && win.document.getElementById('freight');
+  if (freightInp && win.__ttFreightRateId !== undefined){
+    p.rqUsFreightRateId = win.__ttFreightRateId || null;
+    if (p.rqLastCalc) p.rqLastCalc.freight = parseFloat(freightInp.value) || 0;
   }
   return p.rqLastCalc || null;
 }
