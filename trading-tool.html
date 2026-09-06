@@ -1603,43 +1603,76 @@ window.__ttFreightRateId = '';
 function ttEscapeHtml(str){
   return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
-function ttRatesForPlant(plantId){
+// ALL of the plant's known ship-from cities (2026-09-07 fix — the dropdown was silently dropping
+// any city with no carrier rate on file yet, e.g. Tyson has 5 real locations but only 1 of them
+// has a provider_rates row; the other 4 just never appeared, with no indication they existed at
+// all). plant_locations can have more than one row per real location_id (separate dock/contact
+// records at the same city — e.g. Tyson's two Storm Lake rows) — deduped down to one per
+// location_id here, since a rate is keyed by location_id, not by the individual facility record.
+function ttLocationsForPlant(plantId){
   if (!plantId) return [];
-  const locIds = [...new Set(ttFreightLocations.filter(l => l.plant_id === plantId).map(l => l.location_id).filter(Boolean))];
-  if (!locIds.length) return [];
-  return ttFreightRates.filter(r => r.service_type === 'us_freight' && locIds.includes(r.location_id))
-    .slice().sort((a, b) => (a.origin || '').localeCompare(b.origin || '') || a.rate - b.rate);
+  const seen = new Set();
+  const out = [];
+  ttFreightLocations.filter(l => l.plant_id === plantId).forEach(l => {
+    if (!l.location_id || seen.has(l.location_id)) return;
+    seen.add(l.location_id);
+    out.push(l);
+  });
+  return out.sort((a, b) => (a.location_name || '').localeCompare(b.location_name || ''));
+}
+function ttRatesForLocation(locationId){
+  return ttFreightRates.filter(r => r.service_type === 'us_freight' && r.location_id === locationId)
+    .slice().sort((a, b) => a.rate - b.rate);
 }
 // The dropdown picks a real rate as a starting point; the $ box next to it is always its own
 // separate, always-editable field (point 3, 2026-09-07: a negotiated one-off number still has to
 // be typeable, a picklist alone can't cover every real deal) — it never gets disabled or replaced
 // by the dropdown, it only gets its value FILLED by a pick.
 function ttFreightDdownHtml(){
-  const rates = ttRatesForPlant(ttFreightPlantId);
+  const locations = ttLocationsForPlant(ttFreightPlantId);
   const selected = ttFreightSelectedId;
   const hasValue = !!selected;
   let nameText = 'Del Border';
-  if (selected){
-    const r = rates.find(x => x.id === selected);
-    if (r) nameText = r.origin || 'Origin';
+  if (selected && selected.startsWith('LOC:')){
+    const loc = locations.find(l => l.location_id === selected.slice(4));
+    if (loc) nameText = loc.location_name || 'Location';
+  } else if (selected){
+    for (const loc of locations){
+      const r = ttRatesForLocation(loc.location_id).find(x => x.id === selected);
+      if (r){ nameText = loc.location_name || 'Location'; break; }
+    }
   }
   const freightEl = document.getElementById('freight');
   const amount = freightEl ? (parseFloat(freightEl.value) || 0) : 0;
   // No "average" fallback, ever — explicit, repeated instruction: a real per-carrier rate or
   // "Del Border" ($0, freight already inside the Purchase Price), nothing computed in between.
+  const locationOptionsHtml = locations.map(loc => {
+    const rates = ttRatesForLocation(loc.location_id);
+    if (rates.length){
+      return rates.map(r => `
+      <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="ttPickFreightRate('${r.id}')">
+        <div>
+          <div class="rq-ddown-option-name">${ttEscapeHtml(loc.location_name || 'Location')}</div>
+          ${r.provider_name ? `<div class="rq-ddown-option-sub">${ttEscapeHtml(r.provider_name)}</div>` : ''}
+        </div>
+        <span class="rq-ddown-option-price">$${Number(r.rate).toFixed(2)}</span>
+      </div>`).join('');
+    }
+    // Known city, no carrier rate on file yet — still listed (that's the whole fix), just with no
+    // price to pick; clicking it sets the name and leaves the $ box for the trader to type into.
+    const locKey = 'LOC:' + loc.location_id;
+    return `
+      <div class="rq-ddown-option${selected === locKey ? ' selected' : ''}" onclick="ttPickFreightRate('${locKey}')">
+        <div class="rq-ddown-option-name">${ttEscapeHtml(loc.location_name || 'Location')}</div>
+        <span class="rq-ddown-option-sub" style="margin-top:0;">No rate on file yet</span>
+      </div>`;
+  }).join('');
   const optionsHtml = `
     <div class="rq-ddown-option${!selected ? ' selected' : ''}" onclick="ttPickFreightRate('')">
       <span class="rq-ddown-option-name">Del Border</span>
       <span class="rq-ddown-option-price">$0</span>
     </div>
-    ${rates.length ? `<div class="rq-ddown-divider"></div>${rates.map(r => `
-    <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="ttPickFreightRate('${r.id}')">
-      <div>
-        <div class="rq-ddown-option-name">${ttEscapeHtml(r.origin || 'Origin')}</div>
-        ${r.provider_name ? `<div class="rq-ddown-option-sub">${ttEscapeHtml(r.provider_name)}</div>` : ''}
-      </div>
-      <span class="rq-ddown-option-price">$${Number(r.rate).toFixed(2)}</span>
-    </div>`).join('')}` : `<div class="rq-ddown-empty">No carrier rate on file yet for this plant's cities.</div>`}
+    ${locations.length ? `<div class="rq-ddown-divider"></div>${locationOptionsHtml}` : `<div class="rq-ddown-empty">No locations on file yet for this plant.</div>`}
   `;
   return `
     <div class="rq-ddown">
@@ -1661,10 +1694,12 @@ function ttToggleFreightDdown(){
 }
 function ttPickFreightRate(value){
   ttFreightSelectedId = value;
-  window.__ttFreightRateId = value;
+  // 'LOC:<location_id>' is a known city with no carrier rate on file — not a real provider_rates
+  // row, so (same FK-safety reasoning as the old 'AVERAGE' sentinel) it never goes out as the id.
+  window.__ttFreightRateId = value.startsWith('LOC:') ? null : value;
   ttFreightDdownOpen = false;
   let amount = 0;
-  if (value){
+  if (value && !value.startsWith('LOC:')){
     const r = ttFreightRates.find(x => x.id === value);
     amount = r ? Number(r.rate) : 0;
   }
