@@ -1860,7 +1860,15 @@ async function createAndShareInvoice(){
   try { result = await callApi('orders-compose-so', { order_number: orderNumber }); }
   catch (e) { msgEl.textContent = 'Error: ' + e.message; return; }
   const { document: composed, so, customer } = result;
-  const emails = (customer && [customer.email, ...String(customer.email_cc || '').split(',')].map(s => (s || '').trim()).filter(Boolean)) || [];
+  // Real correction 2026-09-06: "cobros a clientes (no cliente)... para no molestar al cliente con
+  // todo" — the Invoice is a billing document, so it goes to the customer's own Payments Contact
+  // (already a real field on customers.html, just never wired to any send until now) when one is
+  // on file, CC'ing the general/sales contact who negotiated the deal. Falls back to the general
+  // contact alone (today's behavior) when no dedicated Payments Contact has been entered yet.
+  const generalEmails = (customer && [customer.email, ...String(customer.email_cc || '').split(',')].map(s => (s || '').trim()).filter(Boolean)) || [];
+  const paymentsEmails = (customer && customer.payments_contact_email) ? [customer.payments_contact_email] : [];
+  const emails = paymentsEmails.length ? paymentsEmails : generalEmails;
+  const ccEmails = paymentsEmails.length ? generalEmails : [];
   if (!emails.length){ msgEl.textContent = 'Este cliente no tiene correo en archivo.'; return; }
 
   let issueRes;
@@ -1878,11 +1886,11 @@ async function createAndShareInvoice(){
   const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber} por un total de $${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}.\n\n`
     + `Para confirmar la recepción, por favor firma aquí:\n${signLink}\n\nGracias por su preferencia.`;
   const contact = customer && customer.contact_name ? negoFirstName(customer.contact_name) : '';
-  const waPhone = customer && (customer.whatsapp || customer.phone);
+  const waPhone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
   const waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar que la recibiste, firma aquí: ${signLink}`;
 
   try {
-    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(doc, filename)], { phone: waPhone, message: waMessage });
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(doc, filename)], { phone: waPhone, message: waMessage }, ccEmails);
     await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: orderNumber, doc_type: 'invoice' });
     msgEl.textContent = 'Factura enviada — pendiente de firma del cliente.';
   } catch (e) {
@@ -2100,8 +2108,9 @@ function emailModalSendWhatsApp(){
   if (content) downloadBase64File(filename, content);
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
 }
-function openEmailModal(toList, subject, text, attachments, waInfo){
+function openEmailModal(toList, subject, text, attachments, waInfo, ccList){
   document.getElementById('emailModalTo').value = toList;
+  document.getElementById('emailModalCc').value = ccList || '';
   document.getElementById('emailModalSubject').value = subject;
   document.getElementById('emailModalBody').value = text;
   const attachWrap = document.getElementById('emailModalAttachWrap');
@@ -2125,28 +2134,31 @@ function emailModalCancel(){
 function emailModalConfirm(){
   const subject = document.getElementById('emailModalSubject').value;
   const text = document.getElementById('emailModalBody').value;
+  const cc = document.getElementById('emailModalCc').value;
   document.getElementById('emailModalOverlay').style.display = 'none';
-  if (emailModalResolve) emailModalResolve({ subject, text });
+  if (emailModalResolve) emailModalResolve({ subject, text, cc });
   emailModalResolve = null;
 }
 
 // Sends through the Netlify function (Resend) so the right BuenTrade alias goes out as the
 // sender automatically. Falls back to mailto: (old behavior) if the API call fails, so a send
 // is never fully blocked by an API/network hiccup.
-async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
+async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo, cc){
   const toList = Array.isArray(to) ? to.join(', ') : to;
+  const ccList = Array.isArray(cc) ? cc.join(', ') : (cc || '');
   const waInfoWithFile = (waInfo && waInfo.phone && attachments && attachments[0])
     ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content } : waInfo;
-  const edited = await openEmailModal(toList, subject, text, attachments, waInfoWithFile);
+  const edited = await openEmailModal(toList, subject, text, attachments, waInfoWithFile, ccList);
   if (!edited){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
     throw cancelErr;
   }
+  const finalCc = (edited.cc || '').split(',').map(s => s.trim()).filter(Boolean);
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, subject: edited.subject, text: edited.text, attachments }),
+    body: JSON.stringify({ from: fromAlias, to, cc: finalCc.length ? finalCc : undefined, subject: edited.subject, text: edited.text, attachments }),
   });
   if (!res.ok){
     const err = await res.json().catch(() => ({}));
@@ -2283,6 +2295,7 @@ async function negoSaveDefinitive(overrideCreditCheck){
   <div class="email-modal-box">
     <h3 id="emailModalTitle">Review before sending</h3>
     <div class="email-modal-field"><label>To</label><input type="text" id="emailModalTo" readonly></div>
+    <div class="email-modal-field"><label>CC (optional — comma-separated)</label><input type="text" id="emailModalCc" placeholder="name@example.com"></div>
     <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject"></div>
     <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody"></textarea></div>
     <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
