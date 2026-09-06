@@ -775,17 +775,7 @@ if (FIREBASE_READY) {
           <div class="section-label">Shared — applies to both</div>
           <div class="field" id="freightField">
             <label>US Freight (USD)</label>
-            <!-- Real ask 2026-09-06: "sacame los precios posibles en el qt y yo escojo uno
-                 dependiendo del location de cada planta" — this used to just be a blank/average
-                 number, sometimes hidden entirely (see the removed hideFreight gate below). Same
-                 real per-city carrier rates Quotes already shows when building the quote
-                 (rqUsFreightRatesForPlant), now available here too so a rate can be corrected or
-                 picked for the first time during negotiation, not just at quote time. -->
-            <select id="freightRatePicker" style="width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;margin-bottom:6px;" onchange="negoPickFreightRate(this.value)"></select>
-            <!-- Real correction 2026-09-06: "escoger solo uno" — the $ amount now only ever comes
-                 from picking a real rate above, never typed in directly. readonly (not disabled)
-                 so its value still submits/reads normally everywhere else in this file. -->
-            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" readonly style="background:var(--card);cursor:default;"></div>
+            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
           </div>
           <div class="field" id="mexicanFreightField">
             <label>Mexican Freight</label>
@@ -1435,11 +1425,9 @@ function rqShow(id, visible){ document.getElementById(id).style.display = visibl
 // trader picks a location/destination that should reveal it.
 function applyEmbedParams(qp){
   if (qp.has('freight')) document.getElementById('freight').value = Number(qp.get('freight')) || 0;
-  // Real correction 2026-09-06: this used to hide the whole field whenever the offer had no exact
-  // matched rate (average-fallback case) — the trader could see a $0.00 chip in the header but had
-  // no way to see or fix the real number, or pick a carrier. Always shown now; negoLoadFreightRates
-  // (called from negoInit) fills in the real per-city options once the plant is known.
-  rqShow('freightField', true);
+  // Quotes hides this field when the plant delivers to the border itself — there's no US Freight
+  // for the trader to pay or edit in that case. Pure visibility toggle, same as Inspection.
+  rqShow('freightField', qp.get('hideFreight') !== '1');
   // Re-opening an existing offer's negotiation only has one historical total on file
   // (inspection_amount predates the Cases/Combos split) — lands it in Cases rather than silently
   // dropping it; the trader can move it to Combos if that's what the load actually was.
@@ -1603,56 +1591,7 @@ async function negoInit(){
     document.getElementById('negoQbLeft').style.display = 'flex';
     document.getElementById('negoQbRight').style.display = 'flex';
     document.getElementById('negoCreateOrderBtn').style.display = 'inline-flex';
-    if (plantId) await negoLoadFreightRates(plantId);
   }
-}
-
-// Real ask 2026-09-06: "sacame los precios posibles en el qt y yo escojo uno dependiendo del
-// location de cada planta y punto" — same real per-city carrier rates quotes.html already shows
-// when the quote is first built (rqUsFreightRatesForPlant), now available during negotiation too.
-// Strict per-plant, no cross-plant fallback — same rule quotes.html follows ("no desplegar todas
-// las locations en una planta solo las de la planta").
-async function negoLoadFreightRates(plantId){
-  let locations = [], rates = [];
-  try {
-    const [locRes, rateRes] = await Promise.all([
-      callApi('plant-locations-search', { plant_id: plantId }),
-      callApi('provider-rates-search', { service_type: 'us_freight' }),
-    ]);
-    locations = locRes.results || [];
-    rates = rateRes.results || [];
-  } catch (e) { return; }
-  const locationIds = new Set(locations.map(l => l.location_id).filter(Boolean));
-  const plantRates = rates.filter(r => locationIds.has(r.location_id));
-  const currentAmount = negoOffer.us_freight_amount || 0;
-  const currentRateId = negoOffer.us_freight_rate_id || null;
-
-  // Real correction 2026-09-06: "borra lo del promedio" — no more auto-computed middle-ground
-  // guess as a selectable option. Only two real choices: Del Border, or one specific carrier rate.
-  const matchesSpecificRate = currentRateId && plantRates.some(r => r.id === currentRateId);
-  const isLegacyValue = currentAmount > 0 && !matchesSpecificRate;
-
-  const sel = document.getElementById('freightRatePicker');
-  const opts = [`<option value=""${currentAmount === 0 ? ' selected' : ''}>Del Border ($0)</option>`];
-  plantRates.forEach(r => {
-    opts.push(`<option value="${r.id}" data-amount="${r.rate}"${currentRateId === r.id ? ' selected' : ''}>${negoEscapeHtml(r.origin || 'Origin')} — ${negoEscapeHtml(r.provider_name || '')} ($${Number(r.rate).toFixed(2)})</option>`);
-  });
-  // A number already on the offer from before this correction (an old average, or a manually-typed
-  // amount) that doesn't match any real rate above — kept visible as its own option so it's never
-  // silently reset to $0, but the trader has to actively pick a real rate to replace it.
-  if (isLegacyValue) opts.push(`<option value="LEGACY" selected>Previous amount ($${currentAmount.toFixed(2)}) — pick a real rate</option>`);
-  sel.innerHTML = opts.join('');
-}
-
-function negoPickFreightRate(value){
-  const freightEl = document.getElementById('freight');
-  if (value === '' || value === 'LEGACY'){ if (value === '') freightEl.value = 0; /* LEGACY: leave the existing $ as-is until a real rate is picked */ }
-  else {
-    const sel = document.getElementById('freightRatePicker');
-    const opt = Array.from(sel.options).find(o => o.value === value);
-    if (opt) freightEl.value = opt.dataset.amount || 0;
-  }
-  calc();
 }
 
 // ===== Real Costs (Won offers only) — reconciles quoted vs. actual freight/extra costs right
