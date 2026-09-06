@@ -13,7 +13,12 @@ export type ProductRow = Record<string, any>;
 
 export type MatchResult =
   | { matched: true; source: "alias" | "name_and_spec"; product: ProductRow }
-  | { matched: false; candidates: ProductRow[] }
+  // conflicted: true means every candidate here was already known NOT to fully satisfy the line
+  // (see narrowStep's "never narrow to zero" rule) — e.g. the line explicitly said
+  // "Boneless" and the only candidate on file for that temp+pack is Bone-In. Still real, useful
+  // candidates for a human to look at, but never confident enough to auto-pick even when there's
+  // only one — a caller that pre-selects on `candidates.length === 1` must check this first.
+  | { matched: false; candidates: ProductRow[]; conflicted?: boolean }
   | { error: string };
 
 function normalizeForMatch(s: string | null | undefined): string {
@@ -63,7 +68,7 @@ function detectTempPackFromLine(
   // Real bug, confirmed live against a real Wholestone email: the catalog's packaging term is
   // "Poly Bag" (two words), but plants write it as just "Poly" (e.g. "Poly soldier-pack") — the
   // word-boundary check above requires the full phrase, so it never matched, packagingId stayed
-  // null, and narrowByTempPack's "no packaging detected → don't filter on packaging" rule let a
+  // null, and narrowStep's "no packaging detected → don't filter on packaging" rule let a
   // Frozen-only match through unfiltered, silently applying to a Box candidate when the line
   // explicitly said Poly. Same fix pattern as COV/FZ above — a known plant-wording synonym for an
   // existing catalog term, never a new packaging value.
@@ -89,18 +94,21 @@ function detectTempPackFromLine(
   return { tempId, packagingId };
 }
 
-function narrowByTempPack(
-  rawText: string,
-  candidates: any[],
-  temperatures: TempPack[],
-  packagings: TempPack[],
-  plantTermAliasMap: Map<string, { temperature?: string; packaging?: string }>,
-) {
-  const { tempId, packagingId } = detectTempPackFromLine(rawText, temperatures, packagings, plantTermAliasMap);
-  return candidates.filter((p) =>
-    (!tempId || p.temperature_id === tempId) &&
-    (!packagingId || p.packaging_id === packagingId)
-  );
+// Every real-world attribute a line can name (temperature, packaging, variation) narrows the same
+// way: filter the current candidate pool by that attribute; if the line didn't mention it at all,
+// don't touch the pool. Real bug, confirmed live 2026-09-05 against a real Wholestone line
+// ("Frozen — Bone-in sirloins Poly soldier-pack"): an earlier version applied temperature and
+// packaging together as one all-or-nothing filter, so a packaging word with no matching catalog
+// product at this cut ("Poly" — every Sirloin on file is Box or VAC, a genuine gap) wiped out
+// candidates of the CORRECT temperature too, and the fallback that followed reset all the way back
+// to the full, un-narrowed name-matches — discarding a perfectly good, already-confirmed
+// temperature match along with it. Each attribute now narrows independently and never discards
+// the pool collected so far just because IT specifically found nothing (Rule 5, generalized from
+// variation to every attribute) — it flags the conflict instead and lets the pool stand.
+function narrowStep(pool: any[], matches: (p: any) => boolean, signalPresent: boolean): { pool: any[]; conflicted: boolean } {
+  if (!signalPresent) return { pool, conflicted: false };
+  const narrowed = pool.filter(matches);
+  return narrowed.length ? { pool: narrowed, conflicted: false } : { pool, conflicted: true };
 }
 
 // Real bug, confirmed live against real Tyson data: a variation registered as "72%" never matched
@@ -129,32 +137,6 @@ function candidateVariationSet(p: any): Set<string> {
       .map((s: string) => s.trim().toLowerCase())
       .filter(Boolean),
   );
-}
-
-// Real bug found and fixed 2026-09-02, confirmed live against a real Wholestone email: when
-// temp+pack narrowing already leaves exactly ONE candidate, and the line's own text names a real
-// variation (e.g. "Bone-in") that candidate does NOT have (the catalog only has a Boneless variant
-// at that temperature), the old version's "never narrow to zero" fallback returned that one WRONG
-// candidate unchanged — which then read as narrowed.length === 1 to the caller and applied with
-// full confidence to the wrong variant. The "never narrow to zero" rule (comment below) was always
-// meant to keep MULTIPLE real candidates in play for a human to pick between, not to launder a
-// single conflicting candidate into a confident match. Now reports the conflict explicitly so the
-// caller can refuse to treat a size-1 result as confident when it only got there via this fallback.
-function narrowByVariation(
-  rawText: string, candidates: any[], variationNames: string[], taughtNames: Set<string> = new Set(),
-): { candidates: any[]; conflicted: boolean } {
-  const lineVariations = new Set([...detectVariationNamesFromLine(rawText, variationNames), ...taughtNames]);
-  if (lineVariations.size === 0) return { candidates, conflicted: false };
-  const narrowed = candidates.filter((p) => {
-    const pVariations = candidateVariationSet(p);
-    for (const v of lineVariations) if (!pVariations.has(v)) return false;
-    return true;
-  });
-  // Rule 5 — never narrow to zero silently. If nothing on file actually has the variation the line
-  // names, that's real information to surface (as candidates, still requiring a human pick), not a
-  // reason to pretend the variation signal didn't exist.
-  if (narrowed.length) return { candidates: narrowed, conflicted: false };
-  return { candidates, conflicted: true };
 }
 
 function productSummary(p: any): ProductRow {
@@ -387,17 +369,27 @@ export async function matchProductFromPlantText(
 
   if (!nameMatches.length) return { matched: false, candidates: [] };
 
-  const tempPackNarrowed = narrowByTempPack(raw_text, nameMatches, temperatures, packagings, plantTermAliasMap);
-  const variationResult = narrowByVariation(raw_text, tempPackNarrowed, variationNames, taughtVariationNamesFromLine(raw_text));
-  const narrowed = variationResult.candidates;
+  // Temperature, packaging, then variation — each narrows the pool left by the one before it, and
+  // each is independent: a mismatch on ONE attribute (see narrowStep above) never erases progress
+  // already made by another. `conflicted` is sticky (true if ANY step conflicted) — a pool that
+  // narrowed to exactly one candidate only via a step that couldn't actually satisfy the line is
+  // never treated as a confident match, no matter which attribute caused it.
+  const { tempId, packagingId } = detectTempPackFromLine(raw_text, temperatures, packagings, plantTermAliasMap);
+  const lineVariations = new Set([...detectVariationNamesFromLine(raw_text, variationNames), ...taughtVariationNamesFromLine(raw_text)]);
 
-  // conflicted === true means the line named a real variation nothing on file actually has at
-  // this temp/pack — even if that leaves exactly one candidate, it's a known mismatch, never a
-  // confident match (see narrowByVariation's own note above).
-  if (narrowed.length === 1 && !variationResult.conflicted) {
-    return { matched: true, source: "name_and_spec", product: productSummary(narrowed[0]) };
+  const tempStep = narrowStep(nameMatches, (p) => p.temperature_id === tempId, !!tempId);
+  const packStep = narrowStep(tempStep.pool, (p) => p.packaging_id === packagingId, !!packagingId);
+  const variationStep = narrowStep(packStep.pool, (p) => {
+    const pVariations = candidateVariationSet(p);
+    for (const v of lineVariations) if (!pVariations.has(v)) return false;
+    return true;
+  }, lineVariations.size > 0);
+
+  const pool = variationStep.pool;
+  const conflicted = tempStep.conflicted || packStep.conflicted || variationStep.conflicted;
+
+  if (pool.length === 1 && !conflicted) {
+    return { matched: true, source: "name_and_spec", product: productSummary(pool[0]) };
   }
-
-  const candidates = (narrowed.length ? narrowed : (tempPackNarrowed.length ? tempPackNarrowed : nameMatches)).map(productSummary);
-  return { matched: false, candidates };
+  return { matched: false, candidates: pool.map(productSummary), conflicted };
 }

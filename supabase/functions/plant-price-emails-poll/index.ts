@@ -179,6 +179,14 @@ const GMAIL_CLIENT_SECRET = Deno.env.get("GMAIL_CLIENT_SECRET")!;
 const GMAIL_REFRESH_TOKEN = Deno.env.get("GMAIL_REFRESH_TOKEN")!;
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 const EMAIL_AUTOMATION_ACTOR = "email-automation@buentradegroup.com";
+// Real addition, explicit ask: "avisa a todos los trader ahora solo a mi" — comma-separated so
+// this already supports more than one trader the moment there's more than one to notify, without
+// another code change; today it's just the one address. No new secret/service needed for this —
+// Resend lives only in Netlify (currently suspended, see the project's own standing note), so this
+// reuses the SAME Gmail OAuth credentials this function already holds to read plant mail, now also
+// used to send from purchasing@buentradegroup.com — one already-authenticated account, one less
+// external dependency.
+const TRADER_NOTIFICATION_EMAILS = (Deno.env.get("TRADER_NOTIFICATION_EMAILS") || "").split(",").map((s) => s.trim()).filter(Boolean);
 
 async function getAccessToken(): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
@@ -194,6 +202,28 @@ async function getAccessToken(): Promise<string> {
   const data = await res.json();
   if (!res.ok) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
   return data.access_token;
+}
+
+// Real addition, explicit ask: "el sistema debería avisarle con un correo que ya están
+// actualizados los precios que faltaban." One notification per plant per email processed (not one
+// per line item, not a giant cross-plant digest) — matches how the poll itself already runs, one
+// plant's price list at a time. Uses the same Gmail account/token this function already
+// authenticates as to READ mail (see getAccessToken above) to also SEND this one — no new
+// credential, no external service dependency.
+function buildGmailRawMessage(to: string, subject: string, body: string): string {
+  const raw = `To: ${to}\r\nFrom: purchasing@buentradegroup.com\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${body}`;
+  const bytes = new TextEncoder().encode(raw);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function sendGmailNotification(authHeaders: Record<string, string>, to: string, subject: string, body: string): Promise<void> {
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: buildGmailRawMessage(to, subject, body) }),
+  });
+  if (!res.ok) throw new Error(`Gmail send failed: ${await res.text()}`);
 }
 
 function headerValue(headers: { name: string; value: string }[], name: string): string {
@@ -250,9 +280,23 @@ Deno.serve(async (req) => {
     // the inbox — the normal recency scan would need a huge (slow) maxResults to reach an old real
     // test email. Goes through the real apply/pending pipeline exactly like any other message.
     const testMessageId = body.test_message_id || null;
+    // Verification aid only, never touches the real pipeline/DB: sends one real test email through
+    // the same Gmail send path the trader-notification feature uses, so its OAuth scope (send, not
+    // just read) can be confirmed live without waiting for a genuine "price someone was waiting on
+    // just arrived" moment to happen naturally.
+    const testNotificationEmail = body.test_notification_email || null;
 
     const accessToken = await getAccessToken();
     const authHeaders = { Authorization: `Bearer ${accessToken}` };
+
+    if (testNotificationEmail) {
+      try {
+        await sendGmailNotification(authHeaders, testNotificationEmail, "BuenTrade — test notification", "This is a test of the plant-price-emails-poll notification path. If you got this, the Gmail send scope works.");
+        return jsonResponse({ test_notification: "sent", to: testNotificationEmail });
+      } catch (e) {
+        return jsonResponse({ test_notification: "failed", error: String(e) }, 500);
+      }
+    }
 
     let listData: { messages?: { id: string }[] };
     if (testMessageId) {
@@ -392,10 +436,21 @@ Deno.serve(async (req) => {
       // verified live. Never decides which catalog SKU anything maps to — that's still entirely
       // the deterministic matcher below; this only replaces "where is the price in this text."
       let llmTextItems: Item[] | null = null;
+      // Real addition, explicit ask, walking the whole off-spec flow end to end: the same LLM call
+      // now also returns declined_items — "we don't produce this" statements, distinct from a
+      // priced item and distinct from temporary unavailability (see llmExtractor.ts's own prompt
+      // for that exact distinction). No regex/block-format equivalent exists for this signal at
+      // all (those parsers only ever looked for price lines) — when the LLM call fails and this
+      // run falls back to regex, declined-item detection simply doesn't run for that email, same
+      // as every other LLM-only capability here.
+      let declinedTextItems: { rawText: string }[] = [];
       let llmError: string | null = null;
       try {
         const extracted = await extractItemsWithLLM(bodyText);
-        const mapped = extracted.map((it) => ({
+        declinedTextItems = extracted.declinedItems.map((it) => ({
+          rawText: it.temperature === "Unknown" ? it.name : `${it.temperature} — ${it.name}`,
+        }));
+        const mapped = extracted.items.map((it) => ({
           rawText: it.temperature === "Unknown" ? it.name : `${it.temperature} — ${it.name}`,
           price: it.price, freightIncluded: it.delivered,
         }));
@@ -436,6 +491,12 @@ Deno.serve(async (req) => {
 
       let applied = 0, pending = 0, skipped = lines.length - textItems.length;
       const errors: string[] = llmError ? [`llm extraction: ${llmError}`] : [];
+      // Real addition, explicit ask: "avisa con un correo que ya están actualizados los precios
+      // que faltaban" — collects every applied price that resolves a row someone had actually
+      // asked for (last_requested_at set BEFORE this apply — applyPlantProductMatch's own upsert
+      // never touches that column, so the value it returns is exactly the pre-apply state), so one
+      // notification can go out for this plant's whole batch at the end, not one email per line.
+      const resolvedForTrader: { name: string; price: number }[] = [];
       // Real fix for a real 51-item Tyson list hitting a Postgres connection rate limit partway
       // through: these three now run IN-PROCESS (see _shared/productMatcher.ts,
       // applyPlantProductMatch.ts, pendingMatch.ts) sharing this function's own single `sql`
@@ -452,23 +513,67 @@ Deno.serve(async (req) => {
         if ("error" in matchRes) { skipped++; errors.push(`match ${item.rawText}: ${matchRes.error}`); continue; }
         try {
           if (matchRes.matched) {
-            await applyPlantProductMatch(sql, HMAC_SECRET, {
+            const applyResult = await applyPlantProductMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, product_id: matchRes.product.id,
               raw_text: normalize(item.rawText), price: item.price,
               price_currency_id: usdCurrencyId, price_date: today,
               docs_included: plant.docs_included === true, freight_included: item.freightIncluded,
               location_name: item.locationName || null,
             });
+            if ("applied" in applyResult && applyResult.plant_product.last_requested_at) {
+              resolvedForTrader.push({ name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price });
+            }
             applied++;
           } else {
             await createPendingMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, raw_text: item.rawText,
               detected_price: item.price, candidate_product_ids: matchRes.candidates.map((p: any) => p.id),
-              idempotency_key: `${m.id}|${normalize(item.rawText)}`,
+              idempotency_key: `${m.id}|${normalize(item.rawText)}`, candidates_conflicted: matchRes.conflicted === true,
             });
             pending++;
           }
         } catch (e) { skipped++; errors.push(`apply ${item.rawText}: ${e}`); }
+      }
+
+      // Real addition, explicit ask: a "we don't produce this" signal runs through the exact same
+      // matcher as a price line (same rules, same candidate narrowing), but — unlike a price —
+      // NEVER auto-applies here, no matter how confident the match. A wrong price self-corrects on
+      // the next email; a wrong permanent decline (plant_products.declined_at) silently blocks
+      // that plant for that product forever with nothing to trigger a second look. Every declined
+      // signal becomes a plant_pending_matches row (signal_type: 'declined') for a human to
+      // actually set declined_at from plants.html — see that screen's own review queue.
+      let declined = 0;
+      for (const decl of declinedTextItems) {
+        let matchRes;
+        try {
+          matchRes = await matchProductFromPlantText(sql, { plant_id: plant.id, raw_text: decl.rawText });
+        } catch (e) { skipped++; errors.push(`declined match ${decl.rawText}: ${e}`); continue; }
+        if ("error" in matchRes) { skipped++; errors.push(`declined match ${decl.rawText}: ${matchRes.error}`); continue; }
+        try {
+          const candidateIds = matchRes.matched ? [matchRes.product.id] : matchRes.candidates.map((p: any) => p.id);
+          await createPendingMatch(sql, HMAC_SECRET, {
+            actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, raw_text: decl.rawText,
+            detected_price: null, candidate_product_ids: candidateIds,
+            idempotency_key: `${m.id}|declined|${normalize(decl.rawText)}`, signal_type: "declined",
+            candidates_conflicted: matchRes.matched ? false : matchRes.conflicted === true,
+          });
+          declined++;
+        } catch (e) { skipped++; errors.push(`declined queue ${decl.rawText}: ${e}`); }
+      }
+      pending += declined;
+
+      // Real addition, explicit ask: one notification per plant, only when this run actually
+      // resolved something someone was waiting on — never fires on a routine price refresh nobody
+      // had asked for. Fire-and-forget on purpose: a notification failing to send should never
+      // fail the whole poll run or block the next message from processing.
+      if (resolvedForTrader.length && TRADER_NOTIFICATION_EMAILS.length) {
+        const lines = resolvedForTrader.map((r) => `${r.name} — $${r.price.toFixed(4)}/lb`).join("\n");
+        const subject = `${plant.name} — ${resolvedForTrader.length} price${resolvedForTrader.length === 1 ? "" : "s"} you were waiting on just came in`;
+        const body = `${plant.name} just sent updated pricing, and it included ${resolvedForTrader.length} product${resolvedForTrader.length === 1 ? "" : "s"} you'd asked them for:\n\n${lines}\n\nOpen Quotes to send ${resolvedForTrader.length === 1 ? "it" : "these"} now.`;
+        for (const to of TRADER_NOTIFICATION_EMAILS) {
+          try { await sendGmailNotification(authHeaders, to, subject, body); }
+          catch (e) { errors.push(`notify ${to}: ${e}`); }
+        }
       }
 
       await sql`
@@ -479,7 +584,7 @@ Deno.serve(async (req) => {
         on conflict (message_id) do nothing
       `;
       results.push({
-        id: m.id, plant: plant.name, applied, pending, skipped, errors: errors.slice(0, 5),
+        id: m.id, plant: plant.name, applied, pending, declined, skipped, errors: errors.slice(0, 5),
         text_items_regex: regexTextItems.length, text_items_llm: llmTextItems ? llmTextItems.length : null, extraction_method: extractionMethod,
       });
     }

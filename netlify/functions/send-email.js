@@ -11,6 +11,9 @@ const FROM_ADDRESSES = {
 
 // Mirrors the signature set up by hand in Gmail — the API path never touches Gmail, so it has
 // to carry its own copy of the same signature to look consistent with manually-sent mail.
+// Explicit ask 2026-09-04: the phone number itself shouldn't be visible as text — Call/WhatsApp
+// are real tel:/wa.me links instead, so anyone reading the email can still reach that number in
+// one tap without it ever appearing as digits on the page.
 const SIGNATURE_HTML = `
   <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555555;line-height:1.5;">
     <div style="font-size:19px;margin:0 0 2px;">
@@ -19,10 +22,13 @@ const SIGNATURE_HTML = `
     <div style="font-size:10.5px;color:#999999;letter-spacing:0.6px;margin:0 0 10px;">GOOD TRADE. GOOD BUSINESS.</div>
     <div>BuenTrade LLC</div>
     <div>1525 N Park Dr, Suite 104, Weston, FL 33326</div>
-    <div>+1 954-208-0209 &nbsp;&middot;&nbsp; <a href="https://buentradegroup.com" style="color:#1E6ADB;text-decoration:none;">buentradegroup.com</a></div>
+    <div><a href="tel:+17542481016" style="color:#1E6ADB;text-decoration:none;">Call</a> &nbsp;&middot;&nbsp; <a href="https://wa.me/17542481016" style="color:#1E6ADB;text-decoration:none;">WhatsApp</a> &nbsp;&middot;&nbsp; <a href="https://buentradegroup.com" style="color:#1E6ADB;text-decoration:none;">buentradegroup.com</a></div>
   </div>`;
 
-const SIGNATURE_TEXT = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
+// Plain-text fallback (the non-HTML part of the email, and what a client with images/HTML off
+// actually shows) — a link that hides its own digits is an HTML-only trick, so this keeps the
+// number visible as plain digits; there's no way to make it tap-but-unseen without markup.
+const SIGNATURE_TEXT = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 754-248-1016 · buentradegroup.com';
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));

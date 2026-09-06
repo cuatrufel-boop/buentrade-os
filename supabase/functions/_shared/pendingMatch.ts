@@ -11,9 +11,10 @@ export type CreatePendingMatchResult =
 export async function createPendingMatch(
   sql: any,
   hmacSecret: string,
-  { actor, plant_id, raw_text, detected_price = null, candidate_product_ids = [], idempotency_key = null }: {
+  { actor, plant_id, raw_text, detected_price = null, candidate_product_ids = [], idempotency_key = null, signal_type = "price", candidates_conflicted = false }: {
     actor: string; plant_id: string; raw_text: string; detected_price?: number | null;
-    candidate_product_ids?: string[]; idempotency_key?: string | null;
+    candidate_product_ids?: string[]; idempotency_key?: string | null; signal_type?: "price" | "declined";
+    candidates_conflicted?: boolean;
   },
 ): Promise<CreatePendingMatchResult> {
   if (!actor || !plant_id || !raw_text) return { error: "missing required fields" };
@@ -28,8 +29,8 @@ export async function createPendingMatch(
 
   const result = await sql.begin(async (tx: any) => {
     const [row] = await tx`
-      insert into plant_pending_matches (plant_id, raw_text, detected_price, candidate_product_ids, idempotency_key)
-      values (${plant_id}, ${raw_text}, ${detected_price}, ${tx.json(candidate_product_ids)}, ${idempotency_key})
+      insert into plant_pending_matches (plant_id, raw_text, detected_price, candidate_product_ids, idempotency_key, signal_type, candidates_conflicted)
+      values (${plant_id}, ${raw_text}, ${detected_price}, ${tx.json(candidate_product_ids)}, ${idempotency_key}, ${signal_type}, ${candidates_conflicted})
       returning *
     `;
     await writeAuditLog(tx, hmacSecret, {

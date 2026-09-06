@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { status = null, customer_id = null, awaiting_payment = false } = body;
+    const { status = null, customer_id = null, awaiting_payment = false, order_number = null } = body;
     const limit = Math.min(Number(body.limit) || 100, 500);
 
     if (status && !VALID_STATUSES.includes(status)) return jsonResponse({ error: "invalid status", valid_statuses: VALID_STATUSES }, 400);
@@ -27,7 +27,9 @@ Deno.serve(async (req) => {
         o.plant_name, o.customer_name,
         p.name as carrier_name, p.phone as carrier_phone,
         cu.contact_name as customer_contact_name, cu.whatsapp as customer_whatsapp, cu.phone as customer_phone,
+        cu.email as customer_email, cu.email_cc as customer_email_cc,
         cu.payment_days as customer_payment_days,
+        pl.whatsapp as plant_whatsapp, pl.phone as plant_phone, pl.email as plant_email,
         pr.name as catalog_product_name, pr.name_en as catalog_product_name_en, pp.photo_url as catalog_product_photo_url,
         (
           select fo.origin from freight_orders fo
@@ -35,18 +37,45 @@ Deno.serve(async (req) => {
           limit 1
         ) as freight_origin,
         (
+          -- The confirmed pickup date, same source orders-compose-po already prints as
+          -- "Pick-up date" on the real PO document (po.delivery_dates[0]) — nothing new, just
+          -- exposed here so the Status tab can compute the fixed 2-day-to-border window against it.
+          select po.delivery_dates->>0 from purchase_orders po
+          where po.order_number = sh.order_number limit 1
+        ) as pickup_date,
+        (
+          select po.docs_on from purchase_orders po where po.order_number = sh.order_number limit 1
+        ) as docs_on,
+        (
           select coalesce(json_agg(e.* order by e.at), '[]'::json)
           from shipment_events e where e.shipment_id = sh.id
-        ) as events
+        ) as events,
+        (
+          -- Real pickup documents (BOL/packing list/photos/USDA), received by email from plant
+          -- and/or carrier (pickup-docs-emails-poll), still waiting on the trader's confirm before
+          -- they go to customs — never sent automatically, see shareCustomsPickupDocs.
+          select coalesce(json_agg(d.* order by d.created_at), '[]'::json)
+          from shipment_pickup_documents d where d.shipment_id = sh.id and d.forwarded_to_customs_at is null
+        ) as pending_pickup_documents,
+        (
+          -- ALL pickup documents regardless of forwarded status — the Orders "Documents" panel
+          -- needs the full record of what's on file for this order, not just what's still waiting
+          -- to be sent. Added 2026-09-06, real gap found live ("tengo que tener un sitio fisico
+          -- donde se guarden los docs de esa venta").
+          select coalesce(json_agg(d.* order by d.created_at), '[]'::json)
+          from shipment_pickup_documents d where d.shipment_id = sh.id
+        ) as pickup_documents
       from shipments sh
       join sent_offers o on o.id = sh.sent_offer_id
       left join providers p on p.id = sh.carrier_provider_id
+      left join plants pl on pl.id = o.plant_id
       left join customers cu on cu.id = sh.customer_id
       left join products pr on pr.id = o.product_id
       left join plant_products pp on pp.product_id = o.product_id and pp.plant_id = o.plant_id
       where (${status}::text is null or sh.status = ${status})
         and (${customer_id}::uuid is null or sh.customer_id = ${customer_id})
         and (${awaiting_payment}::boolean is false or (sh.status = 'delivered' and sh.paid_at is null))
+        and (${order_number}::text is null or sh.order_number = ${order_number})
       order by sh.created_at desc
       limit ${limit}
     `;

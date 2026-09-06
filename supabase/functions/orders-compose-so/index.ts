@@ -32,9 +32,18 @@ Deno.serve(async (req) => {
       const [incoterm] = await sql`select code from incoterms where id = ${customer.usual_incoterm_id}`;
       if (incoterm) incoterms = [incoterm.code, customer.usual_incoterm_place].filter(Boolean).join(" ");
     }
+    // Real correction 2026-09-06, stated repeatedly and emphatically: "NO HACEMOS NADA CON MEXICO
+    // AHORA todo en US. ADUANA cruza. nosotros entregamos en US sin importar" — BuenTrade never
+    // delivers into Mexico; every export always hands off to the customs agency on the US side,
+    // full stop. This used to be gated on customer.usual_delivery_type === "Border", which let a
+    // customer marked "Delivered Mexico" silently show its own Mexican address here instead — that
+    // gate is gone. Whichever customs agency is on file (customer's own, falling back to this
+    // specific offer's) is always the ship-to; if neither is on file, that's a real data gap to
+    // fill in, not a reason to ship to the customer's own address.
     let customsAgency = null;
-    if (customer?.usual_delivery_type === "Border" && customer.customs_agency_provider_id) {
-      const [agency] = await sql`select * from providers where id = ${customer.customs_agency_provider_id}`;
+    const agencyId = customer?.customs_agency_provider_id || offer?.customs_agency_provider_id;
+    if (agencyId) {
+      const [agency] = await sql`select * from providers where id = ${agencyId}`;
       if (agency) {
         customsAgency = agency;
         entregarA = [agency.name, agency.city].filter(Boolean).join("\n");

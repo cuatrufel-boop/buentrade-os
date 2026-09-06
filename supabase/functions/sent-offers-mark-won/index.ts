@@ -114,27 +114,41 @@ Deno.serve(async (req) => {
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "sales_orders", record_id: salesOrder.id, after: salesOrder });
 
-      // A quote built on the no-known-city AVERAGE fallback (quotes.html rqAverageUsFreightRate,
-      // 2026-08-30) has no single provider_rates row to attribute — us_freight_rate_id is null for
-      // it same as "Del Border" — so no US-leg freight_orders row auto-creates here. Correct: which
-      // carrier actually books this load is genuinely undecided until Real Costs picks one later,
-      // there's nothing real to pre-fill yet. us_freight_amount (the estimate) still carried on the
-      // sent_offers/purchase_orders rows regardless, via finalUsFreightAmount below.
+      // Real correction 2026-09-06: "claro que debe crear el FO por que en ese momento es donde
+      // pongo tambien el costo real" — the freight_orders row must ALWAYS exist whenever there's a
+      // real US freight leg (FOB), whether that amount came from a matched catalog rate or was
+      // typed directly into the calculator's freight box (the no-known-city AVERAGE fallback,
+      // quotes.html rqAverageUsFreightRate — us_freight_rate_id is null for it, same as "Del
+      // Border"). Previously the manual-amount case created no row at all, so the FO silently
+      // never sent and Real Costs had nothing to attach a carrier to later (it can only update an
+      // existing row, never create one). Whichever carrier actually books the load can still be
+      // TBD at this point — carrier_provider_id stays null and gets filled in via Real Costs
+      // (realCostSetCarrier) — but the row, origin/destination and quoted amount are always real
+      // from the moment the deal is won.
       let freightOrder = null;
-      if (offer.us_freight_rate_id) {
-        const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;
-        if (rate) {
-          // quoted_rate is what was actually quoted for THIS deal (finalUsFreightAmount — may
-          // have been negotiated away from the catalog's base rate.rate), not the generic lane
-          // rate; actual_rate (filled in later via Real Costs) is what the carrier really charges.
-          const [fo] = await tx`
-            insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency, currency_id, status)
-            values (${orderNumber}, ${sent_offer_id}, ${rate.provider_id}, ${rate.origin}, ${rate.destination}, ${finalUsFreightAmount ?? rate.rate}, ${rate.currency}, ${rate.currency_id}, 'open')
-            returning *
-          `;
-          freightOrder = fo;
-          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "freight_orders", record_id: fo.id, after: fo });
+      if (finalUsFreightAmount > 0) {
+        let provider_id: string | null = null, origin: string | null = offer.plant_name, destination = "Border";
+        let currency = "USD", currency_id: string | null = null;
+        if (offer.us_freight_rate_id) {
+          const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;
+          if (rate) {
+            provider_id = rate.provider_id;
+            origin = rate.origin;
+            destination = rate.destination;
+            currency = rate.currency;
+            currency_id = rate.currency_id;
+          }
         }
+        // quoted_rate is what was actually quoted for THIS deal (finalUsFreightAmount — may have
+        // been negotiated away from the catalog's base rate.rate), not the generic lane rate;
+        // actual_rate (filled in later via Real Costs) is what the carrier really charges.
+        const [fo] = await tx`
+          insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency, currency_id, status)
+          values (${orderNumber}, ${sent_offer_id}, ${provider_id}, ${origin}, ${destination}, ${finalUsFreightAmount}, ${currency}, ${currency_id}, 'open')
+          returning *
+        `;
+        freightOrder = fo;
+        await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "freight_orders", record_id: fo.id, after: fo });
       }
 
       // The Mexican leg (border → destino) — a second, separate freight_orders row on the same

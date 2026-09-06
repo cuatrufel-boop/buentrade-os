@@ -33,6 +33,19 @@ Deno.serve(async (req) => {
         where id = ${id} returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "freight_orders", record_id: id, before: existing, after: freightOrder });
+
+      // Real gap found 2026-09-06: shipments.carrier_provider_id was only ever set once, at Won
+      // time (sent-offers-mark-won's insert) — if the carrier is picked or corrected here in Real
+      // Costs afterward (the normal case for a manual/average-fallback freight leg, which starts
+      // with no carrier at all), Orders kept showing the stale original value, so the FO document
+      // row and the "WhatsApp Carrier" action never appeared even after a real carrier was booked.
+      // "carrier_provider_id" only ever appears in the update body when it's the field actually
+      // being changed (realCostSetCarrier calls this endpoint with only that one field) — gating
+      // on that, rather than always writing it, avoids overwriting shipments with a stale value
+      // from an unrelated actual_rate-only update.
+      if ("carrier_provider_id" in body && freightOrder.destination === "Border") {
+        await tx`update shipments set carrier_provider_id = ${freightOrder.carrier_provider_id} where order_number = ${freightOrder.order_number}`;
+      }
       return freightOrder;
     });
 

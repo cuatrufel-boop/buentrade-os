@@ -23,6 +23,21 @@ export interface ExtractedItem {
   delivered: boolean; // true = a stated Delivered/landed price (freight included), false = FOB/unstated
 }
 
+// Real addition, explicit ask, walking the off-spec flow end to end: a plant reply can also say
+// it does NOT produce a specific product at all — a permanent, structural fact with no price to
+// extract at all, previously invisible to this extractor entirely (its schema only ever looked
+// for name+price pairs). Deliberately a SEPARATE array from `items`, not a zero-price item —
+// mixing the two would make "price: 0" ambiguous between "really free" and "not applicable."
+//
+// Critical distinction, explicit ask: "no lo producimos" (does not produce — permanent) is NOT
+// the same as "no disponible" (not available right now — temporary, they may still make it, just
+// nothing to offer this week). Only the permanent kind belongs here; see the prompt rule below,
+// this is exactly the free-text judgment call the model is meant to make, not a keyword list.
+export interface DeclinedItem {
+  name: string; // the product/item as referred to in the text, same convention as ExtractedItem.name
+  temperature: "Fresh" | "Frozen" | "Unknown";
+}
+
 // Real fix, confirmed live: Anthropic's structured-outputs JSON Schema validator rejects a
 // nullable enum written as {"type": ["string", "null"], "enum": [..., null]} — "Unknown" as a
 // plain enum member (not null) is what actually works.
@@ -43,14 +58,26 @@ const EXTRACTION_SCHEMA = {
         additionalProperties: false,
       },
     },
+    declined_items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The product/item the plant says it does NOT produce, exactly as written in the source text." },
+          temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if stated for this item, Unknown if not." },
+        },
+        required: ["name", "temperature"],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ["items"],
+  required: ["items", "declined_items"],
   additionalProperties: false,
 };
 
 const SYSTEM_PROMPT = `You extract real product price offers from a raw meat-packing plant price-list email. This may be a clean line-per-item list, a table flattened into plain text, or ordinary prose mentioning prices mid-sentence.
 
-Rules:
+Rules for "items" (priced products):
 - Only extract lines that name a real, sellable product WITH a real price attached to it. Never extract a phone number, a fax number, an address, a date, a lead-time note ("2 weeks"), a signature block, a legal disclaimer, or a greeting/closing line as if it were a product.
 - Prices are usually written as whole-number shorthand with NO decimal point — "$98" means $0.98/lb, "220" means $2.20/lb. Convert these: divide by 100. A price that ALREADY has a decimal point (e.g. "0.95", "$1.20") is correct as written — do not divide it again.
 - A single sentence can genuinely contain several distinct product+price pairs (e.g. "Fresh COV $0.95/lb, Frozen COV $0.98/lb, Frozen Poly $0.96/lb" is three separate items, not one). Extract each one separately.
@@ -58,9 +85,15 @@ Rules:
 - A price stated with a formula instead of a number (e.g. "DPS*1.2+0.12") is not extractable — skip it, do not guess a numeric value.
 - A line that only says "Call for availability", "N/A", "Check with X", or similar with no real number is not extractable — skip it.
 - If a whole table/list has no per-item temperature stated anywhere (no Fresh/Frozen section headers, no per-item word), leave temperature null for all of them rather than guessing.
-- Never invent a product that isn't actually named in the text.`;
+- Never invent a product that isn't actually named in the text.
 
-export async function extractItemsWithLLM(bodyText: string): Promise<ExtractedItem[]> {
+Rules for "declined_items" (products this plant does NOT produce at all — a separate, permanent signal, not a price):
+- Extract a declined_item ONLY when the plant states, as a general/structural fact, that they do not produce, do not make, do not carry, or have discontinued a specific product — in whatever words they actually use (e.g. "we don't produce bone-in picnics", "that's not something we make", "no fabricamos eso", "we discontinued that item", "that's not a product we carry"). This is free-text judgment, not a fixed phrase list — recognize the same meaning however it's worded, in English or Spanish.
+- Do NOT extract a declined_item for TEMPORARY unavailability — "sold out", "nothing to offer this week", "out of stock right now", "no tenemos disponible esta semana", "we're out until next month" all mean the plant may still produce this, they just have nothing to quote right now. These are not declined_items; simply leave them out of both arrays (no price to extract either).
+- If genuinely unsure whether a statement means "we never make this" versus "we don't have it right now," do not extract it as a declined_item — when in doubt, leave it out rather than guess.
+- Never extract a declined_item for a product that already has a real price quoted elsewhere in the same email (that's a contradiction — treat the priced item as the real signal and ignore any conflicting decline language about it).`;
+
+export async function extractItemsWithLLM(bodyText: string): Promise<{ items: ExtractedItem[]; declinedItems: DeclinedItem[] }> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -83,7 +116,10 @@ export async function extractItemsWithLLM(bodyText: string): Promise<ExtractedIt
   const textBlock = (data.content || []).find((b: any) => b.type === "text");
   if (!textBlock) throw new Error(`No text content in Anthropic response: ${JSON.stringify(data)}`);
   const parsed = JSON.parse(textBlock.text);
-  return (parsed.items || []) as ExtractedItem[];
+  return {
+    items: (parsed.items || []) as ExtractedItem[],
+    declinedItems: (parsed.declined_items || []) as DeclinedItem[],
+  };
 }
 
 // A second, real shape confirmed live: Wholestone's "fresh offers" aren't text or an HTML table at

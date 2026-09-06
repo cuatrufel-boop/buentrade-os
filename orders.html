@@ -1,0 +1,1915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BuenTrade Trading OS — Orders</title>
+<link rel="manifest" href="/manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547;
+    --navy-2:#0E3D8F;
+    --blue:#1E6ADB;
+    --blue-bright:#5AAAFF;
+    --blue-light:rgba(90,170,255,.14);
+    --bg:#0A2547;
+    --card:rgba(255,255,255,.08);
+    --line:rgba(255,255,255,.18);
+    --ink:#FFFFFF;
+    --ink-soft:rgba(255,255,255,.55);
+    --red:#C4432E;
+    --green:#0F8A5F;
+    --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  input,select,textarea{background:var(--card);color:var(--ink);}
+  body{
+    margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,
+      linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
+  .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
+  .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+  .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .email-modal-box{background:rgba(255,255,255,.06);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
+  .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .email-modal-field{margin-bottom:12px;}
+  .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
+  .email-modal-field textarea{min-height:130px;resize:vertical;}
+  .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .email-modal-chip{background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
+  .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+  .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);animation:toastIn .25s ease-out;--ink:#0F1F33;--ink-soft:#64748B;}
+  .toast.error{border-left-color:var(--red);}
+  .toast-icon{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .toast.error .toast-icon{background:var(--red);}
+  .toast-icon svg{width:12px;height:12px;}
+  .toast-text{font-size:13px;color:var(--ink);line-height:1.35;}
+  .toast-text b{display:block;font-size:13px;margin-bottom:1px;}
+  @keyframes toastIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));
+    border:1px solid rgba(232,181,76,.55); border-radius:12px;
+    box-shadow:0 3px 12px -3px rgba(232,181,76,.4), inset 0 1px 0 rgba(255,255,255,.1);
+    padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:box-shadow .15s,transform .15s;
+  }
+  .stat-card:hover{box-shadow:0 6px 20px -4px rgba(232,181,76,.5), inset 0 1px 0 rgba(255,255,255,.12); transform:translateY(-1px);}
+  .stat-icon{width:38px;height:38px;border-radius:10px;background:rgba(232,181,76,.15);border:1.5px solid rgba(232,181,76,.55);color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;background:#E8B54C;box-shadow:0 0 7px 1.5px rgba(232,181,76,.8);flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .load-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px;}
+  .load-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
+  .load-product-row{display:flex;align-items:center;gap:14px;}
+  .load-product-icon{width:52px;height:52px;border-radius:10px;background:var(--blue-light);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .load-product-icon svg{width:26px;height:26px;}
+  .load-product-name{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:var(--ink);line-height:1.25;}
+  .load-product-spec{font-size:12.5px;color:var(--ink-soft);margin-top:1px;}
+  .load-route{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin:14px 0;font-size:13px;}
+  .load-route-node{display:flex;align-items:center;gap:7px;min-width:0;}
+  .load-route-node svg{width:15px;height:15px;color:var(--ink-soft);flex-shrink:0;}
+  .load-route-node .rname{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .load-route-arrow{color:var(--line);flex-shrink:0;}
+  .load-route-arrow svg{width:16px;height:16px;display:block;}
+  .stepper{display:flex;align-items:flex-start;margin:24px 4px 18px;}
+  .step{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:104px;position:relative;}
+  .step-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);transition:all .25s;flex-shrink:0;}
+  .step-icon svg{width:18px;height:18px;}
+  .step.actionable{cursor:pointer;}
+  .step.actionable .step-icon{border-color:var(--blue);color:var(--blue);}
+  .step.actionable .step-label{color:var(--blue);}
+  .step.actionable:hover .step-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
+  .step.actionable.urgent .step-icon{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  .step.actionable.urgent .step-label{color:#FF9C8A;}
+  .step.done .step-icon{background:var(--green);border-color:var(--green);color:#fff;}
+  .step.current .step-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
+  @keyframes stepPulse{0%,100%{box-shadow:0 0 0 4px var(--blue-light);}50%{box-shadow:0 0 0 7px rgba(30,106,219,.12);}}
+  .step-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:8px;text-align:center;line-height:1.3;}
+  .step.done .step-label,.step.current .step-label{color:var(--ink);}
+  .step-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;}
+  .step-line.done{background:var(--green);}
+  /* Real ask 2026-09-06: "visualmente dame algo mejor un camion moviendose" — a small truck rides
+     the road segment the load is actually crossing right now (Picked Up -> Unloading), a plain
+     dashed line otherwise. Only ever one moving truck per card, on whichever segment is current. */
+  .route-truck{position:absolute;top:-9px;left:0;width:18px;height:18px;color:var(--blue-bright);animation:truckDrive 2.2s ease-in-out infinite;}
+  .route-truck svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 3px rgba(4,12,26,.6));}
+  @keyframes truckDrive{0%{left:6%;}50%{left:88%;}100%{left:6%;}}
+  /* Real ask 2026-09-06 (follow-up): "no veo ningun camion en movimiento ni cargando ni
+     descargando" — the moving truck only ever covered the Picked Up leg; Unloading (the stage
+     the trader actually lands on most often) had zero motion. A package now visibly drops out of
+     the truck into the Unloading node itself while that stage is current — the truck has already
+     arrived and parked, so the motion belongs on the node, not the road. */
+  .unload-drop{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:15px;height:15px;color:var(--blue-bright);animation:unloadDrop 1.3s ease-in-out infinite;z-index:1;}
+  .unload-drop svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 3px rgba(4,12,26,.6));}
+  @keyframes unloadDrop{0%{top:-8px;opacity:0;}25%{opacity:1;}65%{top:16px;opacity:1;}85%{opacity:0;}100%{top:-8px;opacity:0;}}
+  .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+  .docs-panel-toggle{cursor:pointer;font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:14px;padding-top:12px;border-top:1px solid var(--line);user-select:none;}
+  .docs-panel-toggle:hover{color:var(--ink);}
+  .docs-panel{margin-top:8px;display:flex;flex-direction:column;gap:2px;}
+  .doc-row{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line);}
+  .doc-row:last-child{border-bottom:none;}
+  .doc-row-label{font-weight:600;color:var(--ink);min-width:120px;flex-shrink:0;}
+  .doc-row-link{color:var(--blue-bright);text-decoration:underline;flex-shrink:0;}
+  .doc-row-btn{padding:4px 9px !important;font-size:11px !important;flex-shrink:0;}
+  .doc-row-status{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
+  .doc-row-status.sent{color:#5FE097;}
+  .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:6px 0;}
+  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
+  .wa-btn:active{background:rgba(29,168,81,.28);}
+  .wa-btn svg{fill:currentColor;}
+  .wa-btn.outline{background:var(--card);color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
+  .wa-btn.outline:hover{background:rgba(29,168,81,.18);box-shadow:none;transform:none;}
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;border:1px solid transparent;}
+  .payment-badge.ok{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
+  .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
+  #urgentQueueBox{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN GATE (same Firebase project/login as the Trading Tool) ============ -->
+<style>
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);--ink:#0F1F33;--ink-soft:#64748B;}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-field input:focus{outline:none;border-color:#1B6FC9;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-msg.ok{background:#E3F6F4;color:#00776F;display:block;}
+  .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Trading OS</div>
+    </div>
+    <form id="formSignIn" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit">Sign In</button>
+    </form>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-note">Accounts are created from the Trading Tool. Same login works here.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+// STAGING Trading OS API — see providers.html/plants.html for the full note. Every read/write
+// goes through an Edge Function. The one deliberate exception is file Storage (order-documents
+// PDFs) — storageClient below, pointed at staging's bucket, same pattern as offers.html.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+// ============ PUSH NOTIFICATIONS (real-time actionable alerts) ============
+// Same registration as offers.html — every page that can show the urgent queue subscribes this
+// browser to push, once per login. Silently does nothing if the trader denies the permission
+// prompt or the browser has no push support — never blocks the rest of the app on this.
+const VAPID_PUBLIC_KEY = 'BF6sg1hoRI0lW7rnTtrq0OjNTpx1QXWd775B30addUWlvqkJIsBuWZaB9mG-zvsIZ9C-cCP2Penh-eUxZTAFmiI';
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+async function initPushNotifications(){
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub){
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    await callApi('push-subscribe', { actor: currentActor(), endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+  } catch (e) {
+    console.warn('Push notification setup failed (non-fatal):', e.message);
+  }
+}
+
+const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
+
+function showAuthMsg(text){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg err';
+}
+
+function doSignIn(e){
+  e.preventDefault();
+  const email = document.getElementById('siEmail').value;
+  const pass = document.getElementById('siPass').value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(!cred.user.emailVerified){
+        showAuthMsg('Please verify your email first.');
+        auth.signOut();
+      }
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+
+function logout(){ auth.signOut(); }
+
+auth.onAuthStateChanged(user => {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (user && user.emailVerified) {
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    document.getElementById('userBadge').textContent = user.email;
+    runPendingWonDocConfirm().then(() => {
+      loadStatusOrders();
+      initPushNotifications();
+      runUrgentQueueOnLogin();
+    });
+  } else {
+    gate.style.display = 'flex';
+    app.style.display = 'none';
+  }
+});
+</script>
+<!-- ============ END LOGIN GATE ============ -->
+
+<div id="appContent" style="display:none;">
+<header>
+  <div class="top-row">
+    <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Go to Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
+    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="font-size:12px;color:rgba(255,255,255,.85);font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;text-align:center;"></span>
+    </div>
+  </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Clients</a>
+    <a href="providers.html" class="nav-pill">Logistics</a>
+    <a href="plants.html" class="nav-pill">Plants</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="offers.html" class="nav-pill">Offers</a>
+    <a href="orders.html" class="nav-pill active">Orders</a>
+    <a href="collections.html" class="nav-pill">Collections</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <h1>Orders</h1>
+
+  <!-- Same persistent, always-there attention list as the urgent queue overlay below — one real
+       list of conditions (computeAttentionItems), never two copies that could drift. -->
+  <div id="needsAttentionWrap" style="display:none;margin-bottom:22px;">
+    <h3 style="font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px;">⚠ Necesita tu atención <span id="needsAttentionCount" class="payment-badge overdue" style="font-size:11px;"></span></h3>
+    <div id="needsAttentionList"></div>
+  </div>
+  <div class="stats-row" id="statusStats"></div>
+  <div id="statusCards"></div>
+  <div id="statusEmpty" class="empty" style="display:none;">No active loads right now.</div>
+</div>
+</div>
+
+<div id="toastStack" class="toast-stack"></div>
+
+<div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box">
+    <h3 id="emailModalTitle">Review before sending</h3>
+    <div class="email-modal-from" id="emailModalFrom"></div>
+    <div class="email-modal-field"><label>To</label><input type="text" id="emailModalTo" autocomplete="off" name="bt-email-to"></div>
+    <div class="email-modal-field"><label>CC (optional — add more recipients, comma-separated)</label><input type="text" id="emailModalCc" placeholder="name@example.com, name2@example.com" autocomplete="off" name="bt-email-cc"></div>
+    <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject" autocomplete="off" name="bt-email-subject"></div>
+    <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody" autocomplete="off"></textarea></div>
+    <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
+      <label>Attachments</label>
+      <div class="email-modal-attachments" id="emailModalAttachments"></div>
+    </div>
+    <div class="email-modal-actions">
+      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:#fff;color:#1DA851;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
+      <button onclick="emailModalCancel()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Real ask 2026-09-06: "cuando entre a OS me lleve a la pantalla de lo que tengo que hacer
+     urgente que este blinking... si son varias me lleve de una a otra hasta que las haga todas" —
+     a mandatory, blocking, one-at-a-time queue over every urgent item, the instant the trader logs
+     in. No dismiss-without-acting: each step's own real action button is here (WhatsApp Carrier/
+     Plant, Enviar a Aduana — same ones the in-page panel uses, see computeAttentionItems), plus an
+     explicit "Ya lo hice" the trader only clicks after actually doing it in real life — clicking it
+     is what advances to the next item, closing only once every item has been stepped through. -->
+<div id="urgentQueueOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6000;align-items:center;justify-content:center;padding:20px;">
+  <div id="urgentQueueBox" style="background:var(--card);border:2px solid var(--red);border-radius:16px;padding:32px;max-width:480px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(4,12,26,.6);">
+    <div id="urgentQueueProgress" style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;"></div>
+    <div class="order-num" id="urgentQueueOrderNum" style="font-size:15px;margin-bottom:8px;"></div>
+    <div id="urgentQueueText" style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;margin-bottom:24px;line-height:1.35;"></div>
+    <div id="urgentQueueActions" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<!-- Real ask 2026-09-05: "una pantalla como de datáfono para que firme" (Proof of Delivery) — the
+     customer signs on this screen at the moment a load is marked Delivered, and that real
+     signature gets embedded into the generated Factura (buildInvoiceDoc) as proof of receipt.
+     Same overlay/box classes as the email modal, no new container component invented. -->
+<div id="sigModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:560px;">
+    <h3>Firma de conformidad — Orden <span id="sigModalOrderNum"></span></h3>
+    <div class="email-modal-from">Pide al cliente que firme para confirmar que recibió la carga. Esto queda guardado como prueba de entrega en la factura.</div>
+    <div class="email-modal-field">
+      <label>Firma del cliente</label>
+      <canvas id="sigCanvas" width="500" height="200" style="width:100%;height:200px;border:1.5px solid var(--line);border-radius:7px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+    </div>
+    <div class="email-modal-actions" style="justify-content:space-between;">
+      <button onclick="clearSignature()" style="background:#fff;color:var(--ink-soft);border:1.5px solid var(--line);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Limpiar</button>
+      <div style="display:flex;gap:10px;">
+        <button onclick="cancelSignature()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancelar</button>
+        <button onclick="acceptSignature()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Aceptar y firmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ============ STATUS / TRACKING (load lifecycle: pickup -> unloading -> delivered -> payment) ============
+// Moved here from offers.html's old "Status" tab 2026-09-06, per the real architecture: "el trader
+// en offers ve lo que a mandado en orders ve lo que ha cerrado... con todo su proceso de punta a
+// punta." A load only exists once an offer has been Won (offers.html's markWon creates it and
+// sends PO/SO/FO immediately) — everything from here on (pickup, delivery, customs, invoice,
+// payment tracking) is this page's job. Status lives on sales_orders/shipments (one row per
+// order_number already) rather than a new table, since it's a 1:1 extension of data that's already
+// there.
+const STEP_ICONS = {
+  pending_pickup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  picked_up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="12" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v4h-2"/><circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg>',
+  unloading: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 11 12 16 17 11"/><path d="M20 20H4"/></svg>',
+  delivered: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+};
+const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
+const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
+const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+
+const LOAD_STAGES = [
+  { key: 'pending_pickup', label: 'Pending Pickup' },
+  { key: 'picked_up', label: 'Picked Up' },
+  { key: 'unloading', label: 'Unloading' },
+  { key: 'delivered', label: 'Delivered' },
+];
+
+let statusOrders = [];
+
+async function loadStatusOrders(){
+  const wrap = document.getElementById('statusCards');
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+
+  let orders;
+  try { orders = (await callApi('shipments-search', { limit: 500 })).results || []; }
+  catch (e) { wrap.innerHTML = ''; document.getElementById('statusEmpty').style.display = 'block'; document.getElementById('statusEmpty').textContent = 'Error loading: ' + e.message; return; }
+
+  // A load stops needing attention once it's delivered AND either 3+ days past its payment due
+  // date (paid or written off by then in practice) — this is a time-based cutoff to keep old
+  // closed loads from accumulating here forever, not a real "paid" flag.
+  const today = new Date();
+  const active = orders.filter(o => {
+    if (o.status !== 'delivered') return true;
+    if (!o.delivered_at) return true;
+    const daysSinceDelivery = (today - new Date(o.delivered_at)) / 86400000;
+    const payDays = 30; // shown badge already accounts for the real payment_due_date; this is just the list cutoff
+    return daysSinceDelivery < payDays + 3;
+  });
+
+  // shipments-search already joins everything (carrier, customer contact, catalog product,
+  // freight origin) — just reshape field names to what renderStatusOrders/advanceLoadStatus
+  // already expect.
+  statusOrders = active.map(o => ({
+    ...o,
+    load_status: o.status,
+    freight: o.freight_origin ? { origin: o.freight_origin } : null,
+    carrier: o.carrier_provider_id ? { phone: o.carrier_phone, name: o.carrier_name } : null,
+    plant: { whatsapp: o.plant_whatsapp, phone: o.plant_phone, email: o.plant_email },
+    customer: { contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, email: o.customer_email, email_cc: o.customer_email_cc, payment_days: o.customer_payment_days },
+    catalogProduct: o.product_id ? { name: o.catalog_product_name, name_en: o.catalog_product_name_en, photo_url: o.catalog_product_photo_url } : null,
+  }));
+
+  renderStatusOrders();
+}
+
+function paymentBadge(order){
+  if (!order.payment_due_date) return '';
+  const due = new Date(order.payment_due_date + 'T00:00:00');
+  const today = new Date();
+  const daysLeft = Math.ceil((due - today) / 86400000);
+  let cls = 'ok', text = `Payment due ${fmtDateStr(order.payment_due_date)}`;
+  if (daysLeft < 0){ cls = 'overdue'; text = `Payment overdue ${Math.abs(daysLeft)}d`; }
+  else if (daysLeft <= 3){ cls = 'due-soon'; text = `Payment due in ${daysLeft}d`; }
+  return `<span class="payment-badge ${cls}">${text}</span>`;
+}
+
+// The one fixed rule this whole business runs on, confirmed by the user 2026-09-05: every load
+// crosses in exactly 2 calendar days, no exceptions — 3 border crossings (San Diego/McAllen/
+// Laredo). Ship date + 2 calendar days, weekend rolls to Monday.
+function computeBorderArrivalDate(fromDateStr){
+  if (!fromDateStr) return null;
+  const d = new Date(fromDateStr + 'T00:00:00');
+  d.setDate(d.getDate() + 2);
+  const dow = d.getDay(); // 0 = Sunday, 6 = Saturday
+  if (dow === 6) d.setDate(d.getDate() + 2);
+  else if (dow === 0) d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function pickupReadinessBadge(o){
+  const stage = o.load_status || 'pending_pickup';
+  if (stage === 'pending_pickup'){
+    if (!o.pickup_date) return '';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const pickup = new Date(o.pickup_date + 'T00:00:00');
+    const daysUntil = Math.round((pickup - today) / 86400000);
+    const missingDocs = [];
+    if (!o.po_sent_at) missingDocs.push('PO');
+    if (o.carrier_provider_id && !o.fo_sent_at) missingDocs.push('FO');
+    if (!o.customs_sent_at) missingDocs.push('Customs');
+    if (daysUntil < 0) return `<span class="payment-badge overdue">⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)}</span>`;
+    if (missingDocs.length) return `<span class="payment-badge overdue">⚠ Pickup ${daysUntil === 0 ? 'today' : 'in ' + daysUntil + 'd'} — ${missingDocs.join('/')} not sent</span>`;
+    return `<span class="payment-badge ok">Pickup ${daysUntil === 0 ? 'today' : fmtDateStr(o.pickup_date)}</span>`;
+  }
+  if (stage === 'picked_up' || stage === 'unloading'){
+    const fromDate = o.picked_up_at ? o.picked_up_at.slice(0, 10) : o.pickup_date;
+    const expected = computeBorderArrivalDate(fromDate);
+    if (!expected) return '';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (new Date(expected + 'T00:00:00') < today) return `<span class="payment-badge overdue">⚠ Should have reached the border by ${fmtDateStr(expected)}</span>`;
+    return `<span class="payment-badge ok">Expected at border: ${fmtDateStr(expected)}</span>`;
+  }
+  return '';
+}
+
+function renderStatusStats(){
+  const inTransit = statusOrders.filter(o => o.load_status !== 'delivered').length;
+  const uniqueCustomers = new Set(statusOrders.map(o => o.customer_name)).size;
+  const today = new Date();
+  const overdue = statusOrders.filter(o => o.payment_due_date && new Date(o.payment_due_date + 'T00:00:00') < today).length;
+  const deliveredRecent = statusOrders.filter(o => o.load_status === 'delivered').length;
+  const stats = [
+    { accent: '#5AAAFF', accentSoft: 'rgba(90,170,255,.4)', value: String(inTransit), label: 'Loads in transit', hero: true,
+      icon: '<rect x="1" y="7" width="15" height="10" rx="1"/><path d="M16 10h3.5L22 14v3h-6z"/><circle cx="6" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/>' },
+    { accent: '#5AAAFF', accentSoft: 'rgba(90,170,255,.4)', value: String(uniqueCustomers), label: 'Customers active',
+      icon: '<path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="3.5"/><path d="M21 20v-1a4 4 0 0 0-3-3.87"/><path d="M15.5 3.6a3.5 3.5 0 0 1 0 6.8"/>' },
+    { accent: '#FF9C8A', accentSoft: 'rgba(196,67,46,.4)', value: String(overdue), label: 'Payments overdue',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>' },
+    { accent: '#5FE097', accentSoft: 'rgba(95,224,151,.4)', value: String(deliveredRecent), label: 'Delivered',
+      icon: '<path d="M20 6 9 17l-5-5"/>' },
+  ];
+  document.getElementById('statusStats').innerHTML = stats.map(s => `
+    <div class="stat-card${s.hero ? ' hero' : ''}" style="--stat-accent:${s.accent};--stat-accent-soft:${s.accentSoft};">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
+      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
+    </div>`).join('');
+}
+
+// Real ask 2026-09-06: "yo debo ver en el sistema de OS que es lo que me esta notificando y cual
+// es la accion que me pide" — always visible on this page, not only as a push notification that
+// fires once and is gone. Shared by the in-page panel AND the blocking urgent-queue overlay below —
+// one real list of conditions, never two copies that could drift. Mirrors
+// supabase/functions/shipment-alerts-poll/index.ts's server-side logic exactly.
+function computeAttentionItems(){
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const items = [];
+
+  statusOrders.forEach(o => {
+    const stage = o.load_status || 'pending_pickup';
+    const plantName = o.plant_name || 'plant';
+    const productName = o.product_name || '';
+    const label = `${o.order_number} — ${plantName}`;
+    const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
+    const plantEmail = o.plant ? (o.plant.email || '') : '';
+    const plantContact = o.plant ? (o.plant.whatsapp || o.plant.phone || '') : '';
+
+    function pickupBtns(message, subject){
+      const btns = [];
+      if (plantEmail) btns.push(`<button class="wa-btn outline" onclick="gmailComposeOpen('${escapeHtml(plantEmail)}','${escapeHtml(subject)}','${escapeHtml(message)}')">✉️ Email Plant</button>`);
+      if (carrierPhone) btns.push(`<button class="wa-btn outline" onclick="askFleteroWhatsApp('${o.order_number}')">💬 WhatsApp Carrier</button>`);
+      else if (plantContact) btns.push(`<button class="wa-btn outline" onclick="askPlantWhatsApp('${o.order_number}')">💬 WhatsApp Plant</button>`);
+      return btns.join('');
+    }
+
+    if (stage === 'pending_pickup' && o.pickup_date){
+      const pickup = new Date(o.pickup_date + 'T00:00:00');
+      const daysUntil = Math.round((pickup - today) / 86400000);
+      if (daysUntil < 0){
+        items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)} — ${productName}`,
+          btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. This load is past its pickup date, please advise.`, `${o.order_number} — Missed pickup`) });
+      } else if (daysUntil === 1){
+        const carrierName = o.carrier && o.carrier.name ? ` con ${o.carrier.name}` : '';
+        items.push({ orderNumber: label, order_number: o.order_number, text: `Pickup mañana (${fmtDateStr(o.pickup_date)})${carrierName} — confirma que todo está listo — ${productName}`,
+          btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `${o.order_number} — Pickup tomorrow`) });
+      }
+    }
+    // Real correction 2026-09-06: pay-the-plant and ask-for-release# are TWO separate steps, not
+    // one message that asks the plant to self-report payment. 1) BuenTrade pays, trader confirms
+    // it in-system (sends a real payment-confirmation email to the plant); 2) only once paid does
+    // a separate item ask for the release number — "el pago habilita a buentrade a pedir el
+    // release number." Timing (1 day after won) is still provisional, per the user ("te confirmo").
+    const PLANT_PAYMENT_REMINDER_DAYS_AFTER_WON = 1;
+    if (stage === 'pending_pickup' && o.created_at && !o.plant_paid_at){
+      const daysSinceWon = (Date.now() - new Date(o.created_at).getTime()) / 86400000;
+      if (daysSinceWon >= PLANT_PAYMENT_REMINDER_DAYS_AFTER_WON){
+        items.push({ orderNumber: label, order_number: o.order_number, text: `Paga a la planta — ${productName}`,
+          btn: `<button class="wa-btn" onclick="confirmPlantPaymentSent('${o.order_number}')">Confirmar pago enviado</button>` });
+      }
+    }
+    if (stage === 'pending_pickup' && o.plant_paid_at){
+      items.push({ orderNumber: label, order_number: o.order_number, text: `Pide el Release Number al transportista — ${productName}`,
+        btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. We've confirmed payment — please provide the release number for the carrier's pickup.`, `${o.order_number} — Release number`) });
+    }
+    if (stage === 'picked_up' && !(o.pending_pickup_documents && o.pending_pickup_documents.length)){
+      const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
+      items.push({ orderNumber: label, order_number: o.order_number, text: `Request pickup documents (${docsLine}) — ${productName}`,
+        btn: pickupBtns(`Hi, for order ${o.order_number} — ${productName}, please send us: ${docsLine}. Thank you.`, `${o.order_number} — Pickup documents needed`) });
+    }
+    if (stage === 'picked_up' || stage === 'unloading'){
+      const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
+      const expected = fromDate ? computeBorderArrivalDate(fromDate) : null;
+      if (expected && new Date(expected + 'T00:00:00') < today) items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Debería haber llegado a la frontera el ${fmtDateStr(expected)} — ${productName}`, btn: '' });
+    }
+    if (o.pending_pickup_documents && o.pending_pickup_documents.length){
+      items.push({ orderNumber: label, order_number: o.order_number, text: `📎 ${o.pending_pickup_documents.length} documento(s) recibido(s), listos para aduana — ${productName}`, btn: `<button class="wa-btn" onclick="shareCustoms('${o.order_number}')">Enviar a Aduana</button>` });
+    }
+  });
+  return items;
+}
+
+// Real ask 2026-09-06: "que cuando entre a OS me lleve a la pantalla de lo que tengo que hacer
+// urgente... si son varias me lleve de una a otra hasta que las haga todas." Runs once right after
+// login (see auth.onAuthStateChanged), blocking, one item at a time — "Ya lo hice" is the only way
+// through, and it only ever appears after the trader has actually clicked the real action button
+// for that item (WhatsApp/Enviar a Aduana), so there's no way to click through without having done
+// something first.
+let urgentQueue = [];
+let urgentQueueIndex = 0;
+let urgentQueueActionTaken = false;
+
+// Real correction 2026-09-06: "necesito que la notificacion SIEMPRE me lleve a una accion...
+// una pantalla que solo me deje hacer esa accion antes de todo" — a push/email notification used
+// to only link to the bare app (or, worse, a raw external Gmail/WhatsApp compose link that
+// bypassed the app entirely — no forced screen, nothing tracked). Every notification now deep-links
+// to /orders.html?focus=<order_number>: this queue already blocks on login with one item at a time
+// ("Ya lo hice" only appears after the real action button is clicked) — ?focus just moves that
+// specific order's item(s) to the FRONT of the queue, so the trader lands directly on the thing the
+// notification was about, then falls through into whatever else is still outstanding — "una me
+// lleva a otra." If the alert already resolved by the time they click (someone else handled it, or
+// it was a duplicate), there's simply nothing to prioritize and the normal queue runs as-is.
+function getFocusOrderNumber(){
+  return new URLSearchParams(location.search).get('focus');
+}
+async function runUrgentQueueOnLogin(){
+  await loadStatusOrders();
+  urgentQueue = computeAttentionItems();
+  const focus = getFocusOrderNumber();
+  if (focus) urgentQueue = [...urgentQueue.filter(it => it.order_number === focus), ...urgentQueue.filter(it => it.order_number !== focus)];
+  urgentQueueIndex = 0;
+  if (urgentQueue.length) showUrgentQueueStep();
+}
+function showUrgentQueueStep(){
+  const it = urgentQueue[urgentQueueIndex];
+  urgentQueueActionTaken = !it.btn; // an item with no real action (e.g. border-overdue, informational) doesn't need one before advancing
+  document.getElementById('urgentQueueProgress').textContent = `${urgentQueueIndex + 1} de ${urgentQueue.length} — Necesita tu atención`;
+  document.getElementById('urgentQueueOrderNum').textContent = it.orderNumber;
+  document.getElementById('urgentQueueText').textContent = it.text;
+  const wrappedBtn = it.btn.replace('onclick="', 'onclick="urgentQueueActionTaken=true;');
+  document.getElementById('urgentQueueActions').innerHTML = wrappedBtn +
+    `<button class="wa-btn" onclick="urgentQueueAdvance()">✓ Ya lo hice</button>`;
+  document.getElementById('urgentQueueOverlay').style.display = 'flex';
+}
+function urgentQueueAdvance(){
+  if (!urgentQueueActionTaken){ alert('Primero da click en la acción de arriba (WhatsApp / Enviar a Aduana) antes de marcarlo como hecho.'); return; }
+  urgentQueueIndex++;
+  if (urgentQueueIndex >= urgentQueue.length){
+    document.getElementById('urgentQueueOverlay').style.display = 'none';
+    return;
+  }
+  showUrgentQueueStep();
+}
+
+function renderNeedsAttention(){
+  const wrap = document.getElementById('needsAttentionWrap');
+  const list = document.getElementById('needsAttentionList');
+  const countEl = document.getElementById('needsAttentionCount');
+  const items = computeAttentionItems();
+
+  if (!items.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  countEl.textContent = items.length;
+  list.innerHTML = items.map(it => `
+    <div class="load-card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div><span class="order-num">${escapeHtml(it.orderNumber)}</span> — ${escapeHtml(it.text)}</div>
+      ${it.btn}
+    </div>`).join('');
+}
+
+// ============ DOCUMENTS PANEL (real ask 2026-09-06: "tengo que tener un sitio fisico donde se
+// guarden los docs de esa venta") ============
+// PO/SO/FO/Factura filenames are deterministic EXCEPT FO, which gets a "-{id}" suffix once an
+// order has more than one freight leg (see buildFODocs) — so this checks what actually exists in
+// Storage rather than guessing a filename, never risking a dead link. One real list() call per
+// order, only made the first time its panel is opened (not on every render), then cached.
+const docsOpenOverride = new Set();
+const orderDocsFileCache = new Map(); // order_number -> [{name, url}]
+
+async function toggleOrderDocs(orderNumber){
+  if (docsOpenOverride.has(orderNumber)){
+    docsOpenOverride.delete(orderNumber);
+    renderStatusOrders();
+    return;
+  }
+  docsOpenOverride.add(orderNumber);
+  if (!orderDocsFileCache.has(orderNumber)){
+    // Real bug found live 2026-09-06: Storage's `search` option matches by PREFIX, not substring —
+    // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
+    // the start of the filename). One list() call per real filename prefix instead.
+    try {
+      const prefixes = ['PO-', 'SO-', 'FO-', 'Factura-'].map(p => `${p}${orderNumber}`);
+      const results = await Promise.all(prefixes.map(prefix =>
+        storageClient.storage.from('order-documents').list('', { search: prefix })
+      ));
+      const files = [];
+      results.forEach(({ data, error }) => {
+        if (error) { console.warn('Could not list documents:', error.message); return; }
+        (data || []).forEach(f => files.push({
+          name: f.name,
+          url: storageClient.storage.from('order-documents').getPublicUrl(f.name).data.publicUrl,
+        }));
+      });
+      orderDocsFileCache.set(orderNumber, files);
+    } catch (e) {
+      console.warn('Could not list documents for', orderNumber, e.message);
+      orderDocsFileCache.set(orderNumber, []);
+    }
+  }
+  renderStatusOrders();
+}
+
+function renderTradeDocRow(label, sentAt, matchedFiles, actionsHtml, actionsWhenMissing){
+  if (!matchedFiles.length) return `<div class="doc-row"><span class="doc-row-label">${label}</span>${actionsWhenMissing || ''}<span class="doc-row-status">No generado</span></div>`;
+  const links = matchedFiles.map(f => `<a href="${f.url}" target="_blank" rel="noopener" class="doc-row-link">Ver</a>`).join(' ');
+  const when = sentAt ? new Date(sentAt).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+  return `<div class="doc-row"><span class="doc-row-label">${label}</span>${links}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Enviado ' + when : 'Generado, no enviado'}</span></div>`;
+}
+
+// Real ask 2026-09-06: "si no se manda pero queda guardado debo poder entrar y darme la
+// posibilidad de compartir por whatsapp o por correo a sus destinatarios" — every generated
+// document (sent already or not) gets its own Email/WhatsApp actions right in this row, reusing
+// the exact same send functions Offers already uses, same preview-before-send modal.
+function renderOrderDocsPanel(o){
+  const isOpen = docsOpenOverride.has(o.order_number);
+  const arrow = isOpen ? '▲' : '▼';
+  let body = '';
+  if (isOpen){
+    const files = orderDocsFileCache.get(o.order_number) || [];
+    const findFiles = prefix => files.filter(f => f.name.startsWith(prefix));
+    const pickupDocs = o.pickup_documents || [];
+    const docRowBtn = (label, onclick) => `<button class="wa-btn outline doc-row-btn" onclick="${onclick}">${label}</button>`;
+    const poFiles = findFiles(`PO-${o.order_number}`);
+    const soFiles = findFiles(`SO-${o.order_number}`);
+    const foFiles = findFiles(`FO-${o.order_number}`);
+    const invoiceFiles = findFiles(`Factura-${o.order_number}`);
+    const poActions = docRowBtn('✉️ Email', `sharePO('${o.order_number}')`) + docRowBtn('💬 WhatsApp', `waCardPO('${o.order_number}')`);
+    const soActions = docRowBtn('✉️ Email', `shareSO('${o.order_number}')`) + docRowBtn('💬 WhatsApp', `waCardSO('${o.order_number}')`);
+    const foActions = docRowBtn('✉️ Email', `shareFO('${o.order_number}')`) + docRowBtn('💬 WhatsApp', `waCardFO('${o.order_number}')`);
+    const invoiceActions = invoiceFiles.length
+      ? docRowBtn('✉️ Email', `resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
+      : '';
+    body = `<div class="docs-panel">
+      ${renderTradeDocRow('PO (Planta)', o.po_sent_at, poFiles, poActions, poActions)}
+      ${renderTradeDocRow('SO (Cliente)', o.so_sent_at, soFiles, soActions, soActions)}
+      ${o.carrier_provider_id ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
+      ${renderTradeDocRow('Factura', o.invoice_sent_at, invoiceFiles, invoiceActions)}
+      ${pickupDocs.length
+        ? pickupDocs.map(d => `<div class="doc-row"><span class="doc-row-label">${escapeHtml(d.filename)}</span><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-link">Ver</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Enviado a aduana' : 'Recibido, pendiente de aduana'}</span></div>`).join('')
+        : '<div class="doc-row-empty">Sin documentos de recogida todavía.</div>'}
+    </div>`;
+  }
+  return `<div class="docs-panel-toggle" onclick="toggleOrderDocs('${o.order_number}')">📄 Documentos ${arrow}</div>${body}`;
+}
+
+function renderStatusOrders(){
+  renderNeedsAttention();
+  renderStatusStats();
+  const wrap = document.getElementById('statusCards');
+  const emptyEl = document.getElementById('statusEmpty');
+  if (!statusOrders.length){
+    wrap.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  // Real correction 2026-09-06: "el blinking no es que se paso el tiempo es que debe blink si
+  // necesita mi accion para prevenir... tienes todo el flujo" — blinking is driven by the SAME
+  // computeAttentionItems() engine already used by the "Necesita tu atención" panel and the urgent
+  // queue, not a second, separately-invented time rule. If an order has any pending attention item
+  // (pickup tomorrow, missed pickup, pay+release#, docs needed, docs ready for customs), its next
+  // actionable stepper icon blinks — regardless of which specific condition triggered it.
+  const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
+
+  wrap.innerHTML = statusOrders.map(o => {
+    const stage = o.load_status || 'pending_pickup';
+    const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
+    const stepsHtml = LOAD_STAGES.map((s, i) => {
+      const cls = i < stageIdx ? 'done' : (i === stageIdx ? 'current' : '');
+      // The truck only actually drives on the leg between Picked Up and Unloading — before that
+      // nothing's picked up yet, after that it has already arrived and is stationary being
+      // unloaded, so this is the one segment that's really "in transit."
+      const isMoving = i === stageIdx && s.key === 'picked_up';
+      const truckHtml = isMoving ? `<div class="route-truck">${STEP_ICONS.picked_up}</div>` : '';
+      const line = i < LOAD_STAGES.length - 1 ? `<div class="step-line ${i < stageIdx ? 'done' : ''}">${truckHtml}</div>` : '';
+      // The truck has already arrived once we're on Unloading — the motion moves off the road and
+      // onto the node itself: a package drops out of the truck into place.
+      const isUnloading = i === stageIdx && s.key === 'unloading';
+      const unloadHtml = isUnloading ? `<div class="unload-drop">${STEP_ICONS.pending_pickup}</div>` : '';
+      // Real ask 2026-09-06: "estos deben ser botones de acciones" — the next pending stage on the
+      // stepper IS the action, replacing the separate text button that used to sit below the card.
+      // Only the immediate next stage is clickable (same one-step-forward behavior as before, just
+      // relocated onto the stepper itself) — done/current stages stay purely informational.
+      const isNext = i === stageIdx + 1;
+      const isUrgent = isNext && attentionOrderNumbers.has(o.order_number);
+      const onclickAttr = isNext
+        ? (s.key === 'delivered' ? ` onclick="markDeliveredWithSignature('${o.order_number}')"` : ` onclick="advanceLoadStatus('${o.order_number}','${s.key}')"`)
+        : '';
+      // Real bug found live: the 38px circle alone was too small a click target — "nothing"
+      // happened because clicks near the label text below it missed the handler entirely. The
+      // whole column (icon + label) is now the click target, not just the circle.
+      const actionableClass = isNext ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
+      return `<div class="step ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="step-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="step-label">${s.label}</div></div>${line}`;
+    }).join('');
+
+    const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
+    const plantContact = o.plant ? (o.plant.whatsapp || o.plant.phone || '') : '';
+    let checkInBtn = '';
+    if (stage !== 'delivered'){
+      if (carrierPhone) checkInBtn = `<button class="wa-btn outline" onclick="askFleteroWhatsApp('${o.order_number}')">💬 WhatsApp Carrier</button>`;
+      else if (plantContact) checkInBtn = `<button class="wa-btn outline" onclick="askPlantWhatsApp('${o.order_number}')">💬 WhatsApp Plant</button>`;
+    }
+
+    const pendingDocs = o.pending_pickup_documents || [];
+    const pickupDocsBtn = pendingDocs.length
+      ? `<button class="wa-btn outline" onclick="shareCustoms('${o.order_number}')">📎 ${pendingDocs.length} doc${pendingDocs.length === 1 ? '' : 's'} — Enviar a Aduana</button>`
+      : '';
+
+    const cp = o.catalogProduct;
+    const productName = cp ? (cp.name_en || cp.name) : o.product_name;
+    const productIconHtml = (cp && cp.photo_url)
+      ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
+      : PRODUCT_PLACEHOLDER_ICON;
+
+    return `<div class="load-card">
+      <div class="load-card-top">
+        <div class="load-product-row">
+          <div class="load-product-icon">${productIconHtml}</div>
+          <div>
+            <div class="load-product-name">${escapeHtml(productName)}</div>
+            <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="order-num">${escapeHtml(o.order_number)}</span>
+          ${pickupReadinessBadge(o)}
+          ${paymentBadge(o)}
+        </div>
+      </div>
+      <div class="load-route">
+        <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
+        <div class="load-route-arrow">${ARROW_ICON}</div>
+        <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
+      </div>
+      <div class="stepper">${stepsHtml}</div>
+      <div class="load-actions">${checkInBtn}${pickupDocsBtn}</div>
+      ${renderOrderDocsPanel(o)}
+    </div>`;
+  }).join('');
+}
+
+function findStatusOrder(orderNumber){
+  return statusOrders.find(o => o.order_number === orderNumber);
+}
+
+function askFleteroWhatsApp(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.carrier) return;
+  const phone = (o.carrier.phone || '').replace(/\D/g, '');
+  if (!phone) { alert('This carrier has no phone on file.'); return; }
+  const msg = `Hi, following up on order ${o.order_number} — ${o.product_name}, picking up from ${o.freight && o.freight.origin ? o.freight.origin : 'origin'}. Can you confirm pickup status?`;
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// DAP/self-delivered counterpart to askFleteroWhatsApp — no carrier ever gets booked for these
+// loads, the plant IS the one driving it, so they're the only ones who can say where it is.
+function askPlantWhatsApp(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.plant) return;
+  const phone = (o.plant.whatsapp || o.plant.phone || '').replace(/\D/g, '');
+  if (!phone) { alert('This plant has no phone on file.'); return; }
+  const msg = `Hola, seguimiento de la orden ${o.order_number} — ${o.product_name}. ¿Nos confirman el estatus de la carga?`;
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+const STAGE_MESSAGES_ES = {
+  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${o.product_name} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡gracias por tu confianza!`,
+  unloading: (o, contact) => `Hola ${contact}! 📦 Tu carga de ${o.product_name} está llegando y en proceso de descarga. Te aviso apenas quede entregada.`,
+  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga de ${o.product_name} fue entregada. Espero la recibas en perfectas condiciones — cualquier cosa estoy atento.`,
+};
+const STAGE_SUBJECTS_ES = {
+  picked_up: o => `${o.order_number} — Tu carga va en camino`,
+  unloading: o => `${o.order_number} — Tu carga está por entregar`,
+  delivered: o => `${o.order_number} — Tu carga fue entregada`,
+};
+
+async function advanceLoadStatus(orderNumber, newStatus, notes){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+
+  try { await callApi('shipments-update-status', { actor: currentActor(), shipment_id: o.id, status: newStatus, notes: notes || null }); }
+  catch (e) { alert('Error updating status: ' + e.message); return; }
+
+  const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
+  const phone = ((o.customer && (o.customer.whatsapp || o.customer.phone)) || '').replace(/\D/g, '');
+  const msgFn = STAGE_MESSAGES_ES[newStatus];
+  const subjFn = STAGE_SUBJECTS_ES[newStatus];
+  const emails = o.customer ? collectEmails(o.customer) : [];
+  if (phone && msgFn){
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msgFn(o, contact)), '_blank');
+  } else if (msgFn){
+    alert('Status updated, but this customer has no WhatsApp/phone on file — WhatsApp not sent.');
+  }
+  if (emails.length && msgFn && subjFn){
+    window.open(gmailComposeUrl(emails, subjFn(o), msgFn(o, contact)), '_blank');
+  } else if (msgFn){
+    alert('Status updated, but this customer has no email on file — email not sent.');
+  }
+
+  await loadStatusOrders();
+}
+
+// Real correction 2026-09-06: "despues del pago de la carga el sistema debe enviar un email a un
+// contacto de pagos de la planta con la confirmacion de pago... el pago habilita a buentrade a
+// pedir el release number" — the trader pays the plant outside the system, then confirms it here,
+// which sends a real payment-confirmation email to the plant (same preview-before-send modal as
+// every other document — "nada se manda sin que el trader vea") and unlocks the separate
+// release-number ask in computeAttentionItems. No dedicated "plant payments contact" field exists
+// yet — using the plant's general email until the user gives us a distinct one.
+async function confirmPlantPaymentSent(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const emails = o.plant ? collectEmails(o.plant) : [];
+  if (!emails.length){ alert('This plant has no email on file — cannot send a payment confirmation.'); return; }
+  const subject = `${orderNumber} — Payment confirmation`;
+  const body = `Hi,\n\nThis confirms payment has been sent for order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the release number so our carrier can pick up the load.\n\nThank you.`;
+  const waPhone = o.plant && (o.plant.whatsapp || o.plant.phone);
+  try {
+    await sendEmailApi('purchasing', emails, subject, body, [], { phone: waPhone, message: `Orden ${orderNumber} — confirmamos el pago, favor compartir el release number.` });
+  } catch (e) {
+    if (e.cancelled) return;
+    alert('No se pudo enviar la confirmación de pago: ' + e.message);
+    return;
+  }
+  try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
+  catch (e) { alert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
+  showToast('Pago confirmado', 'Se avisó a la planta — ya puedes pedir el release number.');
+  await loadStatusOrders();
+}
+
+// ============ DELIVERY SIGNATURE (Proof of Delivery) ============
+// Real ask 2026-09-05: "en otra empresa mandábamos un email y nunca lo confirmaba... lo mejor es
+// una pantalla como de datáfono para que firme." Pointer Events unify mouse + touch/stylus in one
+// listener set.
+let sigCtx = null, sigDrawing = false, sigHasStroke = false, sigModalResolve = null;
+
+function initSignatureCanvasOnce(){
+  if (sigCtx) return;
+  const canvas = document.getElementById('sigCanvas');
+  sigCtx = canvas.getContext('2d');
+  sigCtx.strokeStyle = '#0A2547';
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  const posFromEvent = e => {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+  };
+  canvas.addEventListener('pointerdown', e => {
+    sigDrawing = true; sigHasStroke = true;
+    const p = posFromEvent(e);
+    sigCtx.beginPath();
+    sigCtx.moveTo(p.x, p.y);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!sigDrawing) return;
+    const p = posFromEvent(e);
+    sigCtx.lineTo(p.x, p.y);
+    sigCtx.stroke();
+  });
+  window.addEventListener('pointerup', () => { sigDrawing = false; });
+}
+function clearSignature(){
+  const canvas = document.getElementById('sigCanvas');
+  if (sigCtx) sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  sigHasStroke = false;
+}
+function openSignatureModal(orderNumber){
+  initSignatureCanvasOnce();
+  document.getElementById('sigModalOrderNum').textContent = orderNumber;
+  clearSignature();
+  document.getElementById('sigModalOverlay').style.display = 'flex';
+  return new Promise(resolve => { sigModalResolve = resolve; });
+}
+function cancelSignature(){
+  document.getElementById('sigModalOverlay').style.display = 'none';
+  if (sigModalResolve) sigModalResolve(null);
+  sigModalResolve = null;
+}
+function acceptSignature(){
+  if (!sigHasStroke){ alert('Por favor, pide al cliente que firme antes de continuar.'); return; }
+  const dataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
+  document.getElementById('sigModalOverlay').style.display = 'none';
+  if (sigModalResolve) sigModalResolve(dataUrl);
+  sigModalResolve = null;
+}
+
+// Replaces a direct advanceLoadStatus(...,'delivered') call on "Mark Delivered" — "debe generar
+// factura, la firma es aceptando factura." No signature, no delivery: cancelling the pad leaves
+// the load exactly where it was, nothing is marked delivered without it.
+async function markDeliveredWithSignature(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const contact = (o.customer && o.customer.contact_name) || o.customer_name || 'Cliente';
+
+  // Real ask 2026-09-06: "invoice va con ajustados de aduana cuando recibe la carga numeros
+  // reales" — the pedimento's real weight, never PO/SO (those never change). Cancelling this (or
+  // leaving it blank) aborts the whole delivery step, same as cancelling the signature.
+  const realWeightInput = prompt(`Peso real según el pedimento de aduana (lbs) para la orden ${orderNumber}:\n\nEste es el número que va en la factura — deja en blanco solo si aún no tienes el pedimento.`, '');
+  if (realWeightInput === null) return;
+  const realWeight = realWeightInput.trim() ? Number(realWeightInput.trim()) : null;
+  if (realWeightInput.trim() && (!realWeight || realWeight <= 0)){ alert('Peso inválido.'); return; }
+
+  const signatureDataUrl = await openSignatureModal(orderNumber);
+  if (!signatureDataUrl) return;
+
+  let built, invoiceUrl;
+  const filename = `Factura-${orderNumber}.pdf`;
+  try {
+    built = await buildInvoiceDoc(orderNumber, signatureDataUrl, contact, realWeight);
+    invoiceUrl = await uploadOrderPdf(built.doc, filename);
+  } catch (e) {
+    alert('Error generando la factura firmada: ' + e.message);
+    return;
+  }
+
+  // Real gap found live 2026-09-06 ("esa firma me salio... como se manda") — the signed invoice
+  // used to just sit in Storage with no send step at all. Same preview-before-send pattern as
+  // PO/SO/FO: the trader still reviews/confirms before it actually goes out. Best-effort, like
+  // every other document send here — a failed/cancelled send never blocks the delivery itself from
+  // being recorded, since the signature is the real proof of delivery, independent of email.
+  const emails = collectEmails(built.customer);
+  if (emails.length){
+    const subject = `${orderNumber} — Factura`;
+    const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber}, firmada de conformidad al momento de la entrega.\n\nGracias por su preferencia.`;
+    const waPhone = built.customer && (built.customer.whatsapp || built.customer.phone);
+    try {
+      await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhone, message: `Orden ${orderNumber} — te mando la factura firmada.` });
+      showToast('Factura enviada', emails.join(', '));
+      markDocSent(orderNumber, 'invoice');
+    } catch (e) {
+      if (!e.cancelled) showToast('No se pudo enviar la factura automáticamente', e.message, true);
+    }
+  } else {
+    showToast('Factura generada sin enviar', 'Este cliente no tiene correo en archivo.', true);
+  }
+
+  await advanceLoadStatus(orderNumber, 'delivered', `Factura firmada (prueba de entrega): ${invoiceUrl}`);
+}
+
+// ============ DOCUMENT ENGINE (subset needed here: Invoice + Customs forwarding) ============
+// Same functions as offers.html's PO/SO/FO engine — duplicated, not shared, since this is a static
+// multi-page app with no bundler (every page here is already fully self-contained). Only the pieces
+// Orders actually calls are included: the Invoice builder (buildInvoiceDoc, issued at delivery) and
+// the email/toast infrastructure shareCustoms and the invoice flow both depend on.
+const COMPANY = {
+  name1: 'Buen', name2: 'Trade',
+  legalName: 'BuenTrade LLC',
+  address: '1525 N Park Dr, Suite 104, Weston, FL 33326',
+  phone: '+34 666 318 864',
+};
+const CONTACT_EMAIL_PO = 'purchasing@buentradegroup.com';
+const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
+const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
+const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
+const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
+const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
+const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
+const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
+// Real BuenTrade wire details, provided by the user 2026-09-05 — never invent banking information.
+const BUENTRADE_WIRE = {
+  bankName: 'Grove Bank & Trust',
+  bankAddress: '2701 South Bayshore Drive, Miami, FL 33133',
+  aba: '066004600',
+  accountNumber: '8000012824',
+  accountTitle: 'Buentrade LLC',
+  accountAddress: '1525 N Park Dr Suite 104, Weston, FL 33326, USA',
+};
+// Real correction 2026-09-06: "terminos en ingles" — kept in Spanish before, inconsistent with
+// PO_TERMS/FO_TERMS (both already English). The rest of the Invoice's labels stay Spanish
+// (customer-facing, same as the SO), only the binding legal terms text changes language.
+const INVOICE_TERMS = "This Invoice is issued by BuenTrade LLC. By signing in acknowledgment, the Customer confirms receipt of the merchandise described under the terms stated herein and accepts the outstanding balance and payment due date. The product is delivered as described, subject to standard industry tolerances in weight and count. Any discrepancy must be reported to BuenTrade LLC in writing within 24 hours of signing this invoice.";
+
+function fmtDateStr(d){
+  if (!d) return '';
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+}
+function fmtDatesList(arr){
+  return (arr || []).map(fmtDateStr).join(', ') || 'TBD';
+}
+function todayStr(){
+  return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+}
+
+function pdfDoc(){
+  const { jsPDF } = window.jspdf;
+  return new jsPDF({ unit: 'pt', format: 'letter' });
+}
+
+function pdfHeader(doc, docTitle, orderNumber, contactEmail){
+  doc.setFillColor(10, 37, 71);
+  doc.rect(0, 0, 612, 88, 'F');
+
+  doc.setFillColor(18, 58, 107);
+  doc.circle(58, 42, 17, 'F');
+  doc.setDrawColor(62, 123, 196);
+  doc.setLineWidth(1.3);
+  doc.circle(58, 42, 17, 'S');
+  doc.setDrawColor(95, 168, 232);
+  doc.setLineWidth(1.6);
+  doc.lines([[5, -5], [5, 7], [5, -6]], 47, 46, [1, 1], 'S', false);
+  doc.setFillColor(0, 169, 160);
+  doc.rect(52, 33, 12, 8, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(19);
+  doc.setTextColor(255, 255, 255);
+  doc.text(COMPANY.name1, 86, 46);
+  const w = doc.getTextWidth(COMPANY.name1);
+  doc.setTextColor(94, 175, 255);
+  doc.text(COMPANY.name2, 86 + w, 46);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(178, 197, 222);
+  doc.text(COMPANY.address, 86, 60);
+  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 86, 71);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(19);
+  doc.setTextColor(10, 37, 71);
+  doc.text(docTitle, 40, 120);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  const chipText = String(orderNumber);
+  const chipW = doc.getTextWidth(chipText) + 26;
+  doc.setFillColor(30, 106, 219);
+  doc.roundedRect(572 - chipW, 105, chipW, 21, 5, 5, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.text(chipText, 572 - chipW / 2, 119.5, { align: 'center' });
+
+  doc.setDrawColor(226, 233, 242);
+  doc.setLineWidth(1);
+  doc.line(40, 134, 572, 134);
+  doc.setTextColor(15, 31, 51);
+}
+
+// Real bug found live 2026-09-06 checking the Factura against the real MBG reference: a long
+// Mexican address (common — full street + colonia + CP + city) ran past this column's width and
+// bled straight into the second column's text with no line break, making both unreadable. Each
+// line now wraps to the column width instead of printing as one unbroken run.
+function pdfInfoBlock(doc, x, y, label, lines){
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 106, 219);
+  doc.text(label, x, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 31, 51);
+  let cursorY = y + 16;
+  (lines || []).filter(Boolean).forEach(line => {
+    const wrapped = doc.splitTextToSize(String(line), 260);
+    doc.text(wrapped, x, cursorY);
+    cursorY += wrapped.length * 13;
+  });
+}
+
+function pdfKeyValueRows(doc, x, y, rows){
+  let cursorY = y;
+  rows.forEach(([k, v]) => {
+    if (!v) return;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 106, 219);
+    doc.text(k, x, cursorY);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(15, 31, 51);
+    doc.text(String(v), x + 150, cursorY);
+    cursorY += 17;
+  });
+  return cursorY;
+}
+
+function pdfTerms(doc, y, title, text, disclaimer){
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 106, 219);
+  doc.text(title, 40, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(120, 130, 145);
+  const split = doc.splitTextToSize(text, 532);
+  doc.text(split, 40, y + 14);
+  doc.setFontSize(7.5);
+  doc.setTextColor(190, 60, 60);
+  const disclaimerY = y + 14 + split.length * 10 + 12;
+  doc.text(disclaimer || 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
+  return disclaimerY + 10;
+}
+
+function pdfSignatureBlock(doc, y, leftLabel, rightLabel){
+  const colW = 240, rx = 332;
+  doc.setDrawColor(150, 160, 175);
+  doc.setLineWidth(0.75);
+  doc.line(40, y, 40 + colW, y);
+  doc.line(rx, y, rx + colW, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(leftLabel, 40, y + 12);
+  doc.text(rightLabel, rx, y + 12);
+  doc.setFontSize(7.5);
+  doc.setTextColor(150, 160, 175);
+  doc.text('Date: ______________', 40, y + 26);
+  doc.text('Date: ______________', rx, y + 26);
+}
+
+function pdfFooter(doc, lang){
+  doc.setDrawColor(226, 233, 242);
+  doc.setLineWidth(0.75);
+  doc.line(40, 758, 572, 758);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(160, 170, 185);
+  const stamp = lang === 'es'
+    ? `Generado ${new Date().toLocaleString('es-MX')}`
+    : `Generated ${new Date().toLocaleString('en-US')}`;
+  doc.text(stamp, 40, 770);
+  doc.text(lang === 'es' ? 'Página 1 de 1' : 'Page 1 of 1', 572, 770, { align: 'right' });
+}
+
+// Uploads a generated PDF to the public "order-documents" bucket and returns its shareable URL —
+// same function as offers.html's uploadOrderPdf.
+async function uploadOrderPdf(doc, filename){
+  const blob = doc.output('blob');
+  const { error } = await storageClient.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
+  if (error) throw error;
+  return storageClient.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
+}
+
+// Primary contact email plus every address in email_cc (comma-separated), deduped.
+function collectEmails(entity){
+  if (!entity) return [];
+  const raw = [entity.email, ...String(entity.email_cc || '').split(',')];
+  return [...new Set(raw.map(e => (e || '').trim()).filter(Boolean))];
+}
+
+// Real attachment for the API send path — same helper as offers.html's PO/SO/FO senders.
+function pdfAttachment(doc, filename){
+  return { filename, content: doc.output('datauristring').split(',')[1] };
+}
+
+// Same tracking write as offers.html's sharePO/shareSO/shareFO — best-effort only, the email
+// already went out successfully by the time this runs.
+async function markDocSent(orderNumber, docType){
+  try { await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: orderNumber, doc_type: docType }); }
+  catch (e) { console.warn('markDocSent failed (send itself succeeded):', e.message); }
+}
+
+// Real ask 2026-09-05: at the moment a load is marked Delivered, generate a real invoice (US-side
+// commercial invoice, never a Mexican CFDI — confirmed by the user) and have the customer sign it
+// right there as proof of delivery + acceptance ("la firma es aceptando factura"). Real correction
+// 2026-09-06: "numeros de po so van con precio de qt original pero invoice va con ajustados de
+// aduana cuando recibe la carga numeros reales" — PO and SO are NEVER touched by this function.
+// Only the Invoice reflects the real weight from the customs pedimento — same agreed price per lb,
+// recalculated total.
+async function buildInvoiceDoc(orderNumber, signatureDataUrl, signedByName, realWeightLbs){
+  let result;
+  try { result = await callApi('orders-compose-so', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'Order not found.' : e.message); }
+  const { document: composed, so, customer } = result;
+  const pricePerLb = composed.linea.precio || 0;
+  const finalWeight = (realWeightLbs != null && realWeightLbs > 0) ? realWeightLbs : (composed.linea.peso || 0);
+  const finalTotal = finalWeight * pricePerLb;
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Factura', orderNumber, CONTACT_EMAIL_SO);
+
+  pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
+
+  // Real correction 2026-09-06, verified against a real MBG Invoice (55174): the reference lists
+  // these as a single column (Delivered Date / Incoterms / Customer PO / Payment Terms / Date
+  // Invoice Due), not split across two side-by-side columns — matched exactly here, including the
+  // due date, which the real invoice always shows and this document previously omitted entirely.
+  const paymentDays = customer && customer.payment_days;
+  let dueDateStr = 'Por confirmar';
+  if (paymentDays === 0) dueDateStr = 'Anticipado';
+  else if (paymentDays != null){
+    const due = new Date();
+    due.setDate(due.getDate() + paymentDays);
+    dueDateStr = due.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  }
+  const y = pdfKeyValueRows(doc, 40, 240, [
+    ['FECHA', todayStr()],
+    ['FECHA DE ENTREGA', todayStr()],
+    ['INCOTERMS', composed.incoterms],
+    ['ORDEN DEL CLIENTE', orderNumber],
+    ['CONDICIONES DE PAGO', composed.condiciones_pago],
+    ['FECHA DE VENCIMIENTO', dueDateStr],
+  ]);
+
+  const nameEs = composed.linea.descripcion_es || '';
+  const nameEn = composed.linea.descripcion_en || '';
+  const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
+  const total = finalTotal;
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
+    body: [[
+      description,
+      finalWeight.toLocaleString('en-US'),
+      '$' + pricePerLb.toFixed(4),
+      '$' + total.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 },
+    margin: { left: 40, right: 40 },
+  });
+
+  let ty = doc.lastAutoTable.finalY + 16;
+  const totalsX = 400, totalsLabelW = 100;
+  [['Total', total], ['Pagos/Créditos', 0], ['Saldo Pendiente', total]].forEach(([label, amt], i) => {
+    doc.setFont('helvetica', i === 2 ? 'bold' : 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 31, 51);
+    doc.text(label, totalsX, ty + i * 15);
+    doc.text('$' + Number(amt).toLocaleString('en-US', { minimumFractionDigits: 2 }), totalsX + totalsLabelW + 40, ty + i * 15, { align: 'right' });
+  });
+  ty += 3 * 15 + 14;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 106, 219);
+  doc.text('INSTRUCCIONES DE PAGO / WIRE INSTRUCTIONS', 40, ty);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 31, 51);
+  const wireLines = [
+    `Bank: ${BUENTRADE_WIRE.bankName} — ${BUENTRADE_WIRE.bankAddress}`,
+    `ABA/Routing: ${BUENTRADE_WIRE.aba}`,
+    `Account Number: ${BUENTRADE_WIRE.accountNumber}`,
+    `Beneficiary: ${BUENTRADE_WIRE.accountTitle} — ${BUENTRADE_WIRE.accountAddress}`,
+  ];
+  wireLines.forEach((line, i) => doc.text(line, 40, ty + 14 + i * 12));
+  ty += 14 + wireLines.length * 12 + 10;
+
+  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS, DRAFT_DISCLAIMER_EN);
+
+  if (signatureDataUrl){
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 106, 219);
+    doc.text('FIRMA DE CONFORMIDAD DEL CLIENTE', 40, termsEndY + 14);
+    doc.addImage(signatureDataUrl, 'PNG', 40, termsEndY + 20, 200, 70);
+    doc.setDrawColor(150, 160, 175);
+    doc.setLineWidth(0.75);
+    doc.line(40, termsEndY + 94, 240, termsEndY + 94);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${signedByName || 'Cliente'} — ${new Date().toLocaleString('es-MX')}`, 40, termsEndY + 106);
+  }
+
+  pdfFooter(doc, 'es');
+  return { doc, so, customer };
+}
+
+// ============ EMAIL SEND (same modal + Resend path as offers.html) ============
+const FROM_DISPLAY = {
+  purchasing: 'Purchasing BuenTrade <purchasing@buentradegroup.com>',
+  offers: 'Offers BuenTrade <offers@buentradegroup.com>',
+  logistics: 'Logistics BuenTrade <logistics@buentradegroup.com>',
+  info: 'BuenTrade <info@buentradegroup.com>',
+};
+
+let emailModalResolve = null;
+let emailModalWaInfo = null;
+// Real correction 2026-09-06: "siempre son las dos opciones email y whatsapp no solo email" —
+// every document send now offers WhatsApp right inside the same preview screen, not as a separate
+// trip to the Documents panel afterward. WhatsApp still can't be auto-sent (no WhatsApp Business
+// API — a human has to click wa.me), so this button downloads the same real PDF and opens the
+// chat; it never closes the modal, since the trader may still want to Send the email too.
+function downloadBase64File(filename, base64content){
+  const bytes = atob(base64content);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  const blob = new Blob([arr], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function emailModalSendWhatsApp(){
+  if (!emailModalWaInfo) return;
+  const { phone, message, filename, content } = emailModalWaInfo;
+  if (content) downloadBase64File(filename, content);
+  showToast(content ? 'PDF descargado' : 'Abriendo WhatsApp', content ? 'Arrástralo o adjúntalo dentro de WhatsApp.' : '');
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+}
+function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo){
+  document.getElementById('emailModalFrom').textContent = 'From: ' + (fromDisplay || '');
+  document.getElementById('emailModalTo').value = toList;
+  document.getElementById('emailModalCc').value = '';
+  document.getElementById('emailModalSubject').value = subject;
+  document.getElementById('emailModalBody').value = text;
+  const attachWrap = document.getElementById('emailModalAttachWrap');
+  const attachEl = document.getElementById('emailModalAttachments');
+  if (attachments && attachments.length){
+    attachWrap.style.display = 'block';
+    attachEl.innerHTML = attachments.map(a => `<span class="email-modal-chip">📎 ${escapeHtml(a.filename)}</span>`).join('');
+  } else {
+    attachWrap.style.display = 'none';
+  }
+  emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
+  document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
+  document.getElementById('emailModalOverlay').style.display = 'flex';
+  return new Promise(resolve => { emailModalResolve = resolve; });
+}
+function emailModalCancel(){
+  document.getElementById('emailModalOverlay').style.display = 'none';
+  if (emailModalResolve) emailModalResolve(null);
+  emailModalResolve = null;
+}
+function emailModalConfirm(){
+  const to = document.getElementById('emailModalTo').value;
+  const cc = document.getElementById('emailModalCc').value;
+  const subject = document.getElementById('emailModalSubject').value;
+  const text = document.getElementById('emailModalBody').value;
+  document.getElementById('emailModalOverlay').style.display = 'none';
+  if (emailModalResolve) emailModalResolve({ to, cc, subject, text });
+  emailModalResolve = null;
+}
+
+async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
+  const toList = Array.isArray(to) ? to.join(', ') : to;
+  const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
+  const waInfoWithFile = (waInfo && waInfo.phone && attachments && attachments[0])
+    ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content } : waInfo;
+  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay, waInfoWithFile);
+  if (!edited){
+    const cancelErr = new Error('Cancelled by user');
+    cancelErr.cancelled = true;
+    throw cancelErr;
+  }
+  const finalTo = edited.to.split(',').map(s => s.trim()).filter(Boolean);
+  const finalCc = edited.cc.split(',').map(s => s.trim()).filter(Boolean);
+  const res = await fetch('/.netlify/functions/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: fromAlias, to: finalTo, cc: finalCc.length ? finalCc : undefined, subject: edited.subject, text: edited.text, attachments }),
+  });
+  if (!res.ok){
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Send failed');
+  }
+  return res.json();
+}
+
+function gmailComposeUrl(emails, subject, body){
+  return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: emails.join(','), su: subject, body }).toString()}`;
+}
+function gmailComposeOpen(email, subject, body){
+  window.open(gmailComposeUrl([email], subject, body), '_blank');
+}
+const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
+function gmailFallbackLinkHtml(emails, subject, body){
+  const url = gmailComposeUrl(emails, subject, body + EMAIL_SIGNATURE);
+  return `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
+}
+
+const TOAST_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const TOAST_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+function showToast(title, detail, isError, linkHtml){
+  const stack = document.getElementById('toastStack');
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  const closeBtn = linkHtml ? `<span onclick="this.closest('.toast').remove()" style="cursor:pointer;color:var(--ink-soft,#8a94a6);margin-left:8px;flex-shrink:0;">✕</span>` : '';
+  el.innerHTML = `<span class="toast-icon">${isError ? TOAST_X : TOAST_CHECK}</span><span class="toast-text"><b>${escapeHtml(title)}</b>${detail ? escapeHtml(detail) : ''}${linkHtml || ''}</span>${closeBtn}`;
+  stack.appendChild(el);
+  if (!linkHtml){
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, isError ? 6000 : 4000);
+  }
+}
+
+// ============ PO / SO / FO (same engine as offers.html, duplicated here 2026-09-06) ============
+// Real correction: winning a deal through the calculator (Negotiate) never actually sent these —
+// it only ever showed "Go to Offers to export PO/SO/FO" and left it to the trader to remember. The
+// fix moves the confirm-and-send sequence to right here, the moment the trader lands on Orders
+// after winning — see runPendingWonDocConfirm below.
+async function buildPODoc(orderNumber){
+  let result;
+  try { result = await callApi('orders-compose-po', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'PO not found.' : e.message); }
+  const { document: composed, po, plant } = result;
+  const isFob = composed.incoterms.startsWith('FCA');
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Purchase Order', orderNumber, CONTACT_EMAIL_PO);
+
+  const vendorLines = composed.vendor.split('\n');
+  pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
+  pdfInfoBlock(doc, 320, 168, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO', composed.ship_to.split('\n'));
+
+  const yLeft = pdfKeyValueRows(doc, 40, 240, [
+    ['DATE', todayStr()],
+    [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
+    ['SHIP VIA', 'Refrigerated Trucking'],
+    ['PAYMENT TERMS', composed.payment_terms],
+    ['ORDER #', orderNumber],
+  ]);
+  const yRight = pdfKeyValueRows(doc, 320, 240, [
+    ['INCOTERMS', composed.incoterms],
+    ['SUPPLIER PO', composed.supplier_po || ''],
+    ['COUNTRY OF ORIGIN', composed.country_of_origin],
+  ]);
+  const y = Math.max(yLeft, yRight);
+
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Part #', 'Item Description', 'Qty LBS', 'Unit Cost', 'Amount', 'PU or DEL Date', 'Buyer']],
+    body: [[
+      '',
+      composed.line_item.description || '',
+      (composed.line_item.weight || 0).toLocaleString('en-US'),
+      '$' + (composed.line_item.purchase_price || 0).toFixed(4),
+      '$' + (composed.line_item.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      composed.pick_up_date || '',
+      composed.trader || '',
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 },
+    margin: { left: 40, right: 40 },
+  });
+
+  let ty = doc.lastAutoTable.finalY + 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text('NOTES: ' + composed.docs_note, 40, ty);
+
+  pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
+  pdfFooter(doc, 'en');
+  return { doc, po, plant };
+}
+
+async function sharePO(orderNumber){
+  let built;
+  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  const emails = collectEmails(built.plant);
+  if (!emails.length){ alert('This plant has no email on file.'); return; }
+  const filename = `PO-${orderNumber}.pdf`;
+  let url;
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const subject = `${orderNumber} — Purchase Order`;
+  const po = built.po;
+  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
+    + `Product: ${po.product_spec || po.product_name || ''}\n`
+    + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
+    + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
+    + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
+    + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
+  const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
+  try {
+    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: `Purchase Order ${orderNumber} — sending you the document now.` });
+    showToast('PO sent', emails.join(', '));
+    markDocSent(orderNumber, 'po');
+  } catch(e){
+    if (e.cancelled) return;
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`));
+  }
+}
+
+async function buildSODoc(orderNumber){
+  let result;
+  try { result = await callApi('orders-compose-so', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'SO not found.' : e.message); }
+  const { document: composed, so, customer } = result;
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Confirmación de Venta', orderNumber, CONTACT_EMAIL_SO);
+
+  pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
+
+  const yLeft = pdfKeyValueRows(doc, 40, 240, [
+    ['FECHA', todayStr()],
+    ['CONDICIONES DE PAGO', composed.condiciones_pago],
+    ['ORDEN #', orderNumber],
+  ]);
+  const yRight = pdfKeyValueRows(doc, 320, 240, [
+    ['INCOTERMS', composed.incoterms],
+    ['PAÍS DE ORIGEN', composed.pais_origen],
+    ['MONEDA', composed.moneda],
+  ]);
+  const y = Math.max(yLeft, yRight);
+
+  const nameEs = composed.linea.descripcion_es || '';
+  const nameEn = composed.linea.descripcion_en || '';
+  const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto', 'Entrega Est.', 'Vendedor']],
+    body: [[
+      description,
+      (composed.linea.peso || 0).toLocaleString('en-US'),
+      '$' + (composed.linea.precio || 0).toFixed(4),
+      '$' + (composed.linea.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      fmtDatesList(so.delivery_dates),
+      composed.ejecutivo || '',
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 },
+    margin: { left: 40, right: 40 },
+  });
+
+  let ty = doc.lastAutoTable.finalY + 20;
+  if (composed.mxn_equivalente){
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('EQUIVALENTE: MXN $' + composed.mxn_equivalente.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 }) + ` (TC ${composed.mxn_equivalente.rate})`, 40, ty);
+    ty += 20;
+  }
+
+  pdfTerms(doc, ty + 10, 'TÉRMINOS', SO_TERMS, DRAFT_DISCLAIMER_ES);
+  pdfFooter(doc, 'es');
+  return { doc, so, customer };
+}
+
+async function shareSO(orderNumber){
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  const emails = collectEmails(built.customer);
+  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  const filename = `SO-${orderNumber}.pdf`;
+  let url;
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const subject = `${orderNumber} — Confirmación de Venta`;
+  const so = built.so;
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
+    + `Producto: ${so.product_spec_es || so.product_name_es || so.product_name || ''}\n`
+    + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
+    + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
+    + `Total: $${(so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
+    + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
+  const waPhoneSo = built.customer && (built.customer.whatsapp || built.customer.phone);
+  try {
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: `Orden ${orderNumber} — te mando el documento.` });
+    showToast('SO sent', emails.join(', '));
+    markDocSent(orderNumber, 'so');
+  } catch(e){
+    if (e.cancelled) return;
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      gmailFallbackLinkHtml(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`));
+  }
+}
+
+async function buildFODocs(orderNumber){
+  let result;
+  try { result = await callApi('orders-compose-fo', { order_number: orderNumber }); }
+  catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
+  const docs = result.documents;
+
+  const built = [];
+  for (const { document: composed, fo, carrier } of docs){
+    const doc = pdfDoc();
+    pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
+
+    pdfInfoBlock(doc, 40, 168, 'CARRIER', [
+      carrier ? carrier.name : 'TBD — not yet booked',
+      carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
+      carrier && carrier.phone,
+      carrier && (carrier.mc_number || carrier.dot_number)
+        ? `MC# ${carrier.mc_number || '—'}  ·  DOT# ${carrier.dot_number || '—'}` : null,
+    ]);
+    pdfInfoBlock(doc, 320, 168, 'CLIENT (BROKER)', ['BuenTrade LLC', COMPANY.address, COMPANY.phone]);
+
+    const yLeft = pdfKeyValueRows(doc, 40, 240, [
+      ['DATE', todayStr()],
+      ['PICK-UP ADDRESS', composed.pick_up_address],
+      ['DELIVERY ADDRESS', composed.delivery_address],
+      ['STOP OVER (IF NECESSARY)', '____________________'],
+      ['PICK-UP / DELIVERY DATE', fmtDatesList(composed.delivery_dates)],
+    ]);
+    const yRight = pdfKeyValueRows(doc, 320, 240, [
+      ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
+      ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
+      ['CLIENT ORDER #', orderNumber],
+      ['APPT. / CHECK-IN #', '____________________'],
+      ['RELEASE #', '____________________'],
+    ]);
+    const y2 = pdfKeyValueRows(doc, 40, Math.max(yLeft, yRight) + 30, [
+      ['CUSTOMS BROKER', composed.customs_broker || 'TBD'],
+    ]);
+    const y = Math.max(yLeft, yRight, y2);
+
+    doc.autoTable({
+      startY: y + 12,
+      head: [['Product', 'Service', 'Agreed Rate']],
+      body: [[
+        composed.product_name || '—',
+        'Inland Freight',
+        '$' + (composed.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      ]],
+      theme: 'grid',
+      headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      styles: { fontSize: 9.5, cellPadding: 7 },
+      margin: { left: 40, right: 40 },
+    });
+
+    const ty = doc.lastAutoTable.finalY + 30;
+    const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
+    pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
+    pdfFooter(doc, 'en');
+    built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+  }
+  return built;
+}
+
+async function shareFO(orderNumber){
+  let built;
+  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  for (const b of built){
+    const emails = collectEmails(b.carrier);
+    if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
+    let url;
+    try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
+    const subject = `${orderNumber} — Freight Confirmation`;
+    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
+      + `Pick-up: ${b.fo.origin || '—'}\n`
+      + `Delivery: ${b.fo.destination || '—'}\n`
+      + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    const waPhoneFo = b.carrier && b.carrier.phone;
+    try {
+      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: `Order ${orderNumber} — sending you the document now.` });
+      showToast('FO sent', emails.join(', '));
+      markDocSent(orderNumber, 'fo');
+    } catch(e){
+      if (e.cancelled) continue;
+      showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+        gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`));
+    }
+  }
+}
+
+// Real ask 2026-09-06: winning a deal through the calculator (Negotiate, in offers.html) never
+// actually sent PO/SO/FO — it just showed a message and left it to the trader to remember. The
+// calculator posts the new order's info into sessionStorage and navigates here; this runs the same
+// send-with-preview sequence offers.html's own sendWonDocs already uses, right as the trader lands.
+// "nada se manda sin que el trader vea" — same modal, same Send/Cancel per document, nothing new.
+async function runPendingWonDocConfirm(){
+  const raw = sessionStorage.getItem('bt_pending_doc_confirm');
+  if (!raw) return;
+  sessionStorage.removeItem('bt_pending_doc_confirm');
+  let pending;
+  try { pending = JSON.parse(raw); } catch (e) { return; }
+  const { order_number, freight_order, mexican_freight_order } = pending;
+  if (!order_number) return;
+  await sharePO(order_number);
+  await shareSO(order_number);
+  if (freight_order || mexican_freight_order) await shareFO(order_number);
+}
+
+// ============ WHATSAPP SEND (real PDF, never a summary image) — same engine as offers.html.
+// Real fix 2026-09-06: this file had drifted from offers.html's own "graba en png debe ser pdf"
+// fix — it was still building a canvas summary card. Needed here so the Documents panel can offer
+// Email + WhatsApp on any document, sent or not: "si no se manda pero queda guardado debo poder
+// entrar y darme la posibilidad de compartir por whatsapp o por correo a sus destinatarios." ============
+function shareDocAndOpenWhatsApp(doc, filename, phone, message){
+  doc.save(filename);
+  showToast('PDF descargado', 'Arrástralo o adjúntalo dentro de WhatsApp.');
+  if (!phone){ showToast('Sin WhatsApp en archivo', 'Adjunta el PDF manualmente.', true); return; }
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+}
+
+async function waCardPO(orderNumber){
+  let built;
+  try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
+  const plant = built.plant;
+  const phone = plant && (plant.whatsapp || plant.phone);
+  shareDocAndOpenWhatsApp(built.doc, `PO-${orderNumber}.pdf`, phone, `Purchase Order ${orderNumber} — sending you the document now.`);
+}
+
+async function waCardSO(orderNumber){
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
+  const customer = built.customer;
+  const phone = customer && (customer.whatsapp || customer.phone);
+  shareDocAndOpenWhatsApp(built.doc, `SO-${orderNumber}.pdf`, phone, `Orden ${orderNumber} — te mando el documento.`);
+}
+
+async function waCardFO(orderNumber){
+  let built;
+  try { built = await buildFODocs(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
+  const b = built[0];
+  if (!b){ showToast('No freight leg on this order.', '', true); return; }
+  const phone = b.carrier && b.carrier.phone;
+  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `Order ${orderNumber} — sending you the document now.`);
+}
+
+// Invoice can't be rebuilt from scratch on a resend — it carries the real captured signature and
+// the real customs-adjusted weight, neither of which are stored anywhere except inside the PDF
+// already uploaded. So resending fetches that exact file back and re-attaches it, instead of
+// calling buildInvoiceDoc again (which would produce an unsigned, quoted-weight version).
+async function resendInvoiceEmail(orderNumber, fileUrl, filename){
+  const o = findStatusOrder(orderNumber);
+  const emails = o ? collectEmails(o.customer) : [];
+  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  let base64;
+  try {
+    const res = await fetch(fileUrl);
+    const blob = await res.blob();
+    base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch(e){ alert('Error al cargar el archivo: ' + e.message); return; }
+  const subject = `${orderNumber} — Factura`;
+  const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber}.\n\nGracias por su preferencia.`;
+  const waPhoneInv = o && o.customer && (o.customer.whatsapp || o.customer.phone);
+  try {
+    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: `Orden ${orderNumber} — te mando la factura.` });
+    showToast('Factura enviada', emails.join(', '));
+    markDocSent(orderNumber, 'invoice');
+  } catch(e){
+    if (!e.cancelled) showToast('No se pudo enviar la factura', e.message, true);
+  }
+}
+
+// Border customs paperwork isn't its own document — the broker just needs the REAL pickup
+// documents the plant/carrier emailed after picking up (BOL, packing list, label photos, USDA
+// papers if Docs) — collected automatically by pickup-docs-emails-poll, sitting in
+// shipment_pickup_documents until the trader confirms sending them here. Never auto-forwarded;
+// this is the explicit confirm step. Real correction 2026-09-06: "a la aduana no se le manda po so
+// fo" — customs never gets copies of the trade documents.
+// Real correction 2026-09-06: "cada cliente tiene su propia aduana... a esa es la que hay que
+// notificar" — the customs agency belongs to the CUSTOMER (customers.customs_agency_provider_id),
+// not the individual offer. This used to only ever check sent_offers.customs_agency_provider_id,
+// which is a different, offer-level field that's empty on every real order today — falling back to
+// it here only if the customer genuinely has none on file, matching the same resolution order
+// already fixed in orders-compose-so.
+async function shareCustoms(orderNumber){
+  const shipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+  if (!shipment){ alert('Order not found.'); return; }
+
+  let agencyId = null;
+  if (shipment.customer_id){
+    const customer = ((await callApi('customers-search', { ids: [shipment.customer_id] })).results || [])[0];
+    agencyId = customer && customer.customs_agency_provider_id;
+  }
+  if (!agencyId){
+    const sentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+    agencyId = sentOffer && sentOffer.customs_agency_provider_id;
+  }
+  if (!agencyId){ alert('No customs agency on file for this customer.'); return; }
+  const agency = ((await callApi('providers-search', { id: agencyId })).results || [])[0];
+  const emails = collectEmails(agency);
+  if (!emails.length){ alert('This customs agency has no email on file.'); return; }
+
+  const pending = shipment.pending_pickup_documents || [];
+  if (!pending.length){ alert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
+
+  const attachments = [];
+  for (const doc of pending){
+    try {
+      const res = await fetch(doc.storage_url);
+      const blob = await res.blob();
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      attachments.push({ filename: doc.filename, content: base64 });
+    } catch(e){ /* one file failing to fetch never blocks the others */ }
+  }
+  if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
+
+  const subject = `${orderNumber} — Documentos de recogida`;
+  const body = `Adjuntamos los documentos de recogida de la orden ${orderNumber}: ${pending.map(d => d.filename).join(', ')}.`;
+  const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
+  try {
+    await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: `Orden ${orderNumber} — te mando los documentos de recogida.` });
+    showToast('Documentos reenviados a aduana', emails.join(', '));
+    await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
+  } catch(e){
+    if (e.cancelled) return;
+    showToast('Automatic send failed', e.message, true);
+  }
+}
+</script>
+
+</body>
+</html>

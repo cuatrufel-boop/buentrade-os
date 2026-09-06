@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>BuenTrade Trading OS — Offers</title>
+<link rel="manifest" href="/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,18 +18,24 @@
     --navy-2:#0E3D8F;
     --blue:#1E6ADB;
     --blue-bright:#5AAAFF;
-    --blue-light:#EAF3FC;
-    --bg:#F4F7FB;
-    --card:#FFFFFF;
-    --line:#E2E9F2;
-    --ink:#0F1F33;
-    --ink-soft:#64748B;
+    --blue-light:rgba(90,170,255,.14);
+    --bg:#0A2547;
+    --card:rgba(255,255,255,.08);
+    --line:rgba(255,255,255,.18);
+    --ink:#FFFFFF;
+    --ink-soft:rgba(255,255,255,.55);
     --red:#C4432E;
     --green:#0F8A5F;
     --radius:8px;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+  input,select,textarea{background:var(--card);color:var(--ink);}
+  body{
+    margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,
+      linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;
+  }
   .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
@@ -40,7 +47,8 @@
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
-  .btn.secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
+  .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
+  .confirm-box .btn.secondary{background:#fff;}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
   .btn.win{background:var(--green);color:#fff;border:none;padding:6px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(15,138,95,.3);transition:transform .1s,box-shadow .1s;}
   .btn.win:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,138,95,.35);}
@@ -60,7 +68,7 @@
   .docs-btn{background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:6px 12px;font-weight:600;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
   .docs-btn svg{width:14px;height:14px;}
   .menu-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
-  .docs-menu{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:8px;min-width:320px;max-width:calc(100vw - 40px);max-height:80vh;overflow-y:auto;}
+  .docs-menu{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:8px;min-width:320px;max-width:calc(100vw - 40px);max-height:80vh;overflow-y:auto;--ink:#0F1F33;--ink-soft:#64748B;}
   .docs-menu-row{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;}
   .docs-menu-row:hover{background:var(--bg);}
   .docs-menu-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
@@ -76,10 +84,11 @@
   .docs-menu-action-row{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:8px;cursor:pointer;transition:background .12s;}
   .docs-menu-action-row:hover{background:var(--bg);}
   .docs-menu-action-row svg{width:15px;height:15px;flex-shrink:0;}
-  .row-menu-btn{background:#fff;border:1.5px solid var(--line);color:var(--ink-soft);border-radius:8px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+  .row-menu-btn{background:var(--card);border:1.5px solid var(--line);color:var(--ink-soft);border-radius:8px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+  .doc-preview-box .row-menu-btn{background:#fff;}
   .row-menu-btn:hover{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
   .row-menu-btn svg{width:17px;height:17px;}
-  .doc-preview-box{background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,31,51,.4);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;animation:menuPop .18s cubic-bezier(.2,.9,.3,1.2);}
+  .doc-preview-box{background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,31,51,.4);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;animation:menuPop .18s cubic-bezier(.2,.9,.3,1.2);--ink:#0F1F33;--ink-soft:#64748B;}
   .doc-preview-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);flex-shrink:0;}
   .doc-preview-title{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:var(--ink);}
   .doc-preview-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
@@ -91,23 +100,23 @@
   .doc-preview-actions{display:flex;justify-content:flex-end;gap:10px;padding:16px 22px;border-top:1px solid var(--line);flex-shrink:0;}
   .doc-preview-actions .btn{display:inline-flex;align-items:center;gap:7px;}
   .doc-preview-actions .btn svg{width:15px;height:15px;}
-  .confirm-box{background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;animation:menuPop .16s cubic-bezier(.2,.9,.3,1.2);}
+  .confirm-box{background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;animation:menuPop .16s cubic-bezier(.2,.9,.3,1.2);--ink:#0F1F33;--ink-soft:#64748B;}
   .confirm-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--ink);margin-bottom:8px;}
   .confirm-message{font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:20px;}
   .confirm-actions{display:flex;justify-content:flex-end;gap:10px;}
   .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
   .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
-  .email-modal-box{background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(15,31,51,.35);}
+  .email-modal-box{background:rgba(255,255,255,.06);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
   .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
   .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
   .email-modal-field{margin-bottom:12px;}
   .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
-  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
   .email-modal-field textarea{min-height:130px;resize:vertical;}
   .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
   .email-modal-chip{background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
   .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
-  .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);animation:toastIn .25s ease-out;}
+  .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);animation:toastIn .25s ease-out;--ink:#0F1F33;--ink-soft:#64748B;}
   .toast.error{border-left-color:var(--red);}
   .toast-icon{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .toast.error .toast-icon{background:var(--red);}
@@ -121,7 +130,7 @@
   tr:last-child td{border-bottom:none;}
   .field{margin-bottom:0;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
-  .field input,.field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;}
+  .field input,.field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
   .field input:focus,.field select:focus{outline:none;border-color:var(--blue);}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .status-pill{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
@@ -136,21 +145,26 @@
   .pending-group{padding:18px 0;border-bottom:1px solid var(--line);}
   .pending-group:last-child{border-bottom:none;}
   .pending-group-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
-  .pending-group-title{font-family:'Space Grotesk',sans-serif;font-size:15.5px;font-weight:800;color:var(--navy);letter-spacing:.01em;display:flex;align-items:center;gap:9px;}
+  .pending-group-title{font-family:'Space Grotesk',sans-serif;font-size:15.5px;font-weight:800;color:var(--ink);letter-spacing:.01em;display:flex;align-items:center;gap:9px;}
   .pending-group-title::before{content:'';width:7px;height:7px;border-radius:2px;background:var(--blue);flex-shrink:0;}
   .pending-group-count{font-size:11px;font-weight:700;color:var(--blue);background:var(--blue-light);padding:4px 11px;border-radius:20px;white-space:nowrap;}
   .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
-  .pkg-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
-  .pkg-row:hover{border-color:#CBDCF2;box-shadow:0 3px 12px rgba(15,31,51,.07);}
+  .pkg-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--card);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
+  .pkg-row:hover{border-color:rgba(255,255,255,.4);box-shadow:0 3px 12px rgba(4,12,26,.25);}
   .pkg-plant-avatar{width:44px;height:44px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-  .pkg-plant-avatar-logo{background:#fff;border:1px solid var(--line);padding:3px;}
-  .pkg-plant-avatar-logo img{width:100%;height:100%;object-fit:contain;}
+  /* Same real fix as plants.html/quotes.html: plant logos are wordmarks up to ~3:1 wide, and a
+     forced 44×44 square left most of that square empty above/below a thin sliver of logo. Width
+     now follows each logo's own aspect ratio; white card stays (light page, already correct). */
+  .pkg-plant-avatar-logo{width:auto;max-width:70px;background:none;border:none;padding:2px;}
+  .pkg-plant-avatar-logo img{width:auto;max-width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);}
   .pkg-plant-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:1;min-width:0;}
   .pkg-plant{font-weight:600;color:var(--ink);font-size:13.5px;}
   .pkg-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
-  .pkg-tag.price{background:var(--blue-light);color:var(--blue);}
-  .pkg-tag.won{background:#E3F6EC;color:var(--green);}
-  .pkg-tag.lost{background:var(--bg);color:var(--ink-soft);}
+  /* Exact same outline-pill pattern as quotes.html's real Dashboard tags (.pkg-tag.missing/.stale/
+     .price there) — transparent fill, colored border + text, not a tinted filled box. */
+  .pkg-tag.price{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  .pkg-tag.won{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);}
+  .pkg-tag.lost{background:transparent;color:var(--ink-soft);border-color:var(--line);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   /* One button, two states — no separate "🔥 negotiating" pill anymore. Calm blue when it's just
      a sent offer waiting; the same slot switches to a pulsing green the moment a real bid/counter
@@ -161,16 +175,46 @@
   .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
   .pkg-trigger-btn.hot{background:linear-gradient(180deg,#E3F6EC,#D2F0E1);color:#0F8A5F;border-color:rgba(15,138,95,.35);animation:hotPulse 1.4s ease-in-out infinite;}
   .pkg-trigger-btn.hot:hover{background:linear-gradient(180deg,#0F8A5F,#0B6B48);color:#fff;border-color:#0B6B48;}
-  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
-  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
-  .stat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--stat-accent,var(--blue));}
-  .stat-icon{width:38px;height:38px;border-radius:10px;background:var(--stat-accent-soft,var(--blue-light));color:var(--stat-accent,var(--blue));display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  /* Real ask: customer-first drill-down (find Murgati, then her Sirloin, then the plants quoting
+     it), not a flat list of every offer. A customer's card collapses to one line once you're not
+     actively looking at it — opens on its own when it has a live bid, or when the search box
+     matches it, so scanning past a quiet customer costs nothing. */
+  .attn-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .attn-pill{display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:10px;font-size:12.5px;cursor:pointer;border:1px solid;transition:transform .1s;background:none;font-family:inherit;text-align:left;}
+  .attn-pill:hover{transform:translateY(-1px);}
+  .attn-pill.hot{background:rgba(15,138,95,.12);border-color:rgba(15,138,95,.4);color:#3FCB7E;}
+  .attn-pill.cold{background:rgba(196,67,46,.12);border-color:rgba(196,67,46,.4);color:#FF9C8A;}
+  .attn-pill .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  .attn-pill.hot .dot{background:#0F8A5F;animation:hotPulse 1.4s ease-in-out infinite;}
+  .attn-pill.cold .dot{background:#C4432E;}
+  .pending-group-head{cursor:pointer;user-select:none;}
+  .cust-chevron{width:8px;height:8px;border-right:2px solid var(--ink-soft);border-bottom:2px solid var(--ink-soft);transform:rotate(-45deg);transition:transform .15s;flex-shrink:0;display:inline-block;margin-right:4px;}
+  .pending-group.open .cust-chevron{transform:rotate(45deg);}
+  .pending-group-body{display:none;}
+  .pending-group.open .pending-group-body{display:block;}
+  .prod-subhead{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;display:flex;align-items:center;gap:8px;}
+  .prod-subhead:first-child{margin-top:0;}
+  .prod-subhead .n{background:var(--bg);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;color:var(--ink-soft);}
+  .pkg-asof.cold{color:#A6371F;font-weight:600;}
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));
+    border:1px solid rgba(232,181,76,.55); border-radius:12px;
+    box-shadow:0 3px 12px -3px rgba(232,181,76,.4), inset 0 1px 0 rgba(255,255,255,.1);
+    padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:box-shadow .15s,transform .15s;
+  }
+  .stat-card:hover{box-shadow:0 6px 20px -4px rgba(232,181,76,.5), inset 0 1px 0 rgba(255,255,255,.12); transform:translateY(-1px);}
+  .stat-icon{width:38px;height:38px;border-radius:10px;background:rgba(232,181,76,.15);border:1.5px solid rgba(232,181,76,.55);color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .stat-icon svg{width:18px;height:18px;}
-  .stat-value{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;color:var(--ink);line-height:1.15;font-variant-numeric:tabular-nums;}
-  .stat-label{font-size:11.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-value.empty{font-size:14px;font-weight:600;color:rgba(255,255,255,.7);font-family:'Inter',sans-serif;text-shadow:none;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;background:#E8B54C;box-shadow:0 0 7px 1.5px rgba(232,181,76,.8);flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
   .row-actions{display:inline-flex;align-items:center;gap:8px;}
   .icon-btn.lose{
-    background:#FFF5F2; color:#C4432E; border:1.5px solid rgba(196,67,46,.3);
+    background:transparent; color:#FF9C8A; border:1.5px solid rgba(196,67,46,.4);
     width:30px;height:30px;border-radius:50%;cursor:pointer;
     display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
     transition:background .12s ease,border-color .12s ease,transform .12s ease,color .12s ease;
@@ -189,8 +233,10 @@
      to zero margin outside it at normal window widths, nowhere near enough room for a logo badge
      without either overlapping "PLANT"/Email/WhatsApp or getting clipped off the viewport edge.
      The title bar has real open space and doesn't scroll, so no position-tracking is needed either. */
-  .tt-logo-inline{width:32px;height:32px;object-fit:contain;background:#fff;border-radius:7px;padding:4px;box-sizing:border-box;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
-  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);}
+  /* Same wide-wordmark fix as the row avatars below, scaled down for this smaller header icon —
+     a fixed 32×32 square squeezed a wide plant logo just as thin here as it did in the list rows. */
+  .tt-logo-inline{width:auto;max-width:52px;height:32px;object-fit:contain;background:#fff;border-radius:7px;padding:4px;box-sizing:border-box;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
   .edit-input{padding:5px 7px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;width:90px;transition:border-color .3s;}
   .edit-input:focus{outline:none;border-color:var(--blue);}
   .tab-row{display:flex;gap:6px;margin:0 0 18px;border-bottom:1.5px solid var(--line);}
@@ -198,6 +244,10 @@
   .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
   .tab-btn:focus{outline:none;}
   .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+  .seg-control{display:flex;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:3px;gap:2px;height:38px;box-sizing:border-box;}
+  .seg-btn{flex:1;background:transparent;border:none;color:var(--ink-soft);font-size:12.5px;font-weight:600;padding:0 10px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .15s,color .15s;}
+  .seg-btn:hover:not(.active){background:rgba(255,255,255,.07);color:var(--ink);}
+  .seg-btn.active{background:var(--blue);color:#fff;}
   .load-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px;}
   .load-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
   .load-product-row{display:flex;align-items:center;gap:14px;}
@@ -225,15 +275,16 @@
   .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
   /* Real fix 2026-09-02, explicit ask ("unifica... revisa todos los tabs") — same gradient+shadow
      every WhatsApp button across the OS now uses, not this page's own flat green. */
-  .wa-btn{background:linear-gradient(180deg,#32E67F,#1DA851);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 3px rgba(29,168,81,.25);transition:background .18s,box-shadow .2s,transform .15s;}
-  .wa-btn:hover{background:linear-gradient(180deg,#3EF08C,#20BD5A);box-shadow:0 4px 10px rgba(29,168,81,.35);transform:translateY(-1px);}
-  .wa-btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(29,168,81,.25);}
-  .wa-btn.outline{background:#fff;color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
-  .wa-btn.outline:hover{background:#EAFBF1;box-shadow:none;transform:none;}
-  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;}
-  .payment-badge.ok{background:var(--bg);color:var(--ink-soft);}
-  .payment-badge.due-soon{background:#FFF4E5;color:#B26A00;}
-  .payment-badge.overdue{background:#FCEBE7;color:var(--red);}
+  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
+  .wa-btn:active{background:rgba(29,168,81,.28);}
+  .wa-btn svg{fill:currentColor;}
+  .wa-btn.outline{background:var(--card);color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
+  .wa-btn.outline:hover{background:rgba(29,168,81,.18);box-shadow:none;transform:none;}
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;border:1px solid transparent;}
+  .payment-badge.ok{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
+  .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
 </style>
 </head>
 <body>
@@ -241,7 +292,7 @@
 <!-- ============ LOGIN GATE (same Firebase project/login as the Trading Tool) ============ -->
 <style>
   #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
-  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);--ink:#0F1F33;--ink-soft:#64748B;}
   .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
   .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
   .auth-logo .word span{color:#1B6FC9;}
@@ -302,6 +353,39 @@ async function callApi(fn, body){
 }
 function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
 
+// ============ PUSH NOTIFICATIONS (real-time actionable alerts) ============
+// Real ask 2026-09-06: "una notificacion donde yo le de ok y se ejecute... no me sirve un
+// resumen." First piece of the approved architecture — see project_order_lifecycle_and_alerting_
+// spec memory. This registers the service worker and subscribes THIS browser to push, once per
+// login. Silently does nothing if the trader denies the permission prompt or the browser has no
+// push support (Safari on iOS pre-16.4, etc.) — never blocks the rest of the app on this.
+const VAPID_PUBLIC_KEY = 'BF6sg1hoRI0lW7rnTtrq0OjNTpx1QXWd775B30addUWlvqkJIsBuWZaB9mG-zvsIZ9C-cCP2Penh-eUxZTAFmiI';
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+async function initPushNotifications(){
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub){
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    await callApi('push-subscribe', { actor: currentActor(), endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+  } catch (e) {
+    console.warn('Push notification setup failed (non-fatal):', e.message);
+  }
+}
+
 const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
 
 function showAuthMsg(text){
@@ -335,6 +419,8 @@ auth.onAuthStateChanged(user => {
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
     loadOffers();
+    initPushNotifications();
+    runUrgentQueueOnLogin();
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
@@ -353,23 +439,19 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
   <nav class="nav-row">
-    <a href="customers.html" class="nav-pill">Customers</a>
-    <a href="providers.html" class="nav-pill">Freight &amp; Logistics</a>
-    <a href="plants.html" class="nav-pill">Meat Packers</a>
+    <a href="customers.html" class="nav-pill">Clients</a>
+    <a href="providers.html" class="nav-pill">Logistics</a>
+    <a href="plants.html" class="nav-pill">Plants</a>
     <a href="products.html" class="nav-pill">Products</a>
     <a href="quotes.html" class="nav-pill">Quotes</a>
     <a href="offers.html" class="nav-pill active">Offers</a>
-    <a href="trading-tool.html" class="nav-pill">Trading Tool</a>
+    <a href="orders.html" class="nav-pill">Orders</a>
+    <a href="collections.html" class="nav-pill">Collections</a>
   </nav>
 </header>
 
 <div class="wrap">
   <h1>Offers</h1>
-
-  <div class="tab-row">
-    <button type="button" class="tab-btn active" id="offerTabBtn_pipeline" onclick="setOfferTab('pipeline')">Pipeline</button>
-    <button type="button" class="tab-btn" id="offerTabBtn_status" onclick="setOfferTab('status')">Status</button>
-  </div>
 
   <div id="offerPanel_pipeline">
     <div class="stats-row" id="pipelineStats"></div>
@@ -377,12 +459,13 @@ auth.onAuthStateChanged(user => {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
         <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="Search…"></div>
         <div class="field"><label>Status</label>
-          <select id="f_status" onchange="renderOffers()">
-            <option value="">All</option>
-            <option value="sent" selected>Pending</option>
-            <option value="won">Win</option>
-            <option value="lost">Lost</option>
-          </select>
+          <input type="hidden" id="f_status" value="sent">
+          <div class="seg-control" id="f_status_seg">
+            <button type="button" class="seg-btn active" data-val="sent" onclick="setStatusFilter('sent',this)">Pending</button>
+            <button type="button" class="seg-btn" data-val="won" onclick="setStatusFilter('won',this)">Won</button>
+            <button type="button" class="seg-btn" data-val="lost" onclick="setStatusFilter('lost',this)">Lost</button>
+            <button type="button" class="seg-btn" data-val="" onclick="setStatusFilter('',this)">All</button>
+          </div>
         </div>
         <div class="field"><label>From</label><input type="date" id="f_from" onchange="loadOffers()"></div>
         <div class="field"><label>To</label><input type="date" id="f_to" onchange="loadOffers()"></div>
@@ -393,11 +476,6 @@ auth.onAuthStateChanged(user => {
       <div id="offerRows"></div>
       <div id="emptyState" class="empty" style="display:none;">No offers in this range yet.</div>
     </div>
-  </div>
-
-  <div id="offerPanel_status" style="display:none;">
-    <div id="statusCards"></div>
-    <div id="statusEmpty" class="empty" style="display:none;">No active loads right now.</div>
   </div>
 </div>
 </div>
@@ -516,25 +594,53 @@ function renderStats(){
   const closedCount = won.length + lost.length;
   const winRate = closedCount ? Math.round((won.length / closedCount) * 100) : null;
   const stats = [
-    { accent: '#1E6ADB', accentSoft: '#EAF3FC', value: money(pipelineValue), label: 'Pipeline value',
-      icon: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
-    { accent: '#C4432E', accentSoft: '#FFF5F2', value: String(hot.length), label: 'Negotiating now',
+    { accent: '#5AAAFF', accentSoft: 'rgba(90,170,255,.4)', value: money(pipelineValue), label: 'Pipeline value',
+      hero: true, icon: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
+    { accent: '#FF9C8A', accentSoft: 'rgba(196,67,46,.4)', value: String(hot.length), label: 'Negotiating now',
       icon: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.4 0 2.5-1 2.5-2.3 0-1.4-1.5-2-1.2-3.7.3-1.6 2-2.7 2-2.7s.5 2 .3 3.3c1.5-.7 2.4-2.5 2.4-4.1 0-2.3-1.6-4-3.2-5C13 4.4 12 6.6 10 8c-2 1.4-3.5 3.5-3.5 6.5"/>' },
-    { accent: '#1E6ADB', accentSoft: '#EAF3FC', value: String(pending.length), label: 'Pending offers',
+    { accent: '#5AAAFF', accentSoft: 'rgba(90,170,255,.4)', value: String(pending.length), label: 'Pending offers',
       icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-    { accent: '#0F8A5F', accentSoft: '#E3F6EC', value: winRate === null ? '—' : winRate + '%', label: 'Win rate',
-      icon: '<path d="M20 6 9 17l-5-5"/>' },
+    { accent: '#5FE097', accentSoft: 'rgba(95,224,151,.4)', value: winRate === null ? 'No closed deals yet' : winRate + '%', label: 'Win rate',
+      empty: winRate === null, icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];
   document.getElementById('pipelineStats').innerHTML = stats.map(s => `
-    <div class="stat-card" style="--stat-accent:${s.accent};--stat-accent-soft:${s.accentSoft};">
+    <div class="stat-card${s.hero ? ' hero' : ''}" style="--stat-accent:${s.accent};--stat-accent-soft:${s.accentSoft};">
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
-      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
+      <div><div class="stat-value${s.empty ? ' empty' : ''}">${s.value}</div><div class="stat-label">${s.label}</div></div>
     </div>`).join('');
 }
 
 function offerAgeDays(dateStr){
   if (!dateStr) return null;
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
+const COLD_DAYS = 3;
+function offerIsHot(o){ return o.status === 'sent' && (o.negotiation_log || []).length > 0; }
+function offerIsCold(o){ return o.status === 'sent' && !offerIsHot(o) && (offerAgeDays(o.sent_at) || 0) >= COLD_DAYS; }
+
+// Manual open/close overrides, keyed by customer name — set the moment a trader clicks a card's
+// header, so it stays exactly how they left it across re-renders (a new search keystroke, a
+// status change) instead of snapping back to the hot/cold default every time.
+const custOpenOverride = new Map();
+function toggleCustGroup(name, currentlyOpen){
+  custOpenOverride.set(name, !currentlyOpen);
+  renderOffers();
+}
+// Jumping from an attention pill reuses the existing search box — same filtering everything
+// else already goes through, no separate "jump to customer" mechanism to keep in sync.
+function jumpToCustomer(name){
+  document.getElementById('f_search').value = name;
+  custOpenOverride.set(name, true);
+  renderOffers();
+}
+
+// Segmented pill control replacing the old plain <select> — same f_status hidden value and
+// same renderOffers() read, just a modern toggle group instead of a native dropdown.
+function setStatusFilter(val, btn){
+  document.getElementById('f_status').value = val;
+  document.querySelectorAll('#f_status_seg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderOffers();
 }
 
 function renderOffers(){
@@ -570,59 +676,121 @@ function renderOffers(){
   });
   groupList.forEach(g => g.rows.sort((a, b) => (isHot(b) - isHot(a))));
 
-  wrap.innerHTML = groupList.map(g => {
-    const rowsHtml = g.rows.map(o => {
-      const hot = isHot(o);
-      const plant = o.plant_id ? offerPlantsById[o.plant_id] : null;
-      const logo = plant && (plant.logo_url || plant.logo_url_dark);
-      const initial = (o.plant_name || '?').trim().charAt(0).toUpperCase();
-      const avatarHtml = logo
-        ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
-        : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
-      const ageDays = offerAgeDays(o.sent_at);
-      const statusTag = o.status === 'won'
-        ? `<span class="pkg-tag won">Win${o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`
-        : o.status === 'lost' ? `<span class="pkg-tag lost">Lost</span>` : '';
-      let actionsHtml = '';
-      if (o.status === 'sent'){
-        // "Create Order" here is only the fast path — price closed exactly as quoted, nothing to
-        // negotiate. Anything that needs back-and-forth (customer counters, plant counters back)
-        // goes through "Negotiate", which has the full calculator, can message either side any
-        // number of times, and is the ONLY place that creates the order (negoSaveDefinitive in
-        // trading-tool.html) — no separate "Create Order" shortcut out here anymore, having both
-        // was a duplicate of the same action ("ya lo tenemos dentro"). The button itself is now
-        // the only "hot" signal — calm blue at rest, pulsing green the moment a bid lands — so
-        // there's no separate pill duplicating what the button already says.
-        actionsHtml = `
-          <button class="pkg-trigger-btn${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
-          <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
-      } else if (o.status === 'won'){
-        // A single "⋯" replaces what used to be three separate pill buttons (Documents / Real
-        // Costs / History) crowding this cell — everything now lives in one dropdown, opened the
-        // same way as the old Documents menu.
-        actionsHtml = `<button class="row-menu-btn" style="margin-left:auto;" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`;
-      }
-      // Numbers are read-only here on purpose — editing a price without seeing the rest of the
-      // build-up (customs, inspection, freight) isn't safe. Any change goes through "TT" above.
-      return `<div class="pkg-row">
+  // Attention strip — computed off the whole loaded (date-ranged) set, not whatever the search
+  // box or status filter currently narrows to, since its entire job is "what needs a look right
+  // now" regardless of what's on screen. A hot offer gets its own pill (there's rarely more than
+  // a couple at once); cold ones are rolled up per customer so 4 quiet Murgati offers read as one
+  // line, not four.
+  const hotOffers = offers.filter(offerIsHot);
+  const coldByCustomer = {};
+  offers.filter(offerIsCold).forEach(o => {
+    const key = o.customer_name || '—';
+    (coldByCustomer[key] = coldByCustomer[key] || []).push(o);
+  });
+  const attnHtml = (hotOffers.length || Object.keys(coldByCustomer).length) ? `
+    <div class="attn-strip">
+      ${hotOffers.map(o => `<button type="button" class="attn-pill hot" onclick="jumpToCustomer('${escapeHtml(o.customer_name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${escapeHtml(o.customer_name)}</b> — bid in on ${escapeHtml(o.product_name)}</button>`).join('')}
+      ${Object.entries(coldByCustomer).map(([name, rows]) => {
+        const maxDays = Math.max(...rows.map(o => offerAgeDays(o.sent_at) || 0));
+        return `<button type="button" class="attn-pill cold" onclick="jumpToCustomer('${escapeHtml(name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${rows.length} offer${rows.length === 1 ? '' : 's'}</b> to ${escapeHtml(name)} — ${maxDays}d with no reply</button>`;
+      }).join('')}
+    </div>` : '';
+
+  // A won/lost row keeps the exact original rendering (price, status tag, kebab menu/History) —
+  // nothing about how a closed deal is shown or acted on changes here.
+  function renderClosedRow(o){
+    const plant = o.plant_id ? offerPlantsById[o.plant_id] : null;
+    const logo = plant && (plant.logo_url || plant.logo_url_dark);
+    const initial = (o.plant_name || '?').trim().charAt(0).toUpperCase();
+    const avatarHtml = logo
+      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
+      : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
+    const statusTag = o.status === 'won'
+      ? `<span class="pkg-tag won">Win${o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`
+      : `<span class="pkg-tag lost">Lost</span>`;
+    const actionsHtml = o.status === 'won'
+      ? `<button class="row-menu-btn" style="margin-left:auto;" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`
+      : '';
+    return `<div class="pkg-row">
         ${avatarHtml}
         <div class="pkg-plant-info">
           <span class="pkg-plant">${escapeHtml(o.product_name)}</span>
           <span class="pkg-asof">${escapeHtml(o.plant_name)}</span>
           <span class="pkg-tag price">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</span>
           ${statusTag}
-          ${ageDays != null ? `<span class="pkg-asof">sent ${ageDays === 0 ? 'today' : ageDays + 'd ago'}</span>` : ''}
         </div>
         ${actionsHtml}
       </div>
       <div id="history_row_${o.id}" style="display:none;padding:0 0 8px;"><div id="history_panel_${o.id}"></div></div>`;
-    }).join('');
-    return `<div class="pending-group">
-      <div class="pending-group-head">
+  }
+
+  // A live/pending offer renders one row per plant quoting it, nested under its product — this is
+  // the "find Murgati, then her Sirloin, then the 3 plants quoting it" drill-down, not a flat list
+  // of every offer regardless of what it's for.
+  function renderOpenRow(o){
+    const hot = offerIsHot(o);
+    const cold = offerIsCold(o);
+    const plant = o.plant_id ? offerPlantsById[o.plant_id] : null;
+    const logo = plant && (plant.logo_url || plant.logo_url_dark);
+    const initial = (o.plant_name || '?').trim().charAt(0).toUpperCase();
+    const avatarHtml = logo
+      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
+      : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
+    const ageDays = offerAgeDays(o.sent_at);
+    const ageLabel = hot ? 'bid received'
+      : cold ? `${ageDays}d, no response`
+      : (ageDays != null ? `sent ${ageDays === 0 ? 'today' : ageDays + 'd ago'}` : '');
+    return `<div class="pkg-row">
+        ${avatarHtml}
+        <div class="pkg-plant-info">
+          <span class="pkg-plant">${escapeHtml(o.plant_name)}</span>
+          <span class="pkg-tag price">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</span>
+          <span class="pkg-asof${cold ? ' cold' : ''}">${escapeHtml(ageLabel)}</span>
+        </div>
+        <button class="pkg-trigger-btn${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
+        <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div id="history_row_${o.id}" style="display:none;padding:0 0 8px;"><div id="history_panel_${o.id}"></div></div>`;
+  }
+
+  wrap.innerHTML = attnHtml + groupList.map(g => {
+    const openRows = g.rows.filter(o => o.status === 'sent');
+    const closedRows = g.rows.filter(o => o.status !== 'sent');
+    const coldCount = openRows.filter(offerIsCold).length;
+
+    // Open rows nest under their product — same product, multiple plants quoting it (exactly the
+    // "Murgati wants Sirloin, 3 plants have quoted it" case), grouped in whatever order they were
+    // first sent rather than re-sorted, so a trader scanning top to bottom sees them consistently.
+    const byProduct = {};
+    const productOrder = [];
+    openRows.forEach(o => {
+      const key = o.product_name || '—';
+      if (!byProduct[key]){ byProduct[key] = []; productOrder.push(key); }
+      byProduct[key].push(o);
+    });
+    const openHtml = productOrder.map(name => `
+      <div class="prod-subhead">${escapeHtml(name)} <span class="n">${byProduct[name].length} plant${byProduct[name].length === 1 ? '' : 's'} quoting</span></div>
+      ${byProduct[name].map(renderOpenRow).join('')}
+    `).join('');
+    const closedHtml = closedRows.map(renderClosedRow).join('');
+
+    // Real bug, confirmed against the real 11-offer dataset: "open only when hot" collapsed
+    // EVERY customer the moment none of them had a live negotiation yet (the normal state early
+    // on), leaving the whole page looking empty until you noticed you had to click. Pending offers
+    // ARE the thing a trader watches for day to day — they should be visible by default, not
+    // hidden behind a click; only a customer with nothing left to act on (every offer already
+    // won/lost) collapses down to its one-line summary.
+    const isOpen = custOpenOverride.has(g.customerName) ? custOpenOverride.get(g.customerName) : (!!term || openRows.length > 0);
+    return `<div class="pending-group${isOpen ? ' open' : ''}">
+      <div class="pending-group-head" onclick="toggleCustGroup('${escapeHtml(g.customerName).replace(/'/g, "\\'")}', ${isOpen})">
+        <span class="cust-chevron"></span>
         <span class="pending-group-title">${escapeHtml(g.customerName)}</span>
         <span class="pending-group-count">${g.rows.length} offer${g.rows.length === 1 ? '' : 's'}</span>
+        ${coldCount ? `<span class="pkg-tag" style="background:rgba(196,67,46,.12);color:#FF9C8A;">${coldCount} going cold</span>` : ''}
       </div>
-      <div class="pkg-table-wrap">${rowsHtml}</div>
+      <div class="pending-group-body">
+        <div class="pkg-table-wrap">${openHtml}${closedHtml}</div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -743,14 +911,6 @@ function loadTTPanel(id){
   panel.innerHTML = `<iframe id="ttIframe" src="trading-tool.html?${params.toString()}"></iframe>`;
 }
 
-// The Trading Tool posts this the moment "Save as Final — Win" succeeds inside the iframe, so
-// the overlay closes and the pipeline refreshes in place (no manual refresh needed).
-window.addEventListener('message', (e) => {
-  if (!e.data || e.data.type !== 'buentrade:offerWon') return;
-  if (ttOpenId === e.data.offerId) closeTTOverlay();
-  loadOffers();
-});
-
 // Losing an offer just needs the status flip — no orders, nothing else to generate.
 async function markOffer(id, status){
   if (status === 'lost'){
@@ -789,8 +949,34 @@ async function markWon(id, overrideCreditCheck){
     alert('Error marking won: ' + e.message);
     return;
   }
-  alert(`Orden ${result.order_number} creada.`);
+  await sendWonDocs(result);
   loadOffers();
+}
+
+// Real flow correction 2026-09-05, explicit ask: "solo mandando estos se vuelve orden" — an offer
+// isn't really an order until its required documents actually go out, right at the moment it's
+// won, not left for the trader to remember from the row menu later. PO (plant), SO (customer), and
+// customs always apply. FO (carrier) is the ONE conditional one — only when this deal actually has
+// a US and/or Mexican freight leg booked (a Seaboard-style self-delivered load has neither, so
+// there's no carrier to send anything to — explicit ask: "solo si tiene un flete americano hacemos
+// FO"). Customs is NOT conditional — corrected 2026-09-05 after wrongly gating it on an agency
+// being on file ("nunca dije solo si hay doc de aduana SIEMPRE hay que avisar y mandar a aduana"):
+// shareCustoms still runs every time; if no agency is on file it alerts the trader right here,
+// which is exactly the point — a missing agency surfaces immediately, it never just gets skipped.
+// Each share*() call still opens its own real editable preview and waits for the trader to confirm
+// or cancel — this only removes the part where sending them was optional and easy to forget, it
+// does not remove the trader's confirmation step.
+// Real correction 2026-09-06: "la Aduana solo se contacta cuando se recoge la carga en planta" —
+// customs was wrongly included here at Won time. It only gets contacted at pickup (BOL/packing
+// list/label photos/USDA papers, requested from carrier AND plant, forwarded to customs) — that's
+// a separate step at Confirm Pickup, not this one. PO/SO/FO are the only documents that belong at
+// the moment an offer becomes an order.
+async function sendWonDocs(result){
+  const orderNumber = result.order_number;
+  await sharePO(orderNumber);
+  await shareSO(orderNumber);
+  if (result.freight_order || result.mexican_freight_order) await shareFO(orderNumber);
+  alert(`Orden ${orderNumber} creada.`);
 }
 
 function escapeHtml(str){
@@ -932,196 +1118,6 @@ function confirmResolve(val){
   confirmResolveFn = null;
 }
 
-// ============ STATUS TAB (load lifecycle: pickup -> unloading -> delivered -> payment) ============
-// Lives here, not as its own nav item, because a load only exists once an offer has been Won —
-// it's the next stage of the same pipeline, not a separate concept. Status lives on sales_orders
-// (one row per order_number already) rather than a new table, since it's a 1:1 extension of data
-// that's already there.
-const STEP_ICONS = {
-  pending_pickup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
-  picked_up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="12" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v4h-2"/><circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg>',
-  unloading: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 11 12 16 17 11"/><path d="M20 20H4"/></svg>',
-  delivered: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-};
-// Generic package icon — used whenever a real product photo isn't available (products created
-// via Offers/Trading Tool don't carry a product_id back to `products.photo_url` yet). Swap this
-// for an <img> per-card once that link exists; don't guess a photo by matching on product name.
-const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
-const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
-const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
-const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
-
-const LOAD_STAGES = [
-  { key: 'pending_pickup', label: 'Pending Pickup' },
-  { key: 'picked_up', label: 'Picked Up' },
-  { key: 'unloading', label: 'Unloading' },
-  { key: 'delivered', label: 'Delivered' },
-];
-
-let statusOrders = [];
-let statusOrdersLoaded = false;
-
-function setOfferTab(tab){
-  document.getElementById('offerTabBtn_pipeline').classList.toggle('active', tab === 'pipeline');
-  document.getElementById('offerTabBtn_status').classList.toggle('active', tab === 'status');
-  document.getElementById('offerPanel_pipeline').style.display = tab === 'pipeline' ? 'block' : 'none';
-  document.getElementById('offerPanel_status').style.display = tab === 'status' ? 'block' : 'none';
-  if (tab === 'status' && !statusOrdersLoaded){
-    statusOrdersLoaded = true;
-    loadStatusOrders();
-  }
-}
-
-async function loadStatusOrders(){
-  const wrap = document.getElementById('statusCards');
-  wrap.innerHTML = '<div class="empty">Loading…</div>';
-
-  let orders;
-  try { orders = (await callApi('shipments-search', { limit: 500 })).results || []; }
-  catch (e) { wrap.innerHTML = ''; document.getElementById('statusEmpty').style.display = 'block'; document.getElementById('statusEmpty').textContent = 'Error loading: ' + e.message; return; }
-
-  // A load stops needing attention once it's delivered AND either 3+ days past its payment due
-  // date (paid or written off by then in practice) — this is a time-based cutoff to keep old
-  // closed loads from accumulating here forever, not a real "paid" flag.
-  const today = new Date();
-  const active = orders.filter(o => {
-    if (o.status !== 'delivered') return true;
-    if (!o.delivered_at) return true;
-    const daysSinceDelivery = (today - new Date(o.delivered_at)) / 86400000;
-    const payDays = 30; // shown badge already accounts for the real payment_due_date; this is just the list cutoff
-    return daysSinceDelivery < payDays + 3;
-  });
-
-  // shipments-search already joins everything (carrier, customer contact, catalog product,
-  // freight origin) — just reshape field names to what renderStatusOrders/advanceLoadStatus
-  // already expect, so those functions didn't need to change at all.
-  statusOrders = active.map(o => ({
-    ...o,
-    load_status: o.status,
-    freight: o.freight_origin ? { origin: o.freight_origin } : null,
-    carrier: o.carrier_provider_id ? { phone: o.carrier_phone } : null,
-    customer: { contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, payment_days: o.customer_payment_days },
-    catalogProduct: o.product_id ? { name: o.catalog_product_name, name_en: o.catalog_product_name_en, photo_url: o.catalog_product_photo_url } : null,
-  }));
-
-  renderStatusOrders();
-}
-
-function paymentBadge(order){
-  if (!order.payment_due_date) return '';
-  const due = new Date(order.payment_due_date + 'T00:00:00');
-  const today = new Date();
-  const daysLeft = Math.ceil((due - today) / 86400000);
-  let cls = 'ok', text = `Payment due ${fmtDateStr(order.payment_due_date)}`;
-  if (daysLeft < 0){ cls = 'overdue'; text = `Payment overdue ${Math.abs(daysLeft)}d`; }
-  else if (daysLeft <= 3){ cls = 'due-soon'; text = `Payment due in ${daysLeft}d`; }
-  return `<span class="payment-badge ${cls}">${text}</span>`;
-}
-
-function renderStatusOrders(){
-  const wrap = document.getElementById('statusCards');
-  const emptyEl = document.getElementById('statusEmpty');
-  if (!statusOrders.length){
-    wrap.innerHTML = '';
-    emptyEl.style.display = 'block';
-    return;
-  }
-  emptyEl.style.display = 'none';
-
-  wrap.innerHTML = statusOrders.map(o => {
-    const stage = o.load_status || 'pending_pickup';
-    const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
-    const stepsHtml = LOAD_STAGES.map((s, i) => {
-      const cls = i < stageIdx ? 'done' : (i === stageIdx ? 'current' : '');
-      const line = i < LOAD_STAGES.length - 1 ? `<div class="step-line ${i < stageIdx ? 'done' : ''}"></div>` : '';
-      return `<div class="step ${cls}"><div class="step-icon">${STEP_ICONS[s.key]}</div><div class="step-label">${s.label}</div></div>${line}`;
-    }).join('');
-
-    const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
-    const askFleteroBtn = (stage === 'pending_pickup' && carrierPhone)
-      ? `<button class="wa-btn outline" onclick="askFleteroWhatsApp('${o.order_number}')">💬 WhatsApp Carrier</button>`
-      : '';
-
-    let advanceBtn = '';
-    if (stage === 'pending_pickup') advanceBtn = `<button class="wa-btn" onclick="advanceLoadStatus('${o.order_number}','picked_up')">✓ Confirm Pickup</button>`;
-    else if (stage === 'picked_up') advanceBtn = `<button class="wa-btn" onclick="advanceLoadStatus('${o.order_number}','unloading')">✓ Mark Unloading</button>`;
-    else if (stage === 'unloading') advanceBtn = `<button class="wa-btn" onclick="advanceLoadStatus('${o.order_number}','delivered')">✓ Mark Delivered</button>`;
-
-    const cp = o.catalogProduct;
-    const productName = cp ? (cp.name_en || cp.name) : o.product_name;
-    const productIconHtml = (cp && cp.photo_url)
-      ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
-      : PRODUCT_PLACEHOLDER_ICON;
-
-    return `<div class="load-card">
-      <div class="load-card-top">
-        <div class="load-product-row">
-          <div class="load-product-icon">${productIconHtml}</div>
-          <div>
-            <div class="load-product-name">${escapeHtml(productName)}</div>
-            <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="order-num">${escapeHtml(o.order_number)}</span>
-          ${paymentBadge(o)}
-        </div>
-      </div>
-      <div class="load-route">
-        <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
-        <div class="load-route-arrow">${ARROW_ICON}</div>
-        <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
-      </div>
-      <div class="stepper">${stepsHtml}</div>
-      <div class="load-actions">${askFleteroBtn}${advanceBtn}</div>
-    </div>`;
-  }).join('');
-}
-
-function findStatusOrder(orderNumber){
-  return statusOrders.find(o => o.order_number === orderNumber);
-}
-
-function askFleteroWhatsApp(orderNumber){
-  const o = findStatusOrder(orderNumber);
-  if (!o || !o.carrier) return;
-  const phone = (o.carrier.phone || '').replace(/\D/g, '');
-  if (!phone) { alert('This carrier has no phone on file.'); return; }
-  const msg = `Hi, following up on order ${o.order_number} — ${o.product_name}, picking up from ${o.freight && o.freight.origin ? o.freight.origin : 'origin'}. Can you confirm pickup status?`;
-  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
-}
-
-// One click both records the stage AND opens WhatsApp with the message pre-filled — the wa.me
-// screen itself is the review step (the trader still has to hit send inside WhatsApp), so a
-// separate confirm dialog here would just be a second click for no extra safety, and this is
-// exactly the kind of real-time update that's supposed to be the fast, friendly differentiator.
-const STAGE_MESSAGES_ES = {
-  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${o.product_name} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡gracias por tu confianza!`,
-  unloading: (o, contact) => `Hola ${contact}! 📦 Tu carga de ${o.product_name} está llegando y en proceso de descarga. Te aviso apenas quede entregada.`,
-  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga de ${o.product_name} fue entregada. Espero la recibas en perfectas condiciones — cualquier cosa estoy atento.`,
-};
-
-async function advanceLoadStatus(orderNumber, newStatus){
-  const o = findStatusOrder(orderNumber);
-  if (!o) return;
-
-  // shipments.updateStatus computes picked_up_at/unloading_at/delivered_at + payment_due_date
-  // (from the customer's own payment_days) itself — this used to happen here by hand.
-  try { await callApi('shipments-update-status', { actor: currentActor(), shipment_id: o.id, status: newStatus }); }
-  catch (e) { alert('Error updating status: ' + e.message); return; }
-
-  const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
-  const phone = ((o.customer && (o.customer.whatsapp || o.customer.phone)) || '').replace(/\D/g, '');
-  const msgFn = STAGE_MESSAGES_ES[newStatus];
-  if (phone && msgFn){
-    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msgFn(o, contact)), '_blank');
-  } else if (msgFn){
-    alert('Status updated, but this customer has no WhatsApp/phone on file — message not sent.');
-  }
-
-  await loadStatusOrders();
-}
-
 // ============ PDF EXPORT (PO / SO / FO) ============
 // PO and SO are ready the moment an order exists (Ganada already created them with the last
 // confirmed Trading Tool numbers). FO is exported the same way, but in practice you'd print it
@@ -1218,6 +1214,10 @@ function pdfHeader(doc, docTitle, orderNumber, contactEmail){
   doc.setTextColor(15, 31, 51);
 }
 
+// Real bug found live 2026-09-06 checking the Factura against the real MBG reference: a long
+// Mexican address (common — full street + colonia + CP + city) ran past this column's width and
+// bled straight into the second column's text with no line break, making both unreadable. Each
+// line now wraps to the column width instead of printing as one unbroken run.
 function pdfInfoBlock(doc, x, y, label, lines){
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
@@ -1226,7 +1226,12 @@ function pdfInfoBlock(doc, x, y, label, lines){
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10.5);
   doc.setTextColor(15, 31, 51);
-  (lines || []).filter(Boolean).forEach((line, i) => doc.text(String(line), x, y + 16 + i * 14));
+  let cursorY = y + 16;
+  (lines || []).filter(Boolean).forEach(line => {
+    const wrapped = doc.splitTextToSize(String(line), 260);
+    doc.text(wrapped, x, cursorY);
+    cursorY += wrapped.length * 13;
+  });
 }
 
 function pdfKeyValueRows(doc, x, y, rows){
@@ -1299,11 +1304,18 @@ function pdfFooter(doc, lang){
 // Uploads a generated PDF to the public "order-documents" bucket and returns its shareable URL
 // — mailto:/wa.me links can't carry a real attachment, so a link is the only way to actually
 // deliver the file through those channels.
+// Real bug fixed 2026-09-06, found live testing sharePO: this referenced `db`, a variable that
+// never exists anywhere in this file — the actual Supabase client is `storageClient` (declared
+// near the top, next to API_KEY). Every call site (sharePO/shareSO/shareFO/shareCustoms/
+// buildInvoiceDoc's delivery flow) awaits this before ever opening the send-preview modal, so this
+// silently aborted PO/SO/FO/customs/invoice sending at the upload step, before the trader ever saw
+// anything — confirmed by reproducing sharePO live and catching the real error ("db is not
+// defined").
 async function uploadOrderPdf(doc, filename){
   const blob = doc.output('blob');
-  const { error } = await db.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
+  const { error } = await storageClient.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
   if (error) throw error;
-  return db.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
+  return storageClient.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
 }
 
 // Real attachment for the API send path — Resend can actually carry a file, unlike mailto:/wa.me,
@@ -1334,29 +1346,45 @@ async function buildPODoc(orderNumber){
   pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
   pdfInfoBlock(doc, 320, 168, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO', composed.ship_to.split('\n'));
 
+  // Real corrections 2026-09-06, verified against two real MBG POs (55285 freight + 55400
+  // product — same template used for both): Ship Via is a real, populated field ("Refrigerated
+  // Trucking" — always this, confirmed by the user: "solo es fresco o congelado... el camion" —
+  // the temperature GRADE varies, the transport MODE never does, that granularity already lives on
+  // the FO's own Temperature Setting). Supplier PO is a real field on the template, confirmed
+  // blank in both real examples — added for template fidelity, no fabricated value. Country of
+  // Origin is kept even though MBG's own template doesn't show it — explicit ask: "a veces puede
+  // ser Canada... no todo de US," a real fact this business needs that MBG's template just omits.
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['DATE', todayStr()],
     [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
+    ['SHIP VIA', 'Refrigerated Trucking'],
     ['PAYMENT TERMS', composed.payment_terms],
     ['ORDER #', orderNumber],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
+    ['SUPPLIER PO', composed.supplier_po || ''],
     ['COUNTRY OF ORIGIN', composed.country_of_origin],
-    ['TRADER', composed.trader],
   ]);
   const y = Math.max(yLeft, yRight);
 
   // Plant-facing document: English product name only (products.name_en), never the Spanish
-  // catalog name — the plant's spec sheet and customs paperwork are in English.
+  // catalog name — the plant's spec sheet and customs paperwork are in English. Part # and Buyer
+  // columns added to match the real template exactly (Part # confirmed blank in both real
+  // examples — nothing to fill in yet, not a fabricated value; Buyer is composed.trader, moved
+  // here from its own header row since neither real PO shows a header Trader/Buyer field, only
+  // this column).
   doc.autoTable({
     startY: y + 12,
-    head: [['Item Description', 'Qty LBS', 'Unit Cost', 'Amount']],
+    head: [['Part #', 'Item Description', 'Qty LBS', 'Unit Cost', 'Amount', 'PU or DEL Date', 'Buyer']],
     body: [[
+      '',
       composed.line_item.description || '',
       (composed.line_item.weight || 0).toLocaleString('en-US'),
       '$' + (composed.line_item.purchase_price || 0).toFixed(4),
       '$' + (composed.line_item.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      composed.pick_up_date || '',
+      composed.trader || '',
     ]],
     theme: 'grid',
     headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1390,7 +1418,6 @@ const FROM_DISPLAY = {
   logistics: 'Logistics BuenTrade <logistics@buentradegroup.com>',
   info: 'BuenTrade <info@buentradegroup.com>',
 };
-const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
 
 // A plain confirm() only ever showed what was already decided — no way to fix a typo, add a CC,
 // or actually see the attachment before it goes out. This is a real modal: To/CC/Subject/Body
@@ -1483,137 +1510,42 @@ function gmailFallbackLinkHtml(emails, subject, body){
   return `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
 }
 
-// ============ WHATSAPP CARD (PO/SO/FO as an image, never a PDF link) ============
-// wa.me can only pre-fill text, never attach a file — and a PDF can't be put on the clipboard the
-// way an image can (Chrome's Clipboard API only reliably accepts image/png). So instead of trying
-// to rasterize the actual legal PDF, this draws a separate, short summary card straight to canvas
-// — same underlying order data as the email body, just as a clean image instead of a dense
-// document. One click copies it to the clipboard (Cmd/Ctrl+V into WhatsApp) and opens the right
-// contact's chat with a short pre-filled line.
-function buildOrderCardCanvas(title, orderNumber, rows){
-  const W = 640, padX = 32;
-  const rowH = 34;
-  const H = 190 + rows.length * rowH;
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-
-  ctx.fillStyle = '#F4F7FB';
-  ctx.fillRect(0, 0, W, H);
-
-  const grad = ctx.createLinearGradient(0, 0, W, 0);
-  grad.addColorStop(0, '#0A2547');
-  grad.addColorStop(1, '#0E3D8F');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, 96);
-
-  ctx.font = '700 26px "Space Grotesk", Arial, sans-serif';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('Buen', padX, 42);
-  const buenW = ctx.measureText('Buen').width;
-  ctx.fillStyle = '#5AAAFF';
-  ctx.fillText('Trade', padX + buenW, 42);
-
-  ctx.font = '600 13px Arial, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,.75)';
-  ctx.fillText(title.toUpperCase(), padX, 66);
-
-  ctx.font = '700 13px "IBM Plex Mono", monospace';
-  ctx.fillStyle = '#5AAAFF';
-  ctx.fillText(orderNumber, padX, 86);
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(padX - 12, 116, W - (padX - 12) * 2, H - 116 - 24);
-  ctx.strokeStyle = '#E2E9F2';
-  ctx.strokeRect(padX - 12, 116, W - (padX - 12) * 2, H - 116 - 24);
-
-  let y = 116 + 34;
-  rows.forEach(([label, value]) => {
-    ctx.font = '600 13px Arial, sans-serif';
-    ctx.fillStyle = '#64748B';
-    ctx.fillText(label, padX, y);
-    ctx.font = '700 15px Arial, sans-serif';
-    ctx.fillStyle = '#0F1F33';
-    ctx.textAlign = 'right';
-    ctx.fillText(String(value), W - padX, y);
-    ctx.textAlign = 'left';
-    y += rowH;
-  });
-
-  return canvas;
-}
-
-// navigator.clipboard.write() needs the click's "user activation" to still be live by the time it
-// runs — any real async work first (fetching the order, building the canvas) reliably burns
-// through that window, so the write silently does nothing. Confirmed failing in real use, not
-// hypothetical. Downloading the file instead has no such timing requirement — it always works,
-// the trader just drags/attaches the file into WhatsApp themselves.
-function downloadCanvasPng(canvas, filename){
-  canvas.toBlob(blob => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-  }, 'image/png');
-}
-
-function shareCardAndOpenWhatsApp(canvas, phone, message, filename, btn){
-  downloadCanvasPng(canvas, filename);
-  showToast('Tarjeta descargada', 'Arrástrala o adjúntala dentro de WhatsApp.');
-  if (!phone){ showToast('Sin WhatsApp en archivo', 'Adjunta la tarjeta manualmente.', true); return; }
+// ============ WHATSAPP SHARE (the real PDF, not a fabricated summary image) ============
+// Real correction 2026-09-06: this used to draw a separate summary card to canvas and share that
+// as a PNG instead of the actual document — wa.me can only pre-fill text, never attach a file, so
+// a prior pass invented an image workaround instead of just handing over the real PDF. Downloading
+// the real PDF and letting the trader attach it themselves is no harder and is the actual document,
+// not a re-derived stand-in.
+function shareDocAndOpenWhatsApp(doc, filename, phone, message){
+  doc.save(filename);
+  showToast('PDF descargado', 'Arrástralo o adjúntalo dentro de WhatsApp.');
+  if (!phone){ showToast('Sin WhatsApp en archivo', 'Adjunta el PDF manualmente.', true); return; }
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
 }
 
-async function waCardPO(orderNumber, btn){
+async function waCardPO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
-  const po = built.po, plant = built.plant;
-  const canvas = buildOrderCardCanvas('Purchase Order', orderNumber, [
-    ['Plant', plant ? plant.name : po.plant_name],
-    ['Product', po.product_spec || po.product_name || ''],
-    ['Quantity', (po.weight || 0).toLocaleString('en-US') + ' lbs'],
-    ['Unit Cost', '$' + (po.purchase_price || 0).toFixed(4)],
-    ['Total', '$' + (po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
-    ['Pick-up / Delivery', fmtDatesList(po.delivery_dates)],
-  ]);
+  const plant = built.plant;
   const phone = plant && (plant.whatsapp || plant.phone);
-  shareCardAndOpenWhatsApp(canvas, phone, `Purchase Order ${orderNumber} — sending you the summary now.`, `PO-${orderNumber}.png`, btn);
+  shareDocAndOpenWhatsApp(built.doc, `PO-${orderNumber}.pdf`, phone, `Purchase Order ${orderNumber} — sending you the document now.`);
 }
 
-async function waCardSO(orderNumber, btn){
+async function waCardSO(orderNumber){
   let built;
   try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
-  const so = built.so, customer = built.customer;
-  const canvas = buildOrderCardCanvas('Confirmación de Venta', orderNumber, [
-    ['Cliente', customer ? customer.trade_name : so.customer_name],
-    ['Producto', so.product_spec_es || so.product_name_es || so.product_name || ''],
-    ['Cantidad', (so.weight || 0).toLocaleString('en-US') + ' lbs'],
-    ['Precio', '$' + (so.sale_price || 0).toFixed(4) + ' USD/lb'],
-    ['Total', '$' + (so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
-    ['Entrega estimada', fmtDatesList(so.delivery_dates)],
-  ]);
+  const customer = built.customer;
   const phone = customer && (customer.whatsapp || customer.phone);
-  shareCardAndOpenWhatsApp(canvas, phone, `Orden ${orderNumber} — te mando el resumen.`, `SO-${orderNumber}.png`, btn);
+  shareDocAndOpenWhatsApp(built.doc, `SO-${orderNumber}.pdf`, phone, `Orden ${orderNumber} — te mando el documento.`);
 }
 
-async function waCardFO(orderNumber, btn){
+async function waCardFO(orderNumber){
   let built;
   try { built = await buildFODocs(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const b = built[0];
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
-  const fo = b.fo, carrier = b.carrier;
-  const canvas = buildOrderCardCanvas('Freight Confirmation', orderNumber, [
-    ['Carrier', carrier ? carrier.name : 'TBD'],
-    ['Pick-up', fo.origin || '—'],
-    ['Delivery', fo.destination || '—'],
-    ['Agreed Rate', '$' + (fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })],
-  ]);
-  const phone = carrier && carrier.phone;
-  shareCardAndOpenWhatsApp(canvas, phone, `Order ${orderNumber} — sending you the freight summary.`, `FO-${orderNumber}.png`, btn);
+  const phone = b.carrier && b.carrier.phone;
+  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `Order ${orderNumber} — sending you the document now.`);
 }
 
 const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
@@ -1655,6 +1587,7 @@ async function sharePO(orderNumber){
   try {
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)]);
     showToast('PO sent', emails.join(', '));
+    markDocSent(orderNumber, 'po');
   } catch(e){
     if (e.cancelled) return;
     // Gmail's compose screen genuinely can't carry a file attachment, so the fallback link is the
@@ -1663,6 +1596,16 @@ async function sharePO(orderNumber){
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
       gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`));
   }
+}
+
+// Real gap explained by the user 2026-09-05: nothing recorded whether the PO/FO/customs docs for a
+// won order were actually sent before its confirmed pickup date — this is the foundation a real
+// "pickup in 1 day, FO still not sent" warning needs. Best-effort only: the email already went out
+// successfully by the time this runs, so a failure here (network blip, etc.) must never look like
+// the send itself failed — it just means the readiness check won't see this one as sent yet.
+async function markDocSent(orderNumber, docType){
+  try { await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: orderNumber, doc_type: docType }); }
+  catch (e) { console.warn('markDocSent failed (send itself succeeded):', e.message); }
 }
 
 async function buildSODoc(orderNumber){
@@ -1679,7 +1622,6 @@ async function buildSODoc(orderNumber){
 
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()],
-    ['ENTREGA ESTIMADA', fmtDatesList(so.delivery_dates)],
     ['CONDICIONES DE PAGO', composed.condiciones_pago],
     ['ORDEN #', orderNumber],
   ]);
@@ -1687,10 +1629,12 @@ async function buildSODoc(orderNumber){
     ['INCOTERMS', composed.incoterms],
     ['PAÍS DE ORIGEN', composed.pais_origen],
     ['MONEDA', composed.moneda],
-    ['EJECUTIVO', composed.ejecutivo],
   ]);
   const y = Math.max(yLeft, yRight);
 
+  // Real correction 2026-09-06, verified against a real MBG Sales Confirmation (55399): estimated
+  // delivery date and sales rep are columns in the line-item table there, not header fields — moved
+  // here from ENTREGA ESTIMADA / EJECUTIVO above to match exactly, same underlying data.
   // Both full names shown — Spanish leads (this is the customer-facing document) with the
   // English catalog name underneath in parentheses, so nothing is left to a single casilla.
   const nameEs = composed.linea.descripcion_es || '';
@@ -1698,12 +1642,14 @@ async function buildSODoc(orderNumber){
   const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
   doc.autoTable({
     startY: y + 12,
-    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
+    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto', 'Entrega Est.', 'Vendedor']],
     body: [[
       description,
       (composed.linea.peso || 0).toLocaleString('en-US'),
       '$' + (composed.linea.precio || 0).toFixed(4),
       '$' + (composed.linea.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      fmtDatesList(so.delivery_dates),
+      composed.ejecutivo || '',
     ]],
     theme: 'grid',
     headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -1750,6 +1696,7 @@ async function shareSO(orderNumber){
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)]);
     showToast('SO sent', emails.join(', '));
+    markDocSent(orderNumber, 'so');
   } catch(e){
     if (e.cancelled) return;
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
@@ -1778,16 +1725,23 @@ async function buildFODocs(orderNumber){
     ]);
     pdfInfoBlock(doc, 320, 168, 'CLIENT (BROKER)', ['BuenTrade LLC', COMPANY.address, COMPANY.phone]);
 
+    // Real fields added 2026-09-06, verified against a real MBG Freight Confirmation (55285):
+    // Appt./Check-in # and Release # both come from the plant at pickup, per the same "request at
+    // pickup" flow already asking for BOL/packing list/photos (see shipment-alerts-poll) — left
+    // blank here for the trader to fill in once the plant provides them, same as this file already
+    // did for Release #. Stop Over is blank unless a real multi-stop route applies.
     const yLeft = pdfKeyValueRows(doc, 40, 240, [
       ['DATE', todayStr()],
       ['PICK-UP ADDRESS', composed.pick_up_address],
       ['DELIVERY ADDRESS', composed.delivery_address],
+      ['STOP OVER (IF NECESSARY)', '____________________'],
       ['PICK-UP / DELIVERY DATE', fmtDatesList(composed.delivery_dates)],
     ]);
     const yRight = pdfKeyValueRows(doc, 320, 240, [
       ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
       ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
       ['CLIENT ORDER #', orderNumber],
+      ['APPT. / CHECK-IN #', '____________________'],
       ['RELEASE #', '____________________'],
     ]);
     const y2 = pdfKeyValueRows(doc, 40, Math.max(yLeft, yRight) + 30, [
@@ -1845,6 +1799,7 @@ async function shareFO(orderNumber){
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
       showToast('FO sent', emails.join(', '));
+      markDocSent(orderNumber, 'fo');
     } catch(e){
       if (e.cancelled) continue;
       // Each leg gets its own real link in its own toast — a real anchor click never depends on
@@ -1859,6 +1814,11 @@ async function shareFO(orderNumber){
 // Border customs paperwork isn't its own document — the broker just needs whatever of
 // PO/SO/FO already exist for this order, so this bundles links to all of them in one email
 // instead of asking the trader to forward each separately.
+// Real correction 2026-09-06: "a la aduana no se le mandan po so fo" — customs never gets copies
+// of the trade documents. It gets the REAL pickup documents the plant/carrier emailed after
+// picking up (BOL, packing list, label photos, USDA papers if Docs) — collected automatically by
+// pickup-docs-emails-poll, sitting in shipment_pickup_documents until the trader confirms sending
+// them here. Never auto-forwarded; this is the explicit confirm step.
 async function shareCustoms(orderNumber){
   const sentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
   if (!sentOffer || !sentOffer.customs_agency_provider_id){ alert('No customs agency on file for this order.'); return; }
@@ -1866,34 +1826,35 @@ async function shareCustoms(orderNumber){
   const emails = collectEmails(agency);
   if (!emails.length){ alert('This customs agency has no email on file.'); return; }
 
-  const docs = []; // { label, doc, filename }
-  try {
-    const po = await buildPODoc(orderNumber).catch(() => null);
-    if (po) docs.push({ label: 'Purchase Order', doc: po.doc, filename: `PO-${orderNumber}.pdf` });
-    const so = await buildSODoc(orderNumber).catch(() => null);
-    if (so) docs.push({ label: 'Sales Order', doc: so.doc, filename: `SO-${orderNumber}.pdf` });
-    const fos = await buildFODocs(orderNumber).catch(() => []);
-    for (const b of fos) docs.push({ label: 'Freight Confirmation', doc: b.doc, filename: b.filename });
-  } catch(e){ alert('Error preparing documents: ' + e.message); return; }
-  if (!docs.length){ alert('No documents available yet for this order.'); return; }
+  const shipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+  const pending = (shipment && shipment.pending_pickup_documents) || [];
+  if (!pending.length){ alert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
 
-  // Links only get built for the Gmail fallback body (Gmail's compose screen can't carry
-  // attachments) — the API send below always attaches the real PDFs instead.
-  const links = [];
-  for (const d of docs){
-    try { links.push([d.label, await uploadOrderPdf(d.doc, d.filename)]); } catch(e){ alert('Upload error: ' + e.message); return; }
+  const attachments = [];
+  for (const doc of pending){
+    try {
+      const res = await fetch(doc.storage_url);
+      const blob = await res.blob();
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      attachments.push({ filename: doc.filename, content: base64 });
+    } catch(e){ /* one file failing to fetch never blocks the others */ }
   }
+  if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
 
-  const subject = `${orderNumber} — Documentos`;
-  const body = `Adjuntamos documentación de la orden ${orderNumber}: ${docs.map(d => d.label).join(', ')}.`;
+  const subject = `${orderNumber} — Documentos de recogida`;
+  const body = `Adjuntamos los documentos de recogida de la orden ${orderNumber}: ${pending.map(d => d.filename).join(', ')}.`;
   try {
-    await sendEmailApi('logistics', emails, subject, body, docs.map(d => pdfAttachment(d.doc, d.filename)));
-    showToast('Customs documents sent', emails.join(', '));
+    await sendEmailApi('logistics', emails, subject, body, attachments);
+    showToast('Documentos reenviados a aduana', emails.join(', '));
+    await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
   } catch(e){
     if (e.cancelled) return;
-    const fallbackBody = `Adjuntamos documentación de la orden ${orderNumber}:\n\n` + links.map(([label, url]) => `${label}: ${url}`).join('\n');
-    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, fallbackBody));
+    showToast('Automatic send failed', e.message, true);
   }
 }
 
