@@ -45,6 +45,8 @@
   .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
   .email-modal-field textarea{min-height:110px;resize:vertical;}
   .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+  .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .email-modal-chip{background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 0 24px;}
 
   header{
@@ -443,6 +445,11 @@
 <!-- Firebase Auth (free tier) — handles real per-employee accounts + email verification -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<!-- Real ask 2026-09-06: "boton de create invoice share invoice" — Real Costs needs to build and
+     upload the real Invoice PDF directly from here now, same libraries orders.html already uses. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -468,6 +475,7 @@ async function callApi(fn, body){
   return data;
 }
 function currentActor(){ return (auth && auth.currentUser && auth.currentUser.email) || 'unknown'; }
+const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
 
 if (FIREBASE_READY) {
   firebase.initializeApp(firebaseConfig);
@@ -861,6 +869,13 @@ if (FIREBASE_READY) {
             <button class="btn" style="padding:6px 10px;font-size:12px;flex-shrink:0;" onclick="realCostAdd()">+ Add</button>
           </div>
         </div>
+        <!-- Real ask 2026-09-06: "boton de create invoice share invoice... en el mismo chat es
+             decir recibe invoice email y whatsapp y recibe pantalla para firma email y whatsapp" —
+             one button, right here where the real numbers already live: generates the Invoice,
+             sends it (email + WhatsApp), and sends the remote signature link alongside it (also
+             email + WhatsApp) so the trader can follow up for it in the same WhatsApp thread. -->
+        <button onclick="createAndShareInvoice()" style="width:100%;margin-top:16px;background:linear-gradient(135deg,#12A56E,#0F8A5F);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:800;font-size:12.5px;cursor:pointer;box-shadow:0 3px 8px rgba(15,138,95,.4);">📄 Create & Share Invoice</button>
+        <div id="invoiceMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;text-align:center;"></div>
       </div>
     </div>
 
@@ -1581,6 +1596,154 @@ async function negoInit(){
 
 // ===== Real Costs (Won offers only) — reconciles quoted vs. actual freight/extra costs right
 // inside the same TT view used to quote the deal, instead of a disconnected table elsewhere.
+// ============ INVOICE DOCUMENT ENGINE — duplicated from orders.html's buildInvoiceDoc (same
+// static multi-page app, no bundler). Real ask 2026-09-06: "boton de create invoice share invoice"
+// — Real Costs generates and sends the Invoice directly, no round trip through Orders needed. The
+// signature no longer happens here or on a trader-held pad (BuenTrade never rides the truck) — a
+// remote sign link goes out alongside the Invoice instead (see sign-invoice.html), so this PDF is
+// built WITHOUT a signature block; sign-invoice.html rebuilds the exact same document once signed. ============
+const COMPANY = { name1: 'Buen', name2: 'Trade', legalName: 'BuenTrade LLC', address: '1525 N Park Dr, Suite 104, Weston, FL 33326', phone: '+34 666 318 864' };
+const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
+const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
+const BUENTRADE_WIRE = { bankName: 'Grove Bank & Trust', bankAddress: '2701 South Bayshore Drive, Miami, FL 33133', aba: '066004600', accountNumber: '8000012824', accountTitle: 'Buentrade LLC', accountAddress: '1525 N Park Dr Suite 104, Weston, FL 33326, USA' };
+const INVOICE_TERMS = "This Invoice is issued by BuenTrade LLC. By signing in acknowledgment, the Customer confirms receipt of the merchandise described under the terms stated herein and accepts the outstanding balance and payment due date. The product is delivered as described, subject to standard industry tolerances in weight and count. Any discrepancy must be reported to BuenTrade LLC in writing within 24 hours of signing this invoice.";
+
+function todayStr(){ return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }); }
+function pdfDoc(){ const { jsPDF } = window.jspdf; return new jsPDF({ unit: 'pt', format: 'letter' }); }
+function pdfHeader(doc, docTitle, orderNumber, contactEmail){
+  doc.setFillColor(10, 37, 71); doc.rect(0, 0, 612, 88, 'F');
+  doc.setFillColor(18, 58, 107); doc.circle(58, 42, 17, 'F');
+  doc.setDrawColor(62, 123, 196); doc.setLineWidth(1.3); doc.circle(58, 42, 17, 'S');
+  doc.setDrawColor(95, 168, 232); doc.setLineWidth(1.6); doc.lines([[5, -5], [5, 7], [5, -6]], 47, 46, [1, 1], 'S', false);
+  doc.setFillColor(0, 169, 160); doc.rect(52, 33, 12, 8, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(255, 255, 255);
+  doc.text(COMPANY.name1, 86, 46);
+  const w = doc.getTextWidth(COMPANY.name1);
+  doc.setTextColor(94, 175, 255); doc.text(COMPANY.name2, 86 + w, 46);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(178, 197, 222);
+  doc.text(COMPANY.address, 86, 60);
+  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 86, 71);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(10, 37, 71);
+  doc.text(docTitle, 40, 120);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  const chipText = String(orderNumber);
+  const chipW = doc.getTextWidth(chipText) + 26;
+  doc.setFillColor(30, 106, 219); doc.roundedRect(572 - chipW, 105, chipW, 21, 5, 5, 'F');
+  doc.setTextColor(255, 255, 255); doc.text(chipText, 572 - chipW / 2, 119.5, { align: 'center' });
+  doc.setDrawColor(226, 233, 242); doc.setLineWidth(1); doc.line(40, 134, 572, 134);
+  doc.setTextColor(15, 31, 51);
+}
+function pdfInfoBlock(doc, x, y, label, lines){
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text(label, x, y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(15, 31, 51);
+  let cursorY = y + 16;
+  (lines || []).filter(Boolean).forEach(line => {
+    const wrapped = doc.splitTextToSize(String(line), 260);
+    doc.text(wrapped, x, cursorY);
+    cursorY += wrapped.length * 13;
+  });
+}
+function pdfKeyValueRows(doc, x, y, rows){
+  let cursorY = y;
+  rows.forEach(([k, v]) => {
+    if (!v) return;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30, 106, 219);
+    doc.text(k, x, cursorY);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 31, 51);
+    doc.text(String(v), x + 150, cursorY);
+    cursorY += 17;
+  });
+  return cursorY;
+}
+function pdfTerms(doc, y, title, text, disclaimer){
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text(title, 40, y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 130, 145);
+  const split = doc.splitTextToSize(text, 532);
+  doc.text(split, 40, y + 14);
+  doc.setFontSize(7.5); doc.setTextColor(190, 60, 60);
+  const disclaimerY = y + 14 + split.length * 10 + 12;
+  doc.text(disclaimer, 40, disclaimerY);
+  return disclaimerY + 10;
+}
+function pdfFooter(doc, lang){
+  doc.setDrawColor(226, 233, 242); doc.setLineWidth(0.75); doc.line(40, 758, 572, 758);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(160, 170, 185);
+  const stamp = lang === 'es' ? `Generado ${new Date().toLocaleString('es-MX')}` : `Generated ${new Date().toLocaleString('en-US')}`;
+  doc.text(stamp, 40, 770);
+  doc.text(lang === 'es' ? 'Página 1 de 1' : 'Page 1 of 1', 572, 770, { align: 'right' });
+}
+async function uploadOrderPdf(doc, filename){
+  const blob = doc.output('blob');
+  const { error } = await storageClient.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
+  if (error) throw error;
+  return storageClient.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
+}
+function pdfAttachment(doc, filename){
+  return { filename, content: doc.output('datauristring').split(',')[1] };
+}
+
+function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
+  const pricePerLb = composed.linea.precio || 0;
+  const finalWeight = (so.real_weight != null && so.real_weight > 0) ? so.real_weight : (composed.linea.peso || 0);
+  const finalTotal = finalWeight * pricePerLb;
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Factura', orderNumber, CONTACT_EMAIL_SO);
+  pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
+
+  const paymentDays = customer && customer.payment_days;
+  let dueDateStr = 'Por confirmar';
+  if (paymentDays === 0) dueDateStr = 'Anticipado';
+  else if (paymentDays != null){
+    const due = new Date(); due.setDate(due.getDate() + paymentDays);
+    dueDateStr = due.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  }
+  const y = pdfKeyValueRows(doc, 40, 240, [
+    ['FECHA', todayStr()], ['FECHA DE ENTREGA', todayStr()], ['INCOTERMS', composed.incoterms],
+    ['ORDEN DEL CLIENTE', orderNumber], ['CONDICIONES DE PAGO', composed.condiciones_pago], ['FECHA DE VENCIMIENTO', dueDateStr],
+  ]);
+
+  const nameEs = composed.linea.descripcion_es || '';
+  const nameEn = composed.linea.descripcion_en || '';
+  const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
+    body: [[description, finalWeight.toLocaleString('en-US'), '$' + pricePerLb.toFixed(4), '$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })]],
+    theme: 'grid', headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 }, margin: { left: 40, right: 40 },
+  });
+
+  let ty = doc.lastAutoTable.finalY + 16;
+  const totalsX = 400, totalsLabelW = 100;
+  [['Total', finalTotal], ['Pagos/Créditos', 0], ['Saldo Pendiente', finalTotal]].forEach(([label, amt], i) => {
+    doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); doc.setFontSize(9.5); doc.setTextColor(15, 31, 51);
+    doc.text(label, totalsX, ty + i * 15);
+    doc.text('$' + Number(amt).toLocaleString('en-US', { minimumFractionDigits: 2 }), totalsX + totalsLabelW + 40, ty + i * 15, { align: 'right' });
+  });
+  ty += 3 * 15 + 14;
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text('INSTRUCCIONES DE PAGO / WIRE INSTRUCTIONS', 40, ty);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(15, 31, 51);
+  const wireLines = [
+    `Bank: ${BUENTRADE_WIRE.bankName} — ${BUENTRADE_WIRE.bankAddress}`, `ABA/Routing: ${BUENTRADE_WIRE.aba}`,
+    `Account Number: ${BUENTRADE_WIRE.accountNumber}`, `Beneficiary: ${BUENTRADE_WIRE.accountTitle} — ${BUENTRADE_WIRE.accountAddress}`,
+  ];
+  wireLines.forEach((line, i) => doc.text(line, 40, ty + 14 + i * 12));
+  ty += 14 + wireLines.length * 12 + 10;
+
+  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS, DRAFT_DISCLAIMER_EN);
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(120, 130, 145);
+  doc.text('Pending customer signature — see the confirmation link sent separately.', 40, termsEndY + 14);
+
+  pdfFooter(doc, 'es');
+  return { doc, finalWeight, finalTotal };
+}
+
 const REAL_COST_TYPES = ['Labels', 'Plastic wrap', 'IN-LIEU', 'Storage', 'Fresh to Frozen', 'Lumper fee', 'INBOND Release', 'Other'];
 
 // Carriers only — same list a trader would pick from in Freight & Logistics. Fetched once per
@@ -1617,6 +1780,55 @@ async function realWeightSave(value){
   const real_weight = value.trim() === '' ? null : Number(value);
   try { await callApi('sales-orders-update-real-weight', { actor: currentActor(), order_number: negoOffer.order_number, real_weight }); }
   catch (e) { alert('Error: ' + e.message); }
+}
+
+// Real, confirmed production URL (2026-09-06) — never guessed. Netlify's own free-plan credit
+// pause doesn't apply here; this is only used to build the customer-facing sign link.
+const APP_ORIGIN = 'https://wonderful-longma-8b07c7.netlify.app';
+
+// Real ask 2026-09-06: "boton de create invoice share invoice, y el share invoice debe ir
+// acompanado por una pantalla de firma... en el mismo chat es decir recibe invoice email y
+// whatsapp y recibe pantalla para firma email y whatsapp" — one combined send: the Invoice PDF
+// attached, and the remote sign link in the SAME message (not a second, separate email/WhatsApp),
+// so the trader can follow up for a signature in that same WhatsApp thread.
+async function createAndShareInvoice(){
+  if (!negoOffer || !negoOffer.order_number){ alert('No order on this offer yet.'); return; }
+  const orderNumber = negoOffer.order_number;
+  const msgEl = document.getElementById('invoiceMsg');
+  msgEl.textContent = 'Generando factura…';
+  let result;
+  try { result = await callApi('orders-compose-so', { order_number: orderNumber }); }
+  catch (e) { msgEl.textContent = 'Error: ' + e.message; return; }
+  const { document: composed, so, customer } = result;
+  const emails = (customer && [customer.email, ...String(customer.email_cc || '').split(',')].map(s => (s || '').trim()).filter(Boolean)) || [];
+  if (!emails.length){ msgEl.textContent = 'Este cliente no tiene correo en archivo.'; return; }
+
+  let issueRes;
+  try { issueRes = await callApi('orders-invoice-signature', { action: 'issue', actor: currentActor(), order_number: orderNumber }); }
+  catch (e) { msgEl.textContent = 'Error creando el link de firma: ' + e.message; return; }
+  const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
+
+  const { doc, finalTotal } = buildInvoicePdfUnsigned(composed, so, customer, orderNumber);
+  const filename = `Factura-${orderNumber}.pdf`;
+  let invoiceUrl;
+  try { invoiceUrl = await uploadOrderPdf(doc, filename); }
+  catch (e) { msgEl.textContent = 'Error subiendo el PDF: ' + e.message; return; }
+
+  const subject = `${orderNumber} — Factura`;
+  const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber} por un total de $${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}.\n\n`
+    + `Para confirmar la recepción, por favor firma aquí:\n${signLink}\n\nGracias por su preferencia.`;
+  const contact = customer && customer.contact_name ? negoFirstName(customer.contact_name) : '';
+  const waPhone = customer && (customer.whatsapp || customer.phone);
+  const waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar que la recibiste, firma aquí: ${signLink}`;
+
+  try {
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(doc, filename)], { phone: waPhone, message: waMessage });
+    await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: orderNumber, doc_type: 'invoice' });
+    msgEl.textContent = 'Factura enviada — pendiente de firma del cliente.';
+  } catch (e) {
+    if (e.cancelled){ msgEl.textContent = ''; return; }
+    msgEl.textContent = 'No se pudo enviar: ' + e.message;
+  }
 }
 
 // This card lives in the same narrow 3-column grid as Direct Costs/Profitability (~280px),
@@ -1807,10 +2019,41 @@ function negoCurrentSale(){
 // "no sé si mando o no" was pointing at. This opens a real modal with an editable subject/body
 // instead, and only sends what's actually in those fields when Send is clicked.
 let emailModalResolve = null;
-function openEmailModal(toList, subject, text){
+let emailModalWaInfo = null;
+// Real correction 2026-09-06: "siempre son las dos opciones email y whatsapp" — same fix already
+// applied in orders.html. Also added attachments support here (never existed in this file's copy
+// of the modal) since Create Invoice needs to attach the real PDF, not just a text message.
+function downloadBase64File(filename, base64content){
+  const bytes = atob(base64content);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  const blob = new Blob([arr], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function emailModalSendWhatsApp(){
+  if (!emailModalWaInfo) return;
+  const { phone, message, filename, content } = emailModalWaInfo;
+  if (content) downloadBase64File(filename, content);
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+}
+function openEmailModal(toList, subject, text, attachments, waInfo){
   document.getElementById('emailModalTo').value = toList;
   document.getElementById('emailModalSubject').value = subject;
   document.getElementById('emailModalBody').value = text;
+  const attachWrap = document.getElementById('emailModalAttachWrap');
+  const attachEl = document.getElementById('emailModalAttachments');
+  if (attachments && attachments.length){
+    attachWrap.style.display = 'block';
+    attachEl.innerHTML = attachments.map(a => `<span class="email-modal-chip">📎 ${a.filename}</span>`).join('');
+  } else {
+    attachWrap.style.display = 'none';
+  }
+  emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
+  document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
   document.getElementById('emailModalOverlay').style.display = 'flex';
   return new Promise(resolve => { emailModalResolve = resolve; });
 }
@@ -1830,9 +2073,11 @@ function emailModalConfirm(){
 // Sends through the Netlify function (Resend) so the right BuenTrade alias goes out as the
 // sender automatically. Falls back to mailto: (old behavior) if the API call fails, so a send
 // is never fully blocked by an API/network hiccup.
-async function sendEmailApi(fromAlias, to, subject, text){
+async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
   const toList = Array.isArray(to) ? to.join(', ') : to;
-  const edited = await openEmailModal(toList, subject, text);
+  const waInfoWithFile = (waInfo && waInfo.phone && attachments && attachments[0])
+    ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content } : waInfo;
+  const edited = await openEmailModal(toList, subject, text, attachments, waInfoWithFile);
   if (!edited){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
@@ -1841,7 +2086,7 @@ async function sendEmailApi(fromAlias, to, subject, text){
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, subject: edited.subject, text: edited.text }),
+    body: JSON.stringify({ from: fromAlias, to, subject: edited.subject, text: edited.text, attachments }),
   });
   if (!res.ok){
     const err = await res.json().catch(() => ({}));
@@ -1980,7 +2225,12 @@ async function negoSaveDefinitive(overrideCreditCheck){
     <div class="email-modal-field"><label>To</label><input type="text" id="emailModalTo" readonly></div>
     <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject"></div>
     <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody"></textarea></div>
+    <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
+      <label>Attachments</label>
+      <div class="email-modal-attachments" id="emailModalAttachments"></div>
+    </div>
     <div class="email-modal-actions">
+      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:#fff;color:#1DA851;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
       <button onclick="emailModalCancel()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
       <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
     </div>

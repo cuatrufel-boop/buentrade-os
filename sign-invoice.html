@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Firmar Factura — BuenTrade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF;
+    --blue-light:rgba(30,106,219,.10); --bg:#F4F6FB; --card:#FFFFFF; --line:#E2E8F2;
+    --ink:#0F1F33; --ink-soft:#64748B; --green:#0F8A5F; --green-light:rgba(15,138,95,.10);
+    --red:#C4432E;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:0 0 40px;
+  }
+  .header{
+    width:100%; background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
+    padding:22px 20px; display:flex; align-items:center; gap:10px; justify-content:center;
+  }
+  .header svg{flex-shrink:0;}
+  .header .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;color:#fff;}
+  .header .word span{color:var(--blue-bright);}
+  .page{width:100%;max-width:480px;padding:22px 18px 0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(10,37,71,.05);}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);margin:0 0 6px;}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em;}
+  .sub{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin:0;}
+  .order-chip{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#fff;background:var(--blue);padding:3px 10px;border-radius:20px;margin-top:6px;}
+  .row{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .row:last-child{border-bottom:none;}
+  .row .label{color:var(--ink-soft);}
+  .row .value{font-weight:600;text-align:right;}
+  .row.total{margin-top:4px;padding-top:14px;border-top:2px solid var(--line);border-bottom:none;}
+  .row.total .label{font-weight:700;color:var(--ink);font-size:15px;}
+  .row.total .value{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--navy);}
+  label.field-label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+  input.field-input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;font-family:inherit;margin-bottom:16px;}
+  input.field-input:focus{outline:none;border-color:var(--blue);}
+  #sigCanvas{width:100%;height:180px;border:1.5px dashed #C9D6E8;border-radius:10px;background:#FAFBFD;touch-action:none;cursor:crosshair;display:block;}
+  .sig-actions{display:flex;justify-content:space-between;align-items:center;margin-top:8px;}
+  .clear-link{font-size:12.5px;color:var(--ink-soft);background:none;border:none;cursor:pointer;text-decoration:underline;padding:4px;}
+  .sig-hint{font-size:11.5px;color:var(--ink-soft);}
+  .btn-sign{
+    width:100%;padding:15px;border:none;border-radius:11px;background:linear-gradient(135deg,#12A56E,#0F8A5F);
+    color:#fff;font-weight:700;font-size:15.5px;cursor:pointer;box-shadow:0 4px 14px rgba(15,138,95,.35);
+    margin-top:6px;
+  }
+  .btn-sign:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+  .btn-sign:active:not(:disabled){transform:translateY(1px);}
+  .msg{font-size:12.5px;text-align:center;margin-top:10px;color:var(--ink-soft);}
+  .msg.error{color:var(--red);font-weight:600;}
+  .state-icon{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+  .state-icon.ok{background:var(--green-light);color:var(--green);}
+  .state-icon.err{background:rgba(196,67,46,.1);color:var(--red);}
+  .state-icon svg{width:26px;height:26px;}
+  .center-card{text-align:center;padding:36px 24px;}
+  .center-card h2{font-family:'Space Grotesk',sans-serif;font-size:19px;margin:0 0 8px;}
+  .center-card p{font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin:0;}
+  .spinner{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:20px auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <svg viewBox="0 0 44 44" width="26" height="26"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+  <div class="word">Buen<span>Trade</span></div>
+</div>
+
+<div class="page">
+
+  <div id="loadingState" class="card center-card">
+    <div class="spinner"></div>
+    <p>Cargando factura…</p>
+  </div>
+
+  <div id="errorState" class="card center-card" hidden>
+    <div class="state-icon err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+    <h2>No se pudo abrir</h2>
+    <p id="errorText">Este link no es válido. Contacta a tu representante de BuenTrade.</p>
+  </div>
+
+  <div id="alreadySignedState" class="card center-card" hidden>
+    <div class="state-icon ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <h2>Ya firmada</h2>
+    <p>Esta factura ya fue firmada y confirmada anteriormente. Si necesitas una copia, contacta a tu representante de BuenTrade.</p>
+  </div>
+
+  <div id="successState" class="card center-card" hidden>
+    <div class="state-icon ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <h2>¡Gracias!</h2>
+    <p>Tu firma quedó registrada y la entrega fue confirmada. BuenTrade ya tiene esta información.</p>
+  </div>
+
+  <div id="mainState" hidden>
+    <div class="card">
+      <p class="eyebrow">Factura</p>
+      <h1 id="productName">—</h1>
+      <p class="sub" id="productSpec"></p>
+      <div class="order-chip" id="orderChip"></div>
+    </div>
+
+    <div class="card">
+      <div class="row"><span class="label">Peso</span><span class="value" id="rowWeight">—</span></div>
+      <div class="row"><span class="label">Precio</span><span class="value" id="rowPrice">—</span></div>
+      <div class="row"><span class="label">Condiciones de pago</span><span class="value" id="rowTerms">—</span></div>
+      <div class="row total"><span class="label">Total</span><span class="value" id="rowTotal">—</span></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Confirmación de recepción</p>
+      <p class="sub" style="margin-bottom:16px;">Al firmar, confirmas que recibiste la mercancía descrita en esta factura y aceptas el saldo y la fecha de vencimiento indicados.</p>
+
+      <label class="field-label">Tu nombre completo</label>
+      <input type="text" id="signerName" class="field-input" placeholder="Nombre de quien recibe" autocomplete="name">
+
+      <label class="field-label">Firma</label>
+      <canvas id="sigCanvas" width="600" height="260"></canvas>
+      <div class="sig-actions">
+        <span class="sig-hint">Firma con el dedo o el mouse</span>
+        <button type="button" class="clear-link" onclick="clearSignature()">Borrar</button>
+      </div>
+
+      <button type="button" class="btn-sign" id="signBtn" onclick="submitSignature()" style="margin-top:18px;">Firmar y Confirmar Recepción</button>
+      <p class="msg" id="submitMsg"></p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+const storageClient = supabase.createClient('https://geqhjykbxvxugvnpnygn.supabase.co', API_KEY);
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+
+// ============ DOCUMENT ENGINE — duplicated verbatim from orders.html's buildInvoiceDoc, since
+// this is a static multi-page app with no bundler and this page has to regenerate the exact same
+// signed PDF the trader already sent, now with the customer's real signature embedded. ============
+const COMPANY = { name1: 'Buen', name2: 'Trade', legalName: 'BuenTrade LLC', address: '1525 N Park Dr, Suite 104, Weston, FL 33326', phone: '+34 666 318 864' };
+const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
+const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
+const BUENTRADE_WIRE = { bankName: 'Grove Bank & Trust', bankAddress: '2701 South Bayshore Drive, Miami, FL 33133', aba: '066004600', accountNumber: '8000012824', accountTitle: 'Buentrade LLC', accountAddress: '1525 N Park Dr Suite 104, Weston, FL 33326, USA' };
+const INVOICE_TERMS = "This Invoice is issued by BuenTrade LLC. By signing in acknowledgment, the Customer confirms receipt of the merchandise described under the terms stated herein and accepts the outstanding balance and payment due date. The product is delivered as described, subject to standard industry tolerances in weight and count. Any discrepancy must be reported to BuenTrade LLC in writing within 24 hours of signing this invoice.";
+
+function todayStr(){ return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }); }
+function pdfDoc(){ const { jsPDF } = window.jspdf; return new jsPDF({ unit: 'pt', format: 'letter' }); }
+function pdfHeader(doc, docTitle, orderNumber, contactEmail){
+  doc.setFillColor(10, 37, 71); doc.rect(0, 0, 612, 88, 'F');
+  doc.setFillColor(18, 58, 107); doc.circle(58, 42, 17, 'F');
+  doc.setDrawColor(62, 123, 196); doc.setLineWidth(1.3); doc.circle(58, 42, 17, 'S');
+  doc.setDrawColor(95, 168, 232); doc.setLineWidth(1.6); doc.lines([[5, -5], [5, 7], [5, -6]], 47, 46, [1, 1], 'S', false);
+  doc.setFillColor(0, 169, 160); doc.rect(52, 33, 12, 8, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(255, 255, 255);
+  doc.text(COMPANY.name1, 86, 46);
+  const w = doc.getTextWidth(COMPANY.name1);
+  doc.setTextColor(94, 175, 255); doc.text(COMPANY.name2, 86 + w, 46);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(178, 197, 222);
+  doc.text(COMPANY.address, 86, 60);
+  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 86, 71);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(10, 37, 71);
+  doc.text(docTitle, 40, 120);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  const chipText = String(orderNumber);
+  const chipW = doc.getTextWidth(chipText) + 26;
+  doc.setFillColor(30, 106, 219); doc.roundedRect(572 - chipW, 105, chipW, 21, 5, 5, 'F');
+  doc.setTextColor(255, 255, 255); doc.text(chipText, 572 - chipW / 2, 119.5, { align: 'center' });
+  doc.setDrawColor(226, 233, 242); doc.setLineWidth(1); doc.line(40, 134, 572, 134);
+  doc.setTextColor(15, 31, 51);
+}
+function pdfInfoBlock(doc, x, y, label, lines){
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text(label, x, y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(15, 31, 51);
+  let cursorY = y + 16;
+  (lines || []).filter(Boolean).forEach(line => {
+    const wrapped = doc.splitTextToSize(String(line), 260);
+    doc.text(wrapped, x, cursorY);
+    cursorY += wrapped.length * 13;
+  });
+}
+function pdfKeyValueRows(doc, x, y, rows){
+  let cursorY = y;
+  rows.forEach(([k, v]) => {
+    if (!v) return;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30, 106, 219);
+    doc.text(k, x, cursorY);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 31, 51);
+    doc.text(String(v), x + 150, cursorY);
+    cursorY += 17;
+  });
+  return cursorY;
+}
+function pdfTerms(doc, y, title, text, disclaimer){
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text(title, 40, y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 130, 145);
+  const split = doc.splitTextToSize(text, 532);
+  doc.text(split, 40, y + 14);
+  doc.setFontSize(7.5); doc.setTextColor(190, 60, 60);
+  const disclaimerY = y + 14 + split.length * 10 + 12;
+  doc.text(disclaimer, 40, disclaimerY);
+  return disclaimerY + 10;
+}
+function pdfFooter(doc, lang){
+  doc.setDrawColor(226, 233, 242); doc.setLineWidth(0.75); doc.line(40, 758, 572, 758);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(160, 170, 185);
+  const stamp = lang === 'es' ? `Generado ${new Date().toLocaleString('es-MX')}` : `Generated ${new Date().toLocaleString('en-US')}`;
+  doc.text(stamp, 40, 770);
+  doc.text(lang === 'es' ? 'Página 1 de 1' : 'Page 1 of 1', 572, 770, { align: 'right' });
+}
+async function uploadOrderPdf(doc, filename){
+  const blob = doc.output('blob');
+  const { error } = await storageClient.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
+  if (error) throw error;
+  return storageClient.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
+}
+
+function buildInvoicePdf(composed, so, customer, signatureDataUrl, signedByName, orderNumber){
+  const pricePerLb = composed.linea.precio || 0;
+  const finalWeight = (so.real_weight != null && so.real_weight > 0) ? so.real_weight : (composed.linea.peso || 0);
+  const finalTotal = finalWeight * pricePerLb;
+
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Factura', orderNumber, CONTACT_EMAIL_SO);
+  pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
+  pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
+
+  const paymentDays = customer && customer.payment_days;
+  let dueDateStr = 'Por confirmar';
+  if (paymentDays === 0) dueDateStr = 'Anticipado';
+  else if (paymentDays != null){
+    const due = new Date(); due.setDate(due.getDate() + paymentDays);
+    dueDateStr = due.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  }
+  const y = pdfKeyValueRows(doc, 40, 240, [
+    ['FECHA', todayStr()], ['FECHA DE ENTREGA', todayStr()], ['INCOTERMS', composed.incoterms],
+    ['ORDEN DEL CLIENTE', orderNumber], ['CONDICIONES DE PAGO', composed.condiciones_pago], ['FECHA DE VENCIMIENTO', dueDateStr],
+  ]);
+
+  const nameEs = composed.linea.descripcion_es || '';
+  const nameEn = composed.linea.descripcion_en || '';
+  const description = nameEn && nameEn !== nameEs ? `${nameEs}\n(${nameEn})` : nameEs;
+  doc.autoTable({
+    startY: y + 12,
+    head: [['Descripción del Producto', 'Cant. LBS', 'USD / LB', 'Monto']],
+    body: [[description, finalWeight.toLocaleString('en-US'), '$' + pricePerLb.toFixed(4), '$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })]],
+    theme: 'grid', headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    styles: { fontSize: 9.5, cellPadding: 7 }, margin: { left: 40, right: 40 },
+  });
+
+  let ty = doc.lastAutoTable.finalY + 16;
+  const totalsX = 400, totalsLabelW = 100;
+  [['Total', finalTotal], ['Pagos/Créditos', 0], ['Saldo Pendiente', finalTotal]].forEach(([label, amt], i) => {
+    doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); doc.setFontSize(9.5); doc.setTextColor(15, 31, 51);
+    doc.text(label, totalsX, ty + i * 15);
+    doc.text('$' + Number(amt).toLocaleString('en-US', { minimumFractionDigits: 2 }), totalsX + totalsLabelW + 40, ty + i * 15, { align: 'right' });
+  });
+  ty += 3 * 15 + 14;
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text('INSTRUCCIONES DE PAGO / WIRE INSTRUCTIONS', 40, ty);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(15, 31, 51);
+  const wireLines = [
+    `Bank: ${BUENTRADE_WIRE.bankName} — ${BUENTRADE_WIRE.bankAddress}`, `ABA/Routing: ${BUENTRADE_WIRE.aba}`,
+    `Account Number: ${BUENTRADE_WIRE.accountNumber}`, `Beneficiary: ${BUENTRADE_WIRE.accountTitle} — ${BUENTRADE_WIRE.accountAddress}`,
+  ];
+  wireLines.forEach((line, i) => doc.text(line, 40, ty + 14 + i * 12));
+  ty += 14 + wireLines.length * 12 + 10;
+
+  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS, DRAFT_DISCLAIMER_EN);
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(30, 106, 219);
+  doc.text('FIRMA DE CONFORMIDAD DEL CLIENTE', 40, termsEndY + 14);
+  doc.addImage(signatureDataUrl, 'PNG', 40, termsEndY + 20, 200, 70);
+  doc.setDrawColor(150, 160, 175); doc.setLineWidth(0.75); doc.line(40, termsEndY + 94, 240, termsEndY + 94);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+  doc.text(`${signedByName || 'Cliente'} — ${new Date().toLocaleString('es-MX')}`, 40, termsEndY + 106);
+
+  pdfFooter(doc, 'es');
+  return { doc, finalWeight, finalTotal };
+}
+
+// ============ SIGNATURE CANVAS ============
+let sigCtx = null, sigDrawing = false, sigHasStroke = false;
+function initSignatureCanvas(){
+  const canvas = document.getElementById('sigCanvas');
+  sigCtx = canvas.getContext('2d');
+  sigCtx.strokeStyle = '#0A2547'; sigCtx.lineWidth = 2.5; sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round';
+  const posFromEvent = e => {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+  };
+  canvas.addEventListener('pointerdown', e => {
+    sigDrawing = true; sigHasStroke = true;
+    const p = posFromEvent(e);
+    sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!sigDrawing) return;
+    const p = posFromEvent(e);
+    sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+  });
+  window.addEventListener('pointerup', () => { sigDrawing = false; });
+}
+function clearSignature(){
+  const canvas = document.getElementById('sigCanvas');
+  if (sigCtx) sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  sigHasStroke = false;
+}
+
+// ============ PAGE LOAD ============
+let pageState = null; // { orderNumber, token, composed, so, customer }
+
+function showState(id){
+  ['loadingState','errorState','alreadySignedState','successState','mainState'].forEach(s => {
+    document.getElementById(s).hidden = (s !== id);
+  });
+}
+
+async function init(){
+  const params = new URLSearchParams(location.search);
+  const orderNumber = params.get('order');
+  const token = params.get('token');
+  if (!orderNumber || !token){
+    document.getElementById('errorText').textContent = 'Falta información en el link. Contacta a tu representante de BuenTrade.';
+    showState('errorState');
+    return;
+  }
+  let result;
+  try {
+    result = await callApi('orders-compose-so', { order_number: orderNumber });
+  } catch (e) {
+    document.getElementById('errorText').textContent = 'No se encontró esta orden. Contacta a tu representante de BuenTrade.';
+    showState('errorState');
+    return;
+  }
+  const { document: composed, so, customer } = result;
+  pageState = { orderNumber, token, composed, so, customer };
+
+  const pricePerLb = composed.linea.precio || 0;
+  const finalWeight = (so.real_weight != null && so.real_weight > 0) ? so.real_weight : (composed.linea.peso || 0);
+  const finalTotal = finalWeight * pricePerLb;
+
+  document.getElementById('productName').textContent = composed.linea.descripcion_es || composed.linea.descripcion_en || 'Producto';
+  document.getElementById('productSpec').textContent = composed.linea.descripcion_en && composed.linea.descripcion_en !== composed.linea.descripcion_es ? composed.linea.descripcion_en : '';
+  document.getElementById('orderChip').textContent = orderNumber;
+  document.getElementById('rowWeight').textContent = finalWeight.toLocaleString('en-US') + ' lbs';
+  document.getElementById('rowPrice').textContent = '$' + pricePerLb.toFixed(4) + ' / lb';
+  document.getElementById('rowTerms').textContent = composed.condiciones_pago || '—';
+  document.getElementById('rowTotal').textContent = '$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  showState('mainState');
+  initSignatureCanvas();
+}
+
+async function submitSignature(){
+  if (!pageState) return;
+  const name = document.getElementById('signerName').value.trim();
+  if (!name){ document.getElementById('submitMsg').textContent = 'Por favor escribe tu nombre.'; document.getElementById('submitMsg').className = 'msg error'; return; }
+  if (!sigHasStroke){ document.getElementById('submitMsg').textContent = 'Por favor firma antes de continuar.'; document.getElementById('submitMsg').className = 'msg error'; return; }
+
+  const btn = document.getElementById('signBtn');
+  btn.disabled = true;
+  document.getElementById('submitMsg').className = 'msg';
+  document.getElementById('submitMsg').textContent = 'Guardando…';
+
+  try {
+    const signatureDataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
+    const { composed, so, customer, orderNumber, token } = pageState;
+    const { doc } = buildInvoicePdf(composed, so, customer, signatureDataUrl, name, orderNumber);
+    const invoiceUrl = await uploadOrderPdf(doc, `Factura-${orderNumber}.pdf`);
+
+    const redeemRes = await callApi('orders-invoice-signature', { action: 'redeem', order_number: orderNumber, token, invoice_url: invoiceUrl, signed_by_name: name });
+    if (redeemRes.already_delivered){ showState('alreadySignedState'); return; }
+    showState('successState');
+  } catch (e) {
+    if (e.data && e.data.error === 'invalid_token'){
+      document.getElementById('errorText').textContent = 'Este link ya no es válido. Contacta a tu representante de BuenTrade.';
+      showState('errorState');
+      return;
+    }
+    document.getElementById('submitMsg').className = 'msg error';
+    document.getElementById('submitMsg').textContent = 'No se pudo guardar: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
