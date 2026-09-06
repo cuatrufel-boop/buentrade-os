@@ -900,13 +900,36 @@ function findStatusOrder(orderNumber){
   return statusOrders.find(o => o.order_number === orderNumber);
 }
 
+// Real bug found live 2026-09-06: "en OS dice que missed pu. y en correo pide status haces lo que
+// te da la gana?" — this always sent the same neutral "can you confirm pickup status?" text no
+// matter what, while the "Necesita tu atención" panel (computeAttentionItems) already knew this
+// exact load was overdue and said so. Two paths describing the same real state, disagreeing with
+// each other. This now computes the SAME condition computeAttentionItems does — missed pickup,
+// pending pickup, or (once picked up) overdue at the border — so whichever button the trader
+// clicks, the message always matches what the app itself is showing.
+function statusCheckMessage(o){
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (o.load_status === 'pending_pickup' && o.pickup_date){
+    const pickup = new Date(o.pickup_date + 'T00:00:00');
+    const daysUntil = Math.round((pickup - today) / 86400000);
+    if (daysUntil < 0) return `Hi, following up on order ${o.order_number} — ${o.product_name}. This load is past its pickup date (was ${o.pickup_date}) and still shows pending pickup — please advise.`;
+    if (daysUntil === 0) return `Hi, following up on order ${o.order_number} — ${o.product_name}. Pickup is scheduled for today (${o.pickup_date}) — can you confirm it's happening?`;
+    return `Hi, following up on order ${o.order_number} — ${o.product_name}. Pickup is scheduled for ${o.pickup_date} — can you confirm everything is on track?`;
+  }
+  if (o.load_status === 'picked_up' || o.load_status === 'unloading'){
+    const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
+    const expected = fromDate ? computeBorderArrivalDate(fromDate) : null;
+    if (expected && new Date(expected + 'T00:00:00') < today) return `Hi, following up on order ${o.order_number} — ${o.product_name}. This load was expected at the border on ${expected} and hasn't shown an update since — please advise.`;
+    return `Hi, following up on order ${o.order_number} — ${o.product_name}. Can you confirm the current status of this load?`;
+  }
+  return `Hi, following up on order ${o.order_number} — ${o.product_name}. Can you confirm the current status of this load?`;
+}
 function askFleteroWhatsApp(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o || !o.carrier) return;
   const phone = (o.carrier.phone || '').replace(/\D/g, '');
   if (!phone) { alert('This carrier has no phone on file.'); return; }
-  const msg = `Hi, following up on order ${o.order_number} — ${o.product_name}, picking up from ${o.freight && o.freight.origin ? o.freight.origin : 'origin'}. Can you confirm pickup status?`;
-  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(statusCheckMessage(o)), '_blank');
 }
 
 // DAP/self-delivered counterpart to askFleteroWhatsApp — no carrier ever gets booked for these
@@ -916,8 +939,7 @@ function askPlantWhatsApp(orderNumber){
   if (!o || !o.plant) return;
   const phone = (o.plant.whatsapp || o.plant.phone || '').replace(/\D/g, '');
   if (!phone) { alert('This plant has no phone on file.'); return; }
-  const msg = `Hola, seguimiento de la orden ${o.order_number} — ${o.product_name}. ¿Nos confirman el estatus de la carga?`;
-  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(statusCheckMessage(o)), '_blank');
 }
 
 const STAGE_MESSAGES_ES = {
