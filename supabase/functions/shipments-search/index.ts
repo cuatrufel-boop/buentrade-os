@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
         cu.email as customer_email, cu.email_cc as customer_email_cc,
         cu.payment_days as customer_payment_days,
         pl.whatsapp as plant_whatsapp, pl.phone as plant_phone, pl.email as plant_email,
+        pl.payments_contact_name as plant_payments_contact_name, pl.payments_email as plant_payments_email, pl.payments_whatsapp as plant_payments_whatsapp,
         pr.name as catalog_product_name, pr.name_en as catalog_product_name_en, pp.photo_url as catalog_product_photo_url,
         (
           select fo.origin from freight_orders fo

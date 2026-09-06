@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
       actor, supplier_id, name, category_id, country_id = null, city_id = null, state_id = null, state = null,
       address = null, internal_code = null, contact_name = null, email = null, email_cc = null,
       phone = null, whatsapp = null, whatsapp_cc = null,
+      payments_contact_name = null, payments_email = null, payments_whatsapp = null,
       docs_included = null, payment_terms = null,
       required_documentation = null, website = null, notes = null, internal_notes = null,
       logo_url = null, logo_url_dark = null,
@@ -75,11 +76,13 @@ Deno.serve(async (req) => {
         insert into plants (
           supplier_id, name, category_id, country_id, city_id, state_id, state, address, internal_code,
           contact_name, email, email_cc, phone, whatsapp, whatsapp_cc,
+          payments_contact_name, payments_email, payments_whatsapp,
           docs_included, payment_terms, required_documentation, website, notes, internal_notes,
           logo_url, logo_url_dark, idempotency_key
         ) values (
           ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${state_id}, ${state}, ${address}, ${internal_code},
           ${contact_name}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc},
+          ${payments_contact_name}, ${payments_email}, ${payments_whatsapp},
           ${docs_included}, ${payment_terms}, ${required_documentation}, ${website}, ${notes}, ${internal_notes},
           ${logo_url}, ${logo_url_dark}, ${idempotency_key}
         ) returning *

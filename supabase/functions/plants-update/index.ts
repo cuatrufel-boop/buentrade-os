@@ -10,6 +10,7 @@ const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 const UPDATABLE_FIELDS = [
   "name", "category_id", "country_id", "city_id", "state_id", "state", "address", "internal_code",
   "contact_name", "email", "email_cc", "phone", "whatsapp", "whatsapp_cc",
+  "payments_contact_name", "payments_email", "payments_whatsapp",
   "docs_included", "payment_terms", "required_documentation", "website", "notes", "internal_notes",
   "logo_url", "logo_url_dark",
 ];
@@ -56,6 +57,7 @@ Deno.serve(async (req) => {
           state_id = ${merged.state_id}, state = ${merged.state}, address = ${merged.address}, internal_code = ${merged.internal_code},
           contact_name = ${merged.contact_name}, email = ${merged.email}, email_cc = ${merged.email_cc},
           phone = ${merged.phone}, whatsapp = ${merged.whatsapp}, whatsapp_cc = ${merged.whatsapp_cc},
+          payments_contact_name = ${merged.payments_contact_name}, payments_email = ${merged.payments_email}, payments_whatsapp = ${merged.payments_whatsapp},
           docs_included = ${merged.docs_included},
           payment_terms = ${merged.payment_terms}, required_documentation = ${merged.required_documentation},
           website = ${merged.website}, notes = ${merged.notes}, internal_notes = ${merged.internal_notes},

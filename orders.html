@@ -485,7 +485,10 @@ async function loadStatusOrders(){
     load_status: o.status,
     freight: o.freight_origin ? { origin: o.freight_origin } : null,
     carrier: o.carrier_provider_id ? { phone: o.carrier_phone, name: o.carrier_name } : null,
-    plant: { whatsapp: o.plant_whatsapp, phone: o.plant_phone, email: o.plant_email },
+    plant: {
+      whatsapp: o.plant_whatsapp, phone: o.plant_phone, email: o.plant_email,
+      payments_contact_name: o.plant_payments_contact_name, payments_email: o.plant_payments_email, payments_whatsapp: o.plant_payments_whatsapp,
+    },
     customer: { contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, email: o.customer_email, email_cc: o.customer_email_cc, payment_days: o.customer_payment_days },
     catalogProduct: o.product_id ? { name: o.catalog_product_name, name_en: o.catalog_product_name_en, photo_url: o.catalog_product_photo_url } : null,
   }));
@@ -1013,11 +1016,21 @@ function readFileAsBase64(file){
 // ("this confirms payment has been sent") with nothing behind it. Now it requires attaching the
 // REAL bank wire confirmation the trader received, in the same email that asks for the release
 // number — one real, verifiable message, not the trader's word alone.
+// Real correction 2026-09-06: "en todas las plantas es una persona distinta a la que vendio la
+// carga la que recibe el recibo de pago... tengo que poder enviarlo a esa persona copiando a la
+// que me vendio la carga" — Payments Contact (plants.payments_email) is a real, separate person
+// from the sales Contact (plants.email), never assumed to be the same. Falls back to asking the
+// trader to add it in Plants rather than silently emailing the sales contact instead — sending a
+// bank receipt to the wrong person is exactly the mistake this is meant to prevent.
 async function confirmPlantPaymentSent(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  const emails = o.plant ? collectEmails(o.plant) : [];
-  if (!emails.length){ alert('This plant has no email on file — cannot send a payment confirmation.'); return; }
+  const paymentsEmails = o.plant ? collectEmails({ email: o.plant.payments_email, email_cc: null }) : [];
+  if (!paymentsEmails.length){
+    alert(`This plant has no Payments Contact email on file — add it in Plants (Profile → Payments Contact) before confirming payment for ${orderNumber}.`);
+    return;
+  }
+  const salesEmails = o.plant ? collectEmails(o.plant) : [];
 
   alert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
   const file = await pickBankConfirmationFile();
@@ -1029,9 +1042,9 @@ async function confirmPlantPaymentSent(orderNumber){
 
   const subject = `${orderNumber} — Payment confirmation`;
   const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the release number so our carrier can pick up the load.\n\nThank you.`;
-  const waPhone = o.plant && (o.plant.whatsapp || o.plant.phone);
+  const waPhone = o.plant && (o.plant.payments_whatsapp || o.plant.whatsapp || o.plant.phone);
   try {
-    await sendEmailApi('purchasing', emails, subject, body, [{ filename: file.name, content: base64, contentType: file.type }], { phone: waPhone, message: `Order ${orderNumber} — payment confirmed (bank receipt attached), please share the release number.` });
+    await sendEmailApi('purchasing', paymentsEmails, subject, body, [{ filename: file.name, content: base64, contentType: file.type }], { phone: waPhone, message: `Order ${orderNumber} — payment confirmed (bank receipt attached), please share the release number.` }, salesEmails);
   } catch (e) {
     if (e.cancelled) return;
     alert('No se pudo enviar la confirmación de pago: ' + e.message);
@@ -1531,10 +1544,10 @@ function emailModalSendWhatsApp(){
   showToast(content ? 'Archivo descargado' : 'Abriendo WhatsApp', content ? 'Arrástralo o adjúntalo dentro de WhatsApp.' : '');
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
 }
-function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo){
+function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo, ccList){
   document.getElementById('emailModalFrom').textContent = 'From: ' + (fromDisplay || '');
   document.getElementById('emailModalTo').value = toList;
-  document.getElementById('emailModalCc').value = '';
+  document.getElementById('emailModalCc').value = ccList || '';
   document.getElementById('emailModalSubject').value = subject;
   document.getElementById('emailModalBody').value = text;
   const attachWrap = document.getElementById('emailModalAttachWrap');
@@ -1565,12 +1578,13 @@ function emailModalConfirm(){
   emailModalResolve = null;
 }
 
-async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
+async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo, cc){
   const toList = Array.isArray(to) ? to.join(', ') : to;
+  const ccList = Array.isArray(cc) ? cc.join(', ') : (cc || '');
   const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
   const waInfoWithFile = (waInfo && waInfo.phone && attachments && attachments[0])
     ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content, contentType: attachments[0].contentType } : waInfo;
-  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay, waInfoWithFile);
+  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay, waInfoWithFile, ccList);
   if (!edited){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
