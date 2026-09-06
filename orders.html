@@ -333,6 +333,11 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 
+<!-- Real correction 2026-09-06: "la confirmacion de pago es la del banco. no soy yo diciendo que
+     ya pague" — confirming payment to a plant means attaching the real bank wire confirmation,
+     never just the trader's own typed claim. -->
+<input type="file" id="bankConfirmationInput" accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
+
 <div class="wrap">
   <h1>Orders</h1>
 
@@ -986,16 +991,47 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
 // every other document — "nada se manda sin que el trader vea") and unlocks the separate
 // release-number ask in computeAttentionItems. No dedicated "plant payments contact" field exists
 // yet — using the plant's general email until the user gives us a distinct one.
+function pickBankConfirmationFile(){
+  return new Promise(resolve => {
+    const input = document.getElementById('bankConfirmationInput');
+    input.value = '';
+    const handler = () => { input.removeEventListener('change', handler); resolve(input.files[0] || null); };
+    input.addEventListener('change', handler);
+    input.click();
+  });
+}
+function readFileAsBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+// Real correction 2026-09-06: "la confirmacion de pago es la del banco. no soy yo diciendo que ya
+// pague. en la misma confirmacion pedimos release number" — this used to just send a typed claim
+// ("this confirms payment has been sent") with nothing behind it. Now it requires attaching the
+// REAL bank wire confirmation the trader received, in the same email that asks for the release
+// number — one real, verifiable message, not the trader's word alone.
 async function confirmPlantPaymentSent(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   const emails = o.plant ? collectEmails(o.plant) : [];
   if (!emails.length){ alert('This plant has no email on file — cannot send a payment confirmation.'); return; }
+
+  alert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
+  const file = await pickBankConfirmationFile();
+  if (!file) return; // cancelled — no bank confirmation selected, nothing sent
+
+  let base64;
+  try { base64 = await readFileAsBase64(file); }
+  catch (e) { alert('No se pudo leer el archivo: ' + e.message); return; }
+
   const subject = `${orderNumber} — Payment confirmation`;
-  const body = `Hi,\n\nThis confirms payment has been sent for order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the release number so our carrier can pick up the load.\n\nThank you.`;
+  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the release number so our carrier can pick up the load.\n\nThank you.`;
   const waPhone = o.plant && (o.plant.whatsapp || o.plant.phone);
   try {
-    await sendEmailApi('purchasing', emails, subject, body, [], { phone: waPhone, message: `Order ${orderNumber} — payment confirmed, please share the release number.` });
+    await sendEmailApi('purchasing', emails, subject, body, [{ filename: file.name, content: base64, contentType: file.type }], { phone: waPhone, message: `Order ${orderNumber} — payment confirmed (bank receipt attached), please share the release number.` });
   } catch (e) {
     if (e.cancelled) return;
     alert('No se pudo enviar la confirmación de pago: ' + e.message);
@@ -1003,7 +1039,7 @@ async function confirmPlantPaymentSent(orderNumber){
   }
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
   catch (e) { alert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
-  showToast('Pago confirmado', 'Se avisó a la planta — ya puedes pedir el release number.');
+  showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
   await loadStatusOrders();
 }
 
@@ -1477,11 +1513,11 @@ let emailModalWaInfo = null;
 // trip to the Documents panel afterward. WhatsApp still can't be auto-sent (no WhatsApp Business
 // API — a human has to click wa.me), so this button downloads the same real PDF and opens the
 // chat; it never closes the modal, since the trader may still want to Send the email too.
-function downloadBase64File(filename, base64content){
+function downloadBase64File(filename, base64content, mimeType){
   const bytes = atob(base64content);
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-  const blob = new Blob([arr], { type: 'application/pdf' });
+  const blob = new Blob([arr], { type: mimeType || 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
@@ -1490,9 +1526,9 @@ function downloadBase64File(filename, base64content){
 }
 function emailModalSendWhatsApp(){
   if (!emailModalWaInfo) return;
-  const { phone, message, filename, content } = emailModalWaInfo;
-  if (content) downloadBase64File(filename, content);
-  showToast(content ? 'PDF descargado' : 'Abriendo WhatsApp', content ? 'Arrástralo o adjúntalo dentro de WhatsApp.' : '');
+  const { phone, message, filename, content, contentType } = emailModalWaInfo;
+  if (content) downloadBase64File(filename, content, contentType);
+  showToast(content ? 'Archivo descargado' : 'Abriendo WhatsApp', content ? 'Arrástralo o adjúntalo dentro de WhatsApp.' : '');
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
 }
 function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo){
@@ -1533,7 +1569,7 @@ async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
   const toList = Array.isArray(to) ? to.join(', ') : to;
   const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
   const waInfoWithFile = (waInfo && waInfo.phone && attachments && attachments[0])
-    ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content } : waInfo;
+    ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content, contentType: attachments[0].contentType } : waInfo;
   const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay, waInfoWithFile);
   if (!edited){
     const cancelErr = new Error('Cancelled by user');
