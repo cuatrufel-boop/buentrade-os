@@ -55,6 +55,17 @@
      action (shareCustoms/etc.) from inside the urgent queue screen, this modal has to render ON
      TOP of it or the trader sees a dark overlay with no visible way to actually send. */
   .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:6500;display:flex;align-items:center;justify-content:center;padding:20px;}
+  /* Ported from offers.html's toggleTT/ttOverlay — real ask 2026-09-06: "debe sacarme el QT y
+     volver a grabarlo" — Mark Delivered opens the same Real Costs panel here instead of a plain
+     prompt() for the real weight. z-index above everything else in this file since it's the most
+     active screen whenever it's open. */
+  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:7000;display:none;flex-direction:column;}
+  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
+  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-body{flex:1;min-height:0;position:relative;}
+  .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   .email-modal-box{background:rgba(255,255,255,.06);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
   .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
   .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
@@ -373,6 +384,14 @@ auth.onAuthStateChanged(user => {
     <div id="urgentQueueText" style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;margin-bottom:24px;line-height:1.35;"></div>
     <div id="urgentQueueActions" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;"></div>
   </div>
+</div>
+
+<div id="ttOverlay" class="tt-overlay">
+  <div class="tt-overlay-head">
+    <div class="tt-overlay-title" id="ttOverlayTitle"></div>
+    <button class="tt-overlay-close" onclick="closeTTOverlay()" title="Close">✕</button>
+  </div>
+  <div class="tt-overlay-body" id="ttOverlayBody"></div>
 </div>
 
 <!-- Real ask 2026-09-05: "una pantalla como de datáfono para que firme" (Proof of Delivery) — the
@@ -1023,6 +1042,25 @@ function acceptSignature(){
   sigModalResolve = null;
 }
 
+// Ported from offers.html's toggleTT/ttOverlay — same Trading Tool file, full-screen overlay, no
+// duplicated calculator logic. Opens by sent_offer_id (Real Costs keys off negoOffer.order_number
+// once loaded) and resolves its promise when the trader closes it, so callers can wait for the
+// real weight/costs to actually be saved before moving on to the next step.
+let ttOverlayResolve = null;
+function openTTOverlay(sentOfferId, title){
+  document.getElementById('ttOverlayTitle').textContent = title || '';
+  document.getElementById('ttOverlayBody').innerHTML =
+    `<iframe id="ttIframe" src="trading-tool.html?${new URLSearchParams({ offerId: sentOfferId, v: String(Date.now()) }).toString()}"></iframe>`;
+  document.getElementById('ttOverlay').style.display = 'flex';
+  return new Promise(resolve => { ttOverlayResolve = resolve; });
+}
+function closeTTOverlay(){
+  document.getElementById('ttOverlay').style.display = 'none';
+  document.getElementById('ttOverlayBody').innerHTML = '';
+  if (ttOverlayResolve) ttOverlayResolve();
+  ttOverlayResolve = null;
+}
+
 // Replaces a direct advanceLoadStatus(...,'delivered') call on "Mark Delivered" — "debe generar
 // factura, la firma es aceptando factura." No signature, no delivery: cancelling the pad leaves
 // the load exactly where it was, nothing is marked delivered without it.
@@ -1031,13 +1069,15 @@ async function markDeliveredWithSignature(orderNumber){
   if (!o) return;
   const contact = (o.customer && o.customer.contact_name) || o.customer_name || 'Cliente';
 
-  // Real ask 2026-09-06: "invoice va con ajustados de aduana cuando recibe la carga numeros
-  // reales" — the pedimento's real weight, never PO/SO (those never change). Cancelling this (or
-  // leaving it blank) aborts the whole delivery step, same as cancelling the signature.
-  const realWeightInput = prompt(`Peso real según el pedimento de aduana (lbs) para la orden ${orderNumber}:\n\nEste es el número que va en la factura — deja en blanco solo si aún no tienes el pedimento.`, '');
-  if (realWeightInput === null) return;
-  const realWeight = realWeightInput.trim() ? Number(realWeightInput.trim()) : null;
-  if (realWeightInput.trim() && (!realWeight || realWeight <= 0)){ alert('Peso inválido.'); return; }
+  // Real correction 2026-09-06: "en el momento de crear la factura con numeros reales me saca una
+  // tabla y debe sacarme el QT y volver a grabarlo. ahi es donde debo meter los costos adicionales
+  // faltantes etc. no con una tabla" — a plain prompt() box for the pedimento's real weight was
+  // wrong; this now opens the same Real Costs panel (trading-tool.html) used right after winning,
+  // where the weight AND any missing extra costs get entered and saved together. Closing the
+  // overlay (there's nothing to "cancel" — every field there saves itself on change, same as the
+  // rest of Real Costs) continues straight to the signature step.
+  if (!o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
+  await openTTOverlay(o.sent_offer_id, `Peso real y costos — ${orderNumber}`);
 
   const signatureDataUrl = await openSignatureModal(orderNumber);
   if (!signatureDataUrl) return;
@@ -1045,7 +1085,7 @@ async function markDeliveredWithSignature(orderNumber){
   let built, invoiceUrl;
   const filename = `Factura-${orderNumber}.pdf`;
   try {
-    built = await buildInvoiceDoc(orderNumber, signatureDataUrl, contact, realWeight);
+    built = await buildInvoiceDoc(orderNumber, signatureDataUrl, contact);
     invoiceUrl = await uploadOrderPdf(built.doc, filename);
   } catch (e) {
     alert('Error generando la factura firmada: ' + e.message);
@@ -1293,13 +1333,17 @@ async function markDocSent(orderNumber, docType){
 // aduana cuando recibe la carga numeros reales" — PO and SO are NEVER touched by this function.
 // Only the Invoice reflects the real weight from the customs pedimento — same agreed price per lb,
 // recalculated total.
-async function buildInvoiceDoc(orderNumber, signatureDataUrl, signedByName, realWeightLbs){
+async function buildInvoiceDoc(orderNumber, signatureDataUrl, signedByName){
   let result;
   try { result = await callApi('orders-compose-so', { order_number: orderNumber }); }
   catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'Order not found.' : e.message); }
   const { document: composed, so, customer } = result;
   const pricePerLb = composed.linea.precio || 0;
-  const finalWeight = (realWeightLbs != null && realWeightLbs > 0) ? realWeightLbs : (composed.linea.peso || 0);
+  // Real correction 2026-09-06: "debe sacarme el QT y volver a grabarlo" — the pedimento's real
+  // weight is entered in the Real Costs panel (trading-tool.html), not a prompt() here anymore.
+  // sales_orders.real_weight, same idea as freight_orders.actual_rate vs quoted_rate: blank means
+  // no pedimento yet, so the Invoice still uses the quoted weight.
+  const finalWeight = (so.real_weight != null && so.real_weight > 0) ? so.real_weight : (composed.linea.peso || 0);
   const finalTotal = finalWeight * pricePerLb;
 
   const doc = pdfDoc();
