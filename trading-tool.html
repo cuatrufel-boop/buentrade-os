@@ -782,7 +782,10 @@ if (FIREBASE_READY) {
                  (rqUsFreightRatesForPlant), now available here too so a rate can be corrected or
                  picked for the first time during negotiation, not just at quote time. -->
             <select id="freightRatePicker" style="width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;margin-bottom:6px;" onchange="negoPickFreightRate(this.value)"></select>
-            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
+            <!-- Real correction 2026-09-06: "escoger solo uno" — the $ amount now only ever comes
+                 from picking a real rate above, never typed in directly. readonly (not disabled)
+                 so its value still submits/reads normally everywhere else in this file. -->
+            <div class="inputwrap"><span class="pfx">$</span><input type="number" id="freight" value="0" readonly style="background:var(--card);cursor:default;"></div>
           </div>
           <div class="field" id="mexicanFreightField">
             <label>Mexican Freight</label>
@@ -1624,28 +1627,26 @@ async function negoLoadFreightRates(plantId){
   const currentAmount = negoOffer.us_freight_amount || 0;
   const currentRateId = negoOffer.us_freight_rate_id || null;
 
-  const avg = plantRates.length ? Math.round((plantRates.reduce((s, r) => s + Number(r.rate), 0) / plantRates.length) * 100) / 100 : null;
-  const matchesAverage = avg != null && !currentRateId && currentAmount === avg;
+  // Real correction 2026-09-06: "borra lo del promedio" — no more auto-computed middle-ground
+  // guess as a selectable option. Only two real choices: Del Border, or one specific carrier rate.
   const matchesSpecificRate = currentRateId && plantRates.some(r => r.id === currentRateId);
-  const isManual = currentAmount > 0 && !matchesAverage && !matchesSpecificRate;
+  const isLegacyValue = currentAmount > 0 && !matchesSpecificRate;
 
   const sel = document.getElementById('freightRatePicker');
   const opts = [`<option value=""${currentAmount === 0 ? ' selected' : ''}>Del Border ($0)</option>`];
-  if (avg != null) opts.push(`<option value="AVERAGE"${matchesAverage ? ' selected' : ''}>Average of all carriers ($${avg.toFixed(2)})</option>`);
   plantRates.forEach(r => {
     opts.push(`<option value="${r.id}" data-amount="${r.rate}"${currentRateId === r.id ? ' selected' : ''}>${negoEscapeHtml(r.origin || 'Origin')} — ${negoEscapeHtml(r.provider_name || '')} ($${Number(r.rate).toFixed(2)})</option>`);
   });
-  // A manually-typed amount that doesn't match any real option above — keep it visible as its own
-  // choice instead of silently defaulting the picker to "Del Border" and hiding the real $ that's
-  // already on the offer.
-  if (isManual) opts.push(`<option value="MANUAL" selected>Manual ($${currentAmount.toFixed(2)})</option>`);
+  // A number already on the offer from before this correction (an old average, or a manually-typed
+  // amount) that doesn't match any real rate above — kept visible as its own option so it's never
+  // silently reset to $0, but the trader has to actively pick a real rate to replace it.
+  if (isLegacyValue) opts.push(`<option value="LEGACY" selected>Previous amount ($${currentAmount.toFixed(2)}) — pick a real rate</option>`);
   sel.innerHTML = opts.join('');
 }
 
 function negoPickFreightRate(value){
   const freightEl = document.getElementById('freight');
-  if (value === ''){ freightEl.value = 0; }
-  else if (value === 'AVERAGE' || value === 'MANUAL'){ /* keep whatever $ is already there */ }
+  if (value === '' || value === 'LEGACY'){ if (value === '') freightEl.value = 0; /* LEGACY: leave the existing $ as-is until a real rate is picked */ }
   else {
     const sel = document.getElementById('freightRatePicker');
     const opt = Array.from(sel.options).find(o => o.value === value);

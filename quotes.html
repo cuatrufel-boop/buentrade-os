@@ -2467,17 +2467,18 @@ const rqDdownChevronSvg = `<svg class="rq-ddown-chevron" viewBox="0 0 24 24" fil
 
 // Real carrier rates for this plant's own cities only (rqUsFreightRatesForPlant) — replaces the
 // native <select>'s unstyleable open list with a floating panel matching the app's own look.
+// Real correction 2026-09-06: "borra lo del promedio... sacame los precios posibles y yo escojo
+// uno" — the AVERAGE fallback (an auto-computed middle-ground guess) is gone. Only two real
+// choices now: Del Border (freight already baked into Purchase Price) or one specific real
+// carrier rate the trader explicitly picks — never a number nobody actually quoted.
 function rqUsFreightDropdownHtml(p){
   const key = 'usf:' + p.id;
   const isOpen = rqOpenDropdownKey === key;
   const rates = rqUsFreightRatesForPlant(p.id);
-  const avg = rates.length ? rqAverageUsFreightRate(p.id) : null;
   const selected = p.rqUsFreightRateId;
   const hasValue = !!selected;
   let labelHtml = `Del Border <span class="rq-ddown-price">$0</span>`;
-  if (selected === 'AVERAGE' && avg != null){
-    labelHtml = `Average of all carriers <span class="rq-ddown-price">$${avg.toFixed(2)}</span>`;
-  } else if (selected){
+  if (selected){
     const r = rates.find(x => x.id === selected);
     if (r) labelHtml = `${escapeHtml(r.origin || 'Origin')} <span class="rq-ddown-price">$${Number(r.rate).toFixed(2)}</span>`;
   }
@@ -2486,11 +2487,6 @@ function rqUsFreightDropdownHtml(p){
       <span class="rq-ddown-option-name">Del Border</span>
       <span class="rq-ddown-option-price">$0</span>
     </div>
-    ${avg != null ? `
-    <div class="rq-ddown-option${selected === 'AVERAGE' ? ' selected' : ''}" onclick="rqPickUsFreightRate('${p.id}','AVERAGE')">
-      <span class="rq-ddown-option-name">Average of all carriers</span>
-      <span class="rq-ddown-option-price">$${avg.toFixed(2)}</span>
-    </div>` : ''}
     ${rates.length ? `<div class="rq-ddown-divider"></div>${rates.map(r => `
     <div class="rq-ddown-option${selected === r.id ? ' selected' : ''}" onclick="rqPickUsFreightRate('${p.id}','${r.id}')">
       <div>
@@ -2786,39 +2782,27 @@ function rqCheapestUsFreightForLocation(locationId){
   return rates.reduce((min, r) => (Number(r.rate) < Number(min.rate) ? r : min), rates[0]);
 }
 
-// No city on file for this specific product (the plant's list didn't say, or hasn't restated it
-// this week — see [[feedback_dont_assume_detected_facts_are_permanent]]): quote the AVERAGE of
-// this plant's own known US Freight rates (see rqUsFreightRatesForPlant), a middle-ground estimate
-// so a bid can go out now rather than waiting on an exact origin. Not a real provider_rates row (no
-// single id), so callers use the 'AVERAGE' sentinel (see rqDefaultUsFreightRateId/rqFreightForPlant)
-// rather than a rate id. Strictly per-plant, no cross-plant fallback — see rqUsFreightRatesForPlant.
-function rqAverageUsFreightRate(plantId){
-  const pool = rqUsFreightRatesForPlant(plantId);
-  if (!pool.length) return null;
-  const sum = pool.reduce((s, r) => s + Number(r.rate), 0);
-  // Rounded to real money precision at the source — a raw division ("3961.4641176470586") was
-  // reaching the Trading Tool's Direct Costs field and every save unrounded (real bug confirmed
-  // 2026-08-30). Every caller (the display hint, rqBuildToolParams, the sent_offers save) gets
-  // clean money from here on, nothing left to remember to round downstream.
-  return Math.round((sum / pool.length) * 100) / 100;
-}
+// Real correction 2026-09-06: "borra lo del promedio... sacame los precios posibles y yo escojo
+// uno dependiendo del location de cada planta" — this used to fall back to an auto-computed
+// average of the plant's known rates when no city was on file. Removed: the trader now always
+// sees and explicitly picks a real carrier rate (or leaves it on Del Border), never a number
+// nobody actually quoted.
 
 // One place both call sites (rqSelectPendingProduct, the batch loader below) use to decide the
 // starting freight pick for a plant/product that doesn't have one yet — auto-cheapest when the
 // product's own ship-from city is known ("si si trae ciudad escoge el flete mas barato entre los
-// carriers"), else the 'AVERAGE' sentinel. Never overrides a rate the trader already picked
-// (p.rqUsFreightRateId is only set when absent).
+// carriers"), else left unset (Del Border) for the trader to pick explicitly. Never overrides a
+// rate the trader already picked (p.rqUsFreightRateId is only set when absent).
 //
-// freightIncluded short-circuits both of those to null (Del Border, $0 additional) — real
-// correction 2026-08-30, confirmed against a real Seaboard sheet: a block-format price list gives
-// FOB and Delivered-to-border columns, and the Delivered figure (already saved as current_price)
-// already has freight baked in. Defaulting to the average/cheapest lookup on TOP of a price that's
-// already delivered would double-charge freight on the deal.
+// freightIncluded short-circuits this to null (Del Border, $0 additional) — real correction
+// 2026-08-30, confirmed against a real Seaboard sheet: a block-format price list gives FOB and
+// Delivered-to-border columns, and the Delivered figure (already saved as current_price) already
+// has freight baked in. Defaulting to the cheapest lookup on TOP of a price that's already
+// delivered would double-charge freight on the deal.
 function rqDefaultUsFreightRateId(plantId, locationId, freightIncluded){
   if (freightIncluded) return null;
   const cheapest = rqCheapestUsFreightForLocation(locationId);
-  if (cheapest) return cheapest.id;
-  return rqUsFreightRatesForPlant(plantId).length ? 'AVERAGE' : null;
+  return cheapest ? cheapest.id : null;
 }
 
 // Picking a real origin here both selects the rate AND means "FOB from that plant" — leaving it
@@ -2834,11 +2818,10 @@ function rqSetUsFreightRate(plantId, rateId){
 }
 
 // A location/rate picked (not left on "Del Border") is what determines the US Freight $ — never
-// a static per-plant default. 'AVERAGE' is the no-known-city fallback sentinel (see
-// rqDefaultUsFreightRateId) — not a real provider_rates row, so it's computed rather than looked up.
+// a static per-plant default, and always a real provider_rates row now that the AVERAGE sentinel
+// is gone.
 function rqFreightForPlant(p){
   if (!p.rqUsFreightRateId) return null;
-  if (p.rqUsFreightRateId === 'AVERAGE') return rqAverageUsFreightRate(p.id);
   const rate = rqAllProviderRates.find(r => r.id === p.rqUsFreightRateId);
   return rate ? rate.rate : null;
 }
@@ -3025,10 +3008,6 @@ function rqBuildToolParams(p){
   // "Del Border" (the default) hides US Freight entirely — it's baked into the one Purchase
   // Price number. Picking an actual origin shows it, pre-filled from that rate.
   const showFreight = !!p.rqUsFreightRateId;
-  // Rounded to real money precision before it ever reaches the calculator — real bug confirmed
-  // 2026-08-30: the AVERAGE fallback (rqAverageUsFreightRate, a raw division) passed straight
-  // through as "3961.4641176470586" and the frozen calculator just displays whatever string it's
-  // given. A real carrier rate is already clean 2-decimal money, so this is a no-op for that case.
   const freight = showFreight ? Math.round((rqFreightForPlant(p) || 0) * 100) / 100 : 0;
   const inspection = rqInspectionForPlant(p);
   // "Border" (the default) on Delivery location means no customs, no Mexican Freight — same
@@ -4050,10 +4029,7 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
         plant_id: plant.id,
         customer_id: c.id,
         purchase_price: plant.rqPrice || null,
-        // 'AVERAGE' is a computed fallback (see rqAverageUsFreightRate), never a real provider_rates
-        // row — sending it as an id would break the FK. The actual dollar amount is still saved
-        // correctly below regardless of which case this is.
-        us_freight_rate_id: (plant.rqUsFreightRateId && plant.rqUsFreightRateId !== 'AVERAGE') ? plant.rqUsFreightRateId : null,
+        us_freight_rate_id: plant.rqUsFreightRateId || null,
         us_freight_amount: rqFreightForPlant(plant) || 0,
         docs_on: plant.rqDocsOn === true,
         inspection_amount: rqInspectionForPlant(plant),
