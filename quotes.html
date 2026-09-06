@@ -297,7 +297,9 @@
      strip glued between two dark sections instead of part of the same Trading Tool. blue-light is
      the same pale-blue-family tone the app already uses for this exact "sits near navy" role
      (.tt-brand-header) — ties the bar to the header instead of looking like generic page background. */
-  .rq-tt-overlay-fields{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-start;padding:16px 20px;background:var(--blue-light);}
+  /* Always empty now (rqPlantFieldsHtml returns '' — see 2026-09-07 comment there) — hidden
+     outright instead of showing a padded, colored bar with nothing in it. */
+  .rq-tt-overlay-fields{display:none;}
   .rq-tt-overlay-fields .mini-field input,
   .rq-tt-overlay-fields .mini-field select{border-color:#C8DCF7;}
   .rq-tt-overlay-fields .mini-field input:focus,
@@ -2555,34 +2557,16 @@ function rqMexicanDestDropdownHtml(p){
 // rqCalcRow now reads that one real field directly (see the products[0].cost read there) the same
 // way it already read the Selling Price, so there is exactly one place to type a purchase price,
 // same as every other number in the calculator.
+// Emptied out 2026-09-07: US Freight, Documents (docs on/off), and Delivery location all used to
+// float here as a separate control bar above the calculator. Every one of them just drove a
+// number the calculator's own Direct Costs already shows — Inspection Cases/Combos (Documents),
+// Mexican Freight/Customs Processing/US Warehouse Handling (Delivery location) — real, freely
+// editable $ fields there now, no separate picker needed (see applyEmbedParams in
+// trading-tool.html: those three fields are unconditionally visible). rqToggleDocs,
+// rqMexicanDestDropdownHtml, rqSetMexicanDest etc. are left defined but unused rather than
+// deleted, same as rqUsFreightDropdownHtml — nothing here was asked to change beyond this.
 function rqPlantFieldsHtml(p){
-  const docsOn = p.rqDocsOn === true;
-  // US Freight moved into the Trading Tool's own Direct Costs field (2026-09-07) — it's a real
-  // per-plant rate picker there now (plantId is passed to the iframe), so there's no reason to
-  // also show a second, separate picker up here floating over the calculator. This function no
-  // longer renders it; rqUsFreightDropdownHtml/rqPickUsFreightRate/rqSetUsFreightRate are left
-  // defined but unused rather than deleted, since nothing here was asked to change beyond this.
-  return `
-        ${rqIsSeaboard(p) ? '' : `
-        <div class="mini-field" style="width:auto;flex:0 0 auto;">
-          <label>Documents</label>
-          <button type="button" class="rq-toggle${docsOn ? ' on' : ''}" onclick="rqToggleDocs('${p.id}')">${docsOn ? 'Docs' : 'No Docs'}</button>
-        </div>`}
-        <div class="mini-field" style="width:220px;flex:0 0 auto;">
-          <label>Delivery location</label>
-          ${rqMexicanDestDropdownHtml(p)}
-          ${p.rqMexicanDestRateId ? (() => {
-            const rate = rqMexicanFreightRates().find(r => r.id === p.rqMexicanDestRateId);
-            const matches = rate ? rqCustomersForDestination(rate.destination) : [];
-            if (!matches.length) return `<span class="loc-hint">No customer profile matches this destination yet.</span>`;
-            const agencyId = matches[0].customs_agency_provider_id;
-            const agency = agencyId ? rqAllProviders.find(pr => pr.id === agencyId) : null;
-            const agencyLine = agency
-              ? `<span class="loc-hint">Customs agency: ${escapeHtml(agency.name)}</span>`
-              : `<span class="loc-hint">No customs agency on file for this customer — using default rate.</span>`;
-            return `<span class="loc-hint" style="color:var(--blue);font-weight:600;">Customer: ${matches.map(c => escapeHtml(c.trade_name)).join(', ')}</span>${agencyLine}`;
-          })() : ''}
-        </div>`;
+  return '';
 }
 
 // One row per plant — sorted highest-to-lowest by renderRqPlants once a plant has a real
@@ -3381,6 +3365,19 @@ function rqCalcRow(p){
     p.rqUsFreightRateId = win.__ttFreightRateId || null;
     if (p.rqLastCalc) p.rqLastCalc.freight = parseFloat(freightInp.value) || 0;
   }
+  // Same reasoning as US Freight above, extended 2026-09-07 when the "Delivery location" picker
+  // (the only thing that used to say "this load is going into Mexico") was removed: Mexican
+  // Freight/Customs Processing/US Warehouse Handling are now always-visible, freely editable
+  // fields in Direct Costs (see trading-tool.html's applyEmbedParams) — read live off the iframe
+  // the same way, so whatever the trader actually typed lands on the sent_offer.
+  const freightMxInp = win && win.document && win.document.getElementById('freightMx');
+  const tramiteInp = win && win.document && win.document.getElementById('tramiteAduanal');
+  const bodegaInp = win && win.document && win.document.getElementById('bodegaAmericana');
+  if (p.rqLastCalc && (freightMxInp || tramiteInp || bodegaInp)){
+    p.rqLastCalc.freightMx = freightMxInp ? (parseFloat(freightMxInp.value) || 0) : 0;
+    p.rqLastCalc.tramiteAduanal = tramiteInp ? (parseFloat(tramiteInp.value) || 0) : 0;
+    p.rqLastCalc.bodegaAmericana = bodegaInp ? (parseFloat(bodegaInp.value) || 0) : 0;
+  }
   return p.rqLastCalc || null;
 }
 
@@ -4050,7 +4047,11 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
     const matchedProduct = rqProductForPlant(plant);
     const loggedProductName = matchedProduct ? (matchedProduct.name_en || matchedProduct.name) + (matchedProduct.subcategory_en ? ' ' + matchedProduct.subcategory_en : '') : '';
     const loggedProductNameEs = matchedProduct ? matchedProduct.name + (matchedProduct.subcategory ? ' ' + matchedProduct.subcategory : '') : '';
-    const agencyId = plant.rqMexicanDestRateId ? rqCustomsAgencyForPlant(plant) : null;
+    // "Imported" no longer comes from a picker (Delivery location was removed) — it's inferred
+    // from whether the trader actually put a real number in one of the Mexico-side Direct Costs
+    // fields. A Border-only quote leaves all three at 0/blank, same as always.
+    const wentToMexico = !!(calc && (calc.freightMx > 0 || calc.tramiteAduanal > 0 || calc.bodegaAmericana > 0));
+    const agencyId = wentToMexico ? rqCustomsAgencyForPlant(plant) : null;
     customers.forEach(c => {
       // Deterministic, not random — a genuine double-click/double-fire of this exact same send
       // (same plant, customer, product, channel) within the same minute reuses the same key, so
@@ -4076,11 +4077,14 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
         us_freight_amount: rqFreightForPlant(plant) || 0,
         docs_on: plant.rqDocsOn === true,
         inspection_amount: rqInspectionForPlant(plant),
-        mexican_dest_rate_id: plant.rqMexicanDestRateId || null,
-        mexican_freight_mxn: plant.rqMexicanDestRateId ? rqMexicanFreightMxnForPlant(plant) : null,
+        // Delivery location was removed (see rqPlantFieldsHtml) — there's no catalog-matched
+        // destination row to reference anymore, only whatever the trader typed directly into
+        // Direct Costs (read live in rqCalcRow above, same pattern as US Freight).
+        mexican_dest_rate_id: null,
+        mexican_freight_mxn: wentToMexico ? (calc.freightMx || 0) : null,
         customs_agency_provider_id: agencyId,
-        tramite_aduanal_amount: plant.rqMexicanDestRateId ? rqCustomsRate('tramite_aduanal', agencyId) : 0,
-        bodega_americana_amount: plant.rqMexicanDestRateId ? rqCustomsRate('bodega_americana', agencyId) : 0,
+        tramite_aduanal_amount: calc ? (calc.tramiteAduanal || 0) : 0,
+        bodega_americana_amount: calc ? (calc.bodegaAmericana || 0) : 0,
         extra_fields: plant.rqExtraFields || [],
         weight: calc.weight,
         cost_per_lb: calc.costPerLb,

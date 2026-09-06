@@ -236,28 +236,34 @@
   }
   .chip.on{background:var(--teal); border-color:var(--teal); color:#fff;}
 
-  /* Freight rate dropdown — same component/markup/colors as quotes.html's rq-ddown (fixed
-     2026-09-07: text must be hardcoded dark, never var(--ink), since this page's --ink is white
-     for its own dark theme and a white-on-white bug is exactly what broke this the first time). */
-  .rq-ddown{position:relative;flex:1 1 auto;}
-  .rq-ddown-btn{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;box-sizing:border-box;padding:0 10px;height:var(--field-h);border:1.5px solid var(--line);border-radius:var(--radius);background:#fff;font-family:inherit;font-size:12.5px;color:#0F1F33;cursor:pointer;text-align:left;}
-  .rq-ddown-btn:hover{border-color:#B9CFEC;}
-  .rq-ddown-btn:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,106,219,.12);}
-  .rq-ddown-btn.has-value{border-color:#B9D3F5;background:var(--blue-light);}
+  /* Freight rate dropdown — redesigned 2026-09-07 to match THIS page's own dark theme instead of
+     the white Quotes-page look it was first copied from (real complaint: it read as a foreign
+     component next to every other dark .inputwrap in Direct Costs). Button matches .inputwrap
+     exactly (var(--card)/var(--line)/var(--ink) — correct here since var(--ink) is white on a
+     DARK background, unlike the earlier white-on-white bug). The open panel reuses the same
+     dark-glass + gold-border treatment as .email-modal-box, BuenTrade's own established "floating
+     panel over the app" look, instead of a plain white Material dropdown. */
+  .rq-ddown{position:relative;flex:1 1 auto;min-width:0;}
+  .rq-ddown-btn{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;box-sizing:border-box;padding:0 10px;height:var(--field-h);border:1px solid var(--line);border-radius:var(--radius);background:var(--card);font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;text-align:left;transition:border-color .12s,box-shadow .12s;}
+  .rq-ddown-btn:hover{border-color:rgba(255,255,255,.32);}
+  .rq-ddown-btn:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.2);}
+  .rq-ddown-btn.has-value{border-color:rgba(232,181,76,.55);background:rgba(232,181,76,.08);}
   .rq-ddown-btn-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
-  .rq-ddown-btn-label .rq-ddown-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue);margin-left:5px;}
-  .rq-ddown-chevron{flex-shrink:0;width:13px;height:13px;color:#64748B;transition:transform .15s;}
+  .rq-ddown-chevron{flex-shrink:0;width:13px;height:13px;color:var(--ink-soft);transition:transform .15s;}
   .rq-ddown-btn[aria-expanded="true"] .rq-ddown-chevron{transform:rotate(180deg);}
-  .rq-ddown-panel{position:absolute;top:calc(100% + 6px);left:0;width:max-content;min-width:100%;max-width:320px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.35);max-height:280px;overflow-y:auto;z-index:40;padding:6px;}
-  .rq-ddown-option{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;color:#0F1F33;}
-  .rq-ddown-option:hover{background:var(--blue-light);}
-  .rq-ddown-option.selected{background:var(--blue-light);color:var(--blue);font-weight:600;}
+  .rq-ddown-panel{position:absolute;top:calc(100% + 6px);left:0;width:max-content;min-width:100%;max-width:320px;background:rgba(15,31,51,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);max-height:280px;overflow-y:auto;z-index:40;padding:6px;}
+  .rq-ddown-option{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--ink);}
+  .rq-ddown-option:hover{background:rgba(255,255,255,.08);}
+  .rq-ddown-option.selected{background:rgba(232,181,76,.14);color:var(--ink);font-weight:600;}
   .rq-ddown-option-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .rq-ddown-option-sub{font-size:10.5px;color:#64748B;font-weight:500;margin-top:1px;}
-  .rq-ddown-option-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0F1F33;white-space:nowrap;flex-shrink:0;}
-  .rq-ddown-option.selected .rq-ddown-option-price{color:var(--blue);}
-  .rq-ddown-divider{height:1px;background:#E2E8F2;margin:5px 2px;}
-  .rq-ddown-empty{padding:14px 10px;text-align:center;font-size:11.5px;color:#64748B;}
+  .rq-ddown-option-sub{font-size:10.5px;color:var(--ink-soft);font-weight:500;margin-top:1px;}
+  .rq-ddown-option-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue-bright);white-space:nowrap;flex-shrink:0;}
+  .rq-ddown-option.selected .rq-ddown-option-price{color:#E8B54C;}
+  .rq-ddown-divider{height:1px;background:var(--line);margin:5px 2px;}
+  .rq-ddown-empty{padding:14px 10px;text-align:center;font-size:11.5px;color:var(--ink-soft);}
+  /* The always-editable $ override next to the dropdown (point 3, 2026-09-07: a real rate on file
+     is a starting point, not a cage — the trader can still type a negotiated number directly). */
+  .field .inputwrap.rq-ddown-amount{max-width:112px;flex:0 0 auto;}
 
   .section-label{
     font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
@@ -799,7 +805,7 @@ if (FIREBASE_READY) {
           <div class="field" id="freightField">
             <label>US Freight (USD)</label>
             <div class="inputwrap" id="freightPlainWrap"><span class="pfx">$</span><input type="number" id="freight" value="0" oninput="calc()"></div>
-            <div id="freightDdownWrap" style="display:none;flex:1 1 auto;"></div>
+            <div id="freightDdownWrap" style="display:none;flex:1 1 auto;gap:6px;align-items:center;"></div>
           </div>
           <div class="field" id="mexicanFreightField">
             <label>Mexican Freight</label>
@@ -1487,9 +1493,13 @@ function applyEmbedParams(qp){
   // even though the rate is already on file for the carrier/provider.
   if (qp.has('lumperFee')) document.getElementById('lumperFee').value = Number(qp.get('lumperFee')) || 0;
   if (qp.has('inbondRelease')) document.getElementById('inbondRelease').value = Number(qp.get('inbondRelease')) || 0;
-  const showCustoms = qp.get('hideCustomsBrokerage') !== '1';
-  rqShow('tramiteAduanalField', showCustoms);
-  rqShow('bodegaAmericanaField', showCustoms);
+  // Always shown now (2026-09-07) — Quotes' "Delivery location" picker, the only thing that used
+  // to say "this load is imported" and gate these on/off, was removed (see quotes.html's
+  // rqPlantFieldsHtml). A Border-only quote just leaves them at $0/blank; the trader fills them
+  // in directly for an actual Mexico-delivered load. hideCustomsBrokerage still arrives from
+  // Quotes but is stale by construction now, so it's ignored rather than acted on.
+  rqShow('tramiteAduanalField', true);
+  rqShow('bodegaAmericanaField', true);
   // Lumper fee, INBOND Release, and every Cold storage & USDA field stay hidden by default when
   // embedded from Quotes — the trader can click a "+ Labels" / "+ Storage" chip there, which
   // adds that field's key to showExtras and live-updates this panel with it un-hidden.
@@ -1508,7 +1518,8 @@ function applyEmbedParams(qp){
   // dangling on screen. Re-evaluated every call so a section that was empty can reappear too.
   rqShow('customsBrokerageSection', !['tramiteAduanalField','bodegaAmericanaField','lumperFeeField','inbondReleaseField'].every(id => document.getElementById(id).style.display === 'none'));
   rqShow('coldStorageSection', !['labelsCostField','plasticWrapField','inLieuField','storageOvernightField','storageWeekendField','storageShortTermField','storageMidTermField','storageLongTermField','storageExtraLongField','freshToFrozenField'].every(id => document.getElementById(id).style.display === 'none'));
-  rqShow('mexicanFreightField', qp.get('hideMexicanFreight') !== '1');
+  // Always shown, same reasoning as Customs Processing/US Warehouse above.
+  rqShow('mexicanFreightField', true);
   // Mexican Freight is stored in USD in Master Data; Quotes converts it to MXN itself before
   // sending it here, since this field has always been MXN-denominated.
   if (qp.has('freightMx')) document.getElementById('freightMx').value = Number(qp.get('freightMx')) || 0;
@@ -1599,15 +1610,21 @@ function ttRatesForPlant(plantId){
   return ttFreightRates.filter(r => r.service_type === 'us_freight' && locIds.includes(r.location_id))
     .slice().sort((a, b) => (a.origin || '').localeCompare(b.origin || '') || a.rate - b.rate);
 }
+// The dropdown picks a real rate as a starting point; the $ box next to it is always its own
+// separate, always-editable field (point 3, 2026-09-07: a negotiated one-off number still has to
+// be typeable, a picklist alone can't cover every real deal) — it never gets disabled or replaced
+// by the dropdown, it only gets its value FILLED by a pick.
 function ttFreightDdownHtml(){
   const rates = ttRatesForPlant(ttFreightPlantId);
   const selected = ttFreightSelectedId;
   const hasValue = !!selected;
-  let labelHtml = `Del Border <span class="rq-ddown-price">$0</span>`;
+  let nameText = 'Del Border';
   if (selected){
     const r = rates.find(x => x.id === selected);
-    if (r) labelHtml = `${ttEscapeHtml(r.origin || 'Origin')} <span class="rq-ddown-price">$${Number(r.rate).toFixed(2)}</span>`;
+    if (r) nameText = r.origin || 'Origin';
   }
+  const freightEl = document.getElementById('freight');
+  const amount = freightEl ? (parseFloat(freightEl.value) || 0) : 0;
   // No "average" fallback, ever — explicit, repeated instruction: a real per-carrier rate or
   // "Del Border" ($0, freight already inside the Purchase Price), nothing computed in between.
   const optionsHtml = `
@@ -1627,11 +1644,12 @@ function ttFreightDdownHtml(){
   return `
     <div class="rq-ddown">
       <button type="button" class="rq-ddown-btn${hasValue ? ' has-value' : ''}" aria-expanded="${ttFreightDdownOpen}" onclick="ttToggleFreightDdown()">
-        <span class="rq-ddown-btn-label">${labelHtml}</span>
+        <span class="rq-ddown-btn-label">${ttEscapeHtml(nameText)}</span>
         ${ttDdownChevronSvg}
       </button>
       ${ttFreightDdownOpen ? `<div class="rq-ddown-panel">${optionsHtml}</div>` : ''}
-    </div>`;
+    </div>
+    <div class="inputwrap rq-ddown-amount"><span class="pfx">$</span><input type="number" id="freightAmountInput" value="${amount}" oninput="ttFreightManualEdit(this.value)"></div>`;
 }
 function ttRenderFreightDdown(){
   const el = document.getElementById('freightDdownWrap');
@@ -1652,6 +1670,13 @@ function ttPickFreightRate(value){
   }
   document.getElementById('freight').value = Math.round(amount * 100) / 100;
   ttRenderFreightDdown();
+  calc();
+}
+// Typing directly in the $ box — no re-render (would blur the input mid-keystroke, same class of
+// bug the capture-phase fix above deals with); it's a separate DOM node from #freight, so it has
+// to mirror the value across itself instead of just reading it back.
+function ttFreightManualEdit(value){
+  document.getElementById('freight').value = value;
   calc();
 }
 // capture:true — must run BEFORE the button's own onclick (which re-renders and detaches
@@ -1681,7 +1706,7 @@ async function ttInitFreightPicker(plantId){
   }
   document.getElementById('freightField').style.display = ''; // Quotes may have hidden the whole field via hideFreight before this resolved
   document.getElementById('freightPlainWrap').style.display = 'none';
-  document.getElementById('freightDdownWrap').style.display = '';
+  document.getElementById('freightDdownWrap').style.display = 'flex';
   ttRenderFreightDdown();
 }
 if (__qp.get('plantId')) ttInitFreightPicker(__qp.get('plantId'));
