@@ -131,20 +131,6 @@
   .step.done .step-label,.step.current .step-label{color:var(--ink);}
   .step-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;}
   .step-line.done{background:var(--green);}
-  /* Real ask 2026-09-06: "visualmente dame algo mejor un camion moviendose" — a small truck rides
-     the road segment the load is actually crossing right now (Picked Up -> Unloading), a plain
-     dashed line otherwise. Only ever one moving truck per card, on whichever segment is current. */
-  .route-truck{position:absolute;top:-9px;left:0;width:18px;height:18px;color:var(--blue-bright);animation:truckDrive 2.2s ease-in-out infinite;}
-  .route-truck svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 3px rgba(4,12,26,.6));}
-  @keyframes truckDrive{0%{left:6%;}50%{left:88%;}100%{left:6%;}}
-  /* Real ask 2026-09-06 (follow-up): "no veo ningun camion en movimiento ni cargando ni
-     descargando" — the moving truck only ever covered the Picked Up leg; Unloading (the stage
-     the trader actually lands on most often) had zero motion. A package now visibly drops out of
-     the truck into the Unloading node itself while that stage is current — the truck has already
-     arrived and parked, so the motion belongs on the node, not the road. */
-  .unload-drop{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:15px;height:15px;color:var(--blue-bright);animation:unloadDrop 1.3s ease-in-out infinite;z-index:1;}
-  .unload-drop svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 3px rgba(4,12,26,.6));}
-  @keyframes unloadDrop{0%{top:-8px;opacity:0;}25%{opacity:1;}65%{top:16px;opacity:1;}85%{opacity:0;}100%{top:-8px;opacity:0;}}
   .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
   .docs-panel-toggle{cursor:pointer;font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:14px;padding-top:12px;border-top:1px solid var(--line);user-select:none;}
   .docs-panel-toggle:hover{color:var(--ink);}
@@ -762,10 +748,6 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const i = LOAD_STAGES.findIndex(s => s.key === stageKey);
     const s = LOAD_STAGES[i];
     const cls = i < stageIdx ? 'done' : (i === stageIdx ? 'current' : '');
-    const isMoving = i === stageIdx && s.key === 'picked_up';
-    const truckHtml = isMoving ? `<div class="route-truck">${STEP_ICONS.picked_up}</div>` : '';
-    const isUnloading = i === stageIdx && s.key === 'unloading';
-    const unloadHtml = isUnloading ? `<div class="unload-drop">${STEP_ICONS.pending_pickup}</div>` : '';
     const isNext = i === stageIdx + 1;
     const isUrgent = isNext && attentionOrderNumbers.has(o.order_number);
     // Real correction 2026-09-07 (final): "preguntas estupidas has lo que digo" — no more separate
@@ -814,9 +796,8 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="alert('${infoMsg.replace(/'/g, "\\'")}')"`;
     const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : infoMsg);
     return {
-      html: `<div class="u-main ${cls}${actionableClass}{{BLINK}}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${displayLabel}</div>${dateHtml}</div>`,
+      html: `<div class="u-main ${cls}${actionableClass}{{BLINK}}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div><div class="u-main-label">${displayLabel}</div>${dateHtml}</div>`,
       lineDone: i < stageIdx,
-      lineExtra: truckHtml,
       actionableNow: isNext,
     };
   }
