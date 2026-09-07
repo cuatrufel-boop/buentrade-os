@@ -1070,15 +1070,13 @@ function renderOrderDocsPanel(o){
     const findFiles = prefix => files.filter(f => f.name.startsWith(prefix));
     const pickupDocs = o.pickup_documents || [];
     const docRowBtn = (label, onclick) => `<button class="wa-btn outline doc-row-btn" onclick="${onclick}">${label}</button>`;
-    // Real correction 2026-09-07, re-checked against offers.html's actual DOC_TYPES/openDocPreview
-    // (the real canonical pattern — "no son los mismos botones que hemos usado en todo el
-    // sistema"): every other Email/WhatsApp pair in this app is a secondary-gray Email button next
-    // to a green WhatsApp button, TWO separate buttons side by side — not one, and not both the
-    // same color. My earlier "one button is enough, the modal already has WhatsApp built in" call
-    // was wrong: offers.html keeps them as two independent actions on purpose (a quick direct
-    // WhatsApp send without going through the modal at all). Restored, with the same icons/classes.
-    const emailBtn = onclick => `<button class="btn secondary doc-row-btn" style="display:inline-flex;align-items:center;gap:6px;" onclick="${onclick}">${EMAIL_ICON}Email</button>`;
-    const waBtn = onclick => `<button class="wa-btn doc-row-btn" style="display:inline-flex;align-items:center;gap:6px;" onclick="${onclick}">${WA_ICON}WhatsApp</button>`;
+    // Real correction 2026-09-07 (final): "carriers asi los logos al lado derecho y en ese
+    // formato" — the exact reference is providers.html's renderProviders() carrier list rows:
+    // icon-only, round-ish WhatsApp (solid wa-btn, white icon) + Email (wa-btn outline, green
+    // icon) buttons, no text labels. Copied verbatim (same classes, same inline padding, same
+    // icon fill) instead of the text-labeled pair guessed at before.
+    const emailBtn = onclick => `<button class="wa-btn outline" style="padding:6px 10px;" onclick="${onclick}" title="Email"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></button>`;
+    const waBtn = onclick => `<button class="wa-btn" style="padding:6px 10px;" onclick="${onclick}" title="WhatsApp"><svg viewBox="0 0 24 24" fill="#fff">${WA_ICON.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg></button>`;
     const poFiles = findFiles(`PO-${o.order_number}`);
     const soFiles = findFiles(`SO-${o.order_number}`);
     const foFiles = findFiles(`FO-${o.order_number}`);
