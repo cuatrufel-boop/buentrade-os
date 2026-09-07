@@ -1890,6 +1890,7 @@ async function shareCustoms(orderNumber){
     await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
     showToast('Documentos reenviados a aduana', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
+    markDocSent(orderNumber, 'customs');
   } catch(e){
     if (e.cancelled) return;
     showToast('Automatic send failed', e.message, true);
