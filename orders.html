@@ -367,6 +367,10 @@ auth.onAuthStateChanged(user => {
       <label>Attachments</label>
       <div class="email-modal-attachments" id="emailModalAttachments"></div>
     </div>
+    <div class="email-modal-field" id="emailModalWaWrap" style="display:none;">
+      <label>WhatsApp — <span id="emailModalWaPhone"></span></label>
+      <textarea id="emailModalWaBody" autocomplete="off"></textarea>
+    </div>
     <div class="email-modal-actions">
       <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:#fff;color:#1DA851;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
       <button onclick="emailModalCancel()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
@@ -960,6 +964,13 @@ const STAGE_SUBJECTS_ES = {
   delivered: o => `${o.order_number} — Tu carga fue entregada`,
 };
 
+// Real correction 2026-09-07, explicit and repeated: every notification that leaves BuenTrade
+// goes through the same real, editable preview modal (sendEmailApi/openEmailModal) — the same one
+// Confirmar Pago/Invoice/Enviar a Aduana already use — never a bare window.open() compose link.
+// This used to open TWO window.open() calls back to back (WhatsApp, then Gmail compose) — the
+// second one is exactly the shape browsers silently block as an unrequested popup, which is why
+// "el email no sale" while WhatsApp still opened. One order, one preview, trader confirms, it
+// sends for real (email) with WhatsApp as the same optional second button every other send has.
 async function advanceLoadStatus(orderNumber, newStatus, notes){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
@@ -967,20 +978,23 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
   try { await callApi('shipments-update-status', { actor: currentActor(), shipment_id: o.id, status: newStatus, notes: notes || null }); }
   catch (e) { alert('Error updating status: ' + e.message); return; }
 
-  const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
-  const phone = ((o.customer && (o.customer.whatsapp || o.customer.phone)) || '').replace(/\D/g, '');
   const msgFn = STAGE_MESSAGES_ES[newStatus];
   const subjFn = STAGE_SUBJECTS_ES[newStatus];
-  const emails = o.customer ? collectEmails(o.customer) : [];
-  if (phone && msgFn){
-    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msgFn(o, contact)), '_blank');
-  } else if (msgFn){
-    alert('Status updated, but this customer has no WhatsApp/phone on file — WhatsApp not sent.');
-  }
-  if (emails.length && msgFn && subjFn){
-    window.open(gmailComposeUrl(emails, subjFn(o), msgFn(o, contact)), '_blank');
-  } else if (msgFn){
-    alert('Status updated, but this customer has no email on file — email not sent.');
+  if (msgFn && subjFn){
+    const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
+    const emails = o.customer ? collectEmails(o.customer) : [];
+    const phone = (o.customer && (o.customer.whatsapp || o.customer.phone)) || '';
+    const message = msgFn(o, contact);
+    if (!emails.length){
+      alert('Status updated, but this customer has no email on file — no notification sent.');
+    } else {
+      try {
+        await sendEmailApi('logistics', emails, subjFn(o), message, [], { phone, message });
+        showToast('Cliente notificado', emails.join(', '));
+      } catch (e){
+        if (!e.cancelled) alert('No se pudo enviar la notificación: ' + e.message);
+      }
+    }
   }
 
   await loadStatusOrders();
@@ -1536,9 +1550,14 @@ function downloadBase64File(filename, base64content, mimeType){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+// Real correction 2026-09-07, explicit: the WhatsApp text used to be a fixed string baked in by
+// the caller — never shown, never editable, sent as-is the moment this button was clicked. Now it
+// reads whatever is currently in emailModalWaBody, same as the email side reads emailModalBody —
+// both channels are real editable fields the trader sees and can change before either one sends.
 function emailModalSendWhatsApp(){
   if (!emailModalWaInfo) return;
-  const { phone, message, filename, content, contentType } = emailModalWaInfo;
+  const message = document.getElementById('emailModalWaBody').value;
+  const { phone, filename, content, contentType } = emailModalWaInfo;
   if (content) downloadBase64File(filename, content, contentType);
   showToast(content ? 'Archivo descargado' : 'Abriendo WhatsApp', content ? 'Arrástralo o adjúntalo dentro de WhatsApp.' : '');
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
@@ -1559,6 +1578,14 @@ function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo,
   }
   emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
   document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
+  const waWrap = document.getElementById('emailModalWaWrap');
+  if (emailModalWaInfo){
+    waWrap.style.display = 'block';
+    document.getElementById('emailModalWaPhone').textContent = emailModalWaInfo.phone;
+    document.getElementById('emailModalWaBody').value = emailModalWaInfo.message || '';
+  } else {
+    waWrap.style.display = 'none';
+  }
   document.getElementById('emailModalOverlay').style.display = 'flex';
   return new Promise(resolve => { emailModalResolve = resolve; });
 }

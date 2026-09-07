@@ -533,7 +533,12 @@ auth.onAuthStateChanged(user => {
       <label>Attachments</label>
       <div class="email-modal-attachments" id="emailModalAttachments"></div>
     </div>
+    <div class="email-modal-field" id="emailModalWaWrap" style="display:none;">
+      <label>WhatsApp — <span id="emailModalWaPhone"></span></label>
+      <textarea id="emailModalWaBody" autocomplete="off"></textarea>
+    </div>
     <div class="email-modal-actions">
+      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:#fff;color:#1DA851;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
       <button onclick="emailModalCancel()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
       <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
     </div>
@@ -1423,7 +1428,18 @@ const FROM_DISPLAY = {
 // or actually see the attachment before it goes out. This is a real modal: To/CC/Subject/Body
 // are all editable, and every attachment is listed so nothing ships as a surprise.
 let emailModalResolve = null;
-function openEmailModal(toList, subject, text, attachments, fromDisplay){
+let emailModalWaInfo = null;
+// Real correction 2026-09-07, explicit: PO/SO/FO here had NO WhatsApp option at all — email only.
+// Same pattern as orders.html/trading-tool.html now: a real, visible, editable WhatsApp message
+// field alongside the email one, sent only when the trader clicks it, never auto-opened.
+function emailModalSendWhatsApp(){
+  if (!emailModalWaInfo) return;
+  const message = document.getElementById('emailModalWaBody').value;
+  const { phone, filename, content, contentType } = emailModalWaInfo;
+  if (content) downloadBase64File(filename, content, contentType);
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+}
+function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo){
   document.getElementById('emailModalFrom').textContent = 'From: ' + (fromDisplay || '');
   document.getElementById('emailModalTo').value = toList;
   document.getElementById('emailModalCc').value = '';
@@ -1436,6 +1452,16 @@ function openEmailModal(toList, subject, text, attachments, fromDisplay){
     attachEl.innerHTML = attachments.map(a => `<span class="email-modal-chip">📎 ${escapeHtml(a.filename)}</span>`).join('');
   } else {
     attachWrap.style.display = 'none';
+  }
+  emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
+  document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
+  const waWrap = document.getElementById('emailModalWaWrap');
+  if (emailModalWaInfo){
+    waWrap.style.display = 'block';
+    document.getElementById('emailModalWaPhone').textContent = emailModalWaInfo.phone;
+    document.getElementById('emailModalWaBody').value = emailModalWaInfo.message || '';
+  } else {
+    waWrap.style.display = 'none';
   }
   document.getElementById('emailModalOverlay').style.display = 'flex';
   return new Promise(resolve => { emailModalResolve = resolve; });
@@ -1461,10 +1487,10 @@ function emailModalConfirm(){
 // mailto: (old behavior) if the API call fails for any reason, so a send is never fully blocked.
 // Cancelling the preview throws a flagged error so callers can skip their own fallback/alert —
 // "I said no" isn't the same as "the send failed".
-async function sendEmailApi(fromAlias, to, subject, text, attachments){
+async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
   const toList = Array.isArray(to) ? to.join(', ') : to;
   const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
-  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay);
+  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo);
   if (!edited){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
@@ -1584,8 +1610,9 @@ async function sharePO(orderNumber){
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
     + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
+  const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
   try {
-    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)]);
+    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: `Orden ${orderNumber} — te mando la Purchase Order.` });
     showToast('PO sent', emails.join(', '));
     markDocSent(orderNumber, 'po');
   } catch(e){
@@ -1693,8 +1720,9 @@ async function shareSO(orderNumber){
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
     + `Total: $${(so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
+  const waPhoneSo = built.customer && (built.customer.whatsapp || built.customer.phone);
   try {
-    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)]);
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: `Orden ${orderNumber} — te mando la Confirmación de Venta.` });
     showToast('SO sent', emails.join(', '));
     markDocSent(orderNumber, 'so');
   } catch(e){
@@ -1796,8 +1824,9 @@ async function shareFO(orderNumber){
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    const waPhoneFo = b.carrier && (b.carrier.whatsapp || b.carrier.phone);
     try {
-      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)]);
+      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: `Orden ${orderNumber} — te mando la Freight Confirmation.` });
       showToast('FO sent', emails.join(', '));
       markDocSent(orderNumber, 'fo');
     } catch(e){
@@ -1848,8 +1877,9 @@ async function shareCustoms(orderNumber){
 
   const subject = `${orderNumber} — Documentos de recogida`;
   const body = `Adjuntamos los documentos de recogida de la orden ${orderNumber}: ${pending.map(d => d.filename).join(', ')}.`;
+  const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
   try {
-    await sendEmailApi('logistics', emails, subject, body, attachments);
+    await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: `Orden ${orderNumber} — te mando los documentos de recogida.` });
     showToast('Documentos reenviados a aduana', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
   } catch(e){

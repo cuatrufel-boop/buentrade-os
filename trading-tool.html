@@ -878,38 +878,14 @@ if (FIREBASE_READY) {
       </div>
     </div>
 
-    <!-- ================= REAL COSTS (only for an already-Won offer) ================= -->
+    <!-- Real correction 2026-09-07: this used to be a whole separate "Real Costs" card (freight
+         actual-rate/carrier reconciliation, a "Peso real (pedimento)" field, ad-hoc extra costs) —
+         removed, unrequested scope. Weight/freight/costs are edited directly in the Direct Costs
+         card above, same fields as always; this is just the one button the trader actually asked
+         for, reading whatever orders-compose-so returns at the moment it's clicked. -->
     <div class="card" id="realCostsCard" style="display:none;">
-      <div class="card-head"><h2>Real Costs</h2></div>
       <div class="card-body">
-        <!-- Real ask 2026-09-06: "debe sacarme el QT y volver a grabarlo... para poder sacar el
-             invoice" — the pedimento's real weight lives here now, same idea as actual_rate vs
-             quoted_rate below: weight (the quote, on PO/SO) never changes, real_weight is what
-             the Invoice actually bills once it's set. Blank means "no pedimento yet" — Orders
-             falls back to the quoted weight until this is filled in. -->
-        <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Peso real (pedimento)</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;">
-          <input type="number" step="0.01" id="realWeightInput" placeholder="Peso cotizado si aún no tienes el pedimento" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;"
-            onchange="realWeightSave(this.value)">
-          <span style="font-size:12px;color:var(--ink-soft);flex-shrink:0;">lbs</span>
-        </div>
-        <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Freight — costo real</div>
-        <div id="realCostsFreight"></div>
-        <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px;">Sobrecostos</div>
-        <div id="realCostsList"></div>
-        <div style="margin-top:8px;">
-          <select id="realCostType" style="width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;margin-bottom:6px;"></select>
-          <div style="display:flex;gap:6px;">
-            <input type="number" step="0.01" id="realCostAmount" placeholder="Monto" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;">
-            <button class="btn" style="padding:6px 10px;font-size:12px;flex-shrink:0;" onclick="realCostAdd()">+ Add</button>
-          </div>
-        </div>
-        <!-- Real ask 2026-09-06: "boton de create invoice share invoice... en el mismo chat es
-             decir recibe invoice email y whatsapp y recibe pantalla para firma email y whatsapp" —
-             one button, right here where the real numbers already live: generates the Invoice,
-             sends it (email + WhatsApp), and sends the remote signature link alongside it (also
-             email + WhatsApp) so the trader can follow up for it in the same WhatsApp thread. -->
-        <button onclick="createAndShareInvoice()" style="width:100%;margin-top:16px;background:linear-gradient(135deg,#12A56E,#0F8A5F);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:800;font-size:12.5px;cursor:pointer;box-shadow:0 3px 8px rgba(15,138,95,.4);">📄 Create & Share Invoice</button>
+        <button onclick="createAndShareInvoice()" style="width:100%;background:linear-gradient(135deg,#12A56E,#0F8A5F);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:800;font-size:12.5px;cursor:pointer;box-shadow:0 3px 8px rgba(15,138,95,.4);">📄 Create & Share Invoice</button>
         <div id="invoiceMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;text-align:center;"></div>
       </div>
     </div>
@@ -1976,42 +1952,8 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
   return { doc, finalWeight, finalTotal };
 }
 
-const REAL_COST_TYPES = ['Labels', 'Plastic wrap', 'IN-LIEU', 'Storage', 'Fresh to Frozen', 'Lumper fee', 'INBOND Release', 'Other'];
-
-// Carriers only — same list a trader would pick from in Freight & Logistics. Fetched once per
-// panel open (not per render) since it doesn't change while the panel is up.
-let realCostsCarriers = null;
-async function realCostsFetchCarriers(){
-  if (realCostsCarriers) return realCostsCarriers;
-  try { realCostsCarriers = (await callApi('providers-search', { role: 'carrier' })).results || []; }
-  catch (e) { realCostsCarriers = []; }
-  return realCostsCarriers;
-}
-
 async function realCostsInit(){
   document.getElementById('realCostsCard').style.display = 'block';
-  document.getElementById('realCostType').innerHTML = REAL_COST_TYPES.map(t => `<option>${t}</option>`).join('');
-  await realCostsLoad();
-}
-
-async function realCostsLoad(){
-  if (!negoOffer || !negoOffer.order_number) return;
-  const [fos, costs, so] = await Promise.all([
-    callApi('freight-orders-search', { order_number: negoOffer.order_number }).then(r => r.results || []).catch(() => []),
-    callApi('order-extra-costs-search', { order_number: negoOffer.order_number }).then(r => r.results || []).catch(() => []),
-    realCostsFetchCarriers(),
-    // No dedicated sales_orders read endpoint (Supabase's function-count cap was hit the same day
-    // this was built) — orders-compose-so already returns the full row as `so`, real_weight
-    // included, so this reuses it instead of adding a new function just to read one field.
-    callApi('orders-compose-so', { order_number: negoOffer.order_number }).then(r => r.so || null).catch(() => null),
-  ]);
-  document.getElementById('realWeightInput').value = (so && so.real_weight != null) ? so.real_weight : '';
-  realCostsRender(fos, costs);
-}
-async function realWeightSave(value){
-  const real_weight = value.trim() === '' ? null : Number(value);
-  try { await callApi('sales-orders-update-real-weight', { actor: currentActor(), order_number: negoOffer.order_number, real_weight }); }
-  catch (e) { alert('Error: ' + e.message); }
 }
 
 // Real, confirmed production URL (2026-09-06) — never guessed. Netlify's own free-plan credit
@@ -2069,78 +2011,6 @@ async function createAndShareInvoice(){
     if (e.cancelled){ msgEl.textContent = ''; return; }
     msgEl.textContent = 'No se pudo enviar: ' + e.message;
   }
-}
-
-// This card lives in the same narrow 3-column grid as Direct Costs/Profitability (~280px),
-// not a full-width panel — everything here stacks vertically instead of trying to fit
-// label+quoted+actual (or type+amount+delete) on one horizontal line, which overflowed the card.
-// Carrier picker fixes the gap where a matched freight rate got deleted between quoting and
-// winning — the FO would otherwise say "TBD — not yet booked" forever with no way to fix it
-// short of editing the database directly.
-function realCostsRender(freightOrders, costs){
-  const freightEl = document.getElementById('realCostsFreight');
-  const carrierOptions = (carrier) => {
-    const opts = ['<option value="">— No carrier —</option>']
-      .concat((realCostsCarriers || []).map(c => `<option value="${c.id}"${c.id === carrier ? ' selected' : ''}>${negoEscapeHtml(c.name)}</option>`));
-    return opts.join('');
-  };
-  freightEl.innerHTML = freightOrders.map(fo => `
-    <div style="margin-bottom:10px;">
-      <div style="font-size:12.5px;font-weight:600;">${negoEscapeHtml(fo.origin || '?')} &rarr; ${negoEscapeHtml(fo.destination || '?')}</div>
-      <div style="font-size:12px;color:var(--ink-soft);margin:2px 0 5px;">Quoted: $${(fo.quoted_rate || 0).toLocaleString('en-US')}</div>
-      <div style="margin-bottom:5px;">
-        <label style="font-size:12px;color:var(--ink-soft);display:block;margin-bottom:3px;">Carrier:</label>
-        <select style="width:100%;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;"
-          onchange="realCostSetCarrier('${fo.id}', this.value)">${carrierOptions(fo.carrier_provider_id)}</select>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <label style="font-size:12px;color:var(--ink-soft);flex-shrink:0;">Actual:</label>
-        <input type="number" step="0.01" value="${fo.actual_rate ?? ''}" placeholder="0.00" style="width:100%;min-width:0;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;"
-          onchange="realCostSaveFreight('${fo.id}', this.value)">
-      </div>
-    </div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">No freight leg on this order.</div>';
-
-  const listEl = document.getElementById('realCostsList');
-  listEl.innerHTML = costs.map(c => `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${negoEscapeHtml(c.cost_type)}</span>
-      <span style="font-family:'IBM Plex Mono',monospace;flex-shrink:0;">$${c.amount.toLocaleString('en-US')}</span>
-      <button class="btn danger" style="padding:2px 7px;font-size:11px;flex-shrink:0;" onclick="realCostDelete('${c.id}')">&times;</button>
-    </div>`).join('');
-}
-
-async function realCostSaveFreight(freightOrderId, value){
-  const amount = value.trim() === '' ? null : Number(value);
-  try { await callApi('freight-orders-update', { actor: currentActor(), id: freightOrderId, actual_rate: amount }); }
-  catch (e) { alert('Error: ' + e.message); }
-}
-
-async function realCostSetCarrier(freightOrderId, providerId){
-  try { await callApi('freight-orders-update', { actor: currentActor(), id: freightOrderId, carrier_provider_id: providerId || null }); }
-  catch (e) { alert('Error: ' + e.message); }
-}
-
-async function realCostAdd(){
-  if (!negoOffer) return;
-  const type = document.getElementById('realCostType').value;
-  const amountInput = document.getElementById('realCostAmount');
-  const amount = Number(amountInput.value);
-  if (!amount || amount <= 0) return;
-  const idempotencyKey = `order-extra-costs-add|${negoOffer.id}|${type}|${amount}|${new Date().toISOString().slice(0, 16)}`;
-  try {
-    await callApi('order-extra-costs-add', {
-      actor: currentActor(), order_number: negoOffer.order_number, sent_offer_id: negoOffer.id, cost_type: type, amount,
-      idempotency_key: idempotencyKey,
-    });
-  } catch (e) { alert('Error: ' + e.message); return; }
-  amountInput.value = '';
-  await realCostsLoad();
-}
-
-async function realCostDelete(costId){
-  try { await callApi('order-extra-costs-delete', { actor: currentActor(), id: costId }); }
-  catch (e) { alert('Error: ' + e.message); return; }
-  await realCostsLoad();
 }
 
 // Full timeline = the two synthetic opening entries (what Quotes actually first sent, read
@@ -2274,9 +2144,14 @@ function downloadBase64File(filename, base64content){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+// Real correction 2026-09-07, explicit: the WhatsApp text used to be a fixed string baked in by
+// the caller — never shown, never editable, sent as-is. Now it reads whatever is currently in
+// emailModalWaBody, same as the email side reads emailModalBody — both channels are real editable
+// fields the trader sees and can change before either one sends.
 function emailModalSendWhatsApp(){
   if (!emailModalWaInfo) return;
-  const { phone, message, filename, content } = emailModalWaInfo;
+  const message = document.getElementById('emailModalWaBody').value;
+  const { phone, filename, content } = emailModalWaInfo;
   if (content) downloadBase64File(filename, content);
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
 }
@@ -2295,6 +2170,14 @@ function openEmailModal(toList, subject, text, attachments, waInfo, ccList){
   }
   emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
   document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
+  const waWrap = document.getElementById('emailModalWaWrap');
+  if (emailModalWaInfo){
+    waWrap.style.display = 'block';
+    document.getElementById('emailModalWaPhone').textContent = emailModalWaInfo.phone;
+    document.getElementById('emailModalWaBody').value = emailModalWaInfo.message || '';
+  } else {
+    waWrap.style.display = 'none';
+  }
   document.getElementById('emailModalOverlay').style.display = 'flex';
   return new Promise(resolve => { emailModalResolve = resolve; });
 }
@@ -2473,6 +2356,10 @@ async function negoSaveDefinitive(overrideCreditCheck){
     <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
       <label>Attachments</label>
       <div class="email-modal-attachments" id="emailModalAttachments"></div>
+    </div>
+    <div class="email-modal-field" id="emailModalWaWrap" style="display:none;">
+      <label>WhatsApp — <span id="emailModalWaPhone"></span></label>
+      <textarea id="emailModalWaBody"></textarea>
     </div>
     <div class="email-modal-actions">
       <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:#fff;color:#1DA851;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
