@@ -210,12 +210,12 @@
   .u-mini-btn svg{width:14px;height:14px;}
   .u-mini-label{font-size:9.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-top:7px;text-align:center;line-height:1.25;}
   .u-mini-date{font-size:9px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
-  .u-mini.done .u-mini-btn{background:var(--green);border-color:var(--green);color:#fff;}
+  .u-mini.done .u-mini-btn{background:var(--green);border-color:var(--green);color:#fff;cursor:pointer;}
   .u-mini.done .u-mini-label{color:var(--ink);}
   .u-mini.now .u-mini-btn{cursor:pointer;background:rgba(255,200,118,.14);border-color:#FFC876;color:#FFC876;animation:mstopPulse 1.8s ease-in-out infinite;}
   .u-mini.now .u-mini-label{color:#FFC876;}
   .u-mini.now:hover .u-mini-btn{background:rgba(255,200,118,.28);}
-  .u-mini.wait .u-mini-btn{opacity:.5;}
+  .u-mini.wait .u-mini-btn{opacity:.5;cursor:pointer;}
   .u-mini.wait .u-mini-label{opacity:.5;}
   @keyframes mstopPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,.35);}50%{box-shadow:0 0 0 6px rgba(255,200,118,0);}}
   @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
@@ -649,6 +649,15 @@ function confirmPickupReadyClick(orderNumber){
   else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
   else alert('No carrier/plant phone on file to confirm pickup.');
 }
+// Real ask 2026-09-07: "todos deben ser linkeables con una accion" — Signature has no real
+// trader-side action (only the customer signs remotely), but it still needs to respond to a click
+// instead of sitting there dead. Reports the real status instead of doing nothing.
+function signatureInfoClick(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  if (o.invoice_signed_at) alert(`Signed by the customer on ${fmtDateStr(String(o.invoice_signed_at).slice(0, 10))}.`);
+  else alert('Waiting for the customer to sign — they sign remotely once they receive the Invoice. No action needed from you.');
+}
 function openInvoiceQT(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
@@ -756,12 +765,18 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     };
   }
 
+  // Real ask 2026-09-07: "aqui no deben haber botones fijos todos deben ser linkeables con una
+  // accion" — every stop now always has a click handler, never a plain HTML disabled button. A
+  // done/now stop fires its real action (re-sending is a legitimate real action, not a mistake); a
+  // wait stop that isn't ready yet fires an alert() explaining exactly what has to happen first,
+  // instead of doing nothing.
   function miniEntry(st){
     const state = st.done ? 'done' : (st.wait ? 'wait' : 'now');
-    const clickable = state === 'now' && st.onClick;
+    const effectiveOnClick = (state === 'wait' && st.waitReason) ? `alert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
+    const clickable = !!effectiveOnClick;
     const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
     return {
-      html: `<div class="u-mini ${state}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${st.onClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
+      html: `<div class="u-mini ${state}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
       lineDone: st.done,
     };
   }
@@ -776,16 +791,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
   // other real action on this timeline — no new business logic, just surfaced where it belongs.
-  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, onClick: `recordReleaseNumber('${o.order_number}')` }));
-  if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')` }));
+  if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, waitReason: 'Record the release number first.', onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
   entries.push(mainEntry('pending_pickup'));
   entries.push(mainEntry('picked_up'));
-  entries.push(miniEntry({ icon: CLIP_ICON, label: 'Customs Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestCustomsDocsClick('${o.order_number}')` }));
-  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Send to Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, onClick: `shareCustoms('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: CLIP_ICON, label: 'Customs Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, waitReason: 'Mark the load Picked Up first.', onClick: `requestCustomsDocsClick('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Send to Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, waitReason: 'No pickup documents have arrived yet.', onClick: `shareCustoms('${o.order_number}')` }));
   entries.push(mainEntry('unloading'));
   entries.push(mainEntry('delivered'));
-  entries.push(miniEntry({ icon: RECEIPT_ICON, label: 'Invoice', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, onClick: `openInvoiceQT('${o.order_number}')` }));
-  entries.push(miniEntry({ icon: SIGN_ICON, label: 'Signature', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, onClick: null }));
+  entries.push(miniEntry({ icon: RECEIPT_ICON, label: 'Invoice', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, waitReason: 'The load must be Delivered first.', onClick: `openInvoiceQT('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: SIGN_ICON, label: 'Signature', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, waitReason: 'Send the Invoice first — the customer signs it once they receive it.', onClick: `signatureInfoClick('${o.order_number}')` }));
 
   const html = entries.map((e, i) => {
     const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}</div>` : '';
