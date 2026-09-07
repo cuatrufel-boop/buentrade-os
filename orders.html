@@ -180,6 +180,15 @@
      truck riding above the line. padding-top gives them real room instead of getting cropped; the
      outer margin-top is reduced by the same amount so the visual gap above the row is unchanged. */
   .utimeline{display:flex;align-items:flex-start;gap:0;margin:2px 0 10px;padding-top:20px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:rgba(90,170,255,.35) transparent;}
+  /* Real bug found live 2026-09-08: "se corta el muneco" — the walker/truck's fixed top:-30px/-24px
+     clearance was sized for a flat line; when it rides a curved segment (either end raised), the
+     curve itself already eats into that space and the raised icon sits closer still, so the
+     traveler's own legs/wheels visually overlapped the raised circle. Only cards where the
+     traveler actually lands on a curve get the extra clearance — everyone else keeps the normal
+     20px so most cards don't grow taller for no reason. */
+  .utimeline.needs-curve-clearance{padding-top:48px;}
+  .u-line-curve .u-walker-ride{top:-46px;}
+  .u-line-curve .u-truck-ride{top:-40px;}
   .utimeline::-webkit-scrollbar{height:5px;}
   .utimeline::-webkit-scrollbar-track{background:transparent;}
   .utimeline::-webkit-scrollbar-thumb{background:rgba(90,170,255,.35);border-radius:3px;}
@@ -207,7 +216,7 @@
   .u-truck-ride.idle{animation:none;color:var(--ink-soft);}
   @keyframes uTruckBounce{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-1.5px);}}
   .u-main{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:100px;position:relative;cursor:pointer;}
-  .u-main-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--blue);color:var(--blue-bright);transition:all .25s;flex-shrink:0;}
+  .u-main-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--navy-2);color:var(--navy-2);transition:all .25s;flex-shrink:0;}
   .u-main-icon svg{width:18px;height:18px;}
   .u-main.actionable{cursor:pointer;}
   .u-main.actionable .u-main-icon{border-color:var(--blue);color:var(--blue);}
@@ -240,7 +249,7 @@
   .u-mini.raised,.u-main.raised{transform:translateY(-18px);}
   .u-line-curve{position:relative;flex:1 1 auto;height:2px;margin-top:19px;min-width:14px;overflow:visible;}
   .u-line-curve svg{position:absolute;top:-18px;left:0;width:100%;height:20px;overflow:visible;}
-  .u-mini-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--blue);color:var(--blue-bright);flex-shrink:0;cursor:default;padding:0;font:inherit;transition:all .2s;}
+  .u-mini-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--navy-2);color:var(--navy-2);flex-shrink:0;cursor:default;padding:0;font:inherit;transition:all .2s;}
   .u-mini-btn svg{width:18px;height:18px;}
   .u-mini-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:7px;text-align:center;line-height:1.3;}
   .u-mini-date{font-size:10px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
@@ -943,7 +952,8 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
     return entryHtml + line;
   }).join('');
-  return `<div class="utimeline">${html}</div>`;
+  const travelerOnCurve = travelerLineIdx >= 0 && (entries[travelerLineIdx].raised || (entries[travelerLineIdx + 1] && entries[travelerLineIdx + 1].raised));
+  return `<div class="utimeline${travelerOnCurve ? ' needs-curve-clearance' : ''}">${html}</div>`;
 }
 
 // Real ask 2026-09-07: "si entro al sistema y no se en que va mi carga como me doy cuenta en que
