@@ -2235,8 +2235,10 @@ async function sharePO(orderNumber){
     markDocSent(orderNumber, 'po');
   } catch(e){
     if (e.cancelled) return;
+    // Same fix as shareSO: reuse the real `body` (with all line-item detail) instead of a separate
+    // stripped-down fallback message.
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`));
+      gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`));
   }
 }
 
@@ -2308,7 +2310,7 @@ async function shareSO(orderNumber){
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
-  const subject = `${orderNumber} — Orden de Venta — ${soProductName}`;
+  const subject = `📋 ${orderNumber} — Confirmación de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -2323,8 +2325,13 @@ async function shareSO(orderNumber){
     markDocSent(orderNumber, 'so');
   } catch(e){
     if (e.cancelled) return;
+    // Real bug found live 2026-09-07: "mal el subject, te mande el mensaje completo" — this fallback
+    // used to build a SEPARATE, stripped-down body (just "Adjuntamos... [link]"), missing every
+    // detail (Producto/Cantidad/Precio/Total/Entrega) the real automatic send would have included.
+    // Now reuses the exact same `body` the automatic path builds, plus the PDF link since Gmail
+    // compose can't carry a real attachment.
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`));
+      gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`));
   }
 }
 
@@ -2411,8 +2418,10 @@ async function shareFO(orderNumber){
       markDocSent(orderNumber, 'fo');
     } catch(e){
       if (e.cancelled) continue;
+      // Same fix as shareSO: reuse the real `body` (with all line-item detail) instead of a separate
+      // stripped-down fallback message.
       showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-        gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`));
+        gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`));
     }
   }
 }
