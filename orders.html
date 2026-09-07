@@ -190,26 +190,25 @@
   .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:14px;}
   .u-line.done{background:var(--green);}
   /* Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
-     entrega en movimiento" — real BuenTrade brand colors (--blue/--blue-bright/--navy), riding the
-     exact connector line that represents current progress (see renderUnifiedTimeline). */
-  .u-walker-ride{position:absolute;top:-27px;left:50%;transform:translateX(-50%);width:18px;height:28px;z-index:2;filter:drop-shadow(0 3px 4px rgba(4,12,26,.6));}
+     entrega en movimiento" — rebuilt 2026-09-07 (2nd pass) after "no tenemos colores llenos en
+     buentrade todo son transparencias bordes... un verde lleno que no sale con nada... logo
+     pasado de moda": stroke-only line icons (same fill:none/stroke:currentColor/stroke-width:2
+     language as every STEP_ICONS/DOC_ICON on this card), single accent color, no filled shapes. */
+  .u-walker-ride{position:absolute;top:-30px;left:50%;transform:translateX(-50%);width:19px;height:27px;z-index:2;color:var(--blue-bright);filter:drop-shadow(0 2px 3px rgba(4,12,26,.55));}
   .u-walker-ride svg{width:100%;height:100%;animation:uWalkBob .5s ease-in-out infinite;}
-  .u-walker-ride .uw-leg-back{animation:uWalkLegBack .5s ease-in-out infinite;transform-origin:11px 20px;}
-  .u-walker-ride .uw-leg-front{animation:uWalkLegFront .5s ease-in-out infinite;transform-origin:11px 20px;}
-  .u-walker-ride .uw-arm-back{animation:uWalkArmBack .5s ease-in-out infinite;transform-origin:11px 15px;}
-  .u-walker-ride .uw-arm-front{animation:uWalkArmFront .5s ease-in-out infinite;transform-origin:11px 15px;}
+  .u-walker-ride .uw-leg-back{animation:uWalkLegBack .5s ease-in-out infinite;transform-origin:12px 19px;}
+  .u-walker-ride .uw-leg-front{animation:uWalkLegFront .5s ease-in-out infinite;transform-origin:12px 19px;}
+  .u-walker-ride .uw-arm-back{animation:uWalkArmBack .5s ease-in-out infinite;transform-origin:12px 14px;}
+  .u-walker-ride .uw-arm-front{animation:uWalkArmFront .5s ease-in-out infinite;transform-origin:12px 14px;}
   @keyframes uWalkBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
   @keyframes uWalkLegBack{0%,100%{transform:rotate(22deg);}50%{transform:rotate(-22deg);}}
   @keyframes uWalkLegFront{0%,100%{transform:rotate(-22deg);}50%{transform:rotate(22deg);}}
   @keyframes uWalkArmBack{0%,100%{transform:rotate(-18deg);}50%{transform:rotate(18deg);}}
   @keyframes uWalkArmFront{0%,100%{transform:rotate(18deg);}50%{transform:rotate(-18deg);}}
-  .u-truck-ride{position:absolute;top:-21px;left:50%;transform:translateX(-50%);width:32px;height:21px;z-index:2;filter:drop-shadow(0 3px 5px rgba(4,12,26,.65));animation:uTruckBounce .4s ease-in-out infinite;}
+  .u-truck-ride{position:absolute;top:-24px;left:50%;transform:translateX(-50%);width:22px;height:22px;z-index:2;color:var(--blue-bright);filter:drop-shadow(0 2px 3px rgba(4,12,26,.55));animation:uTruckBounce .4s ease-in-out infinite;}
   .u-truck-ride svg{width:100%;height:100%;}
-  .u-truck-ride .uw-wheel{animation:uWheelSpin .4s linear infinite;}
-  .u-truck-ride.idle{animation:none;}
-  .u-truck-ride.idle .uw-wheel{animation:none;}
+  .u-truck-ride.idle{animation:none;color:var(--ink-soft);}
   @keyframes uTruckBounce{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-1.5px);}}
-  @keyframes uWheelSpin{from{stroke-dashoffset:0;}to{stroke-dashoffset:-12.6px;}}
   .u-main{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:100px;position:relative;cursor:pointer;}
   .u-main-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);transition:all .25s;flex-shrink:0;}
   .u-main-icon svg{width:18px;height:18px;}
@@ -219,8 +218,13 @@
   .u-main.actionable:hover .u-main-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
   .u-main.actionable.urgent .u-main-icon{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
   .u-main.actionable.urgent .u-main-label{color:#FF9C8A;}
-  .u-main.done .u-main-icon{background:var(--green);border-color:var(--green);color:#fff;}
-  .u-main.current .u-main-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
+  /* Real correction 2026-09-07: "no tenemos colores llenos en buentrade todo son transparencias
+     bordes... me sales con un verde lleno que no sale con nada" — every real state elsewhere in
+     this app (the "now" amber state included) is a translucent fill + a solid colored border +
+     colored icon, never an opaque fill with a white icon. done/current now follow that exact
+     pattern instead of standing out as solid blocks. */
+  .u-main.done .u-main-icon{background:rgba(15,138,95,.14);border-color:var(--green);color:var(--green);}
+  .u-main.current .u-main-icon{background:var(--blue-light);border-color:var(--blue);color:var(--blue-bright);box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
   .u-main-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:8px;text-align:center;line-height:1.3;}
   .u-main-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
   .u-main.done .u-main-label,.u-main.current .u-main-label{color:var(--ink);}
@@ -231,7 +235,7 @@
   .u-mini-btn svg{width:14px;height:14px;}
   .u-mini-label{font-size:9.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-top:7px;text-align:center;line-height:1.25;}
   .u-mini-date{font-size:9px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
-  .u-mini.done .u-mini-btn{background:var(--green);border-color:var(--green);color:#fff;cursor:pointer;}
+  .u-mini.done .u-mini-btn{background:rgba(15,138,95,.14);border-color:var(--green);color:var(--green);cursor:pointer;}
   .u-mini.done .u-mini-label{color:var(--ink);}
   .u-mini.now .u-mini-btn{cursor:pointer;background:rgba(255,200,118,.14);border-color:#FFC876;color:#FFC876;animation:mstopPulse 1.8s ease-in-out infinite;}
   .u-mini.now .u-mini-label{color:#FFC876;}
@@ -852,22 +856,26 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     travelerType = 'truck';
     travelerIdle = stageIdx >= deliveredIdx;
   }
-  const WALKER_RIDE_SVG = `<div class="u-walker-ride" title="On the way to pickup"><svg viewBox="0 0 22 34">
-    <circle cx="11" cy="5" r="3.4" fill="#5AAAFF"/>
-    <line class="uw-arm-back" x1="11" y1="15" x2="6.5" y2="21" stroke="#5AAAFF" stroke-width="2.6" stroke-linecap="round"/>
-    <line x1="11" y1="10" x2="11" y2="20" stroke="#5AAAFF" stroke-width="3.2" stroke-linecap="round"/>
-    <line class="uw-arm-front" x1="11" y1="15" x2="15.5" y2="21" stroke="#8CC4FF" stroke-width="2.6" stroke-linecap="round"/>
-    <line class="uw-leg-back" x1="11" y1="20" x2="7" y2="31" stroke="#1E6ADB" stroke-width="3" stroke-linecap="round"/>
-    <line class="uw-leg-front" x1="11" y1="20" x2="15" y2="31" stroke="#1E6ADB" stroke-width="3" stroke-linecap="round"/>
+  // Real correction 2026-09-07: "no tenemos colores llenos en buentrade todo son transparencias
+  // bordes... un logo pasado de moda" — every real icon in this app (STEP_ICONS, DOC_ICON, etc.)
+  // is a stroke-only line icon, currentColor, stroke-width 2, round caps — never a solid-filled
+  // shape. Both travelers rebuilt the same way: same stroke language, single accent color
+  // (var(--blue-bright)), same visual weight as every icon already sitting on this timeline. The
+  // truck reuses STEP_ICONS.picked_up's exact silhouette (already trusted elsewhere on this same
+  // card) instead of a separately-invented truck design.
+  const WALKER_RIDE_SVG = `<div class="u-walker-ride" title="On the way to pickup"><svg viewBox="0 0 24 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="5" r="3"/>
+    <line class="uw-arm-back" x1="12" y1="14" x2="7" y2="20"/>
+    <line x1="12" y1="9" x2="12" y2="19"/>
+    <line class="uw-arm-front" x1="12" y1="14" x2="17" y2="20"/>
+    <line class="uw-leg-back" x1="12" y1="19" x2="8" y2="30"/>
+    <line class="uw-leg-front" x1="12" y1="19" x2="16" y2="30"/>
   </svg></div>`;
-  const truckRideSvg = idle => `<div class="u-truck-ride${idle ? ' idle' : ''}" title="${idle ? 'Delivered' : 'In transit'}"><svg viewBox="0 0 46 30">
-    <rect x="1" y="7" width="26" height="14" rx="2" fill="#5AAAFF"/>
-    <path d="M27 12h9.5a2 2 0 0 1 1.8 1.1L41 18v3h-14z" fill="#1E6ADB"/>
-    <rect x="30" y="14" width="6" height="4" rx=".5" fill="#0A2547" opacity=".55"/>
-    <circle class="uw-wheel" cx="9" cy="24" r="3.4" fill="none" stroke="#0A2547" stroke-width="3" stroke-dasharray="4 2.3"/>
-    <circle cx="9" cy="24" r="1.3" fill="#0A2547"/>
-    <circle class="uw-wheel" cx="34" cy="24" r="3.4" fill="none" stroke="#0A2547" stroke-width="3" stroke-dasharray="4 2.3"/>
-    <circle cx="34" cy="24" r="1.3" fill="#0A2547"/>
+  const truckRideSvg = idle => `<div class="u-truck-ride${idle ? ' idle' : ''}" title="${idle ? 'Delivered' : 'In transit'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="1" y="6" width="15" height="12" rx="1"/>
+    <path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v4h-2"/>
+    <circle class="uw-wheel" cx="6" cy="19" r="2"/>
+    <circle class="uw-wheel" cx="17" cy="19" r="2"/>
   </svg></div>`;
 
   const html = entries.map((e, i) => {
