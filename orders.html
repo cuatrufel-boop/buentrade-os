@@ -167,18 +167,33 @@
   .payment-badge.ok{background:transparent;color:var(--ink-soft);border-color:var(--line);}
   .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
-  /* Real ask 2026-09-07: "el trader debe ver que ha hecho, que falta... todo con el flujo
-     visualmente" — a compact, always-visible checklist (no click needed) of every real step from
-     Create Order to Invoice, right on the card itself. Same color language as payment-badge
-     (green=done, amber=needs action now, gray=not due yet), just as small chips in a row. */
-  .flow-strip{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;}
-  .flow-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px 4px 8px;border-radius:20px;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap;}
-  .flow-chip .fc-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-soft);flex-shrink:0;}
-  .flow-chip.fc-done{color:#5FE097;border-color:rgba(95,224,151,.35);}
-  .flow-chip.fc-done .fc-dot{background:#5FE097;}
-  .flow-chip.fc-now{color:#FFC876;border-color:rgba(255,200,118,.4);}
-  .flow-chip.fc-now .fc-dot{background:#FFC876;}
-  .flow-chip.fc-wait{opacity:.55;}
+  /* Real ask 2026-09-07, redone after the flat chip row was rejected as "tirado ahí" — a real
+     timeline spread across time, each milestone a clickable button, with the real pickup city and
+     the border as Point A / Point B, like a real freight-tracking route. */
+  .route-track{display:flex;align-items:center;gap:10px;margin:14px 0 4px;}
+  .route-point{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;flex-shrink:0;}
+  .route-point.faded{color:var(--ink-soft);font-weight:600;}
+  .route-bar{position:relative;flex:1 1 auto;height:3px;background:var(--line);border-radius:2px;overflow:visible;}
+  .route-bar-fill{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,#0F8A5F,#5FE097);border-radius:2px;transition:width .3s;}
+  .route-bar-truck{position:absolute;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:var(--navy-2,#0E3D8F);border:2px solid var(--blue-bright);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;transition:left .3s;box-shadow:0 0 0 4px var(--blue-light);}
+  .route-bar-truck svg{width:11px;height:11px;}
+
+  .mtimeline{display:flex;align-items:flex-start;gap:0;margin:20px 0 6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;}
+  .mstop{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:86px;position:relative;}
+  .mstop-btn{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);flex-shrink:0;cursor:default;padding:0;font:inherit;}
+  .mstop-btn svg{width:16px;height:16px;}
+  .mstop-line{position:absolute;top:17px;left:calc(50% + 17px);width:calc(100% - 34px);height:2px;background:var(--line);z-index:0;}
+  .mstop-line.done{background:#0F8A5F;}
+  .mstop-label{font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-top:7px;text-align:center;line-height:1.25;}
+  .mstop-date{font-size:9px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
+  .mstop.m-done .mstop-btn{background:#0F8A5F;border-color:#0F8A5F;color:#fff;}
+  .mstop.m-done .mstop-label{color:var(--ink);}
+  .mstop.m-now .mstop-btn{cursor:pointer;background:rgba(255,200,118,.14);border-color:#FFC876;color:#FFC876;animation:mstopPulse 1.8s ease-in-out infinite;}
+  .mstop.m-now .mstop-label{color:#FFC876;}
+  .mstop.m-now:hover .mstop-btn{background:rgba(255,200,118,.28);}
+  .mstop.m-wait .mstop-btn{opacity:.5;}
+  .mstop.m-wait .mstop-label{opacity:.5;}
+  @keyframes mstopPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,.35);}50%{box-shadow:0 0 0 6px rgba(255,200,118,0);}}
   @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
   #urgentQueueBox{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
 </style>
@@ -464,6 +479,13 @@ const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="c
 const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
 const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
 const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+// Milestone-timeline icon set — same stroke-based style as STEP_ICONS/PLANT_ICON, just new subjects.
+const DOC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+const MONEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
+const CLIP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+const CUSTOMS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+const RECEIPT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg>';
+const SIGN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
 
 const LOAD_STAGES = [
   { key: 'pending_pickup', label: 'Pending Pickup' },
@@ -544,36 +566,75 @@ function computeBorderArrivalDate(fromDateStr){
 // visualmente" — every real step from Create Order to Invoice, as small always-visible chips
 // (no need to open Documentos to see this). fc-done = already happened, fc-now = needs action
 // right now, fc-wait = not due at this stage yet (shown faded, not a warning).
-function renderFlowChecklist(o){
+// Real ask 2026-09-07, rebuilt after the flat chip row was rejected: "repartido através del
+// tiempo... cada uno debe ser un botón... usa la ciudad de recogida y la frontera como punto A a
+// punto B." Two pieces: a route track (real pickup city -> Border, progress-filled, same truck
+// marker language as the stepper above) and a horizontal timeline of every document/money/customs
+// milestone as its own clickable button — firing the exact same functions already wired elsewhere
+// on this card (sharePO, confirmPlantPaymentSent, shareCustoms, etc.), nothing new invented.
+// Picked Up/Unloading/Delivered stay OUT of this timeline on purpose — the stepper above is
+// already their one real button ("puedes dejar esos botones como principales"); duplicating them
+// here would just be two controls racing to fire the same status change.
+function renderRouteTrack(o){
+  const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
+  const origin = o.freight_origin || o.plant_name || '—';
+  const pct = stageIdx <= 0 ? 4 : stageIdx === 1 ? 38 : stageIdx === 2 ? 74 : 100;
+  return `<div class="route-track">
+    <span class="route-point">${escapeHtml(origin)}</span>
+    <div class="route-bar">
+      <div class="route-bar-fill" style="width:${pct}%;"></div>
+      <div class="route-bar-truck" style="left:${pct}%;">${STEP_ICONS.picked_up}</div>
+    </div>
+    <span class="route-point faded">Border</span>
+  </div>`;
+}
+
+function requestPickupDocsClick(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  if (o.carrier && o.carrier.phone) askFleteroWhatsApp(orderNumber);
+  else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
+  else alert('No carrier/plant phone on file to ask for documents.');
+}
+function openInvoiceQT(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
+  openTTOverlay(o.sent_offer_id, `Factura — ${orderNumber}`);
+}
+
+function renderMilestoneTimeline(o){
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
   const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
   const deliveredIdx = LOAD_STAGES.findIndex(s => s.key === 'delivered');
-  const chip = (label, state) => `<span class="flow-chip fc-${state}"><span class="fc-dot"></span>${label}</span>`;
-
-  const chips = [];
-  chips.push(chip('PO', o.po_sent_at ? 'done' : 'now'));
-  chips.push(chip('SO', o.so_sent_at ? 'done' : 'now'));
-  if (o.has_freight_order) chips.push(chip('FO', o.fo_sent_at ? 'done' : 'now'));
-  chips.push(chip('Pago Planta', o.plant_paid_at ? 'done' : 'now'));
-
   const hasAnyPickupDoc = (o.pickup_documents || []).length > 0;
-  if (stageIdx < pickedUpIdx) chips.push(chip('Docs recogida', 'wait'));
-  else chips.push(chip('Docs recogida', hasAnyPickupDoc ? 'done' : 'now'));
-
   const pendingCustoms = (o.pending_pickup_documents || []).length > 0;
-  if (o.customs_sent_at) chips.push(chip('Aduana', 'done'));
-  else if (pendingCustoms) chips.push(chip('Aduana', 'now'));
-  else chips.push(chip('Aduana', 'wait'));
 
-  if (o.invoice_sent_at) chips.push(chip('Factura', 'done'));
-  else if (stageIdx >= deliveredIdx) chips.push(chip('Factura', 'now'));
-  else chips.push(chip('Factura', 'wait'));
+  // { icon, label, done, date, onClick } — onClick only set when the milestone is actually
+  // clickable right now (state 'now'); done/wait render as plain status, not fake buttons.
+  const stops = [
+    { icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')` },
+    { icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` },
+  ];
+  if (o.has_freight_order) stops.push({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')` });
+  stops.push({ icon: MONEY_ICON, label: 'Pago Planta', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` });
+  stops.push({ icon: CLIP_ICON, label: 'Docs Recogida', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestPickupDocsClick('${o.order_number}')` });
+  stops.push({ icon: CUSTOMS_ICON, label: 'Aduana', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, onClick: `shareCustoms('${o.order_number}')` });
+  stops.push({ icon: RECEIPT_ICON, label: 'Factura', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, onClick: `openInvoiceQT('${o.order_number}')` });
+  stops.push({ icon: SIGN_ICON, label: 'Firma Cliente', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, onClick: null });
 
-  if (o.invoice_signed_at) chips.push(chip('Firma cliente', 'done'));
-  else if (o.invoice_sent_at) chips.push(chip('Firma cliente', 'now'));
-  else chips.push(chip('Firma cliente', 'wait'));
-
-  return `<div class="flow-strip">${chips.join('')}</div>`;
+  const html = stops.map((st, i) => {
+    const state = st.done ? 'done' : (st.wait ? 'wait' : 'now');
+    const clickable = state === 'now' && st.onClick;
+    const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
+    const line = i < stops.length - 1 ? `<div class="mstop-line ${st.done ? 'done' : ''}"></div>` : '';
+    return `<div class="mstop m-${state}">
+      <button type="button" class="mstop-btn" ${clickable ? `onclick="${st.onClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button>
+      ${line}
+      <div class="mstop-label">${escapeHtml(st.label)}</div>
+      ${dateStr ? `<div class="mstop-date">${dateStr}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="mtimeline">${html}</div>`;
 }
 
 function pickupReadinessBadge(o){
@@ -980,7 +1041,8 @@ function renderStatusOrders(){
         ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
         <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
       </div>
-      ${renderFlowChecklist(o)}
+      ${renderRouteTrack(o)}
+      ${renderMilestoneTimeline(o)}
       <div class="stepper">${stepsHtml}</div>
       <div class="load-actions">${checkInBtn}${pickupDocsBtn}</div>
       ${renderOrderDocsPanel(o)}
