@@ -694,6 +694,14 @@ function openInvoiceQT(orderNumber){
   if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
   openTTOverlay(o.sent_offer_id, `Factura — ${orderNumber}`);
 }
+// Real ask 2026-09-07: "no puedo mandar po so fo sin poder comparar siempre tengo que tener los
+// numeros a la mano" — a direct link to the same QT (trading-tool.html), open to this order's real
+// negotiated numbers, right on the order card, so the trader can check them while sending PO/SO/FO.
+function openOrderQT(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open the QT.'); return; }
+  openTTOverlay(o.sent_offer_id, `QT — ${orderNumber}`);
+}
 
 function renderMilestoneTimeline(o){
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
@@ -1317,6 +1325,7 @@ function renderStatusOrders(){
         <div class="load-route-arrow">${ARROW_ICON}</div>
         ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
         <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
+        ${o.sent_offer_id ? `<div onclick="openOrderQT('${o.order_number}')" style="margin-left:auto;cursor:pointer;color:var(--blue-bright);text-decoration:underline;font-weight:700;white-space:nowrap;">Open QT →</div>` : ''}
       </div>
       ${unifiedTimelineHtml}
       <div class="load-actions">${pickupDocsBtn}</div>
