@@ -1167,17 +1167,23 @@ function closeTTOverlay(){
 // an in-person signature pad (buildInvoiceDoc, a canvas the CUSTOMER signs on the TRADER's own
 // screen) which never matched how this business actually works — "BuenTrade nunca va en el
 // camión," there is no in-person moment to capture a signature at. That whole old path (pad,
-// buildInvoiceDoc, a second separate invoice-email with its own stale text) is removed. Delivered
-// now: opens the QT (trader can hit Create & Share Invoice in there, which sends the real invoice
-// + remote sign-invoice.html link — the customer's own signature there is what actually proves
-// delivery), then sends the same plain arrival notification Unloading already sends, no signature
-// gate on it.
+// buildInvoiceDoc, a second separate invoice-email with its own stale text) is removed.
+//
+// Real bug caught before shipping, 2026-09-07: this first tried to also call
+// advanceLoadStatus(orderNumber, 'delivered') right here, immediately on click — but
+// orders-invoice-signature's redeem action (what actually runs when the CUSTOMER signs
+// remotely) explicitly checks `if (shipment.status === "delivered") return {already_delivered}`.
+// Marking delivered on the trader's click would flip that status BEFORE the customer ever
+// opens their sign link, so their real first signature would incorrectly show "ya fue firmada"
+// — telling them they'd already signed something they never touched. The comment on that
+// function is explicit about why: "es en ese mismo momento que debe enviar para firmar...
+// BuenTrade nunca va en el camión" — the customer's own signature is what proves delivery, not
+// this click. So this only opens the QT now; status advances later, on the real signature.
 async function markDeliveredWithSignature(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   if (!o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
   await openTTOverlay(o.sent_offer_id, `Factura — ${orderNumber}`);
-  await advanceLoadStatus(orderNumber, 'delivered');
 }
 
 // ============ DOCUMENT ENGINE (subset needed here: Invoice + Customs forwarding) ============
