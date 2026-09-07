@@ -202,6 +202,8 @@
   .u-main-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:8px;text-align:center;line-height:1.3;}
   .u-main-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
   .u-main.done .u-main-label,.u-main.current .u-main-label{color:var(--ink);}
+  .u-fob-confirm{margin-top:5px;background:rgba(255,200,118,.14);border:1px solid #FFC876;color:#FFC876;border-radius:12px;padding:2px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;font-family:inherit;}
+  .u-fob-confirm:hover{background:rgba(255,200,118,.28);}
   .u-mini{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:72px;position:relative;}
   .u-mini-btn{width:30px;height:30px;margin-top:4px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);flex-shrink:0;cursor:default;padding:0;font:inherit;transition:all .2s;}
   .u-mini-btn svg{width:14px;height:14px;}
@@ -630,6 +632,17 @@ function requestCustomsDocsClick(orderNumber){
   if (!phone){ alert('No carrier/plant phone on file to request customs documents.'); return; }
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(requestCustomsDocsMessage(o)), '_blank');
 }
+// Real ask 2026-09-07: "antes de esa fecha [FOB] un boton confirmar con carrier o con planta de
+// que este todo ok y punto" — the Pending Pickup node's "Confirm" button. Reuses
+// askFleteroWhatsApp/askPlantWhatsApp unchanged: their statusCheckMessage's pending_pickup branch
+// ("Could you please confirm if everything is on track for pickup?") already IS this exact ask.
+function confirmPickupReadyClick(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  if (o.carrier && o.carrier.phone) askFleteroWhatsApp(orderNumber);
+  else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
+  else alert('No carrier/plant phone on file to confirm pickup.');
+}
 function openInvoiceQT(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
@@ -699,8 +712,12 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       ? (s.key === 'delivered' ? ` onclick="markDeliveredWithSignature('${o.order_number}')"` : ` onclick="advanceLoadStatus('${o.order_number}','${s.key}')"`)
       : '';
     const actionableClass = isNext ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
+    // Real correction 2026-09-07: "solo necesitamos una fecha... por que siempre quieres hablar de
+    // cargas tarde" — showing the scheduled pickup_date on Pending Pickup AT THE SAME TIME the real
+    // picked_up_at date shows on the next node read as an on-time/late comparison the user does not
+    // want. Once picked up, Pending Pickup's own date stops being shown — only one date at a time.
     let dateStr = '';
-    if (s.key === 'pending_pickup' && o.pickup_date) dateStr = fmtDateStr(o.pickup_date);
+    if (s.key === 'pending_pickup') dateStr = (i === stageIdx && o.pickup_date) ? `FOB ${fmtDateStr(o.pickup_date)}` : '';
     else if (s.key === 'picked_up') dateStr = o.picked_up_at ? fmtDateStr(o.picked_up_at.slice(0, 10)) : (i === stageIdx + 1 ? fmtDateStr(o.pickup_date) : '');
     else if (s.key === 'unloading'){
       if (o.unloading_at) dateStr = fmtDateStr(o.unloading_at.slice(0, 10));
@@ -710,8 +727,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       }
     } else if (s.key === 'delivered' && o.delivered_at) dateStr = fmtDateStr(o.delivered_at.slice(0, 10));
     const dateHtml = dateStr ? `<div class="u-main-date">${dateStr}</div>` : '';
+    // Real ask 2026-09-07: "una fecha de FOB y antes de esa fecha un boton confirmar con carrier o
+    // con planta de que este todo ok y punto" — one FOB date, and before it, a button to confirm
+    // with carrier/plant everything's on track. Reuses askFleteroWhatsApp/askPlantWhatsApp exactly
+    // as-is (their statusCheckMessage IS this confirmation ask for pending_pickup) — no new copy.
+    const canConfirm = (o.carrier && o.carrier.phone) || (o.plant && (o.plant.whatsapp || o.plant.phone));
+    const confirmBtnHtml = (s.key === 'pending_pickup' && i === stageIdx && o.pickup_date && canConfirm)
+      ? `<button type="button" class="u-fob-confirm" onclick="event.stopPropagation();confirmPickupReadyClick('${o.order_number}')">Confirm</button>`
+      : '';
     return {
-      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}</div>`,
+      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}${confirmBtnHtml}</div>`,
       lineDone: i < stageIdx,
       lineExtra: truckHtml,
     };
