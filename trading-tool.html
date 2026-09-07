@@ -1996,12 +1996,12 @@ async function createAndShareInvoice(){
   try { invoiceUrl = await uploadOrderPdf(doc, filename); }
   catch (e) { msgEl.textContent = 'Error subiendo el PDF: ' + e.message; return; }
 
-  const subject = `${orderNumber} — Factura`;
-  const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber} por un total de $${finalTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}.\n\n`
-    + `Para confirmar la recepción, por favor firma aquí:\n${signLink}\n\nGracias por su preferencia.`;
   const contact = customer && customer.contact_name ? negoFirstName(customer.contact_name) : '';
+  const subject = `${orderNumber} — INVOICE`;
+  const body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, firma aquí: ${signLink} para su confirmación.\n\n`
+    + `Gracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   const waPhone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
-  const waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar que la recibiste, firma aquí: ${signLink}`;
+  const waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar, firma aquí: ${signLink}. ¡Gracias!`;
 
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(doc, filename)], { phone: waPhone, message: waMessage }, ccEmails);

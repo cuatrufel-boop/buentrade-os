@@ -1602,17 +1602,19 @@ async function sharePO(orderNumber){
   const filename = `PO-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
-  const subject = `${orderNumber} — Purchase Order`;
   const po = built.po;
+  const poProductName = po.product_spec || po.product_name || '';
+  const subject = `📄 PO ${orderNumber} — BuenTrade — ${poProductName}`;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
-    + `Product: ${po.product_spec || po.product_name || ''}\n`
+    + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
     + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
   const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
+  const waMessagePo = `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
   try {
-    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: `Orden ${orderNumber} — te mando la Purchase Order.` });
+    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: waMessagePo });
     showToast('PO sent', emails.join(', '));
     markDocSent(orderNumber, 'po');
   } catch(e){
@@ -1712,17 +1714,19 @@ async function shareSO(orderNumber){
   const filename = `SO-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
-  const subject = `${orderNumber} — Confirmación de Venta`;
   const so = built.so;
+  const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
+  const subject = `${orderNumber} — Orden de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
-    + `Producto: ${so.product_spec_es || so.product_name_es || so.product_name || ''}\n`
+    + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
     + `Total: $${(so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
   const waPhoneSo = built.customer && (built.customer.whatsapp || built.customer.phone);
+  const waMessageSo = `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`;
   try {
-    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: `Orden ${orderNumber} — te mando la Confirmación de Venta.` });
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: waMessageSo });
     showToast('SO sent', emails.join(', '));
     markDocSent(orderNumber, 'so');
   } catch(e){
@@ -1800,7 +1804,7 @@ async function buildFODocs(orderNumber){
     // performance) and the MBG reference examples didn't include one either.
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
 }
@@ -1819,14 +1823,15 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `${orderNumber} — Freight Confirmation`;
+    const subject = `🚛 FO ${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     const waPhoneFo = b.carrier && (b.carrier.whatsapp || b.carrier.phone);
+    const waMessageFo = `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
     try {
-      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: `Orden ${orderNumber} — te mando la Freight Confirmation.` });
+      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: waMessageFo });
       showToast('FO sent', emails.join(', '));
       markDocSent(orderNumber, 'fo');
     } catch(e){
@@ -1875,11 +1880,14 @@ async function shareCustoms(orderNumber){
   }
   if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
 
-  const subject = `${orderNumber} — Documentos de recogida`;
-  const body = `Adjuntamos los documentos de recogida de la orden ${orderNumber}: ${pending.map(d => d.filename).join(', ')}.`;
+  const customerName = shipment && shipment.customer_name || '';
+  const subject = `📎 ${customerName} — BT-${orderNumber} — BuenTrade`;
+  const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${orderNumber}.\n\n`
+    + `Please confirm receipt of the documents and that you have everything needed on your end for the shipment. We will proceed accordingly.\n\nThank you,`;
   const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
+  const waMessageCustoms = `Orden ${orderNumber}\nHi BT-${orderNumber}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
   try {
-    await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: `Orden ${orderNumber} — te mando los documentos de recogida.` });
+    await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
     showToast('Documentos reenviados a aduana', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
   } catch(e){

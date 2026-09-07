@@ -918,22 +918,16 @@ function findStatusOrder(orderNumber){
 // each other. This now computes the SAME condition computeAttentionItems does — missed pickup,
 // pending pickup, or (once picked up) overdue at the border — so whichever button the trader
 // clicks, the message always matches what the app itself is showing.
+// Real correction 2026-09-07, explicit: never frame this as "you're already late" — "aqui no se
+// pueden pasar las fechas." Three interchangeable pre-pickup check-in texts approved by the user;
+// picking the first one here, all equally valid. In-transit keeps a plain status ask — none of the
+// three approved texts fit "already picked up," so that case is untouched apart from dropping the
+// old border-arrival-overdue framing (same "date already passed" pattern, same instruction).
 function statusCheckMessage(o){
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  if (o.load_status === 'pending_pickup' && o.pickup_date){
-    const pickup = new Date(o.pickup_date + 'T00:00:00');
-    const daysUntil = Math.round((pickup - today) / 86400000);
-    if (daysUntil < 0) return `Hi, following up on order ${o.order_number} — ${o.product_name}. This load is past its pickup date (was ${o.pickup_date}) and still shows pending pickup — please advise.`;
-    if (daysUntil === 0) return `Hi, following up on order ${o.order_number} — ${o.product_name}. Pickup is scheduled for today (${o.pickup_date}) — can you confirm it's happening?`;
-    return `Hi, following up on order ${o.order_number} — ${o.product_name}. Pickup is scheduled for ${o.pickup_date} — can you confirm everything is on track?`;
+  if (o.load_status === 'pending_pickup'){
+    return `📦 Hi, just following up on the status of the order. Could you please confirm if everything is on track for pickup? Thank you!`;
   }
-  if (o.load_status === 'picked_up' || o.load_status === 'unloading'){
-    const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
-    const expected = fromDate ? computeBorderArrivalDate(fromDate) : null;
-    if (expected && new Date(expected + 'T00:00:00') < today) return `Hi, following up on order ${o.order_number} — ${o.product_name}. This load was expected at the border on ${expected} and hasn't shown an update since — please advise.`;
-    return `Hi, following up on order ${o.order_number} — ${o.product_name}. Can you confirm the current status of this load?`;
-  }
-  return `Hi, following up on order ${o.order_number} — ${o.product_name}. Can you confirm the current status of this load?`;
+  return `🚚 Hi, could you please confirm the current status of this load? Thank you!`;
 }
 function askFleteroWhatsApp(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -953,15 +947,23 @@ function askPlantWhatsApp(orderNumber){
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(statusCheckMessage(o)), '_blank');
 }
 
-const STAGE_MESSAGES_ES = {
-  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${o.product_name} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡gracias por tu confianza!`,
+// Real correction 2026-09-07: email and WhatsApp are no longer the same short text reused in both
+// places — the email is a full formatted message (greeting + body + sign-off), WhatsApp stays the
+// short version, per the approved message table.
+const STAGE_EMAIL_BODY_ES = {
+  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${o.product_name} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  unloading: (o, contact) => `Hola ${contact},\n\n🚚 Tu carga de ${o.product_name} está llegando y en proceso de descarga.\n\nTe mantendremos informado. Si necesitas algo mientras tanto, quedamos atentos.\n\nUn Abrazo!\n\nSaludos,\nBuentrade Team`,
+  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${o.product_name} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+};
+const STAGE_WHATSAPP_ES = {
+  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${o.product_name} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
   unloading: (o, contact) => `Hola ${contact}! 📦 Tu carga de ${o.product_name} está llegando y en proceso de descarga. Te aviso apenas quede entregada.`,
-  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga de ${o.product_name} fue entregada. Espero la recibas en perfectas condiciones — cualquier cosa estoy atento.`,
+  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga ${o.order_number} de ${o.product_name} fue entregada con éxito.`,
 };
 const STAGE_SUBJECTS_ES = {
   picked_up: o => `${o.order_number} — Tu carga va en camino`,
   unloading: o => `${o.order_number} — Tu carga está por entregar`,
-  delivered: o => `${o.order_number} — Tu carga fue entregada`,
+  delivered: o => `${o.order_number} — Carga entregada con Éxito`,
 };
 
 // Real correction 2026-09-07, explicit and repeated: every notification that leaves BuenTrade
@@ -978,18 +980,18 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
   try { await callApi('shipments-update-status', { actor: currentActor(), shipment_id: o.id, status: newStatus, notes: notes || null }); }
   catch (e) { alert('Error updating status: ' + e.message); return; }
 
-  const msgFn = STAGE_MESSAGES_ES[newStatus];
+  const bodyFn = STAGE_EMAIL_BODY_ES[newStatus];
+  const waFn = STAGE_WHATSAPP_ES[newStatus];
   const subjFn = STAGE_SUBJECTS_ES[newStatus];
-  if (msgFn && subjFn){
+  if (bodyFn && subjFn){
     const contact = (o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : o.customer_name;
     const emails = o.customer ? collectEmails(o.customer) : [];
     const phone = (o.customer && (o.customer.whatsapp || o.customer.phone)) || '';
-    const message = msgFn(o, contact);
     if (!emails.length){
       alert('Status updated, but this customer has no email on file — no notification sent.');
     } else {
       try {
-        await sendEmailApi('logistics', emails, subjFn(o), message, [], { phone, message });
+        await sendEmailApi('logistics', emails, subjFn(o), bodyFn(o, contact), [], { phone, message: waFn(o, contact) });
         showToast('Cliente notificado', emails.join(', '));
       } catch (e){
         if (!e.cancelled) alert('No se pudo enviar la notificación: ' + e.message);
@@ -1053,11 +1055,12 @@ async function confirmPlantPaymentSent(orderNumber){
   try { base64 = await readFileAsBase64(file); }
   catch (e) { alert('No se pudo leer el archivo: ' + e.message); return; }
 
-  const subject = `${orderNumber} — Payment confirmation`;
-  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the release number so our carrier can pick up the load.\n\nThank you.`;
+  const subject = `💰 ${orderNumber} — BuenTrade — ${o.product_name || ''} — Payment confirmation`;
+  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
+  const waMessagePay = `Hi, I sent the payment confirmation by email and I'm sharing it here as well for your convenience. Please confirm receipt and send me the release number so we can arrange pickup. Thank you!`;
   const waPhone = o.plant && (o.plant.payments_whatsapp || o.plant.whatsapp || o.plant.phone);
   try {
-    await sendEmailApi('purchasing', paymentsEmails, subject, body, [{ filename: file.name, content: base64, contentType: file.type }], { phone: waPhone, message: `Order ${orderNumber} — payment confirmed (bank receipt attached), please share the release number.` }, salesEmails);
+    await sendEmailApi('purchasing', paymentsEmails, subject, body, [{ filename: file.name, content: base64, contentType: file.type }], { phone: waPhone, message: waMessagePay }, salesEmails);
   } catch (e) {
     if (e.cancelled) return;
     alert('No se pudo enviar la confirmación de pago: ' + e.message);
@@ -1813,17 +1816,19 @@ async function shareSO(orderNumber){
   const filename = `SO-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
-  const subject = `${orderNumber} — Confirmación de Venta`;
   const so = built.so;
+  const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
+  const subject = `${orderNumber} — Orden de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
-    + `Producto: ${so.product_spec_es || so.product_name_es || so.product_name || ''}\n`
+    + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
     + `Total: $${(so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
   const waPhoneSo = built.customer && (built.customer.whatsapp || built.customer.phone);
+  const waMessageSo = `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`;
   try {
-    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: `Orden ${orderNumber} — te mando el documento.` });
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: waMessageSo });
     showToast('SO sent', emails.join(', '));
     markDocSent(orderNumber, 'so');
   } catch(e){
@@ -2056,11 +2061,14 @@ async function shareCustoms(orderNumber){
   }
   if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
 
-  const subject = `${orderNumber} — Documentos de recogida`;
-  const body = `Adjuntamos los documentos de recogida de la orden ${orderNumber}: ${pending.map(d => d.filename).join(', ')}.`;
+  const customerName = shipment.customer_name || '';
+  const subject = `📎 ${customerName} — BT-${orderNumber} — BuenTrade`;
+  const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${orderNumber}.\n\n`
+    + `Please confirm receipt of the documents and that you have everything needed on your end for the shipment. We will proceed accordingly.\n\nThank you,`;
   const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
+  const waMessageCustoms = `Orden ${orderNumber}\nHi BT-${orderNumber}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
   try {
-    await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: `Orden ${orderNumber} — te mando los documentos de recogida.` });
+    await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
     showToast('Documentos reenviados a aduana', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
   } catch(e){
