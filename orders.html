@@ -395,7 +395,7 @@ auth.onAuthStateChanged(user => {
   <!-- Same persistent, always-there attention list as the urgent queue overlay below — one real
        list of conditions (computeAttentionItems), never two copies that could drift. -->
   <div id="needsAttentionWrap" style="display:none;margin-bottom:22px;">
-    <h3 style="font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px;">⚠ Necesita tu atención <span id="needsAttentionCount" class="payment-badge overdue" style="font-size:11px;"></span></h3>
+    <h3 style="font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px;">⚠ Needs Your Attention <span id="needsAttentionCount" class="payment-badge overdue" style="font-size:11px;"></span></h3>
     <div id="needsAttentionList"></div>
   </div>
   <div class="stats-row" id="statusStats"></div>
@@ -868,8 +868,8 @@ function computeAttentionItems(){
         items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)} — ${productName}`,
           btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. This load is past its pickup date, please advise.`, `${o.order_number} — Missed pickup`) });
       } else if (daysUntil === 1){
-        const carrierName = o.carrier && o.carrier.name ? ` con ${o.carrier.name}` : '';
-        items.push({ orderNumber: label, order_number: o.order_number, text: `Pickup mañana (${fmtDateStr(o.pickup_date)})${carrierName} — confirma que todo está listo — ${productName}`,
+        const carrierName = o.carrier && o.carrier.name ? ` with ${o.carrier.name}` : '';
+        items.push({ orderNumber: label, order_number: o.order_number, text: `Pickup tomorrow (${fmtDateStr(o.pickup_date)})${carrierName} — confirm everything is ready — ${productName}`,
           btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `${o.order_number} — Pickup tomorrow`) });
       }
     }
@@ -882,12 +882,12 @@ function computeAttentionItems(){
     if (stage === 'pending_pickup' && o.created_at && !o.plant_paid_at){
       const daysSinceWon = (Date.now() - new Date(o.created_at).getTime()) / 86400000;
       if (daysSinceWon >= PLANT_PAYMENT_REMINDER_DAYS_AFTER_WON){
-        items.push({ orderNumber: label, order_number: o.order_number, text: `Paga a la planta — ${productName}`,
-          btn: `<button class="wa-btn" onclick="confirmPlantPaymentSent('${o.order_number}')">Confirmar pago enviado</button>` });
+        items.push({ orderNumber: label, order_number: o.order_number, text: `Pay the plant — ${productName}`,
+          btn: `<button class="wa-btn" onclick="confirmPlantPaymentSent('${o.order_number}')">Confirm Payment Sent</button>` });
       }
     }
     if (stage === 'pending_pickup' && o.plant_paid_at){
-      items.push({ orderNumber: label, order_number: o.order_number, text: `Pide el Release Number al transportista — ${productName}`,
+      items.push({ orderNumber: label, order_number: o.order_number, text: `Get the Release Number from the carrier — ${productName}`,
         btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. We've confirmed payment — please provide the release number for the carrier's pickup.`, `${o.order_number} — Release number`) });
     }
     if (stage === 'picked_up' && !(o.pending_pickup_documents && o.pending_pickup_documents.length)){
@@ -898,10 +898,10 @@ function computeAttentionItems(){
     if (stage === 'picked_up' || stage === 'unloading'){
       const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
       const expected = fromDate ? computeBorderArrivalDate(fromDate) : null;
-      if (expected && new Date(expected + 'T00:00:00') < today) items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Debería haber llegado a la frontera el ${fmtDateStr(expected)} — ${productName}`, btn: '' });
+      if (expected && new Date(expected + 'T00:00:00') < today) items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Should have reached the border by ${fmtDateStr(expected)} — ${productName}`, btn: '' });
     }
     if (o.pending_pickup_documents && o.pending_pickup_documents.length){
-      items.push({ orderNumber: label, order_number: o.order_number, text: `📎 ${o.pending_pickup_documents.length} documento(s) recibido(s), listos para aduana — ${productName}`, btn: `<button class="wa-btn" onclick="shareCustoms('${o.order_number}')">Enviar a Aduana</button>` });
+      items.push({ orderNumber: label, order_number: o.order_number, text: `📎 ${o.pending_pickup_documents.length} document(s) received, ready for customs — ${productName}`, btn: `<button class="wa-btn" onclick="shareCustoms('${o.order_number}')">Send to Customs</button>` });
     }
   });
   return items;
@@ -949,12 +949,12 @@ async function runUrgentQueueOnLogin(){
 function showUrgentQueueStep(){
   const it = urgentQueue[urgentQueueIndex];
   urgentQueueActionTaken = !it.btn; // an item with no real action (e.g. border-overdue, informational) doesn't need one before advancing
-  document.getElementById('urgentQueueProgress').textContent = `${urgentQueueIndex + 1} de ${urgentQueue.length} — Necesita tu atención`;
+  document.getElementById('urgentQueueProgress').textContent = `${urgentQueueIndex + 1} of ${urgentQueue.length} — Needs Your Attention`;
   document.getElementById('urgentQueueOrderNum').textContent = it.orderNumber;
   document.getElementById('urgentQueueText').textContent = it.text;
   const wrappedBtn = it.btn.replace('onclick="', 'onclick="urgentQueueActionTaken=true;');
   document.getElementById('urgentQueueActions').innerHTML = wrappedBtn +
-    `<button class="wa-btn" onclick="urgentQueueAdvance()">✓ Ya lo hice</button>`;
+    `<button class="wa-btn" onclick="urgentQueueAdvance()">✓ Done</button>`;
   if (autoTriggerFocusedStep){
     autoTriggerFocusedStep = false; // only the very first step reached via ?focus=, never again
     const actionBtn = document.getElementById('urgentQueueActions').querySelector('button');
@@ -1030,10 +1030,10 @@ async function toggleOrderDocs(orderNumber){
 }
 
 function renderTradeDocRow(label, sentAt, matchedFiles, actionsHtml, actionsWhenMissing){
-  if (!matchedFiles.length) return `<div class="doc-row"><span class="doc-row-label">${label}</span>${actionsWhenMissing || ''}<span class="doc-row-status">No generado</span></div>`;
-  const links = matchedFiles.map(f => `<a href="${f.url}" target="_blank" rel="noopener" class="doc-row-link">Ver</a>`).join(' ');
-  const when = sentAt ? new Date(sentAt).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
-  return `<div class="doc-row"><span class="doc-row-label">${label}</span>${links}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Enviado ' + when : 'Generado, no enviado'}</span></div>`;
+  if (!matchedFiles.length) return `<div class="doc-row"><span class="doc-row-label">${label}</span>${actionsWhenMissing || ''}<span class="doc-row-status">Not generated</span></div>`;
+  const links = matchedFiles.map(f => `<a href="${f.url}" target="_blank" rel="noopener" class="doc-row-link">View</a>`).join(' ');
+  const when = sentAt ? new Date(sentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+  return `<div class="doc-row"><span class="doc-row-label">${label}</span>${links}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Sent ' + when : 'Generated, not sent'}</span></div>`;
 }
 
 // Real ask 2026-09-06: "si no se manda pero queda guardado debo poder entrar y darme la
@@ -1063,20 +1063,20 @@ function renderOrderDocsPanel(o){
     // hecho o no" for one specific load, but Pago a Planta — a real, required step in the same
     // flow — never appeared here at all, only inside the reactive attention queue. Same doc-row
     // look as every other row here, not a new component.
-    const paymentWhen = o.plant_paid_at ? new Date(o.plant_paid_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
-    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Pago a Planta</span>${o.plant_paid_at ? '' : docRowBtn('💰 Confirmar pago enviado', `confirmPlantPaymentSent('${o.order_number}')`)}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${o.plant_paid_at ? 'Pagado ' + paymentWhen : 'No pagado'}</span></div>`;
+    const paymentWhen = o.plant_paid_at ? new Date(o.plant_paid_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${o.plant_paid_at ? '' : docRowBtn('💰 Confirm Payment Sent', `confirmPlantPaymentSent('${o.order_number}')`)}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${o.plant_paid_at ? 'Paid ' + paymentWhen : 'Not paid'}</span></div>`;
     body = `<div class="docs-panel">
-      ${renderTradeDocRow('PO (Planta)', o.po_sent_at, poFiles, poActions, poActions)}
-      ${renderTradeDocRow('SO (Cliente)', o.so_sent_at, soFiles, soActions, soActions)}
+      ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActions)}
+      ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActions)}
       ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
       ${paymentRow}
-      ${renderTradeDocRow('Factura', o.invoice_sent_at, invoiceFiles, invoiceActions)}
+      ${renderTradeDocRow('Invoice', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${pickupDocs.length
-        ? pickupDocs.map(d => `<div class="doc-row"><span class="doc-row-label">${escapeHtml(d.filename)}</span><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-link">Ver</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Enviado a aduana' : 'Recibido, pendiente de aduana'}</span></div>`).join('')
-        : '<div class="doc-row-empty">Sin documentos de recogida todavía.</div>'}
+        ? pickupDocs.map(d => `<div class="doc-row"><span class="doc-row-label">${escapeHtml(d.filename)}</span><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-link">View</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
+        : '<div class="doc-row-empty">No pickup documents yet.</div>'}
     </div>`;
   }
-  return `<div class="docs-panel-toggle" onclick="toggleOrderDocs('${o.order_number}')">📄 Documentos ${arrow}</div>${body}`;
+  return `<div class="docs-panel-toggle" onclick="toggleOrderDocs('${o.order_number}')">📄 Documents ${arrow}</div>${body}`;
 }
 
 function renderStatusOrders(){
@@ -1113,7 +1113,7 @@ function renderStatusOrders(){
 
     const pendingDocs = o.pending_pickup_documents || [];
     const pickupDocsBtn = pendingDocs.length
-      ? `<button class="wa-btn outline" onclick="shareCustoms('${o.order_number}')">📎 ${pendingDocs.length} doc${pendingDocs.length === 1 ? '' : 's'} — Enviar a Aduana</button>`
+      ? `<button class="wa-btn outline" onclick="shareCustoms('${o.order_number}')">📎 ${pendingDocs.length} doc${pendingDocs.length === 1 ? '' : 's'} — Send to Customs</button>`
       : '';
 
     const cp = o.catalogProduct;
