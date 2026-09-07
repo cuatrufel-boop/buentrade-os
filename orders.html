@@ -1098,7 +1098,10 @@ function renderOrderDocsPanel(o){
     // the carrier (once there is one to send it to).
     let paymentBtn, paymentStatus;
     if (!o.plant_paid_at){
-      paymentBtn = docRowBtn('💰 Confirm Payment Sent', `confirmPlantPaymentSent('${o.order_number}')`);
+      // Real ask 2026-09-07: "y payment plant? debo poder mandar por los dos medios tambien" —
+      // same Email/WhatsApp icon pair as every other row now, not a single text button. Both pick
+      // the same bank-confirmation file and both mark plant_paid_at once sent.
+      paymentBtn = emailBtn(`confirmPlantPaymentSent('${o.order_number}')`) + waBtn(`confirmPlantPaymentWhatsApp('${o.order_number}')`);
       paymentStatus = 'Not paid';
     } else if (!o.release_number){
       paymentBtn = docRowBtn('📋 Record Release #', `recordReleaseNumber('${o.order_number}')`);
@@ -1355,6 +1358,30 @@ async function confirmPlantPaymentSent(orderNumber){
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
   catch (e) { alert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
   showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
+  await loadStatusOrders();
+}
+
+// Real ask 2026-09-07: "y payment plant? debo poder mandar por los dos medios tambien" — direct
+// WhatsApp counterpart to confirmPlantPaymentSent above, same shareDocAndOpenWhatsApp-style
+// download-then-wa.me pattern already used for PO/SO/FO/Invoice, same message text
+// confirmPlantPaymentSent already sends via its own embedded WhatsApp option.
+async function confirmPlantPaymentWhatsApp(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const waPhone = o.plant && (o.plant.payments_whatsapp || o.plant.whatsapp || o.plant.phone);
+  if (!waPhone){ alert('No WhatsApp/phone on file for this plant.'); return; }
+  alert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
+  const file = await pickBankConfirmationFile();
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Archivo descargado', 'Arrástralo o adjúntalo dentro de WhatsApp.');
+  const waMessagePay = `Hi, I'm sharing the payment confirmation for this order here. Please confirm receipt and send me the release number so we can arrange pickup. Thank you!`;
+  window.open('https://wa.me/' + waPhone.replace(/\D/g, '') + '?text=' + encodeURIComponent(waMessagePay), '_blank');
+  try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
+  catch (e) { alert('No se pudo marcar el pago: ' + e.message); return; }
+  showToast('Pago confirmado', 'Se compartió el comprobante a la planta — ya puedes pedir el release number.');
   await loadStatusOrders();
 }
 
