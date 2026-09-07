@@ -237,7 +237,7 @@
   /* Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si aplica
      salga arriba" — FO is the only optional one of the three, so it's the one that floats up into
      a small curve when it exists; PO/SO never move. */
-  .u-mini.raised{transform:translateY(-18px);}
+  .u-mini.raised,.u-main.raised{transform:translateY(-18px);}
   .u-line-curve{position:relative;flex:1 1 auto;height:2px;margin-top:19px;min-width:14px;overflow:visible;}
   .u-line-curve svg{position:absolute;top:-18px;left:0;width:100%;height:20px;overflow:visible;}
   .u-mini-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);flex-shrink:0;cursor:default;padding:0;font:inherit;transition:all .2s;}
@@ -810,10 +810,14 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     }
     const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="alert('${infoMsg.replace(/'/g, "\\'")}')"`;
     const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : infoMsg);
+    // Real ask 2026-09-08: "pickup y delivered levantalos tambien como FO para hacer mas espacio"
+    // — same raised treatment as FO, same curved connectors on both sides.
+    const raised = s.key === 'picked_up' || s.key === 'delivered';
     return {
-      html: `<div class="u-main ${cls}${actionableClass}{{BLINK}}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div><div class="u-main-label">${displayLabel}</div>${dateHtml}</div>`,
+      html: `<div class="u-main ${cls}${actionableClass}${raised ? ' raised' : ''}{{BLINK}}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div><div class="u-main-label">${displayLabel}</div>${dateHtml}</div>`,
       lineDone: i < stageIdx,
       actionableNow: isNext,
+      raised,
     };
   }
 
