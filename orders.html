@@ -1085,7 +1085,7 @@ function renderOrderDocsPanel(o){
     const soActions = emailBtn(`shareSO('${o.order_number}')`) + waBtn(`waCardSO('${o.order_number}')`);
     const foActions = emailBtn(`shareFO('${o.order_number}')`) + waBtn(`waCardFO('${o.order_number}')`);
     const invoiceActions = invoiceFiles.length
-      ? emailBtn(`resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
+      ? emailBtn(`resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`) + waBtn(`waResendInvoice('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
       : '';
     // Real gap found live 2026-09-07: this panel is the one place meant to show "todo lo que está
     // hecho o no" for one specific load, but Pago a Planta — a real, required step in the same
@@ -2309,6 +2309,22 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
   } catch(e){
     if (!e.cancelled) showToast('No se pudo enviar la factura', e.message, true);
   }
+}
+
+// Real ask 2026-09-07: "todos con email y whatsapp porfavor" — Invoice only had Email in the
+// Documentos panel. Same direct-download-then-WhatsApp pattern shareDocAndOpenWhatsApp already
+// uses for PO/SO/FO (a real jsPDF doc there vs. an already-uploaded file here — same UX either
+// way), same message text resendInvoiceEmail already sends inside its own WhatsApp option.
+function waResendInvoice(orderNumber, fileUrl, filename){
+  const o = findStatusOrder(orderNumber);
+  const customer = o ? o.customer : null;
+  const phone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
+  if (!phone){ alert('No WhatsApp/phone on file for this customer.'); return; }
+  const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
+  const a = document.createElement('a');
+  a.href = fileUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  showToast('PDF descargado', 'Arrástralo o adjúntalo dentro de WhatsApp.');
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(`Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!`), '_blank');
 }
 
 // Border customs paperwork isn't its own document — the broker just needs the REAL pickup
