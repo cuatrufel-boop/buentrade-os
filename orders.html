@@ -127,6 +127,7 @@
   .step.current .step-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
   @keyframes stepPulse{0%,100%{box-shadow:0 0 0 4px var(--blue-light);}50%{box-shadow:0 0 0 7px rgba(30,106,219,.12);}}
   .step-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:8px;text-align:center;line-height:1.3;}
+  .step-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
   .step.done .step-label,.step.current .step-label{color:var(--ink);}
   .step-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;}
   .step-line.done{background:var(--green);}
@@ -166,6 +167,18 @@
   .payment-badge.ok{background:transparent;color:var(--ink-soft);border-color:var(--line);}
   .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  /* Real ask 2026-09-07: "el trader debe ver que ha hecho, que falta... todo con el flujo
+     visualmente" — a compact, always-visible checklist (no click needed) of every real step from
+     Create Order to Invoice, right on the card itself. Same color language as payment-badge
+     (green=done, amber=needs action now, gray=not due yet), just as small chips in a row. */
+  .flow-strip{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;}
+  .flow-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px 4px 8px;border-radius:20px;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap;}
+  .flow-chip .fc-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-soft);flex-shrink:0;}
+  .flow-chip.fc-done{color:#5FE097;border-color:rgba(95,224,151,.35);}
+  .flow-chip.fc-done .fc-dot{background:#5FE097;}
+  .flow-chip.fc-now{color:#FFC876;border-color:rgba(255,200,118,.4);}
+  .flow-chip.fc-now .fc-dot{background:#FFC876;}
+  .flow-chip.fc-wait{opacity:.55;}
   @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
   #urgentQueueBox{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
 </style>
@@ -527,6 +540,42 @@ function computeBorderArrivalDate(fromDateStr){
   return d.toISOString().slice(0, 10);
 }
 
+// Real ask 2026-09-07: "el trader debe ver que ha hecho que falta... todo con el flujo
+// visualmente" — every real step from Create Order to Invoice, as small always-visible chips
+// (no need to open Documentos to see this). fc-done = already happened, fc-now = needs action
+// right now, fc-wait = not due at this stage yet (shown faded, not a warning).
+function renderFlowChecklist(o){
+  const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
+  const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
+  const deliveredIdx = LOAD_STAGES.findIndex(s => s.key === 'delivered');
+  const chip = (label, state) => `<span class="flow-chip fc-${state}"><span class="fc-dot"></span>${label}</span>`;
+
+  const chips = [];
+  chips.push(chip('PO', o.po_sent_at ? 'done' : 'now'));
+  chips.push(chip('SO', o.so_sent_at ? 'done' : 'now'));
+  if (o.has_freight_order) chips.push(chip('FO', o.fo_sent_at ? 'done' : 'now'));
+  chips.push(chip('Pago Planta', o.plant_paid_at ? 'done' : 'now'));
+
+  const hasAnyPickupDoc = (o.pickup_documents || []).length > 0;
+  if (stageIdx < pickedUpIdx) chips.push(chip('Docs recogida', 'wait'));
+  else chips.push(chip('Docs recogida', hasAnyPickupDoc ? 'done' : 'now'));
+
+  const pendingCustoms = (o.pending_pickup_documents || []).length > 0;
+  if (o.customs_sent_at) chips.push(chip('Aduana', 'done'));
+  else if (pendingCustoms) chips.push(chip('Aduana', 'now'));
+  else chips.push(chip('Aduana', 'wait'));
+
+  if (o.invoice_sent_at) chips.push(chip('Factura', 'done'));
+  else if (stageIdx >= deliveredIdx) chips.push(chip('Factura', 'now'));
+  else chips.push(chip('Factura', 'wait'));
+
+  if (o.invoice_signed_at) chips.push(chip('Firma cliente', 'done'));
+  else if (o.invoice_sent_at) chips.push(chip('Firma cliente', 'now'));
+  else chips.push(chip('Firma cliente', 'wait'));
+
+  return `<div class="flow-strip">${chips.join('')}</div>`;
+}
+
 function pickupReadinessBadge(o){
   const stage = o.load_status || 'pending_pickup';
   if (stage === 'pending_pickup'){
@@ -873,7 +922,22 @@ function renderStatusOrders(){
       // happened because clicks near the label text below it missed the handler entirely. The
       // whole column (icon + label) is now the click target, not just the circle.
       const actionableClass = isNext ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
-      return `<div class="step ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="step-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="step-label">${s.label}</div></div>${line}`;
+      // Real ask 2026-09-07: "tiempos cuando recoge la carga cuando entrega" — a real date under
+      // each step, not just the top-right "Expected at border" badge. Actual timestamp once that
+      // stage happened, the scheduled/expected date while it's still ahead, nothing once neither
+      // is known yet.
+      let dateStr = '';
+      if (s.key === 'pending_pickup' && o.pickup_date) dateStr = fmtDateStr(o.pickup_date);
+      else if (s.key === 'picked_up') dateStr = o.picked_up_at ? fmtDateStr(o.picked_up_at.slice(0, 10)) : (i === stageIdx + 1 ? fmtDateStr(o.pickup_date) : '');
+      else if (s.key === 'unloading'){
+        if (o.unloading_at) dateStr = fmtDateStr(o.unloading_at.slice(0, 10));
+        else if (i === stageIdx + 1){
+          const fromDate = o.picked_up_at ? o.picked_up_at.slice(0, 10) : o.pickup_date;
+          dateStr = fromDate ? fmtDateStr(computeBorderArrivalDate(fromDate)) : '';
+        }
+      } else if (s.key === 'delivered' && o.delivered_at) dateStr = fmtDateStr(o.delivered_at.slice(0, 10));
+      const dateHtml = dateStr ? `<div class="step-date">${dateStr}</div>` : '';
+      return `<div class="step ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="step-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="step-label">${s.label}</div>${dateHtml}</div>${line}`;
     }).join('');
 
     const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
@@ -913,8 +977,10 @@ function renderStatusOrders(){
       <div class="load-route">
         <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
         <div class="load-route-arrow">${ARROW_ICON}</div>
+        ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
         <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
       </div>
+      ${renderFlowChecklist(o)}
       <div class="stepper">${stepsHtml}</div>
       <div class="load-actions">${checkInBtn}${pickupDocsBtn}</div>
       ${renderOrderDocsPanel(o)}
