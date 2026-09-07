@@ -12,7 +12,7 @@ import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
-const VALID_DOC_TYPES = ["po", "so", "fo", "customs", "invoice"];
+const VALID_DOC_TYPES = ["po", "so", "fo", "customs", "invoice", "release_number"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
       else if (doc_type === "so") [updated] = await tx`update shipments set so_sent_at = now() where order_number = ${order_number} returning *`;
       else if (doc_type === "fo") [updated] = await tx`update shipments set fo_sent_at = now() where order_number = ${order_number} returning *`;
       else if (doc_type === "invoice") [updated] = await tx`update shipments set invoice_sent_at = now() where order_number = ${order_number} returning *`;
+      else if (doc_type === "release_number") [updated] = await tx`update shipments set release_number_sent_at = now() where order_number = ${order_number} returning *`;
       else [updated] = await tx`update shipments set customs_sent_at = now() where order_number = ${order_number} returning *`;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "shipments", record_id: existing.id, before: existing, after: updated });
       return updated;

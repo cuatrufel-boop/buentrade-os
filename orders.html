@@ -766,6 +766,12 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   ];
   if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')` }));
   entries.push(miniEntry({ icon: MONEY_ICON, label: 'Payment', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
+  // Real gap found 2026-09-07: "revisa todo... faltan mas cosas" — recordReleaseNumber/
+  // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
+  // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
+  // other real action on this timeline — no new business logic, just surfaced where it belongs.
+  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, onClick: `recordReleaseNumber('${o.order_number}')` }));
+  if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
   entries.push(mainEntry('pending_pickup'));
   entries.push(mainEntry('picked_up'));
   entries.push(miniEntry({ icon: CLIP_ICON, label: 'Customs Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestCustomsDocsClick('${o.order_number}')` }));
@@ -1359,13 +1365,15 @@ async function recordReleaseNumber(orderNumber){
 function releaseNumberMessage(o){
   return `Hi, here's the release number for order ${o.order_number} — ${o.product_name || ''}: ${o.release_number}. Please use it for pickup. Thank you!`;
 }
-function sendReleaseNumberToCarrier(orderNumber){
+async function sendReleaseNumberToCarrier(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   if (!o.release_number){ alert('No release number recorded yet for this order.'); return; }
   const phone = o.carrier && o.carrier.phone;
   if (!phone){ alert('No carrier phone on file to send the release number.'); return; }
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(releaseNumberMessage(o)), '_blank');
+  await markDocSent(orderNumber, 'release_number');
+  await loadStatusOrders();
 }
 
 // ============ DELIVERY SIGNATURE (Proof of Delivery) ============
