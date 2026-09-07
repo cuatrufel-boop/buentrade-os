@@ -234,6 +234,12 @@
   .u-fob-confirm{margin-top:5px;background:rgba(255,200,118,.14);border:1px solid #FFC876;color:#FFC876;border-radius:12px;padding:2px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;font-family:inherit;}
   .u-fob-confirm:hover{background:rgba(255,200,118,.28);}
   .u-mini{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:72px;position:relative;}
+  /* Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si aplica
+     salga arriba" — FO is the only optional one of the three, so it's the one that floats up into
+     a small curve when it exists; PO/SO never move. */
+  .u-mini.raised{transform:translateY(-18px);}
+  .u-line-curve{position:relative;flex:1 1 auto;height:2px;margin-top:19px;min-width:14px;overflow:visible;}
+  .u-line-curve svg{position:absolute;top:-18px;left:0;width:100%;height:20px;overflow:visible;}
   .u-mini-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);flex-shrink:0;cursor:default;padding:0;font:inherit;transition:all .2s;}
   .u-mini-btn svg{width:18px;height:18px;}
   .u-mini-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:7px;text-align:center;line-height:1.3;}
@@ -822,10 +828,15 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const effectiveOnClick = (state === 'wait' && st.waitReason) ? `alert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
     const clickable = !!effectiveOnClick;
     const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
+    // Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si
+    // aplica salga arriba" — FO is the only conditional one of the three (has_freight_order), so
+    // it's the one that rises into a small curve when it exists; PO/SO never move.
+    const raisedClass = st.raised ? ' raised' : '';
     return {
-      html: `<div class="u-mini ${state}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
+      html: `<div class="u-mini ${state}${raisedClass}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
       lineDone: st.done,
       actionableNow: state === 'now',
+      raised: !!st.raised,
     };
   }
 
@@ -833,7 +844,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     miniEntry({ icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')` }),
     miniEntry({ icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` }),
   ];
-  if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')` }));
+  if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')`, raised: true }));
   entries.push(miniEntry({ icon: MONEY_ICON, label: 'Pay-Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
   // Real gap found 2026-09-07: "revisa todo... faltan mas cosas" — recordReleaseNumber/
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
@@ -908,9 +919,24 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // single leftmost real action across the whole card, left to right — "el flujo es el munequito
   // yendo de izquierda a derecha."
   const blinkIdx = entries.findIndex(e => e.actionableNow);
+  // Real ask 2026-09-08: "una sola para po so fo curva... el resto como esta" — only the two
+  // connectors touching the raised entry (FO) curve; every other line stays the plain flat dashed
+  // line exactly as before. When FO doesn't exist, no entry is ever raised, so this never fires.
+  function curveSvg(dir, done){
+    const stroke = done ? 'var(--green)' : 'var(--line)';
+    const dash = done ? '' : 'stroke-dasharray="4 4"';
+    const d = dir === 'up' ? 'M0,18 Q50,0 100,0' : 'M0,0 Q50,0 100,18';
+    return `<svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${stroke}" stroke-width="2" ${dash}/></svg>`;
+  }
   const html = entries.map((e, i) => {
     const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-    const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
+    let line = '';
+    if (i < entries.length - 1){
+      const nextRaised = !!entries[i + 1].raised;
+      if (e.raised) line = `<div class="u-line-curve">${curveSvg('down', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
+      else if (nextRaised) line = `<div class="u-line-curve">${curveSvg('up', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
+      else line = `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>`;
+    }
     const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
     return entryHtml + line;
   }).join('');
