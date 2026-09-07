@@ -10,7 +10,12 @@ import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
-const VALID_TO = ["plant", "customer"];
+// Real gap found live 2026-09-07: "el historial de negociacion... NO QUIERO REPETIR" — only the
+// outgoing ("plant"/"customer", what BuenTrade sent) directions were ever accepted. plant_reply/
+// customer_bid (the incoming half — what the plant/customer told you back) already existed in the
+// frontend's own NEGO_STEP_META rendering map, but this function rejected them outright, so the
+// UI trigger added for them (negoLogPlantReply/negoLogCustomerBid) had nowhere valid to write to.
+const VALID_TO = ["plant", "customer", "plant_reply", "customer_bid"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });

@@ -653,6 +653,15 @@ if (FIREBASE_READY) {
          contact itself is what flags this negotiation hot in Offers. -->
 <div id="negoQbLeft" style="display:none;align-items:center;gap:10px;">
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Plant</span>
+        <!-- Real ask 2026-09-07: "el historial de negociacion" must survive end to end — the "in"
+             half (plant_reply/customer_bid) already had metadata/rendering in NEGO_STEP_META but no
+             way to actually log one: only outgoing Email/WhatsApp sends were ever recorded. This is
+             that missing "log what they told you" step (a call, a WhatsApp reply, anything not
+             itself sent from this app) — same negoLogEvent/sent-offers-log-event plumbing outgoing
+             events already use. -->
+        <button onclick="negoLogPlantReply()" title="Log the price the plant told you (call, reply, etc.)" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;width:36px;height:36px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        </button>
         <button onclick="negoSendToPlant('email')" title="Email Plant" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:0 15px;height:36px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
           Email
@@ -716,6 +725,9 @@ if (FIREBASE_READY) {
         <button onclick="negoSendToCustomer('email')" title="Email Customer" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:0 15px;height:36px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
           Email
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+        </button>
+        <button onclick="negoLogCustomerBid()" title="Log the price the customer bid (call, reply, etc.)" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;width:36px;height:36px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         </button>
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Customer</span>
       </div>
@@ -1791,6 +1803,23 @@ async function negoInit(){
   }
   negoRenderLog();
   if (offer.status === 'won'){
+    // Real bug found live 2026-09-07: "el QT del invoice debe traer los numeros no en cero" —
+    // openTTOverlay (orders.html) only ever passes ?offerId=, so products[0] sat at its
+    // query-param defaults (weight 40000, cost/sellBorder 0) and nothing here wrote the real
+    // agreed numbers back into it — the negotiation panel/history rendered fine (reads negoOffer
+    // directly) but the calculator itself, and the invoice it builds, used the wrong numbers.
+    // Deliberately scoped to WON offers only — the "never touches products[]" rule above is
+    // about not clobbering an ACTIVE negotiation's in-progress typing; a closed deal has no
+    // draft to protect, only the one real final agreed price to show.
+    if (products[0]){
+      products[0].weight = offer.weight || products[0].weight;
+      products[0].weightManual = true;
+      products[0].cost = offer.purchase_price || 0;
+      products[0].sellBorder = offer.sale_per_lb || 0;
+      products[0].sellManual = true;
+      buildProductRows();
+      calc();
+    }
     // Already closed — Plant/Customer/Win don't apply anymore. Instead show the real-cost
     // entry right next to the same numbers that went into the PO/SO/FO, so nothing needs
     // comparing against a separate table.
@@ -2264,6 +2293,26 @@ async function negoSendToCustomer(channel){
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
   }
   negoLogEvent('customer', price);
+}
+
+// Real ask 2026-09-07: "el historial de negociacion... NO QUIERO REPETIR" — plant_reply/
+// customer_bid already existed in NEGO_STEP_META (rendering the "in" arrow, green dot) but nothing
+// ever created one: only outgoing Email/WhatsApp sends were logged, so a real negotiation with
+// back-and-forth counters — most of it a phone call or a WhatsApp reply, never itself sent from
+// this app — left the history empty or one-sided. These record the other half.
+function negoLogPlantReply(){
+  const raw = prompt('Price the plant quoted you (USD/lb):');
+  if (raw === null) return;
+  const price = Number(raw);
+  if (!price || price <= 0){ alert('Enter a valid price.'); return; }
+  negoLogEvent('plant_reply', price);
+}
+function negoLogCustomerBid(){
+  const raw = prompt('Price the customer bid (USD/lb):');
+  if (raw === null) return;
+  const price = Number(raw);
+  if (!price || price <= 0){ alert('Enter a valid price.'); return; }
+  negoLogEvent('customer_bid', price);
 }
 
 // Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
