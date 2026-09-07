@@ -873,8 +873,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     travelerType = 'walker';
   } else if (stageIdx < deliveredIdx){
     const j = firstUndone(confirmIdx, deliveredIdxInEntries);
-    travelerLineIdx = Math.max(confirmIdx, Math.min(j, deliveredIdxInEntries - 1));
-    travelerType = 'truck';
+    const candidateIdx = Math.max(confirmIdx, Math.min(j, deliveredIdxInEntries - 1));
+    // Real correction 2026-09-07: "un camion dos camiones moviendose que es?" — the line right
+    // after Picked Up sits directly next to that node's own icon, which is ALSO a truck
+    // (STEP_ICONS.picked_up) — two trucks touching read as a glitch, not motion. Picked Up's own
+    // pulse already marks "the load is here" while it's current; skip the riding truck on that
+    // one segment instead of doubling up, still shown on every other segment.
+    if (candidateIdx !== confirmIdx + 1){
+      travelerLineIdx = candidateIdx;
+      travelerType = 'truck';
+    }
   }
   // Real correction 2026-09-07: "no tenemos colores llenos en buentrade todo son transparencias
   // bordes... un logo pasado de moda" — every real icon in this app (STEP_ICONS, DOC_ICON, etc.)
