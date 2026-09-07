@@ -1796,7 +1796,9 @@ async function negoInit(){
   const plantId = __qp.get('plantId') || offer.plant_id;
   if (plantId){
     try { negoPlant = ((await callApi('plants-search', { id: plantId })).results || [])[0] || null; } catch (e) { negoPlant = null; }
-    ttInitFreightPicker(plantId);
+    // Awaited (wasn't before) so ttFreightRates/ttFreightPlantId are ready before the 'won' branch
+    // below tries to restore the historical freight rate selection.
+    await ttInitFreightPicker(plantId);
   }
   if (offer.customer_id){
     try { negoCustomer = ((await callApi('customers-search', { ids: [offer.customer_id] })).results || [])[0] || null; } catch (e) { negoCustomer = null; }
@@ -1818,8 +1820,24 @@ async function negoInit(){
       products[0].sellBorder = offer.sale_per_lb || 0;
       products[0].sellManual = true;
       buildProductRows();
-      calc();
     }
+    // Real bug found live 2026-09-07: "no me trajo los numeros que traia de atras freight docs" —
+    // the fix above only ever restored the product's own price/weight. Direct Costs (US Freight,
+    // Mexican Freight, Inspection, Customs Processing, US Warehouse Handling) all have real, saved
+    // columns on this same offer (us_freight_amount/us_freight_rate_id/mexican_freight_mxn/
+    // inspection_amount/tramite_aduanal_amount/bodega_americana_amount — see sent-offers-create)
+    // but nothing here ever read them back — every Direct Cost field just sat at its blank/zero
+    // default on reopen. ttPickFreightRate first (to also restore the dropdown's own label/
+    // selection when the rate still exists), then the real historical dollar amount overrides
+    // whatever that just filled in — same reasoning as applyEmbedParams above: the $ box always
+    // wins over a recalculated rate.
+    if (offer.us_freight_rate_id && ttFreightPlantId) ttPickFreightRate(offer.us_freight_rate_id);
+    document.getElementById('freight').value = offer.us_freight_amount || 0;
+    if (offer.mexican_freight_mxn) document.getElementById('freightMx').value = offer.mexican_freight_mxn;
+    if (offer.inspection_amount) document.getElementById('inspectionCases').value = offer.inspection_amount;
+    if (offer.tramite_aduanal_amount) document.getElementById('tramiteAduanal').value = offer.tramite_aduanal_amount;
+    if (offer.bodega_americana_amount) document.getElementById('bodegaAmericana').value = offer.bodega_americana_amount;
+    calc();
     // Already closed — Plant/Customer/Win don't apply anymore. Instead show the real-cost
     // entry right next to the same numbers that went into the PO/SO/FO, so nothing needs
     // comparing against a separate table.
