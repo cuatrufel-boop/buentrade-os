@@ -853,13 +853,13 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
   // other real action on this timeline — no new business logic, just surfaced where it belongs.
-  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')`, raised: true }));
   if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, waitReason: 'Record the release number first.', onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
   const confirmIdx = entries.length;
   entries.push(mainEntry('pending_pickup'));
   entries.push(mainEntry('picked_up'));
   entries.push(miniEntry({ icon: CLIP_ICON, label: 'Customs Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, waitReason: 'Mark the load Picked Up first.', onClick: `requestCustomsDocsClick('${o.order_number}')` }));
-  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Send to Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, waitReason: 'No pickup documents have arrived yet.', onClick: `shareCustoms('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Send to Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, waitReason: 'No pickup documents have arrived yet.', onClick: `shareCustoms('${o.order_number}')`, raised: true }));
   entries.push(mainEntry('unloading'));
   const deliveredIdxInEntries = entries.length;
   entries.push(mainEntry('delivered'));
