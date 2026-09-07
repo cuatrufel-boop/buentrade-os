@@ -1160,59 +1160,21 @@ function closeTTOverlay(){
   ttOverlayResolve = null;
 }
 
-// Replaces a direct advanceLoadStatus(...,'delivered') call on "Mark Delivered" — "debe generar
-// factura, la firma es aceptando factura." No signature, no delivery: cancelling the pad leaves
-// the load exactly where it was, nothing is marked delivered without it.
+// Real correction 2026-09-07, explicit: "Delivered abre QT, Invoice" — this used to continue into
+// an in-person signature pad (buildInvoiceDoc, a canvas the CUSTOMER signs on the TRADER's own
+// screen) which never matched how this business actually works — "BuenTrade nunca va en el
+// camión," there is no in-person moment to capture a signature at. That whole old path (pad,
+// buildInvoiceDoc, a second separate invoice-email with its own stale text) is removed. Delivered
+// now: opens the QT (trader can hit Create & Share Invoice in there, which sends the real invoice
+// + remote sign-invoice.html link — the customer's own signature there is what actually proves
+// delivery), then sends the same plain arrival notification Unloading already sends, no signature
+// gate on it.
 async function markDeliveredWithSignature(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  const contact = (o.customer && o.customer.contact_name) || o.customer_name || 'Cliente';
-
-  // Real correction 2026-09-06: "en el momento de crear la factura con numeros reales me saca una
-  // tabla y debe sacarme el QT y volver a grabarlo. ahi es donde debo meter los costos adicionales
-  // faltantes etc. no con una tabla" — a plain prompt() box for the pedimento's real weight was
-  // wrong; this now opens the same Real Costs panel (trading-tool.html) used right after winning,
-  // where the weight AND any missing extra costs get entered and saved together. Closing the
-  // overlay (there's nothing to "cancel" — every field there saves itself on change, same as the
-  // rest of Real Costs) continues straight to the signature step.
   if (!o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
-  await openTTOverlay(o.sent_offer_id, `Peso real y costos — ${orderNumber}`);
-
-  const signatureDataUrl = await openSignatureModal(orderNumber);
-  if (!signatureDataUrl) return;
-
-  let built, invoiceUrl;
-  const filename = `Factura-${orderNumber}.pdf`;
-  try {
-    built = await buildInvoiceDoc(orderNumber, signatureDataUrl, contact);
-    invoiceUrl = await uploadOrderPdf(built.doc, filename);
-  } catch (e) {
-    alert('Error generando la factura firmada: ' + e.message);
-    return;
-  }
-
-  // Real gap found live 2026-09-06 ("esa firma me salio... como se manda") — the signed invoice
-  // used to just sit in Storage with no send step at all. Same preview-before-send pattern as
-  // PO/SO/FO: the trader still reviews/confirms before it actually goes out. Best-effort, like
-  // every other document send here — a failed/cancelled send never blocks the delivery itself from
-  // being recorded, since the signature is the real proof of delivery, independent of email.
-  const emails = collectEmails(built.customer);
-  if (emails.length){
-    const subject = `${orderNumber} — Factura`;
-    const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber}, firmada de conformidad al momento de la entrega.\n\nGracias por su preferencia.`;
-    const waPhone = built.customer && (built.customer.whatsapp || built.customer.phone);
-    try {
-      await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhone, message: `Orden ${orderNumber} — te mando la factura firmada.` });
-      showToast('Factura enviada', emails.join(', '));
-      markDocSent(orderNumber, 'invoice');
-    } catch (e) {
-      if (!e.cancelled) showToast('No se pudo enviar la factura automáticamente', e.message, true);
-    }
-  } else {
-    showToast('Factura generada sin enviar', 'Este cliente no tiene correo en archivo.', true);
-  }
-
-  await advanceLoadStatus(orderNumber, 'delivered', `Factura firmada (prueba de entrega): ${invoiceUrl}`);
+  await openTTOverlay(o.sent_offer_id, `Factura — ${orderNumber}`);
+  await advanceLoadStatus(orderNumber, 'delivered');
 }
 
 // ============ DOCUMENT ENGINE (subset needed here: Invoice + Customs forwarding) ============
@@ -1742,17 +1704,19 @@ async function sharePO(orderNumber){
   const filename = `PO-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
-  const subject = `${orderNumber} — Purchase Order`;
   const po = built.po;
+  const poProductName = po.product_spec || po.product_name || '';
+  const subject = `📄 PO ${orderNumber} — BuenTrade — ${poProductName}`;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
-    + `Product: ${po.product_spec || po.product_name || ''}\n`
+    + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
     + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
   const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
+  const waMessagePo = `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
   try {
-    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: `Purchase Order ${orderNumber} — sending you the document now.` });
+    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: waMessagePo });
     showToast('PO sent', emails.join(', '));
     markDocSent(orderNumber, 'po');
   } catch(e){
@@ -1907,7 +1871,7 @@ async function buildFODocs(orderNumber){
     const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    built.push({ doc, fo, carrier, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
 }
@@ -1920,14 +1884,15 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `${orderNumber} — Freight Confirmation`;
+    const subject = `🚛 FO ${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     const waPhoneFo = b.carrier && b.carrier.phone;
+    const waMessageFo = `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
     try {
-      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: `Order ${orderNumber} — sending you the document now.` });
+      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: waMessageFo });
       showToast('FO sent', emails.join(', '));
       markDocSent(orderNumber, 'fo');
     } catch(e){
@@ -1968,12 +1933,15 @@ function shareDocAndOpenWhatsApp(doc, filename, phone, message){
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
 }
 
+// Real gap found live 2026-09-07: these three still had their own leftover WhatsApp text from
+// before the message table was approved — only the primary sharePO/shareSO/shareFO got updated
+// then. Same approved text as those, just reused here for the resend-from-docs-panel path.
 async function waCardPO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const plant = built.plant;
   const phone = plant && (plant.whatsapp || plant.phone);
-  shareDocAndOpenWhatsApp(built.doc, `PO-${orderNumber}.pdf`, phone, `Purchase Order ${orderNumber} — sending you the document now.`);
+  shareDocAndOpenWhatsApp(built.doc, `PO-${orderNumber}.pdf`, phone, `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 async function waCardSO(orderNumber){
@@ -1981,7 +1949,7 @@ async function waCardSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const customer = built.customer;
   const phone = customer && (customer.whatsapp || customer.phone);
-  shareDocAndOpenWhatsApp(built.doc, `SO-${orderNumber}.pdf`, phone, `Orden ${orderNumber} — te mando el documento.`);
+  shareDocAndOpenWhatsApp(built.doc, `SO-${orderNumber}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
 }
 
 async function waCardFO(orderNumber){
@@ -1990,7 +1958,7 @@ async function waCardFO(orderNumber){
   const b = built[0];
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
   const phone = b.carrier && b.carrier.phone;
-  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `Order ${orderNumber} — sending you the document now.`);
+  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 // Invoice can't be rebuilt from scratch on a resend — it carries the real captured signature and
@@ -2012,11 +1980,12 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
       reader.readAsDataURL(blob);
     });
   } catch(e){ alert('Error al cargar el archivo: ' + e.message); return; }
-  const subject = `${orderNumber} — Factura`;
-  const body = `Hola,\n\nAdjuntamos la factura de la orden ${orderNumber}.\n\nGracias por su preferencia.`;
+  const contact = (o && o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : '';
+  const subject = `${orderNumber} — INVOICE`;
+  const body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   const waPhoneInv = o && o.customer && (o.customer.whatsapp || o.customer.phone);
   try {
-    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: `Orden ${orderNumber} — te mando la factura.` });
+    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!` });
     showToast('Factura enviada', emails.join(', '));
     markDocSent(orderNumber, 'invoice');
   } catch(e){
