@@ -1068,7 +1068,22 @@ function renderOrderDocsPanel(o){
     // flow — never appeared here at all, only inside the reactive attention queue. Same doc-row
     // look as every other row here, not a new component.
     const paymentWhen = o.plant_paid_at ? new Date(o.plant_paid_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
-    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${o.plant_paid_at ? '' : docRowBtn('💰 Confirm Payment Sent', `confirmPlantPaymentSent('${o.order_number}')`)}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${o.plant_paid_at ? 'Paid ' + paymentWhen : 'Not paid'}</span></div>`;
+    // Real gap found live 2026-09-07: payment was a dead end here once plant_paid_at was set — no
+    // way to record the release number the plant sends back, nor to relay it to the carrier. Now a
+    // real 3-step chain in one row: confirm payment sent -> record the release number -> send it to
+    // the carrier (once there is one to send it to).
+    let paymentBtn, paymentStatus;
+    if (!o.plant_paid_at){
+      paymentBtn = docRowBtn('💰 Confirm Payment Sent', `confirmPlantPaymentSent('${o.order_number}')`);
+      paymentStatus = 'Not paid';
+    } else if (!o.release_number){
+      paymentBtn = docRowBtn('📋 Record Release #', `recordReleaseNumber('${o.order_number}')`);
+      paymentStatus = `Paid ${paymentWhen} — release # pending`;
+    } else {
+      paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn('🚚 Send to Carrier', `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
+      paymentStatus = `Release #: ${escapeHtml(o.release_number)}`;
+    }
+    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
     body = `<div class="docs-panel">
       ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActions)}
       ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActions)}
@@ -1317,6 +1332,35 @@ async function confirmPlantPaymentSent(orderNumber){
   catch (e) { alert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
   showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
   await loadStatusOrders();
+}
+
+// Real gap found live 2026-09-07: "payment mandar recibo pedir release release recuperar enviar
+// carrier????? esto esta hecho?" — confirmPlantPaymentSent above already asks the plant for the
+// RELEASE NUMBER in the same email, but there was never anywhere to record the value once the plant
+// actually replies with it, nor a way to relay it to the carrier so they can use it at pickup. These
+// two functions are that missing second half of the chain.
+async function recordReleaseNumber(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const value = prompt(`Release number ${o.plant_name || 'the plant'} gave you for ${orderNumber}:`, o.release_number || '');
+  if (value === null) return;
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  try { await callApi('shipments-set-release-number', { actor: currentActor(), order_number: orderNumber, release_number: trimmed }); }
+  catch (e) { alert('Could not save the release number: ' + e.message); return; }
+  showToast('Release number saved', trimmed);
+  await loadStatusOrders();
+}
+function releaseNumberMessage(o){
+  return `Hi, here's the release number for order ${o.order_number} — ${o.product_name || ''}: ${o.release_number}. Please use it for pickup. Thank you!`;
+}
+function sendReleaseNumberToCarrier(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  if (!o.release_number){ alert('No release number recorded yet for this order.'); return; }
+  const phone = o.carrier && o.carrier.phone;
+  if (!phone){ alert('No carrier phone on file to send the release number.'); return; }
+  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(releaseNumberMessage(o)), '_blank');
 }
 
 // ============ DELIVERY SIGNATURE (Proof of Delivery) ============
