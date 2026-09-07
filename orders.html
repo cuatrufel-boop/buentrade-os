@@ -731,9 +731,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     // con planta de que este todo ok y punto" — one FOB date, and before it, a button to confirm
     // with carrier/plant everything's on track. Reuses askFleteroWhatsApp/askPlantWhatsApp exactly
     // as-is (their statusCheckMessage IS this confirmation ask for pending_pickup) — no new copy.
-    const canConfirm = (o.carrier && o.carrier.phone) || (o.plant && (o.plant.whatsapp || o.plant.phone));
+    // Real correction 2026-09-07 (follow-up): "cambiar por confirmar pickup con planta si es
+    // entregado o con carrier si es fob" — the label must name WHO it will actually contact, not a
+    // generic "Confirm Pickup." Carrier booked = FOB (BuenTrade's carrier picks up); no carrier on
+    // this shipment = DAP/self-delivered (the plant is the one driving it) — same has-a-carrier
+    // signal already used everywhere else on this card (checkInBtn, pickupBtns), not a new rule.
+    const hasCarrier = !!(o.carrier && o.carrier.phone);
+    const confirmTarget = hasCarrier ? 'Carrier' : 'Plant';
+    const canConfirm = hasCarrier || (o.plant && (o.plant.whatsapp || o.plant.phone));
     const confirmBtnHtml = (s.key === 'pending_pickup' && i === stageIdx && o.pickup_date && canConfirm)
-      ? `<button type="button" class="u-fob-confirm" onclick="event.stopPropagation();confirmPickupReadyClick('${o.order_number}')">Confirm Pickup</button>`
+      ? `<button type="button" class="u-fob-confirm" onclick="event.stopPropagation();confirmPickupReadyClick('${o.order_number}')">Confirm w/ ${confirmTarget}</button>`
       : '';
     return {
       html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}${confirmBtnHtml}</div>`,
