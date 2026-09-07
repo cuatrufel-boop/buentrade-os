@@ -154,6 +154,7 @@
   .doc-row-label{font-weight:600;color:var(--ink);min-width:120px;flex-shrink:0;}
   .doc-row-link{color:var(--blue-bright);text-decoration:underline;flex-shrink:0;}
   .doc-row-btn{padding:4px 9px !important;font-size:11px !important;flex-shrink:0;}
+  .doc-row-btn svg{width:13px;height:13px;flex-shrink:0;}
   .doc-row-status{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
   .doc-row-status.sent{color:#5FE097;}
   .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:6px 0;}
@@ -509,6 +510,11 @@ const CLIP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const CUSTOMS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
 const RECEIPT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg>';
 const SIGN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+// Real correction 2026-09-07: "no son los mismos botones que hemos usado en todo el sistema" —
+// copied verbatim from offers.html's DOC_TYPES/openDocPreview, the actual canonical Email/WhatsApp
+// button pattern used everywhere else (secondary-gray Email + green WhatsApp, not a same-color pair).
+const EMAIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>';
+const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
 
 const LOAD_STAGES = [
   { key: 'pending_pickup', label: 'Pending Pickup' },
@@ -1064,21 +1070,24 @@ function renderOrderDocsPanel(o){
     const findFiles = prefix => files.filter(f => f.name.startsWith(prefix));
     const pickupDocs = o.pickup_documents || [];
     const docRowBtn = (label, onclick) => `<button class="wa-btn outline doc-row-btn" onclick="${onclick}">${label}</button>`;
+    // Real correction 2026-09-07, re-checked against offers.html's actual DOC_TYPES/openDocPreview
+    // (the real canonical pattern — "no son los mismos botones que hemos usado en todo el
+    // sistema"): every other Email/WhatsApp pair in this app is a secondary-gray Email button next
+    // to a green WhatsApp button, TWO separate buttons side by side — not one, and not both the
+    // same color. My earlier "one button is enough, the modal already has WhatsApp built in" call
+    // was wrong: offers.html keeps them as two independent actions on purpose (a quick direct
+    // WhatsApp send without going through the modal at all). Restored, with the same icons/classes.
+    const emailBtn = onclick => `<button class="btn secondary doc-row-btn" style="display:inline-flex;align-items:center;gap:6px;" onclick="${onclick}">${EMAIL_ICON}Email</button>`;
+    const waBtn = onclick => `<button class="wa-btn doc-row-btn" style="display:inline-flex;align-items:center;gap:6px;" onclick="${onclick}">${WA_ICON}WhatsApp</button>`;
     const poFiles = findFiles(`PO-${o.order_number}`);
     const soFiles = findFiles(`SO-${o.order_number}`);
     const foFiles = findFiles(`FO-${o.order_number}`);
     const invoiceFiles = findFiles(`Factura-${o.order_number}`);
-    // Real correction 2026-09-07: "los botones de email y whatsapp no son los mismos que hemos
-    // usado en todo el sistema" — sharePO/SO/FO already open the standard preview-before-send
-    // modal, which has its own built-in WhatsApp option (openEmailModal's emailModalWaBtn) — a
-    // separate waCardPO/SO/FO button here duplicated that channel via a totally different,
-    // preview-less bypass path, unlike every other send action in the app. One button now, same as
-    // everywhere else; waCardPO/SO/FO left defined but unused (dead code, not deleted).
-    const poActions = docRowBtn('✉️ Email', `sharePO('${o.order_number}')`);
-    const soActions = docRowBtn('✉️ Email', `shareSO('${o.order_number}')`);
-    const foActions = docRowBtn('✉️ Email', `shareFO('${o.order_number}')`);
+    const poActions = emailBtn(`sharePO('${o.order_number}')`) + waBtn(`waCardPO('${o.order_number}')`);
+    const soActions = emailBtn(`shareSO('${o.order_number}')`) + waBtn(`waCardSO('${o.order_number}')`);
+    const foActions = emailBtn(`shareFO('${o.order_number}')`) + waBtn(`waCardFO('${o.order_number}')`);
     const invoiceActions = invoiceFiles.length
-      ? docRowBtn('✉️ Email', `resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
+      ? emailBtn(`resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
       : '';
     // Real gap found live 2026-09-07: this panel is the one place meant to show "todo lo que está
     // hecho o no" for one specific load, but Pago a Planta — a real, required step in the same
