@@ -178,21 +178,42 @@
   .route-bar-truck{position:absolute;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:var(--navy-2,#0E3D8F);border:2px solid var(--blue-bright);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;transition:left .3s;box-shadow:0 0 0 4px var(--blue-light);}
   .route-bar-truck svg{width:11px;height:11px;}
 
-  .mtimeline{display:flex;align-items:flex-start;gap:0;margin:20px 0 6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;}
-  .mstop{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:86px;position:relative;}
-  .mstop-btn{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);flex-shrink:0;cursor:default;padding:0;font:inherit;}
-  .mstop-btn svg{width:16px;height:16px;}
-  .mstop-line{position:absolute;top:17px;left:calc(50% + 17px);width:calc(100% - 34px);height:2px;background:var(--line);z-index:0;}
-  .mstop-line.done{background:#0F8A5F;}
-  .mstop-label{font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-top:7px;text-align:center;line-height:1.25;}
-  .mstop-date{font-size:9px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
-  .mstop.m-done .mstop-btn{background:#0F8A5F;border-color:#0F8A5F;color:#fff;}
-  .mstop.m-done .mstop-label{color:var(--ink);}
-  .mstop.m-now .mstop-btn{cursor:pointer;background:rgba(255,200,118,.14);border-color:#FFC876;color:#FFC876;animation:mstopPulse 1.8s ease-in-out infinite;}
-  .mstop.m-now .mstop-label{color:#FFC876;}
-  .mstop.m-now:hover .mstop-btn{background:rgba(255,200,118,.28);}
-  .mstop.m-wait .mstop-btn{opacity:.5;}
-  .mstop.m-wait .mstop-label{opacity:.5;}
+  /* Real ask 2026-09-07 (2nd revision): "debe ser en ingles y botones repartidos en el timing de
+     pickup" — the milestone buttons (PO/SO/FO/Payment/Pickup Docs/Customs/Invoice/Signature) no
+     longer sit in their own disconnected row; they're interleaved into the SAME timeline as the
+     4 main stages (Pending Pickup/Picked Up/Unloading/Delivered) in real chronological order, one
+     continuous connected line. Main stages keep their original bigger/animated markup (.u-main*
+     mirrors .step* exactly); milestones use a smaller icon-only button (.u-mini*). See
+     renderUnifiedTimeline().  */
+  .utimeline{display:flex;align-items:flex-start;gap:0;margin:22px 0 10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;}
+  .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:14px;}
+  .u-line.done{background:var(--green);}
+  .u-main{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:100px;position:relative;}
+  .u-main-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);transition:all .25s;flex-shrink:0;}
+  .u-main-icon svg{width:18px;height:18px;}
+  .u-main.actionable{cursor:pointer;}
+  .u-main.actionable .u-main-icon{border-color:var(--blue);color:var(--blue);}
+  .u-main.actionable .u-main-label{color:var(--blue);}
+  .u-main.actionable:hover .u-main-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
+  .u-main.actionable.urgent .u-main-icon{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  .u-main.actionable.urgent .u-main-label{color:#FF9C8A;}
+  .u-main.done .u-main-icon{background:var(--green);border-color:var(--green);color:#fff;}
+  .u-main.current .u-main-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
+  .u-main-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:8px;text-align:center;line-height:1.3;}
+  .u-main-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
+  .u-main.done .u-main-label,.u-main.current .u-main-label{color:var(--ink);}
+  .u-mini{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:72px;position:relative;}
+  .u-mini-btn{width:30px;height:30px;margin-top:4px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);flex-shrink:0;cursor:default;padding:0;font:inherit;transition:all .2s;}
+  .u-mini-btn svg{width:14px;height:14px;}
+  .u-mini-label{font-size:9.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-top:7px;text-align:center;line-height:1.25;}
+  .u-mini-date{font-size:9px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
+  .u-mini.done .u-mini-btn{background:var(--green);border-color:var(--green);color:#fff;}
+  .u-mini.done .u-mini-label{color:var(--ink);}
+  .u-mini.now .u-mini-btn{cursor:pointer;background:rgba(255,200,118,.14);border-color:#FFC876;color:#FFC876;animation:mstopPulse 1.8s ease-in-out infinite;}
+  .u-mini.now .u-mini-label{color:#FFC876;}
+  .u-mini.now:hover .u-mini-btn{background:rgba(255,200,118,.28);}
+  .u-mini.wait .u-mini-btn{opacity:.5;}
+  .u-mini.wait .u-mini-label{opacity:.5;}
   @keyframes mstopPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,.35);}50%{box-shadow:0 0 0 6px rgba(255,200,118,0);}}
   @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
   #urgentQueueBox{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
@@ -637,6 +658,84 @@ function renderMilestoneTimeline(o){
   return `<div class="mtimeline">${html}</div>`;
 }
 
+// Real ask 2026-09-07 (2nd revision): "debe ser en ingles y botones repartidos en el timing de
+// pickup falta mucho en lo visual" — supersedes renderRouteTrack/renderMilestoneTimeline above
+// (left in place, unused). One continuous chronological line mixing the 4 main stages (Pending
+// Pickup/Picked Up/Unloading/Delivered — same click/animation/blink behavior as the old stepper,
+// copied verbatim into mainEntry()) with the document/money/customs milestones positioned at their
+// real chronological slot: PO/SO/FO/Payment before Pending Pickup, Pickup Docs/Customs between
+// Picked Up and Unloading, Invoice/Signature after Delivered.
+function renderUnifiedTimeline(o, attentionOrderNumbers){
+  const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
+  const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
+  const deliveredIdx = LOAD_STAGES.findIndex(s => s.key === 'delivered');
+  const hasAnyPickupDoc = (o.pickup_documents || []).length > 0;
+  const pendingCustoms = (o.pending_pickup_documents || []).length > 0;
+
+  function mainEntry(stageKey){
+    const i = LOAD_STAGES.findIndex(s => s.key === stageKey);
+    const s = LOAD_STAGES[i];
+    const cls = i < stageIdx ? 'done' : (i === stageIdx ? 'current' : '');
+    const isMoving = i === stageIdx && s.key === 'picked_up';
+    const truckHtml = isMoving ? `<div class="route-truck">${STEP_ICONS.picked_up}</div>` : '';
+    const isUnloading = i === stageIdx && s.key === 'unloading';
+    const unloadHtml = isUnloading ? `<div class="unload-drop">${STEP_ICONS.pending_pickup}</div>` : '';
+    const isNext = i === stageIdx + 1;
+    const isUrgent = isNext && attentionOrderNumbers.has(o.order_number);
+    const onclickAttr = isNext
+      ? (s.key === 'delivered' ? ` onclick="markDeliveredWithSignature('${o.order_number}')"` : ` onclick="advanceLoadStatus('${o.order_number}','${s.key}')"`)
+      : '';
+    const actionableClass = isNext ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
+    let dateStr = '';
+    if (s.key === 'pending_pickup' && o.pickup_date) dateStr = fmtDateStr(o.pickup_date);
+    else if (s.key === 'picked_up') dateStr = o.picked_up_at ? fmtDateStr(o.picked_up_at.slice(0, 10)) : (i === stageIdx + 1 ? fmtDateStr(o.pickup_date) : '');
+    else if (s.key === 'unloading'){
+      if (o.unloading_at) dateStr = fmtDateStr(o.unloading_at.slice(0, 10));
+      else if (i === stageIdx + 1){
+        const fromDate = o.picked_up_at ? o.picked_up_at.slice(0, 10) : o.pickup_date;
+        dateStr = fromDate ? fmtDateStr(computeBorderArrivalDate(fromDate)) : '';
+      }
+    } else if (s.key === 'delivered' && o.delivered_at) dateStr = fmtDateStr(o.delivered_at.slice(0, 10));
+    const dateHtml = dateStr ? `<div class="u-main-date">${dateStr}</div>` : '';
+    return {
+      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}</div>`,
+      lineDone: i < stageIdx,
+      lineExtra: truckHtml,
+    };
+  }
+
+  function miniEntry(st){
+    const state = st.done ? 'done' : (st.wait ? 'wait' : 'now');
+    const clickable = state === 'now' && st.onClick;
+    const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
+    return {
+      html: `<div class="u-mini ${state}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${st.onClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
+      lineDone: st.done,
+    };
+  }
+
+  const entries = [
+    miniEntry({ icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')` }),
+    miniEntry({ icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` }),
+  ];
+  if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Payment', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
+  entries.push(mainEntry('pending_pickup'));
+  entries.push(mainEntry('picked_up'));
+  entries.push(miniEntry({ icon: CLIP_ICON, label: 'Pickup Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestPickupDocsClick('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, onClick: `shareCustoms('${o.order_number}')` }));
+  entries.push(mainEntry('unloading'));
+  entries.push(mainEntry('delivered'));
+  entries.push(miniEntry({ icon: RECEIPT_ICON, label: 'Invoice', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, onClick: `openInvoiceQT('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: SIGN_ICON, label: 'Signature', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, onClick: null }));
+
+  const html = entries.map((e, i) => {
+    const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}</div>` : '';
+    return e.html + line;
+  }).join('');
+  return `<div class="utimeline">${html}</div>`;
+}
+
 function pickupReadinessBadge(o){
   const stage = o.load_status || 'pending_pickup';
   if (stage === 'pending_pickup'){
@@ -957,49 +1056,7 @@ function renderStatusOrders(){
 
   wrap.innerHTML = statusOrders.map(o => {
     const stage = o.load_status || 'pending_pickup';
-    const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
-    const stepsHtml = LOAD_STAGES.map((s, i) => {
-      const cls = i < stageIdx ? 'done' : (i === stageIdx ? 'current' : '');
-      // The truck only actually drives on the leg between Picked Up and Unloading — before that
-      // nothing's picked up yet, after that it has already arrived and is stationary being
-      // unloaded, so this is the one segment that's really "in transit."
-      const isMoving = i === stageIdx && s.key === 'picked_up';
-      const truckHtml = isMoving ? `<div class="route-truck">${STEP_ICONS.picked_up}</div>` : '';
-      const line = i < LOAD_STAGES.length - 1 ? `<div class="step-line ${i < stageIdx ? 'done' : ''}">${truckHtml}</div>` : '';
-      // The truck has already arrived once we're on Unloading — the motion moves off the road and
-      // onto the node itself: a package drops out of the truck into place.
-      const isUnloading = i === stageIdx && s.key === 'unloading';
-      const unloadHtml = isUnloading ? `<div class="unload-drop">${STEP_ICONS.pending_pickup}</div>` : '';
-      // Real ask 2026-09-06: "estos deben ser botones de acciones" — the next pending stage on the
-      // stepper IS the action, replacing the separate text button that used to sit below the card.
-      // Only the immediate next stage is clickable (same one-step-forward behavior as before, just
-      // relocated onto the stepper itself) — done/current stages stay purely informational.
-      const isNext = i === stageIdx + 1;
-      const isUrgent = isNext && attentionOrderNumbers.has(o.order_number);
-      const onclickAttr = isNext
-        ? (s.key === 'delivered' ? ` onclick="markDeliveredWithSignature('${o.order_number}')"` : ` onclick="advanceLoadStatus('${o.order_number}','${s.key}')"`)
-        : '';
-      // Real bug found live: the 38px circle alone was too small a click target — "nothing"
-      // happened because clicks near the label text below it missed the handler entirely. The
-      // whole column (icon + label) is now the click target, not just the circle.
-      const actionableClass = isNext ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
-      // Real ask 2026-09-07: "tiempos cuando recoge la carga cuando entrega" — a real date under
-      // each step, not just the top-right "Expected at border" badge. Actual timestamp once that
-      // stage happened, the scheduled/expected date while it's still ahead, nothing once neither
-      // is known yet.
-      let dateStr = '';
-      if (s.key === 'pending_pickup' && o.pickup_date) dateStr = fmtDateStr(o.pickup_date);
-      else if (s.key === 'picked_up') dateStr = o.picked_up_at ? fmtDateStr(o.picked_up_at.slice(0, 10)) : (i === stageIdx + 1 ? fmtDateStr(o.pickup_date) : '');
-      else if (s.key === 'unloading'){
-        if (o.unloading_at) dateStr = fmtDateStr(o.unloading_at.slice(0, 10));
-        else if (i === stageIdx + 1){
-          const fromDate = o.picked_up_at ? o.picked_up_at.slice(0, 10) : o.pickup_date;
-          dateStr = fromDate ? fmtDateStr(computeBorderArrivalDate(fromDate)) : '';
-        }
-      } else if (s.key === 'delivered' && o.delivered_at) dateStr = fmtDateStr(o.delivered_at.slice(0, 10));
-      const dateHtml = dateStr ? `<div class="step-date">${dateStr}</div>` : '';
-      return `<div class="step ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="step-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="step-label">${s.label}</div>${dateHtml}</div>${line}`;
-    }).join('');
+    const unifiedTimelineHtml = renderUnifiedTimeline(o, attentionOrderNumbers);
 
     const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
     const plantContact = o.plant ? (o.plant.whatsapp || o.plant.phone || '') : '';
@@ -1041,9 +1098,7 @@ function renderStatusOrders(){
         ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
         <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
       </div>
-      ${renderRouteTrack(o)}
-      ${renderMilestoneTimeline(o)}
-      <div class="stepper">${stepsHtml}</div>
+      ${unifiedTimelineHtml}
       <div class="load-actions">${checkInBtn}${pickupDocsBtn}</div>
       ${renderOrderDocsPanel(o)}
     </div>`;
