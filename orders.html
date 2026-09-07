@@ -738,8 +738,13 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     } else if (s.key === 'delivered' && o.delivered_at) dateStr = fmtDateStr(o.delivered_at.slice(0, 10));
     const dateHtml = dateStr ? `<div class="u-main-date">${dateStr}</div>` : '';
     const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : '');
+    // Real correction 2026-09-07 (word-for-word this time): "confirmar pickup con carrier.
+    // ESTE ES EL QUE TIENE QUE IR EN LUGAR DE PENDING" — not an action bolted onto a node still
+    // named "Pending Pickup": the node's own displayed name replaces "Pending Pickup" outright, at
+    // every state (done or not) — "Confirm w/ Plant" or "Confirm w/ Carrier", never "Pending" again.
+    const displayLabel = s.key === 'pending_pickup' ? `Confirm w/ ${confirmTarget}` : s.label;
     return {
-      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}</div>`,
+      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${displayLabel}</div>${dateHtml}</div>`,
       lineDone: i < stageIdx,
       lineExtra: truckHtml,
     };
