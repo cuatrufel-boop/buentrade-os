@@ -776,7 +776,13 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const hasCarrier = !!(o.carrier && o.carrier.phone);
     const confirmTarget = hasCarrier ? 'Carrier' : 'Plant';
     const canConfirm = hasCarrier || (o.plant && (o.plant.whatsapp || o.plant.phone));
-    const isPendingPickupConfirm = s.key === 'pending_pickup' && i === stageIdx && canConfirm;
+    // Real correction 2026-09-08: "sin ordenes no mandan ni carga ni camion ni nada" — confirming
+    // pickup readiness is the bridge from the paperwork chain into the physical stages, so it needs
+    // the same one-before-the-other gate: the release number has to actually be in the carrier's
+    // hands (sent to them if one's booked, just recorded otherwise) before you can confirm the load.
+    const confirmPrereqDone = hasCarrier ? !!o.release_number_sent_at : !!o.release_number;
+    const confirmBlockedReason = hasCarrier ? 'Send the release number to the carrier first.' : 'Record the release number first.';
+    const isPendingPickupConfirm = s.key === 'pending_pickup' && i === stageIdx && canConfirm && confirmPrereqDone;
     const realOnClick = isPendingPickupConfirm
       ? `confirmPickupReadyClick('${o.order_number}')`
       : isNext
@@ -811,7 +817,8 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     // it happened (or "already here" if no date), future explains it's blocked on earlier steps.
     let infoMsg = '';
     if (!realOnClick){
-      if (i <= stageIdx) infoMsg = dateStr ? `${displayLabel}: ${dateStr}` : `${displayLabel} already reached.`;
+      if (s.key === 'pending_pickup' && i === stageIdx && !confirmPrereqDone) infoMsg = confirmBlockedReason;
+      else if (i <= stageIdx) infoMsg = dateStr ? `${displayLabel}: ${dateStr}` : `${displayLabel} already reached.`;
       else infoMsg = `Complete the earlier steps first.`;
     }
     const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="alert('${infoMsg.replace(/'/g, "\\'")}')"`;
@@ -849,12 +856,17 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     };
   }
 
+  // Real correction 2026-09-08: "sin ordenes no mandan ni carga ni camion ni nada necesito que no
+  // pueda pasar de una a la otra empezando desde la primera" — this is one real sequence, not two
+  // independent tracks. Every document/step now requires the one right before it to be done first.
   const entries = [
     miniEntry({ icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')`, raised: true }),
-    miniEntry({ icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` }),
+    miniEntry({ icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, wait: !o.po_sent_at, waitReason: 'Send the PO first.', onClick: `shareSO('${o.order_number}')` }),
   ];
-  if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')`, raised: true }));
-  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Pay-Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
+  if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, wait: !o.so_sent_at, waitReason: 'Send the SO first.', onClick: `shareFO('${o.order_number}')`, raised: true }));
+  const docBeforePaymentDone = o.has_freight_order ? !!o.fo_sent_at : !!o.so_sent_at;
+  const docBeforePaymentReason = o.has_freight_order ? 'Send the FO first.' : 'Send the SO first.';
+  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Pay-Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, wait: !docBeforePaymentDone, waitReason: docBeforePaymentReason, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
   // Real gap found 2026-09-07: "revisa todo... faltan mas cosas" — recordReleaseNumber/
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
