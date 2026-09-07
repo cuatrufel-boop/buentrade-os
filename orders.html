@@ -844,7 +844,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   }
 
   const entries = [
-    miniEntry({ icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')` }),
+    miniEntry({ icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')`, raised: true }),
     miniEntry({ icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` }),
   ];
   if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')`, raised: true }));
@@ -864,7 +864,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   const deliveredIdxInEntries = entries.length;
   entries.push(mainEntry('delivered'));
   entries.push(miniEntry({ icon: RECEIPT_ICON, label: 'Invoice', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, waitReason: 'The load must be Delivered first.', onClick: `openInvoiceQT('${o.order_number}')` }));
-  entries.push(miniEntry({ icon: SIGN_ICON, label: 'Signature', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, waitReason: 'Send the Invoice first — the customer signs it once they receive it.', onClick: `signatureInfoClick('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: SIGN_ICON, label: 'Signature', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, waitReason: 'Send the Invoice first — the customer signs it once they receive it.', onClick: `signatureInfoClick('${o.order_number}')`, raised: true }));
 
   // Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
   // entrega en movimiento" — a walking-person rides whichever connector line sits at the real
