@@ -797,10 +797,17 @@ function renderOrderDocsPanel(o){
     const invoiceActions = invoiceFiles.length
       ? docRowBtn('✉️ Email', `resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
       : '';
+    // Real gap found live 2026-09-07: this panel is the one place meant to show "todo lo que está
+    // hecho o no" for one specific load, but Pago a Planta — a real, required step in the same
+    // flow — never appeared here at all, only inside the reactive attention queue. Same doc-row
+    // look as every other row here, not a new component.
+    const paymentWhen = o.plant_paid_at ? new Date(o.plant_paid_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Pago a Planta</span>${o.plant_paid_at ? '' : docRowBtn('💰 Confirmar pago enviado', `confirmPlantPaymentSent('${o.order_number}')`)}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${o.plant_paid_at ? 'Pagado ' + paymentWhen : 'No pagado'}</span></div>`;
     body = `<div class="docs-panel">
       ${renderTradeDocRow('PO (Planta)', o.po_sent_at, poFiles, poActions, poActions)}
       ${renderTradeDocRow('SO (Cliente)', o.so_sent_at, soFiles, soActions, soActions)}
       ${o.carrier_provider_id ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
+      ${paymentRow}
       ${renderTradeDocRow('Factura', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${pickupDocs.length
         ? pickupDocs.map(d => `<div class="doc-row"><span class="doc-row-label">${escapeHtml(d.filename)}</span><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-link">Ver</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Enviado a aduana' : 'Recibido, pendiente de aduana'}</span></div>`).join('')
