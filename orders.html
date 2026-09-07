@@ -446,12 +446,6 @@ auth.onAuthStateChanged(user => {
 <div class="wrap">
   <h1>Orders</h1>
 
-  <!-- Same persistent, always-there attention list as the urgent queue overlay below — one real
-       list of conditions (computeAttentionItems), never two copies that could drift. -->
-  <div id="needsAttentionWrap" style="display:none;margin-bottom:22px;">
-    <h3 style="font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px;">⚠ Needs Your Attention <span id="needsAttentionCount" class="payment-badge overdue" style="font-size:11px;"></span></h3>
-    <div id="needsAttentionList"></div>
-  </div>
   <div class="stats-row" id="statusStats"></div>
   <div id="statusCards"></div>
   <div id="statusEmpty" class="empty" style="display:none;">No active loads right now.</div>
@@ -1158,22 +1152,6 @@ function urgentQueueAdvance(){
   showUrgentQueueStep();
 }
 
-function renderNeedsAttention(){
-  const wrap = document.getElementById('needsAttentionWrap');
-  const list = document.getElementById('needsAttentionList');
-  const countEl = document.getElementById('needsAttentionCount');
-  const items = computeAttentionItems();
-
-  if (!items.length){ wrap.style.display = 'none'; return; }
-  wrap.style.display = 'block';
-  countEl.textContent = items.length;
-  list.innerHTML = items.map(it => `
-    <div class="load-card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-      <div><span class="order-num">${escapeHtml(it.orderNumber)}</span> — ${escapeHtml(it.text)}</div>
-      ${it.btn}
-    </div>`).join('');
-}
-
 // ============ DOCUMENTS PANEL (real ask 2026-09-06: "tengo que tener un sitio fisico donde se
 // guarden los docs de esa venta") ============
 // PO/SO/FO/Factura filenames are deterministic EXCEPT FO, which gets a "-{id}" suffix once an
@@ -1300,7 +1278,11 @@ function renderOrderDocsPanel(o){
 }
 
 function renderStatusOrders(){
-  renderNeedsAttention();
+  // Real ask (this session, standing): "no quiero un panel de needs your attention" — the blocking
+  // login queue (runUrgentQueueOnLogin/showUrgentQueueStep) already surfaces the exact same items,
+  // one at a time, with the same real action buttons (computeAttentionItems, shared by both). This
+  // in-page panel duplicated it and was never wanted — removed entirely (was renderNeedsAttention()
+  // + #needsAttentionWrap).
   renderStatusStats();
   const wrap = document.getElementById('statusCards');
   const emptyEl = document.getElementById('statusEmpty');
@@ -2118,9 +2100,20 @@ function gmailComposeOpen(email, subject, body){
   window.open(gmailComposeUrl([email], subject, body), '_blank');
 }
 const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
-function gmailFallbackLinkHtml(emails, subject, body){
+// Real bug found live 2026-09-07: "por tu culpa ahora no puedo avanzar de po a so" — the automatic
+// send's catch block never calls markDocSent (only the try branch does), so whenever the automatic
+// send fails and the trader finishes it manually through this Gmail fallback, the milestone stayed
+// stuck "pending" forever — there was no way to tell the app it actually went out. Clicking the
+// fallback link now also marks it sent, same trust-the-trader's-real-world-click pattern the urgent
+// queue's own "✓ Done" button already uses elsewhere.
+async function markSentFallback(orderNumber, docType){
+  await markDocSent(orderNumber, docType);
+  if (typeof loadStatusOrders === 'function') await loadStatusOrders();
+}
+function gmailFallbackLinkHtml(emails, subject, body, orderNumber, docType){
   const url = gmailComposeUrl(emails, subject, body + EMAIL_SIGNATURE);
-  return `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
+  const onclick = orderNumber && docType ? ` onclick="markSentFallback('${orderNumber}','${docType}')"` : '';
+  return `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener"${onclick} style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
 }
 
 const TOAST_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -2228,7 +2221,7 @@ async function sharePO(orderNumber){
     // Same fix as shareSO: reuse the real `body` (with all line-item detail) instead of a separate
     // stripped-down fallback message.
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`));
+      gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`, orderNumber, 'po'));
   }
 }
 
@@ -2321,7 +2314,7 @@ async function shareSO(orderNumber){
     // Now reuses the exact same `body` the automatic path builds, plus the PDF link since Gmail
     // compose can't carry a real attachment.
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`));
+      gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`, orderNumber, 'so'));
   }
 }
 
@@ -2411,7 +2404,7 @@ async function shareFO(orderNumber){
       // Same fix as shareSO: reuse the real `body` (with all line-item detail) instead of a separate
       // stripped-down fallback message.
       showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-        gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`));
+        gmailFallbackLinkHtml(emails, subject, `${body}\n\nPDF: ${url}`, orderNumber, 'fo'));
     }
   }
 }
