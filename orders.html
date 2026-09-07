@@ -188,7 +188,12 @@
      renderUnifiedTimeline().  */
   /* Real bug found live 2026-09-07: only scrollbar-width (Firefox) was set — Chrome/Safari/Edge
      fell back to the raw OS scrollbar, a stark white/grey bar slashing across the dark card. */
-  .utimeline{display:flex;align-items:flex-start;gap:0;margin:22px 0 10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:rgba(90,170,255,.35) transparent;}
+  /* Real bug found live 2026-09-07: "se corta el blinking con la tabla" — setting overflow-x:auto
+     alone forces the browser to compute overflow-y as auto too (CSS spec behavior, not a typo
+     here), which clips anything that extends above the row — the radar-ping ring and the walker/
+     truck riding above the line. padding-top gives them real room instead of getting cropped; the
+     outer margin-top is reduced by the same amount so the visual gap above the row is unchanged. */
+  .utimeline{display:flex;align-items:flex-start;gap:0;margin:6px 0 10px;padding-top:16px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:rgba(90,170,255,.35) transparent;}
   .utimeline::-webkit-scrollbar{height:5px;}
   .utimeline::-webkit-scrollbar-track{background:transparent;}
   .utimeline::-webkit-scrollbar-thumb{background:rgba(90,170,255,.35);border-radius:3px;}
