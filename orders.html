@@ -914,6 +914,42 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   return `<div class="utimeline">${html}</div>`;
 }
 
+// Real ask 2026-09-07: "si entro al sistema y no se en que va mi carga como me doy cuenta en que
+// esta y que le falta?" — the full timeline answers this, but only once you actually read every
+// circle in the row. Two plain-language badges answer it at a glance instead: where the load
+// physically IS right now, and how many real pending actions are on this card.
+function currentStageBadge(o){
+  const stage = o.load_status || 'pending_pickup';
+  const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
+  const hasCarrier = !!(o.carrier && o.carrier.phone);
+  const label = stage === 'pending_pickup' ? `Confirm w/ ${hasCarrier ? 'Carrier' : 'Plant'}` : LOAD_STAGES[stageIdx].label;
+  const cls = stage === 'delivered' ? 'ok' : 'due-soon';
+  return `<span class="payment-badge ${cls}" style="display:inline-flex;align-items:center;gap:5px;">📍 ${escapeHtml(label)}</span>`;
+}
+function countPendingActions(o){
+  const stage = o.load_status || 'pending_pickup';
+  const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
+  const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
+  const deliveredIdx = LOAD_STAGES.findIndex(s => s.key === 'delivered');
+  const hasAnyPickupDoc = (o.pickup_documents || []).length > 0;
+  const pendingCustoms = (o.pending_pickup_documents || []).length > 0;
+  let n = 0;
+  if (!o.po_sent_at) n++;
+  if (!o.so_sent_at) n++;
+  if (o.has_freight_order && !o.fo_sent_at) n++;
+  if (!o.plant_paid_at) n++;
+  if (o.plant_paid_at && !o.release_number) n++;
+  if (o.carrier && o.carrier.phone && o.release_number && !o.release_number_sent_at) n++;
+  if (stageIdx >= pickedUpIdx && !hasAnyPickupDoc) n++;
+  if (pendingCustoms && !o.customs_sent_at) n++;
+  if (stageIdx >= deliveredIdx && !o.invoice_sent_at) n++;
+  return n;
+}
+function pendingActionsBadge(o){
+  const n = countPendingActions(o);
+  if (!n) return '';
+  return `<span class="payment-badge overdue">${n} pending step${n === 1 ? '' : 's'}</span>`;
+}
 function pickupReadinessBadge(o){
   const stage = o.load_status || 'pending_pickup';
   if (stage === 'pending_pickup'){
@@ -1299,6 +1335,8 @@ function renderStatusOrders(){
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <span class="order-num">${escapeHtml(o.order_number)}</span>
+          ${currentStageBadge(o)}
+          ${pendingActionsBadge(o)}
           ${pickupReadinessBadge(o)}
           ${paymentBadge(o)}
         </div>
