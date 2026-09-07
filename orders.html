@@ -708,10 +708,20 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const unloadHtml = isUnloading ? `<div class="unload-drop">${STEP_ICONS.pending_pickup}</div>` : '';
     const isNext = i === stageIdx + 1;
     const isUrgent = isNext && attentionOrderNumbers.has(o.order_number);
-    const onclickAttr = isNext
+    // Real correction 2026-09-07 (final): "preguntas estupidas has lo que digo" — no more separate
+    // small pill bolted under the node. Pending Pickup's confirm action now fires from the SAME
+    // circle click every other stage node already uses (advanceLoadStatus's pattern), not a second
+    // element next to it.
+    const hasCarrier = !!(o.carrier && o.carrier.phone);
+    const confirmTarget = hasCarrier ? 'Carrier' : 'Plant';
+    const canConfirm = hasCarrier || (o.plant && (o.plant.whatsapp || o.plant.phone));
+    const isPendingPickupConfirm = s.key === 'pending_pickup' && i === stageIdx && canConfirm;
+    const onclickAttr = isPendingPickupConfirm
+      ? ` onclick="confirmPickupReadyClick('${o.order_number}')"`
+      : isNext
       ? (s.key === 'delivered' ? ` onclick="markDeliveredWithSignature('${o.order_number}')"` : ` onclick="advanceLoadStatus('${o.order_number}','${s.key}')"`)
       : '';
-    const actionableClass = isNext ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
+    const actionableClass = (isNext || isPendingPickupConfirm) ? ' actionable' + (isUrgent ? ' urgent' : '') : '';
     // Real correction 2026-09-07: "solo necesitamos una fecha... por que siempre quieres hablar de
     // cargas tarde" — showing the scheduled pickup_date on Pending Pickup AT THE SAME TIME the real
     // picked_up_at date shows on the next node read as an on-time/late comparison the user does not
@@ -727,23 +737,9 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       }
     } else if (s.key === 'delivered' && o.delivered_at) dateStr = fmtDateStr(o.delivered_at.slice(0, 10));
     const dateHtml = dateStr ? `<div class="u-main-date">${dateStr}</div>` : '';
-    // Real ask 2026-09-07: "una fecha de FOB y antes de esa fecha un boton confirmar con carrier o
-    // con planta de que este todo ok y punto" — one FOB date, and before it, a button to confirm
-    // with carrier/plant everything's on track. Reuses askFleteroWhatsApp/askPlantWhatsApp exactly
-    // as-is (their statusCheckMessage IS this confirmation ask for pending_pickup) — no new copy.
-    // Real correction 2026-09-07 (follow-up): "cambiar por confirmar pickup con planta si es
-    // entregado o con carrier si es fob" — the label must name WHO it will actually contact, not a
-    // generic "Confirm Pickup." Carrier booked = FOB (BuenTrade's carrier picks up); no carrier on
-    // this shipment = DAP/self-delivered (the plant is the one driving it) — same has-a-carrier
-    // signal already used everywhere else on this card (checkInBtn, pickupBtns), not a new rule.
-    const hasCarrier = !!(o.carrier && o.carrier.phone);
-    const confirmTarget = hasCarrier ? 'Carrier' : 'Plant';
-    const canConfirm = hasCarrier || (o.plant && (o.plant.whatsapp || o.plant.phone));
-    const confirmBtnHtml = (s.key === 'pending_pickup' && i === stageIdx && o.pickup_date && canConfirm)
-      ? `<button type="button" class="u-fob-confirm" onclick="event.stopPropagation();confirmPickupReadyClick('${o.order_number}')">Confirm w/ ${confirmTarget}</button>`
-      : '';
+    const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : '');
     return {
-      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${isNext ? 'Click to mark ' + s.label : ''}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}${confirmBtnHtml}</div>`,
+      html: `<div class="u-main ${cls}${actionableClass}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div>${unloadHtml}<div class="u-main-label">${s.label}</div>${dateHtml}</div>`,
       lineDone: i < stageIdx,
       lineExtra: truckHtml,
     };
@@ -1029,11 +1025,13 @@ async function toggleOrderDocs(orderNumber){
   renderStatusOrders();
 }
 
+// Real correction 2026-09-07: "quitar el boton de view en docs y poner el nombre con link" — the
+// document's own name is now the link to open it, instead of the name plus a separate "View" link.
 function renderTradeDocRow(label, sentAt, matchedFiles, actionsHtml, actionsWhenMissing){
   if (!matchedFiles.length) return `<div class="doc-row"><span class="doc-row-label">${label}</span>${actionsWhenMissing || ''}<span class="doc-row-status">Not generated</span></div>`;
-  const links = matchedFiles.map(f => `<a href="${f.url}" target="_blank" rel="noopener" class="doc-row-link">View</a>`).join(' ');
+  const labelLink = `<a href="${matchedFiles[0].url}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${label}</a>`;
   const when = sentAt ? new Date(sentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
-  return `<div class="doc-row"><span class="doc-row-label">${label}</span>${links}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Sent ' + when : 'Generated, not sent'}</span></div>`;
+  return `<div class="doc-row">${labelLink}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Sent ' + when : 'Generated, not sent'}</span></div>`;
 }
 
 // Real ask 2026-09-06: "si no se manda pero queda guardado debo poder entrar y darme la
@@ -1053,9 +1051,15 @@ function renderOrderDocsPanel(o){
     const soFiles = findFiles(`SO-${o.order_number}`);
     const foFiles = findFiles(`FO-${o.order_number}`);
     const invoiceFiles = findFiles(`Factura-${o.order_number}`);
-    const poActions = docRowBtn('✉️ Email', `sharePO('${o.order_number}')`) + docRowBtn('💬 WhatsApp', `waCardPO('${o.order_number}')`);
-    const soActions = docRowBtn('✉️ Email', `shareSO('${o.order_number}')`) + docRowBtn('💬 WhatsApp', `waCardSO('${o.order_number}')`);
-    const foActions = docRowBtn('✉️ Email', `shareFO('${o.order_number}')`) + docRowBtn('💬 WhatsApp', `waCardFO('${o.order_number}')`);
+    // Real correction 2026-09-07: "los botones de email y whatsapp no son los mismos que hemos
+    // usado en todo el sistema" — sharePO/SO/FO already open the standard preview-before-send
+    // modal, which has its own built-in WhatsApp option (openEmailModal's emailModalWaBtn) — a
+    // separate waCardPO/SO/FO button here duplicated that channel via a totally different,
+    // preview-less bypass path, unlike every other send action in the app. One button now, same as
+    // everywhere else; waCardPO/SO/FO left defined but unused (dead code, not deleted).
+    const poActions = docRowBtn('✉️ Email', `sharePO('${o.order_number}')`);
+    const soActions = docRowBtn('✉️ Email', `shareSO('${o.order_number}')`);
+    const foActions = docRowBtn('✉️ Email', `shareFO('${o.order_number}')`);
     const invoiceActions = invoiceFiles.length
       ? docRowBtn('✉️ Email', `resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
       : '';
@@ -1072,7 +1076,7 @@ function renderOrderDocsPanel(o){
       ${paymentRow}
       ${renderTradeDocRow('Invoice', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${pickupDocs.length
-        ? pickupDocs.map(d => `<div class="doc-row"><span class="doc-row-label">${escapeHtml(d.filename)}</span><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-link">View</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
+        ? pickupDocs.map(d => `<div class="doc-row"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
         : '<div class="doc-row-empty">No pickup documents yet.</div>'}
     </div>`;
   }
