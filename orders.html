@@ -1512,7 +1512,7 @@ async function confirmPlantPaymentSent(orderNumber){
   try { base64 = await readFileAsBase64(file); }
   catch (e) { alert('No se pudo leer el archivo: ' + e.message); return; }
 
-  const subject = `💰 ${orderNumber} — BuenTrade — ${o.product_name || ''} — Payment confirmation`;
+  const subject = `${orderNumber} — BuenTrade — ${o.product_name || ''} — Payment confirmation`;
   const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
   const waMessagePay = `Hi, I sent the payment confirmation by email and I'm sharing it here as well for your convenience. Please confirm receipt and send me the release number so we can arrange pickup. Thank you!`;
   const waPhone = o.plant && (o.plant.payments_whatsapp || o.plant.whatsapp || o.plant.phone);
@@ -2210,7 +2210,7 @@ async function sharePO(orderNumber){
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
-  const subject = `📄 PO ${orderNumber} — BuenTrade — ${poProductName}`;
+  const subject = `PO ${orderNumber} — BuenTrade — ${poProductName}`;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -2300,7 +2300,7 @@ async function shareSO(orderNumber){
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
-  const subject = `📋 ${orderNumber} — Confirmación de Venta — ${soProductName}`;
+  const subject = `${orderNumber} — Orden de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -2395,7 +2395,7 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `🚛 FO ${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
+    const subject = `FO ${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
@@ -2581,7 +2581,7 @@ async function shareCustoms(orderNumber){
   if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
 
   const customerName = shipment.customer_name || '';
-  const subject = `📎 ${customerName} — BT-${orderNumber} — BuenTrade`;
+  const subject = `${customerName} — BT-${orderNumber} — BuenTrade`;
   const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${orderNumber}.\n\n`
     + `Please confirm receipt of the documents and that you have everything needed on your end for the shipment. We will proceed accordingly.\n\nThank you,`;
   const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
