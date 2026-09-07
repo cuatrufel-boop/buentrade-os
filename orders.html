@@ -549,7 +549,7 @@ const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C
 
 const LOAD_STAGES = [
   { key: 'pending_pickup', label: 'Pending Pickup' },
-  { key: 'picked_up', label: 'Picked Up' },
+  { key: 'picked_up', label: 'Pick up' },
   { key: 'unloading', label: 'Unloading' },
   { key: 'delivered', label: 'Delivered' },
 ];
@@ -790,8 +790,10 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     // Real correction 2026-09-07 (word-for-word this time): "confirmar pickup con carrier.
     // ESTE ES EL QUE TIENE QUE IR EN LUGAR DE PENDING" — not an action bolted onto a node still
     // named "Pending Pickup": the node's own displayed name replaces "Pending Pickup" outright, at
-    // every state (done or not) — "Confirm w/ Plant" or "Confirm w/ Carrier", never "Pending" again.
-    const displayLabel = s.key === 'pending_pickup' ? `Confirm w/ ${confirmTarget}` : s.label;
+    // every state (done or not), never "Pending" again.
+    // Real ask 2026-09-07: "confirm w/ plant - Confirm Load" — simplified further; who to confirm
+    // with is already shown in the route bar above (Plant -> Carrier -> Customer).
+    const displayLabel = s.key === 'pending_pickup' ? 'Confirm Load' : s.label;
     // Real ask 2026-09-07: "siguen confirm picke up unloading y delivered sin click" — the 4 main
     // stages only had a real onclick on whichever one was immediately next; done/current/future
     // ones just sat there. Every state now clicks to something: done/current shows the real date
@@ -832,7 +834,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     miniEntry({ icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` }),
   ];
   if (o.has_freight_order) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')` }));
-  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Payment', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: MONEY_ICON, label: 'Pay-Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
   // Real gap found 2026-09-07: "revisa todo... faltan mas cosas" — recordReleaseNumber/
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
@@ -922,8 +924,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
 function currentStageBadge(o){
   const stage = o.load_status || 'pending_pickup';
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
-  const hasCarrier = !!(o.carrier && o.carrier.phone);
-  const label = stage === 'pending_pickup' ? `Confirm w/ ${hasCarrier ? 'Carrier' : 'Plant'}` : LOAD_STAGES[stageIdx].label;
+  const label = stage === 'pending_pickup' ? 'Confirm Load' : LOAD_STAGES[stageIdx].label;
   const cls = stage === 'delivered' ? 'ok' : 'due-soon';
   return `<span class="payment-badge ${cls}" style="display:inline-flex;align-items:center;gap:5px;">📍 ${escapeHtml(label)}</span>`;
 }
