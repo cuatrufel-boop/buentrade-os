@@ -7,21 +7,23 @@
 // easily guessable) could otherwise mark someone else's order delivered.
 //
 // action "redeem" (called from sign-invoice.html, a PUBLIC page with no login — the customer signs
-// on their own phone, not a BuenTrade device): verifies the token matches, then reuses
-// shipments-update-status (rather than duplicating its payment_due_date/event-logging logic) to
-// actually mark the shipment delivered. Real correction 2026-09-06: "es en ese mismo momento que
-// debe enviar para firmar" — BuenTrade never rides the truck, so the old in-person signature pad
-// never made sense; this link (sent by both email and WhatsApp, same message as the Invoice
-// itself) is what actually gets signed, and the trader can follow up for it in the same WhatsApp
-// thread.
+// on their own phone, not a BuenTrade device): verifies the token matches, then records
+// invoice_signed_at — the customer's own proof-of-receipt, independent of shipment status.
+//
+// Real bug found live 2026-09-07: this used to reuse shipments-update-status to ALSO mark the
+// shipment 'delivered' here, and used that same status to dedupe ("already delivered = already
+// signed, don't re-process"). The user clarified those are two different real-world facts:
+// "Delivered" (Carga entregada con Éxito) is the trader confirming the load physically arrived at
+// the border — independent of whether the customer has gotten around to signing yet. Once
+// "delivered" could be true with no signature on file, that dedupe check would tell the
+// customer's real first signature "ya fue firmada," which never happened. invoice_signed_at is
+// its own column now, set here directly — this action no longer touches shipment status at all.
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
-const API_ROOT = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/";
-const API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
 
 function randomToken(): string {
   const bytes = new Uint8Array(24);
@@ -52,19 +54,14 @@ Deno.serve(async (req) => {
       const { token, invoice_url, signed_by_name } = body;
       if (!token) return jsonResponse({ error: "missing required fields", missing: ["token"] }, 400);
       if (!shipment.invoice_token || shipment.invoice_token !== token) return jsonResponse({ error: "invalid_token" }, 403);
-      if (shipment.status === "delivered") return jsonResponse({ already_delivered: true });
+      if (shipment.invoice_signed_at) return jsonResponse({ already_signed: true });
 
-      const res = await fetch(API_ROOT + "shipments-update-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + API_KEY, apikey: API_KEY },
-        body: JSON.stringify({
-          actor: "customer-signature", shipment_id: shipment.id, status: "delivered",
-          notes: `Factura firmada remotamente por ${signed_by_name || "el cliente"}${invoice_url ? " — " + invoice_url : ""}`,
-        }),
+      const [updated] = await sql`update shipments set invoice_signed_at = now() where id = ${shipment.id} returning *`;
+      await writeAuditLog(sql, HMAC_SECRET, {
+        actor: "customer-signature", action: "update", table_name: "shipments", record_id: shipment.id,
+        before: shipment, after: updated,
       });
-      const data = await res.json();
-      if (!res.ok) return jsonResponse({ error: data.error || "failed to mark delivered" }, 500);
-      return jsonResponse({ redeemed: true, shipment: data.shipment });
+      return jsonResponse({ redeemed: true, shipment: updated });
     }
 
     return jsonResponse({ error: "invalid action", valid_actions: ["issue", "redeem"] }, 400);

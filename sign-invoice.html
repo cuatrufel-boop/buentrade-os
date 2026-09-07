@@ -99,7 +99,7 @@
   <div id="successState" class="card center-card" hidden>
     <div class="state-icon ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
     <h2>¡Gracias!</h2>
-    <p>Tu firma quedó registrada y la entrega fue confirmada. BuenTrade ya tiene esta información.</p>
+    <p>Tu firma quedó registrada como comprobante de recepción. BuenTrade ya tiene esta información.</p>
   </div>
 
   <div id="mainState" hidden>
@@ -392,7 +392,7 @@ async function submitSignature(){
     const invoiceUrl = await uploadOrderPdf(doc, `Factura-${orderNumber}.pdf`);
 
     const redeemRes = await callApi('orders-invoice-signature', { action: 'redeem', order_number: orderNumber, token, invoice_url: invoiceUrl, signed_by_name: name });
-    if (redeemRes.already_delivered){ showState('alreadySignedState'); return; }
+    if (redeemRes.already_signed){ showState('alreadySignedState'); return; }
     showState('successState');
   } catch (e) {
     if (e.data && e.data.error === 'invalid_token'){
