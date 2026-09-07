@@ -610,12 +610,25 @@ function renderRouteTrack(o){
   </div>`;
 }
 
-function requestPickupDocsClick(orderNumber){
+// Real correction 2026-09-07: "no son pickup docs. son docs para aduana... una vez el carrier
+// avisa que ya recogio hay que pedir estos docs para aduana" — this is NOT a generic status
+// check-in, it's the specific request for the documents customs needs (label photos, Bill of
+// Lading, packing list, and USDA papers if applicable). Reuses the exact wording already approved
+// and shipped in computeAttentionItems' "Request pickup documents" item (2026-09-06) — not new
+// copy — instead of the old requestPickupDocsClick, which wrongly fired the generic
+// askFleteroWhatsApp/askPlantWhatsApp (statusCheckMessage), same bug the user just caught live.
+function requestCustomsDocsMessage(o){
+  const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
+  return `Hi, for order ${o.order_number} — ${o.product_name || ''}, please send us: ${docsLine}. Thank you.`;
+}
+function requestCustomsDocsClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  if (o.carrier && o.carrier.phone) askFleteroWhatsApp(orderNumber);
-  else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
-  else alert('No carrier/plant phone on file to ask for documents.');
+  const carrierPhone = o.carrier ? (o.carrier.phone || '').replace(/\D/g, '') : '';
+  const plantPhone = o.plant ? (o.plant.whatsapp || o.plant.phone || '').replace(/\D/g, '') : '';
+  const phone = carrierPhone || plantPhone;
+  if (!phone){ alert('No carrier/plant phone on file to request customs documents.'); return; }
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(requestCustomsDocsMessage(o)), '_blank');
 }
 function openInvoiceQT(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -663,8 +676,8 @@ function renderMilestoneTimeline(o){
 // (left in place, unused). One continuous chronological line mixing the 4 main stages (Pending
 // Pickup/Picked Up/Unloading/Delivered — same click/animation/blink behavior as the old stepper,
 // copied verbatim into mainEntry()) with the document/money/customs milestones positioned at their
-// real chronological slot: PO/SO/FO/Payment before Pending Pickup, Pickup Docs/Customs between
-// Picked Up and Unloading, Invoice/Signature after Delivered.
+// real chronological slot: PO/SO/FO/Payment before Pending Pickup, Customs Docs/Send to Customs
+// between Picked Up and Unloading, Invoice/Signature after Delivered.
 function renderUnifiedTimeline(o, attentionOrderNumbers){
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
   const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
@@ -722,8 +735,8 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   entries.push(miniEntry({ icon: MONEY_ICON, label: 'Payment', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
   entries.push(mainEntry('pending_pickup'));
   entries.push(mainEntry('picked_up'));
-  entries.push(miniEntry({ icon: CLIP_ICON, label: 'Pickup Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestPickupDocsClick('${o.order_number}')` }));
-  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, onClick: `shareCustoms('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: CLIP_ICON, label: 'Customs Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestCustomsDocsClick('${o.order_number}')` }));
+  entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Send to Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, onClick: `shareCustoms('${o.order_number}')` }));
   entries.push(mainEntry('unloading'));
   entries.push(mainEntry('delivered'));
   entries.push(miniEntry({ icon: RECEIPT_ICON, label: 'Invoice', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, onClick: `openInvoiceQT('${o.order_number}')` }));
