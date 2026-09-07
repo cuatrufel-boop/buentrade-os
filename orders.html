@@ -1040,7 +1040,13 @@ async function toggleOrderDocs(orderNumber){
 // document's own name is now the link to open it, instead of the name plus a separate "View" link.
 function renderTradeDocRow(label, sentAt, matchedFiles, actionsHtml, actionsWhenMissing){
   if (!matchedFiles.length) return `<div class="doc-row"><span class="doc-row-label">${label}</span>${actionsWhenMissing || ''}<span class="doc-row-status">Not generated</span></div>`;
-  const labelLink = `<a href="${matchedFiles[0].url}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${label}</a>`;
+  // Real correction 2026-09-07: "palabra plant y customer no van con link" — only the doc type
+  // itself (PO/SO/FO/Invoice) is the clickable link; the "(Plant)"/"(Customer)"/"(Carrier)"
+  // qualifier stays plain text next to it, not part of the link.
+  const parenIdx = label.indexOf('(');
+  const base = parenIdx === -1 ? label : label.slice(0, parenIdx).trim();
+  const qualifier = parenIdx === -1 ? '' : ' ' + label.slice(parenIdx);
+  const labelLink = `<span class="doc-row-label"><a href="${matchedFiles[0].url}" target="_blank" rel="noopener" class="doc-row-link">${base}</a>${qualifier}</span>`;
   const when = sentAt ? new Date(sentAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
   return `<div class="doc-row">${labelLink}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Sent ' + when : 'Generated, not sent'}</span></div>`;
 }
