@@ -531,10 +531,15 @@ function pickupReadinessBadge(o){
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const pickup = new Date(o.pickup_date + 'T00:00:00');
     const daysUntil = Math.round((pickup - today) / 86400000);
+    // Real bugs found live 2026-09-07, both against real orders: (1) this used to gate the FO
+    // check on carrier_provider_id, which is null for a real freight_order still waiting on a
+    // carrier (TBD) — has_freight_order matches by order_number alone, so a TBD FO still counts as
+    // "needs sending." (2) Customs was flagged as "not sent" here even before pickup (BT-0017,
+    // still pending_pickup) — customs can't be contacted before the load is picked up (the real
+    // documents it needs don't exist yet), so it never belongs in a pre-pickup readiness check.
     const missingDocs = [];
     if (!o.po_sent_at) missingDocs.push('PO');
-    if (o.carrier_provider_id && !o.fo_sent_at) missingDocs.push('FO');
-    if (!o.customs_sent_at) missingDocs.push('Customs');
+    if (o.has_freight_order && !o.fo_sent_at) missingDocs.push('FO');
     if (daysUntil < 0) return `<span class="payment-badge overdue">⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)}</span>`;
     if (missingDocs.length) return `<span class="payment-badge overdue">⚠ Pickup ${daysUntil === 0 ? 'today' : 'in ' + daysUntil + 'd'} — ${missingDocs.join('/')} not sent</span>`;
     return `<span class="payment-badge ok">Pickup ${daysUntil === 0 ? 'today' : fmtDateStr(o.pickup_date)}</span>`;
@@ -806,7 +811,7 @@ function renderOrderDocsPanel(o){
     body = `<div class="docs-panel">
       ${renderTradeDocRow('PO (Planta)', o.po_sent_at, poFiles, poActions, poActions)}
       ${renderTradeDocRow('SO (Cliente)', o.so_sent_at, soFiles, soActions, soActions)}
-      ${o.carrier_provider_id ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
+      ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
       ${paymentRow}
       ${renderTradeDocRow('Factura', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${pickupDocs.length

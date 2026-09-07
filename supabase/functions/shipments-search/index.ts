@@ -38,6 +38,15 @@ Deno.serve(async (req) => {
           limit 1
         ) as freight_origin,
         (
+          -- Real bug found live 2026-09-07 against BT-0014: a freight_order can exist with
+          -- carrier_provider_id null (TBD, no rate matched at Win time) — every other check here
+          -- keyed off sh.carrier_provider_id, so a TBD freight order was completely invisible (no
+          -- FO row in the per-order panel, never flagged as "FO not sent") until a carrier got
+          -- assigned. This matches by order_number only, so it's true the moment the freight_order
+          -- row exists, regardless of whether a carrier has been picked yet.
+          select exists(select 1 from freight_orders fo where fo.order_number = sh.order_number)
+        ) as has_freight_order,
+        (
           -- The confirmed pickup date, same source orders-compose-po already prints as
           -- "Pick-up date" on the real PO document (po.delivery_dates[0]) — nothing new, just
           -- exposed here so the Status tab can compute the fixed 2-day-to-border window against it.
