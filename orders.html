@@ -1038,15 +1038,13 @@ function computeAttentionItems(){
     const plantName = o.plant_name || 'plant';
     const productName = o.product_name || '';
     const label = `${o.order_number} — ${plantName}`;
-    const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
     const plantEmail = o.plant ? (o.plant.email || '') : '';
-    const plantContact = o.plant ? (o.plant.whatsapp || o.plant.phone || '') : '';
 
+    // Real ask 2026-09-07, repeated: "quites el puto botonese de whatsapp" — these attention-item
+    // buttons are Email only now, no WhatsApp fallback.
     function pickupBtns(message, subject){
       const btns = [];
       if (plantEmail) btns.push(`<button class="wa-btn outline" onclick="gmailComposeOpen('${escapeHtml(plantEmail)}','${escapeHtml(subject)}','${escapeHtml(message)}')">✉️ Email Plant</button>`);
-      if (carrierPhone) btns.push(`<button class="wa-btn outline" onclick="askFleteroWhatsApp('${o.order_number}')">💬 WhatsApp Carrier</button>`);
-      else if (plantContact) btns.push(`<button class="wa-btn outline" onclick="askPlantWhatsApp('${o.order_number}')">💬 WhatsApp Plant</button>`);
       return btns.join('');
     }
 
@@ -1325,14 +1323,6 @@ function renderStatusOrders(){
     const stage = o.load_status || 'pending_pickup';
     const unifiedTimelineHtml = renderUnifiedTimeline(o, attentionOrderNumbers);
 
-    const carrierPhone = o.carrier ? (o.carrier.phone || '') : '';
-    const plantContact = o.plant ? (o.plant.whatsapp || o.plant.phone || '') : '';
-    let checkInBtn = '';
-    if (stage !== 'delivered'){
-      if (carrierPhone) checkInBtn = `<button class="wa-btn outline" onclick="askFleteroWhatsApp('${o.order_number}')">💬 WhatsApp Carrier</button>`;
-      else if (plantContact) checkInBtn = `<button class="wa-btn outline" onclick="askPlantWhatsApp('${o.order_number}')">💬 WhatsApp Plant</button>`;
-    }
-
     const pendingDocs = o.pending_pickup_documents || [];
     const pickupDocsBtn = pendingDocs.length
       ? `<button class="wa-btn outline" onclick="shareCustoms('${o.order_number}')">📎 ${pendingDocs.length} doc${pendingDocs.length === 1 ? '' : 's'} — Send to Customs</button>`
@@ -1368,7 +1358,7 @@ function renderStatusOrders(){
         <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
       </div>
       ${unifiedTimelineHtml}
-      <div class="load-actions">${checkInBtn}${pickupDocsBtn}</div>
+      <div class="load-actions">${pickupDocsBtn}</div>
       ${renderOrderDocsPanel(o)}
     </div>`;
   }).join('');
