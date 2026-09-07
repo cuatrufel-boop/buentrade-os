@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
         cu.contact_name as customer_contact_name, cu.whatsapp as customer_whatsapp, cu.phone as customer_phone,
         cu.email as customer_email, cu.email_cc as customer_email_cc,
         cu.payment_days as customer_payment_days,
+        cu.payments_contact_name as customer_payments_contact_name, cu.payments_contact_email as customer_payments_email, cu.payments_contact_whatsapp as customer_payments_whatsapp, cu.payments_contact_phone as customer_payments_phone,
         pl.whatsapp as plant_whatsapp, pl.phone as plant_phone, pl.email as plant_email,
         pl.payments_contact_name as plant_payments_contact_name, pl.payments_email as plant_payments_email, pl.payments_whatsapp as plant_payments_whatsapp,
         pr.name as catalog_product_name, pr.name_en as catalog_product_name_en, pp.photo_url as catalog_product_photo_url,

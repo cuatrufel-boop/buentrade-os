@@ -493,7 +493,10 @@ async function loadStatusOrders(){
       whatsapp: o.plant_whatsapp, phone: o.plant_phone, email: o.plant_email,
       payments_contact_name: o.plant_payments_contact_name, payments_email: o.plant_payments_email, payments_whatsapp: o.plant_payments_whatsapp,
     },
-    customer: { contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, email: o.customer_email, email_cc: o.customer_email_cc, payment_days: o.customer_payment_days },
+    customer: {
+      contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, email: o.customer_email, email_cc: o.customer_email_cc, payment_days: o.customer_payment_days,
+      payments_contact_name: o.customer_payments_contact_name, payments_contact_email: o.customer_payments_email, payments_contact_whatsapp: o.customer_payments_whatsapp, payments_contact_phone: o.customer_payments_phone,
+    },
     catalogProduct: o.product_id ? { name: o.catalog_product_name, name_en: o.catalog_product_name_en, photo_url: o.catalog_product_photo_url } : null,
   }));
 
@@ -1965,9 +1968,18 @@ async function waCardFO(orderNumber){
 // the real customs-adjusted weight, neither of which are stored anywhere except inside the PDF
 // already uploaded. So resending fetches that exact file back and re-attaches it, instead of
 // calling buildInvoiceDoc again (which would produce an unsigned, quoted-weight version).
+// Real gap found live 2026-09-07: this used to always email the customer's general contact —
+// "cobros a clientes (no cliente)" (established rule, already respected by createAndShareInvoice)
+// means a resend of a billing document should go to the Payments Contact too, CC'ing the general
+// contact who negotiated the deal, falling back to the general contact alone when no dedicated
+// Payments Contact is on file yet.
 async function resendInvoiceEmail(orderNumber, fileUrl, filename){
   const o = findStatusOrder(orderNumber);
-  const emails = o ? collectEmails(o.customer) : [];
+  const customer = o ? o.customer : null;
+  const generalEmails = customer ? collectEmails(customer) : [];
+  const paymentsEmails = (customer && customer.payments_contact_email) ? [customer.payments_contact_email] : [];
+  const emails = paymentsEmails.length ? paymentsEmails : generalEmails;
+  const ccEmails = paymentsEmails.length ? generalEmails : [];
   if (!emails.length){ alert('This customer has no email on file.'); return; }
   let base64;
   try {
@@ -1980,12 +1992,12 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
       reader.readAsDataURL(blob);
     });
   } catch(e){ alert('Error al cargar el archivo: ' + e.message); return; }
-  const contact = (o && o.customer && o.customer.contact_name) ? o.customer.contact_name.split(' ')[0] : '';
+  const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
   const subject = `${orderNumber} — INVOICE`;
   const body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
-  const waPhoneInv = o && o.customer && (o.customer.whatsapp || o.customer.phone);
+  const waPhoneInv = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
   try {
-    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!` });
+    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!` }, ccEmails);
     showToast('Factura enviada', emails.join(', '));
     markDocSent(orderNumber, 'invoice');
   } catch(e){
