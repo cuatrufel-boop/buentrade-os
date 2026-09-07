@@ -189,6 +189,27 @@
   .utimeline{display:flex;align-items:flex-start;gap:0;margin:22px 0 10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;}
   .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:14px;}
   .u-line.done{background:var(--green);}
+  /* Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
+     entrega en movimiento" — real BuenTrade brand colors (--blue/--blue-bright/--navy), riding the
+     exact connector line that represents current progress (see renderUnifiedTimeline). */
+  .u-walker-ride{position:absolute;top:-27px;left:50%;transform:translateX(-50%);width:18px;height:28px;z-index:2;filter:drop-shadow(0 3px 4px rgba(4,12,26,.6));}
+  .u-walker-ride svg{width:100%;height:100%;animation:uWalkBob .5s ease-in-out infinite;}
+  .u-walker-ride .uw-leg-back{animation:uWalkLegBack .5s ease-in-out infinite;transform-origin:11px 20px;}
+  .u-walker-ride .uw-leg-front{animation:uWalkLegFront .5s ease-in-out infinite;transform-origin:11px 20px;}
+  .u-walker-ride .uw-arm-back{animation:uWalkArmBack .5s ease-in-out infinite;transform-origin:11px 15px;}
+  .u-walker-ride .uw-arm-front{animation:uWalkArmFront .5s ease-in-out infinite;transform-origin:11px 15px;}
+  @keyframes uWalkBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
+  @keyframes uWalkLegBack{0%,100%{transform:rotate(22deg);}50%{transform:rotate(-22deg);}}
+  @keyframes uWalkLegFront{0%,100%{transform:rotate(-22deg);}50%{transform:rotate(22deg);}}
+  @keyframes uWalkArmBack{0%,100%{transform:rotate(-18deg);}50%{transform:rotate(18deg);}}
+  @keyframes uWalkArmFront{0%,100%{transform:rotate(18deg);}50%{transform:rotate(-18deg);}}
+  .u-truck-ride{position:absolute;top:-21px;left:50%;transform:translateX(-50%);width:32px;height:21px;z-index:2;filter:drop-shadow(0 3px 5px rgba(4,12,26,.65));animation:uTruckBounce .4s ease-in-out infinite;}
+  .u-truck-ride svg{width:100%;height:100%;}
+  .u-truck-ride .uw-wheel{animation:uWheelSpin .4s linear infinite;}
+  .u-truck-ride.idle{animation:none;}
+  .u-truck-ride.idle .uw-wheel{animation:none;}
+  @keyframes uTruckBounce{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-1.5px);}}
+  @keyframes uWheelSpin{from{stroke-dashoffset:0;}to{stroke-dashoffset:-12.6px;}}
   .u-main{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:100px;position:relative;cursor:pointer;}
   .u-main-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);transition:all .25s;flex-shrink:0;}
   .u-main-icon svg{width:18px;height:18px;}
@@ -803,17 +824,55 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // other real action on this timeline — no new business logic, just surfaced where it belongs.
   entries.push(miniEntry({ icon: MONEY_ICON, label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')` }));
   if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, waitReason: 'Record the release number first.', onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
+  const confirmIdx = entries.length;
   entries.push(mainEntry('pending_pickup'));
   entries.push(mainEntry('picked_up'));
   entries.push(miniEntry({ icon: CLIP_ICON, label: 'Customs Docs', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, waitReason: 'Mark the load Picked Up first.', onClick: `requestCustomsDocsClick('${o.order_number}')` }));
   entries.push(miniEntry({ icon: CUSTOMS_ICON, label: 'Send to Customs', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, waitReason: 'No pickup documents have arrived yet.', onClick: `shareCustoms('${o.order_number}')` }));
   entries.push(mainEntry('unloading'));
+  const deliveredIdxInEntries = entries.length;
   entries.push(mainEntry('delivered'));
   entries.push(miniEntry({ icon: RECEIPT_ICON, label: 'Invoice', done: !!o.invoice_sent_at, date: o.invoice_sent_at, wait: stageIdx < deliveredIdx, waitReason: 'The load must be Delivered first.', onClick: `openInvoiceQT('${o.order_number}')` }));
   entries.push(miniEntry({ icon: SIGN_ICON, label: 'Signature', done: !!o.invoice_signed_at, date: o.invoice_signed_at, wait: !o.invoice_sent_at, waitReason: 'Send the Invoice first — the customer signs it once they receive it.', onClick: `signatureInfoClick('${o.order_number}')` }));
 
+  // Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
+  // entrega en movimiento" — a walking-person rides whichever connector line sits at the real
+  // current point of progress through PO/SO/FO/Payment/Release#/Send Release# (before pickup); a
+  // truck takes over on whichever connector sits at the current point from Confirm through
+  // Customs Docs/Send to Customs/Unloading to Delivered — parked, still, once actually delivered.
+  const firstUndone = (from, to) => { for (let k = from; k < to; k++) if (!entries[k].lineDone) return k; return to; };
+  let travelerLineIdx = -1, travelerType = '', travelerIdle = false;
+  if (stageIdx === 0){
+    const j = firstUndone(0, confirmIdx);
+    travelerLineIdx = Math.max(0, Math.min(j, confirmIdx - 1));
+    travelerType = 'walker';
+  } else {
+    const j = firstUndone(confirmIdx, deliveredIdxInEntries);
+    travelerLineIdx = Math.max(confirmIdx, Math.min(j, deliveredIdxInEntries - 1));
+    travelerType = 'truck';
+    travelerIdle = stageIdx >= deliveredIdx;
+  }
+  const WALKER_RIDE_SVG = `<div class="u-walker-ride" title="On the way to pickup"><svg viewBox="0 0 22 34">
+    <circle cx="11" cy="5" r="3.4" fill="#5AAAFF"/>
+    <line class="uw-arm-back" x1="11" y1="15" x2="6.5" y2="21" stroke="#5AAAFF" stroke-width="2.6" stroke-linecap="round"/>
+    <line x1="11" y1="10" x2="11" y2="20" stroke="#5AAAFF" stroke-width="3.2" stroke-linecap="round"/>
+    <line class="uw-arm-front" x1="11" y1="15" x2="15.5" y2="21" stroke="#8CC4FF" stroke-width="2.6" stroke-linecap="round"/>
+    <line class="uw-leg-back" x1="11" y1="20" x2="7" y2="31" stroke="#1E6ADB" stroke-width="3" stroke-linecap="round"/>
+    <line class="uw-leg-front" x1="11" y1="20" x2="15" y2="31" stroke="#1E6ADB" stroke-width="3" stroke-linecap="round"/>
+  </svg></div>`;
+  const truckRideSvg = idle => `<div class="u-truck-ride${idle ? ' idle' : ''}" title="${idle ? 'Delivered' : 'In transit'}"><svg viewBox="0 0 46 30">
+    <rect x="1" y="7" width="26" height="14" rx="2" fill="#5AAAFF"/>
+    <path d="M27 12h9.5a2 2 0 0 1 1.8 1.1L41 18v3h-14z" fill="#1E6ADB"/>
+    <rect x="30" y="14" width="6" height="4" rx=".5" fill="#0A2547" opacity=".55"/>
+    <circle class="uw-wheel" cx="9" cy="24" r="3.4" fill="none" stroke="#0A2547" stroke-width="3" stroke-dasharray="4 2.3"/>
+    <circle cx="9" cy="24" r="1.3" fill="#0A2547"/>
+    <circle class="uw-wheel" cx="34" cy="24" r="3.4" fill="none" stroke="#0A2547" stroke-width="3" stroke-dasharray="4 2.3"/>
+    <circle cx="34" cy="24" r="1.3" fill="#0A2547"/>
+  </svg></div>`;
+
   const html = entries.map((e, i) => {
-    const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}</div>` : '';
+    const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : truckRideSvg(travelerIdle)) : '';
+    const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
     return e.html + line;
   }).join('');
   return `<div class="utimeline">${html}</div>`;
