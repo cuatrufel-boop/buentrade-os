@@ -186,7 +186,13 @@
      continuous connected line. Main stages keep their original bigger/animated markup (.u-main*
      mirrors .step* exactly); milestones use a smaller icon-only button (.u-mini*). See
      renderUnifiedTimeline().  */
-  .utimeline{display:flex;align-items:flex-start;gap:0;margin:22px 0 10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;}
+  /* Real bug found live 2026-09-07: only scrollbar-width (Firefox) was set — Chrome/Safari/Edge
+     fell back to the raw OS scrollbar, a stark white/grey bar slashing across the dark card. */
+  .utimeline{display:flex;align-items:flex-start;gap:0;margin:22px 0 10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:rgba(90,170,255,.35) transparent;}
+  .utimeline::-webkit-scrollbar{height:5px;}
+  .utimeline::-webkit-scrollbar-track{background:transparent;}
+  .utimeline::-webkit-scrollbar-thumb{background:rgba(90,170,255,.35);border-radius:3px;}
+  .utimeline::-webkit-scrollbar-thumb:hover{background:rgba(90,170,255,.55);}
   .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:14px;}
   .u-line.done{background:var(--green);}
   /* Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
