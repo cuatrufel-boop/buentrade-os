@@ -46,10 +46,27 @@
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
+  h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
-  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  /* Real ask 2026-09-08: "quiero tener en orders renglones visibles... igual que esta en
+     collections" — same table language as collections.html: outline .btn (transparent fill,
+     solid border, bright text), never solid-filled. This was dead CSS before (no button in this
+     file used the .btn class) — now the table's "View" button does. */
+  .btn{font-family:inherit;font-size:12px;font-weight:700;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--blue);background:transparent;color:var(--blue-bright);}
+  .btn:hover{background:var(--blue-light);}
+  .btn.small{font-size:11px;padding:5px 10px;}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  /* Same table conventions as collections.html's Invoiced Orders table — uppercase muted headers,
+     hairline row dividers, near-invisible hover, mono/tabular numbers where relevant. */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,.03);}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .muted{color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto;}
   .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
   /* Real bug found 2026-09-06: this sat BELOW #urgentQueueOverlay (z-index 6000) — harmless while
      the two never appeared together, but now that a ?focus= deep link auto-triggers the real send
@@ -155,6 +172,11 @@
   .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
   .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  /* Real ask 2026-09-08: "que este blinking el que falta por accion" — the compact table row still
+     needs to show, at a glance, the single next actionable step (same one that gets .blink-now
+     inside the full timeline in the detail modal). Reuses the exact mstopPulse keyframes already
+     defined below for .u-mini.blink-now — same visual language, not a new animation. */
+  .payment-badge.blink-row{animation:mstopPulse 1s ease-in-out infinite;}
   /* Real ask 2026-09-07, redone after the flat chip row was rejected as "tirado ahí" — a real
      timeline spread across time, each milestone a clickable button, with the real pickup city and
      the border as Point A / Point B, like a real freight-tracking route. */
@@ -269,6 +291,15 @@
   .u-main.blink-now.urgent .u-main-icon{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
   @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
   #urgentQueueBox{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+
+  /* ============ ORDER DETAIL MODAL ============ Real ask 2026-09-08: "renglones visibles con
+     cada consecutivo de orden en lugar de eso tan grande... si le das click en un boton te salga
+     grande y puedas ver que estas haciendo" — the full card (product row, route, unified timeline,
+     docs panel) moves in here, opened on demand per order, instead of always rendering for every
+     order at once. Same solid modal-box convention as collections.html's #customerProfileBox
+     (solid bg, not translucent — a modal needs full legibility over the dark overlay). */
+  #orderDetailOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6200;align-items:center;justify-content:center;padding:20px;}
+  #orderDetailBox{background:#0F2B52;border:1px solid var(--line);border-radius:16px;padding:26px 28px;max-width:1040px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(4,12,26,.6);}
 </style>
 </head>
 <body>
@@ -443,8 +474,17 @@ auth.onAuthStateChanged(user => {
   <h1>Orders</h1>
 
   <div class="stats-row" id="statusStats"></div>
-  <div id="statusCards"></div>
-  <div id="statusEmpty" class="empty" style="display:none;">No active loads right now.</div>
+
+  <div class="card">
+    <h2>Active Loads</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Plant</th><th>Stage</th><th>Next Action</th><th></th></tr></thead>
+        <tbody id="statusCards"></tbody>
+      </table>
+    </div>
+    <div id="statusEmpty" class="empty" style="display:none;">No active loads right now.</div>
+  </div>
 </div>
 </div>
 
@@ -487,6 +527,16 @@ auth.onAuthStateChanged(user => {
     <div class="order-num" id="urgentQueueOrderNum" style="font-size:15px;margin-bottom:8px;"></div>
     <div id="urgentQueueText" style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;margin-bottom:24px;line-height:1.35;"></div>
     <div id="urgentQueueActions" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<div id="orderDetailOverlay">
+  <div id="orderDetailBox">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+      <h2 id="orderDetailTitle" style="margin:0;"></h2>
+      <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
+    </div>
+    <div id="orderDetailBody"></div>
   </div>
 </div>
 
@@ -567,6 +617,7 @@ const LOAD_STAGES = [
 ];
 
 let statusOrders = [];
+let openOrderNumber = null; // order_number whose detail modal is currently open, if any
 
 async function loadStatusOrders(){
   const wrap = document.getElementById('statusCards');
@@ -832,6 +883,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       lineDone: i < stageIdx,
       actionableNow: isNext,
       raised,
+      label: displayLabel,
     };
   }
 
@@ -854,6 +906,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       lineDone: st.done,
       actionableNow: state === 'now',
       raised: !!st.raised,
+      label: st.label,
     };
   }
 
@@ -963,7 +1016,13 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     return entryHtml + line;
   }).join('');
   const travelerOnCurve = travelerLineIdx >= 0 && (entries[travelerLineIdx].raised || (entries[travelerLineIdx + 1] && entries[travelerLineIdx + 1].raised));
-  return `<div class="utimeline${travelerOnCurve ? ' needs-curve-clearance' : ''}">${html}</div>`;
+  // Real ask 2026-09-08: "que este blinking el que falta por accion" — the compact orders table
+  // needs this same "single next actionable step" the timeline already computes (blinkIdx), so the
+  // row can show it too without a second, separately-invented rule.
+  return {
+    html: `<div class="utimeline${travelerOnCurve ? ' needs-curve-clearance' : ''}">${html}</div>`,
+    nextAction: blinkIdx >= 0 ? entries[blinkIdx].label : null,
+  };
 }
 
 // Real ask 2026-09-07: "si entro al sistema y no se en que va mi carga como me doy cuenta en que
@@ -1201,7 +1260,7 @@ const orderDocsFileCache = new Map(); // order_number -> [{name, url}]
 async function toggleOrderDocs(orderNumber){
   if (docsOpenOverride.has(orderNumber)){
     docsOpenOverride.delete(orderNumber);
-    renderStatusOrders();
+    refreshOpenOrderDetail();
     return;
   }
   docsOpenOverride.add(orderNumber);
@@ -1228,7 +1287,7 @@ async function toggleOrderDocs(orderNumber){
       orderDocsFileCache.set(orderNumber, []);
     }
   }
-  renderStatusOrders();
+  refreshOpenOrderDetail();
 }
 
 // Real correction 2026-09-07: "quitar el boton de view en docs y poner el nombre con link" — the
@@ -1314,6 +1373,12 @@ function renderOrderDocsPanel(o){
   return `<div class="docs-panel-toggle" onclick="toggleOrderDocs('${o.order_number}')">📄 Documents ${arrow}</div>${body}`;
 }
 
+// Real ask 2026-09-08: "renglones visibles con cada consecutivo de orden en lugar de eso tan
+// grande... organiza cada orden en ORDERS igual que esta en collections" — the full per-order card
+// (product row, route, unified timeline, docs panel) used to always render for every order at
+// once. It now renders on demand, inside the detail modal, for exactly one order at a time
+// (openOrderDetail below); the main list is a compact table row per order, same table language as
+// collections.html's Invoiced Orders table.
 function renderStatusOrders(){
   // Real ask (this session, standing): "no quiero un panel de needs your attention" — the blocking
   // login queue (runUrgentQueueOnLogin/showUrgentQueueStep) already surfaces the exact same items,
@@ -1326,6 +1391,7 @@ function renderStatusOrders(){
   if (!statusOrders.length){
     wrap.innerHTML = '';
     emptyEl.style.display = 'block';
+    closeOrderDetail();
     return;
   }
   emptyEl.style.display = 'none';
@@ -1338,50 +1404,98 @@ function renderStatusOrders(){
   // actionable stepper icon blinks — regardless of which specific condition triggered it.
   const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
 
-  wrap.innerHTML = statusOrders.map(o => {
-    const stage = o.load_status || 'pending_pickup';
-    const unifiedTimelineHtml = renderUnifiedTimeline(o, attentionOrderNumbers);
+  wrap.innerHTML = statusOrders.map(o => renderOrderRow(o, attentionOrderNumbers)).join('');
 
-    const pendingDocs = o.pending_pickup_documents || [];
-    const pickupDocsBtn = pendingDocs.length
-      ? `<button class="wa-btn outline" onclick="shareCustoms('${o.order_number}')">📎 ${pendingDocs.length} doc${pendingDocs.length === 1 ? '' : 's'} — Send to Customs</button>`
-      : '';
+  // Keep the detail modal in sync — every action inside it (advance status, confirm payment, toggle
+  // docs...) reloads via loadStatusOrders()/renderStatusOrders(), and the trader should see the
+  // result right there, still open, instead of the modal going stale or silently closing.
+  refreshOpenOrderDetail(attentionOrderNumbers);
+}
 
-    const cp = o.catalogProduct;
-    const productName = cp ? (cp.name_en || cp.name) : o.product_name;
-    const productIconHtml = (cp && cp.photo_url)
-      ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
-      : PRODUCT_PLACEHOLDER_ICON;
+function renderOrderRow(o, attentionOrderNumbers){
+  const { nextAction } = renderUnifiedTimeline(o, attentionOrderNumbers);
+  const cp = o.catalogProduct;
+  const productName = cp ? (cp.name_en || cp.name) : o.product_name;
+  const nextActionHtml = nextAction
+    ? `<span class="payment-badge due-soon blink-row">${escapeHtml(nextAction)}</span>`
+    : '<span class="muted">—</span>';
+  return `<tr class="order-row">
+    <td class="order-num">${escapeHtml(o.order_number)}</td>
+    <td>${escapeHtml(o.customer_name || '—')}</td>
+    <td class="muted">${escapeHtml(productName || '—')}</td>
+    <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
+    <td>${currentStageBadge(o)}</td>
+    <td>${nextActionHtml}</td>
+    <td><button class="btn small" onclick="openOrderDetail('${o.order_number}')">View</button></td>
+  </tr>`;
+}
 
-    return `<div class="load-card">
-      <div class="load-card-top">
-        <div class="load-product-row">
-          <div class="load-product-icon">${productIconHtml}</div>
-          <div>
-            <div class="load-product-name">${escapeHtml(productName)}</div>
-            <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="order-num">${escapeHtml(o.order_number)}</span>
-          ${currentStageBadge(o)}
-          ${pendingActionsBadge(o)}
-          ${pickupReadinessBadge(o)}
-          ${paymentBadge(o)}
+// The exact content that used to render inline for every order at once — unchanged, just extracted
+// so it can be built for one order on demand (openOrderDetail) instead of all of them always.
+function renderOrderCardBody(o, attentionOrderNumbers){
+  const { html: unifiedTimelineHtml } = renderUnifiedTimeline(o, attentionOrderNumbers);
+
+  const pendingDocs = o.pending_pickup_documents || [];
+  const pickupDocsBtn = pendingDocs.length
+    ? `<button class="wa-btn outline" onclick="shareCustoms('${o.order_number}')">📎 ${pendingDocs.length} doc${pendingDocs.length === 1 ? '' : 's'} — Send to Customs</button>`
+    : '';
+
+  const cp = o.catalogProduct;
+  const productName = cp ? (cp.name_en || cp.name) : o.product_name;
+  const productIconHtml = (cp && cp.photo_url)
+    ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
+    : PRODUCT_PLACEHOLDER_ICON;
+
+  return `
+    <div class="load-card-top">
+      <div class="load-product-row">
+        <div class="load-product-icon">${productIconHtml}</div>
+        <div>
+          <div class="load-product-name">${escapeHtml(productName)}</div>
+          <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
         </div>
       </div>
-      <div class="load-route">
-        <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
-        <div class="load-route-arrow">${ARROW_ICON}</div>
-        ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
-        <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
-        ${o.sent_offer_id ? `<div onclick="openOrderQT('${o.order_number}')" title="Open QT" style="margin-left:auto;cursor:pointer;flex-shrink:0;width:36px;height:36px;border-radius:50%;border:2px solid var(--blue);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:.02em;">QT</div>` : ''}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+        ${currentStageBadge(o)}
+        ${pendingActionsBadge(o)}
+        ${pickupReadinessBadge(o)}
+        ${paymentBadge(o)}
       </div>
-      ${unifiedTimelineHtml}
-      <div class="load-actions">${pickupDocsBtn}</div>
-      ${renderOrderDocsPanel(o)}
-    </div>`;
-  }).join('');
+    </div>
+    <div class="load-route">
+      <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
+      <div class="load-route-arrow">${ARROW_ICON}</div>
+      ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
+      <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
+      ${o.sent_offer_id ? `<div onclick="openOrderQT('${o.order_number}')" title="Open QT" style="margin-left:auto;cursor:pointer;flex-shrink:0;width:36px;height:36px;border-radius:50%;border:2px solid var(--blue);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:.02em;">QT</div>` : ''}
+    </div>
+    ${unifiedTimelineHtml}
+    <div class="load-actions">${pickupDocsBtn}</div>
+    ${renderOrderDocsPanel(o)}
+  `;
+}
+
+// Real ask 2026-09-08: "si tu le das click en un boton te salga grande y puedas ver que estas
+// haciendo" — opens the full detail (everything renderOrderCardBody builds) big, in its own modal.
+function openOrderDetail(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  openOrderNumber = orderNumber;
+  const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
+  document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
+  document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
+  document.getElementById('orderDetailOverlay').style.display = 'flex';
+}
+function closeOrderDetail(){
+  openOrderNumber = null;
+  document.getElementById('orderDetailOverlay').style.display = 'none';
+}
+function refreshOpenOrderDetail(attentionOrderNumbers){
+  if (!openOrderNumber) return;
+  const o = findStatusOrder(openOrderNumber);
+  if (!o) { closeOrderDetail(); return; }
+  const attn = attentionOrderNumbers || new Set(computeAttentionItems().map(it => it.order_number));
+  document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attn);
 }
 
 function findStatusOrder(orderNumber){
