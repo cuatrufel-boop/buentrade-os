@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
     const shipments = await sql`
       select
         sh.*, c.trade_name as customer_trade_name, c.credit_limit, c.payment_days,
+        c.email as customer_email, c.whatsapp as customer_whatsapp, c.contact_name as customer_contact_name,
         so_.cost_per_lb, so_.total_cost, so_.us_freight_amount, so_.inspection_amount, so_.product_name, so_.product_name_es,
         sales.real_weight,
         coalesce((select sum(amount) from order_extra_costs where order_number = sh.order_number), 0) as extra_costs_total
@@ -46,6 +47,16 @@ Deno.serve(async (req) => {
       const isPaid = !!sh.paid_at;
       const isOverdue = !isPaid && sh.payment_due_date && new Date(sh.payment_due_date) < today;
       const daysOverdue = isOverdue ? Math.max(0, Math.round((today.getTime() - new Date(sh.payment_due_date).getTime()) / 86400000)) : 0;
+      // Standard AR aging buckets (0-30/31-60/61-90/90+) — every real AR/Collections platform
+      // leads with these. 'current' = not yet due; null only for paid shipments (no bucket applies).
+      let agingBucket = null;
+      if (!isPaid) {
+        if (daysOverdue === 0) agingBucket = "current";
+        else if (daysOverdue <= 30) agingBucket = "0-30";
+        else if (daysOverdue <= 60) agingBucket = "31-60";
+        else if (daysOverdue <= 90) agingBucket = "61-90";
+        else agingBucket = "90+";
+      }
 
       let interestSoFar = null, profitSoFar = null;
       if (!isPaid) {
@@ -66,6 +77,7 @@ Deno.serve(async (req) => {
         days_since_invoice: daysSinceInvoice,
         is_overdue: !!isOverdue,
         days_overdue: daysOverdue,
+        aging_bucket: agingBucket,
         interest_so_far: interestSoFar,
         profit_so_far: profitSoFar,
       };
@@ -107,6 +119,13 @@ Deno.serve(async (req) => {
     const totalOverdue = enriched.filter((s) => s.is_overdue).reduce((sum, s) => sum + s.balance, 0);
     const totalRealizedProfit = enriched.filter((s) => s.paid_at).reduce((sum, s) => sum + Number(s.net_profit ?? 0), 0);
 
+    // Aging report — total $ and count per bucket, the standard AR summary view.
+    const bucketOrder = ["current", "0-30", "31-60", "61-90", "90+"];
+    const aging = bucketOrder.map((bucket) => {
+      const rows = enriched.filter((s) => s.aging_bucket === bucket);
+      return { bucket, count: rows.length, amount: rows.reduce((sum, s) => sum + s.balance, 0) };
+    });
+
     return jsonResponse({
       shipments: enriched,
       customers,
@@ -115,6 +134,7 @@ Deno.serve(async (req) => {
       total_overdue: totalOverdue,
       total_realized_profit: totalRealizedProfit,
       interest_rate_annual: annualRate,
+      aging,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);

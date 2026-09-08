@@ -225,6 +225,16 @@ auth.onAuthStateChanged(user => {
   <div class="stats-row" id="collStats"></div>
 
   <div class="card">
+    <h2 style="display:flex;align-items:center;justify-content:space-between;">Aging report <button class="btn small" onclick="exportAgingCsv()">⬇ Exportar CSV</button></h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Vigente</th><th>0-30 días</th><th>31-60 días</th><th>61-90 días</th><th>90+ días</th></tr></thead>
+        <tbody id="agingBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Clientes — cupo y saldo</h2>
     <div class="table-scroll">
       <table>
@@ -310,8 +320,39 @@ function showToast(title, detail, isError){
 async function loadCollections(){
   collData = await callApi('collections-search', {});
   renderStats();
+  renderAging();
   renderCustomers();
   renderOrders();
+}
+
+const AGING_LABEL = { current: 'Vigente', '0-30': '0-30 días', '31-60': '31-60 días', '61-90': '61-90 días', '90+': '90+ días' };
+const AGING_COLOR = { current: '#6FD3A8', '0-30': 'var(--amber)', '31-60': '#F0904D', '61-90': '#FF9C8A', '90+': '#FF6B57' };
+function renderAging(){
+  document.getElementById('agingBody').innerHTML = `<tr>${collData.aging.map(a => `
+    <td>
+      <div class="num" style="font-size:16px;font-weight:700;color:${AGING_COLOR[a.bucket]};">${fmtMoney(a.amount)}</div>
+      <div class="muted" style="font-size:11.5px;margin-top:2px;">${a.count} orden${a.count === 1 ? '' : 'es'}</div>
+    </td>`).join('')}</tr>`;
+}
+
+// Standard AR aging report export — "Reporte de aging exportable", approved suggestion.
+function exportAgingCsv(){
+  const header = ['Orden', 'Cliente', 'Producto', 'Facturado', 'Vence', 'Bucket', 'Días vencida', 'Saldo', 'Interés', 'Ganancia'];
+  const rows = collData.shipments.map(s => [
+    s.order_number, s.customer_trade_name || '', s.product_name_es || s.product_name || '',
+    fmtDateStr(s.invoice_sent_at), fmtDateStr(s.payment_due_date),
+    s.paid_at ? 'pagada' : (AGING_LABEL[s.aging_bucket] || ''),
+    s.days_overdue || 0, s.balance,
+    s.paid_at ? s.interest_amount : s.interest_so_far,
+    s.paid_at ? s.net_profit : s.profit_so_far,
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `collections-aging-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderStats(){
@@ -362,7 +403,7 @@ function renderOrders(){
   body.innerHTML = rows.map(s => {
     let statusBadge;
     if (s.paid_at) statusBadge = `<span class="payment-badge ok">Pagada</span>`;
-    else if (s.is_overdue) statusBadge = `<span class="payment-badge overdue">${s.days_overdue}d vencida</span>`;
+    else if (s.is_overdue) statusBadge = `<span class="payment-badge overdue" style="color:${AGING_COLOR[s.aging_bucket]};border-color:${AGING_COLOR[s.aging_bucket]}66;">${AGING_LABEL[s.aging_bucket]} — ${s.days_overdue}d</span>`;
     else statusBadge = `<span class="payment-badge due-soon">${s.days_since_invoice}d desde factura</span>`;
     const interest = s.paid_at ? s.interest_amount : s.interest_so_far;
     const profit = s.paid_at ? s.net_profit : s.profit_so_far;
@@ -430,10 +471,22 @@ function computeCollectionsAttentionItems(){
     const daysUntilDue = Math.round((dueDate - today) / 86400000);
     const label = `${s.order_number} — ${s.customer_trade_name || 'cliente'}`;
     if (s.is_overdue){
+      // Real ask: "aprobadas" — cadencia de mora escalada, tono suave -> firme -> urgente, no el
+      // mismo mensaje repetido. Copy es placeholder (confirmado explícitamente por el usuario: se
+      // define el texto real después), solo el TONO/estructura de la escalada es lo que se aprobó.
+      const tier = s.days_overdue <= 7 ? 'gentle' : s.days_overdue <= 20 ? 'firm' : 'urgent';
+      const tierMeta = {
+        gentle: { icon: '⏰', label: 'Recordatorio', color: 'var(--amber)', msg: `Recordatorio amistoso: tu pago de la orden ${s.order_number} venció hace ${s.days_overdue} día${s.days_overdue === 1 ? '' : 's'}. ¿Nos confirmas cuándo podrías realizarlo?` },
+        firm:   { icon: '📌', label: 'Segundo aviso', color: '#F0904D', msg: `Seguimos sin recibir el pago de la orden ${s.order_number}, vencido hace ${s.days_overdue} días. Por favor confírmanos una fecha de pago esta semana.` },
+        urgent: { icon: '🚨', label: 'Aviso urgente', color: 'var(--red)', msg: `El pago de la orden ${s.order_number} lleva ${s.days_overdue} días vencido. Necesitamos confirmación de pago de inmediato para mantener tu línea de crédito activa.` },
+      }[tier];
+      const reminderBtn = s.customer_email
+        ? `<button class="btn" style="border-color:${tierMeta.color};color:${tierMeta.color};" onclick="urgentQueueActionTaken=true;sendCollectionsReminder('${escapeHtml(s.customer_email)}','${escapeHtml(s.customer_contact_name || s.customer_trade_name || '').replace(/'/g, "\\'")}','${escapeHtml(tierMeta.msg).replace(/'/g, "\\'")}','${s.order_number}')">${tierMeta.icon} Enviar recordatorio</button>`
+        : '';
       items.push({
         orderNumber: label, order_number: s.order_number,
-        text: `⚠ Pago vencido hace ${s.days_overdue} día${s.days_overdue === 1 ? '' : 's'} — ${fmtMoney(s.balance)}`,
-        btn: `<button class="btn" style="background:var(--red);color:#fff;border-color:var(--red);" onclick="urgentQueueActionTaken=true;closeUrgentQueueThenOpenPayment('${s.customer_id}','${escapeHtml(s.customer_trade_name || '').replace(/'/g, "\\'")}')">Confirmar pago</button>`,
+        text: `${tierMeta.icon} ${tierMeta.label} — vencido hace ${s.days_overdue} día${s.days_overdue === 1 ? '' : 's'} — ${fmtMoney(s.balance)}`,
+        btn: reminderBtn + `<button class="btn" style="background:${tierMeta.color};color:#fff;border-color:${tierMeta.color};" onclick="urgentQueueActionTaken=true;closeUrgentQueueThenOpenPayment('${s.customer_id}','${escapeHtml(s.customer_trade_name || '').replace(/'/g, "\\'")}')">Confirmar pago</button>`,
       });
     } else if (daysUntilDue === 1){
       items.push({
@@ -444,6 +497,11 @@ function computeCollectionsAttentionItems(){
     }
   });
   return items;
+}
+function sendCollectionsReminder(email, contactName, message, orderNumber){
+  const subject = `${orderNumber} — Recordatorio de pago`;
+  const body = `Hola${contactName ? ' ' + contactName : ''},\n\n${message}\n\nGracias,\nBuenTrade Team`;
+  window.open(`https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: email, su: subject, body }).toString()}`, '_blank');
 }
 function closeUrgentQueueThenOpenPayment(customerId, customerName){
   document.getElementById('urgentQueueOverlay').style.display = 'none';
