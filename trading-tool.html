@@ -924,7 +924,43 @@ if (FIREBASE_READY) {
 </div>
 <style>@keyframes ttMenuPop{from{opacity:0;transform:translateY(-4px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}</style>
 
+<!-- Collections module (2026-09-08): "si el cliente me da un bid por una carga y no tiene cupo
+     debemos poder enviar un mensaje... o la otra opcion que liberes el cupo" — real action, not
+     just a warning, at the exact moment a new deal would exceed a customer's credit_limit. -->
+<div id="creditLimitOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;--ink:#0F1F33;--ink-soft:#64748B;">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;">Cupo excedido</div>
+    <div id="creditLimitMessage" style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:20px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <button onclick="creditLimitResolve('cancel')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="creditLimitResolve('collect')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Cobrar deuda pendiente</button>
+      <button onclick="creditLimitResolve('financials')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Pedir estados financieros</button>
+      <button onclick="creditLimitResolve('override')" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;">Crear de todas formas</button>
+    </div>
+  </div>
+</div>
+
 <script>
+let creditLimitResolveFn = null;
+function showCreditLimitOverlay(message){
+  document.getElementById('creditLimitMessage').textContent = message;
+  document.getElementById('creditLimitOverlay').style.display = 'flex';
+  return new Promise(resolve => { creditLimitResolveFn = resolve; });
+}
+function creditLimitResolve(choice){
+  document.getElementById('creditLimitOverlay').style.display = 'none';
+  if (creditLimitResolveFn) creditLimitResolveFn(choice);
+  creditLimitResolveFn = null;
+}
+// Placeholder copy — texto real pendiente de aprobación ("ponle cualquier mensaje despues lo
+// ponemos bien", confirmed explicitly), same as the rest of Collections' new customer-facing copy.
+function requestFinancialStatements(customerEmail, customerName){
+  if (!customerEmail){ alert('This customer has no email on file.'); return; }
+  const subject = 'BuenTrade — Solicitud de estados financieros';
+  const body = `Hola${customerName ? ' ' + customerName : ''},\n\nPara poder aumentar tu línea de crédito con BuenTrade, ¿nos podrías compartir tus estados financieros más recientes?\n\nGracias,\nBuenTrade Team`;
+  window.open(`https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: customerEmail, su: subject, body }).toString()}`, '_blank');
+}
+
 let ttConfirmResolveFn = null;
 function showTTConfirm(title, message, okLabel){
   document.getElementById('ttConfirmTitle').textContent = title;
@@ -2367,9 +2403,16 @@ async function negoSaveDefinitive(overrideCreditCheck){
     });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
-      const proceed = await showTTConfirm('Credit limit exceeded', e.data.message, 'Create anyway');
-      if (proceed) return negoSaveDefinitive(true);
+      const choice = await showCreditLimitOverlay(e.data.message);
       document.getElementById('negoMsg').textContent = '';
+      if (choice === 'override') return negoSaveDefinitive(true);
+      if (choice === 'collect'){ window.open('collections.html', '_blank'); return; }
+      if (choice === 'financials'){
+        let customerEmail = null;
+        try { const r = await callApi('customers-search', { ids: [negoOffer.customer_id] }); customerEmail = r.results && r.results[0] && r.results[0].email; } catch (err) {}
+        requestFinancialStatements(customerEmail, negoOffer.customer_name);
+        return;
+      }
       return;
     }
     alert('Error: ' + e.message);

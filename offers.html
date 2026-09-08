@@ -509,6 +509,21 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 </div>
+<!-- Collections module (2026-09-08): "si el cliente me da un bid por una carga y no tiene cupo
+     debemos poder enviar un mensaje... o la otra opcion que liberes el cupo" — real action, not
+     just a warning, at the exact moment a new deal would exceed a customer's credit_limit. -->
+<div id="creditLimitOverlay" class="menu-overlay" style="display:none;">
+  <div class="confirm-box">
+    <div class="confirm-title">Cupo excedido</div>
+    <div class="confirm-message" id="creditLimitMessage"></div>
+    <div class="confirm-actions" style="flex-wrap:wrap;">
+      <button class="btn secondary" onclick="creditLimitResolve('cancel')">Cancel</button>
+      <button class="btn secondary" onclick="creditLimitResolve('collect')">Cobrar deuda pendiente</button>
+      <button class="btn secondary" onclick="creditLimitResolve('financials')">Pedir estados financieros</button>
+      <button class="btn win" onclick="creditLimitResolve('override')">Crear de todas formas</button>
+    </div>
+  </div>
+</div>
 <div id="ttOverlay" class="tt-overlay">
   <div class="tt-overlay-head">
     <div style="display:flex;align-items:center;gap:10px;min-width:0;">
@@ -947,8 +962,15 @@ async function markWon(id, overrideCreditCheck){
     result = await callApi('sent-offers-mark-won', { actor: currentActor(), sent_offer_id: id, override_credit_check: !!overrideCreditCheck, won_idempotency_key: wonIdempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
-      const proceed = await showConfirm('Credit limit exceeded', e.data.message, 'Create anyway');
-      if (proceed) return markWon(id, true);
+      const choice = await showCreditLimitOverlay(e.data.message);
+      if (choice === 'override') return markWon(id, true);
+      if (choice === 'collect'){ window.open('collections.html', '_blank'); return; }
+      if (choice === 'financials'){
+        let customerEmail = null;
+        try { const r = await callApi('customers-search', { ids: [o.customer_id] }); customerEmail = r.results && r.results[0] && r.results[0].email; } catch (err) {}
+        requestFinancialStatements(customerEmail, o.customer_name);
+        return;
+      }
       return;
     }
     alert('Error marking won: ' + e.message);
@@ -1121,6 +1143,28 @@ function confirmResolve(val){
   document.getElementById('confirmOverlay').style.display = 'none';
   if (confirmResolveFn) confirmResolveFn(val);
   confirmResolveFn = null;
+}
+
+let creditLimitResolveFn = null;
+function showCreditLimitOverlay(message){
+  document.getElementById('creditLimitMessage').textContent = message;
+  document.getElementById('creditLimitOverlay').style.display = 'flex';
+  return new Promise(resolve => { creditLimitResolveFn = resolve; });
+}
+function creditLimitResolve(choice){
+  document.getElementById('creditLimitOverlay').style.display = 'none';
+  if (creditLimitResolveFn) creditLimitResolveFn(choice);
+  creditLimitResolveFn = null;
+}
+// Real ask 2026-09-08: "mandar un mensaje de buentrade diciendo dame los estados financieros para
+// que pidamos mas cupo." Placeholder copy — texto real pendiente de aprobación ("ponle cualquier
+// mensaje despues lo ponemos bien", confirmed explicitly), same as the rest of Collections' new
+// customer-facing copy.
+function requestFinancialStatements(customerEmail, customerName){
+  if (!customerEmail){ alert('This customer has no email on file.'); return; }
+  const subject = 'BuenTrade — Solicitud de estados financieros';
+  const body = `Hola${customerName ? ' ' + customerName : ''},\n\nPara poder aumentar tu línea de crédito con BuenTrade, ¿nos podrías compartir tus estados financieros más recientes?\n\nGracias,\nBuenTrade Team`;
+  window.open(gmailComposeUrl([customerEmail], subject, body), '_blank');
 }
 
 // ============ PDF EXPORT (PO / SO / FO) ============
