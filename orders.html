@@ -172,6 +172,7 @@
   .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
   .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  .payment-badge.active{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   /* Real ask 2026-09-08: "que este blinking el que falta por accion" — the compact table row still
      needs to show, at a glance, the single next actionable step (same one that gets .blink-now
      inside the full timeline in the detail modal). Reuses the exact mstopPulse keyframes already
@@ -1029,11 +1030,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
 // esta y que le falta?" — the full timeline answers this, but only once you actually read every
 // circle in the row. Two plain-language badges answer it at a glance instead: where the load
 // physically IS right now, and how many real pending actions are on this card.
+// Real ask 2026-09-08: "veo que faltan colores" — every non-delivered stage used to render the
+// exact same amber badge, indistinguishable from each other and from the Next Action pill sitting
+// right next to it in the new compact table row. Reuses this file's own existing color semantics,
+// nothing invented: amber = action needed now (same as .u-mini.now), blue-bright = in progress
+// (same as .u-main.current), green = done (same as .u-main.done/.payment-badge.ok).
 function currentStageBadge(o){
   const stage = o.load_status || 'pending_pickup';
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === stage);
   const label = stage === 'pending_pickup' ? 'Confirm Load' : LOAD_STAGES[stageIdx].label;
-  const cls = stage === 'delivered' ? 'ok' : 'due-soon';
+  const cls = stage === 'delivered' ? 'ok' : stage === 'pending_pickup' ? 'due-soon' : 'active';
   return `<span class="payment-badge ${cls}" style="display:inline-flex;align-items:center;gap:5px;">📍 ${escapeHtml(label)}</span>`;
 }
 function countPendingActions(o){
