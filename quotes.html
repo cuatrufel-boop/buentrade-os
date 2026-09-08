@@ -2550,11 +2550,8 @@ function rqPlantFieldsHtml(p){
 // Purchase-price, with a SEPARATE "Offer list — highest to lowest" section below repeating the
 // same plant, cost, and delivery date just to add the sort order and the sale-price/total figures
 // — folded directly in here instead of keeping two lists of the same plants in sync.
-function rqPlantRowHtml(p, hasDeliveryDate){
+function rqPlantRowHtml(p, hasDeliveryDate, kind){
   const showPriceRow = hasDeliveryDate;
-  const avatarHtml = (p.logo_url || p.logo_url_dark)
-    ? `<div class="rq-plant-avatar rq-plant-avatar-logo"><img src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt=""></div>`
-    : `<div class="rq-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
   const calc = rqCalcRow(p);
   const files = calc ? rqFindProductFilesFor(p) : {};
   // Real simplification 2026-09-01, explicit ask: this row's own "Cost $X/lb" sub-label used to
@@ -2581,46 +2578,42 @@ function rqPlantRowHtml(p, hasDeliveryDate){
     ? `<span class="pkg-tag stale">Expired · ${escapeHtml(rqFmtDate(p.rqPriceDate) || '')}</span>`
     : '';
   const fileButtonsHtml = (files.photo_url || files.spec_url) ? `
-        <div style="display:flex;gap:6px;flex-shrink:0;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${files.photo_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.photo_url}','Foto-${p.name.replace(/[^a-z0-9]+/gi,'-')}', this)">📋 Foto</button>` : ''}
           ${files.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:11px;" onclick="rqCopyPhotoToClipboard('${files.spec_url}','Ficha-tecnica-${p.name.replace(/[^a-z0-9]+/gi,'-')}.pdf', this)">📋 Ficha</button>` : ''}
         </div>` : '';
-  const saleInfoHtml = calc ? `
-        <div class="rq-plant-sale">
-          <span class="rq-plant-sale-price">$${calc.salePerLb.toFixed(4)}/lb</span>
-          <span class="rq-plant-sale-total">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
-        </div>` : '';
+  const saleHtml = calc
+    ? `<span class="num">$${calc.salePerLb.toFixed(4)}/lb</span><span class="muted" style="display:block;font-size:10.5px;">Total $${calc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</span>`
+    : '<span class="muted">—</span>';
   // Same per-plant send trigger as the Dashboard's Ready rows (qSendConfirmedPlantOffer) — only
   // shows once this plant has both a purchase price and a trader-confirmed Selling price.
   const sendConfirmedBtns = calc ? `
         <button type="button" class="rq-customer-bulk-btn email" style="padding:7px 10px;" title="Email this plant's offer" onclick="qSendConfirmedPlantOffer('${p.rqProductId}','${p.id}','email')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
         <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer" onclick="qSendConfirmedPlantOffer('${p.rqProductId}','${p.id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : '';
+  const plantCellHtml = `<span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="cursor:pointer;" onclick="rqToggleCalculator('${p.id}')">${escapeHtml(p.name)}</span>${calc ? `<span class="muted" style="display:block;font-size:10.5px;">Cost $${calc.costPerLb.toFixed(4)}/lb</span>` : ''}`;
+  const trStyle = `display:${showPriceRow ? 'table-row' : 'none'};`;
   // Real bug fixed, confirmed live with a screenshot: this row used to be one single flex-wrap
-  // line (avatar, name, tags, sale info, action button all siblings) — fine in the wide card this
-  // was designed for (Pending Quotes' own full-width list), but crammed into the ~380px Building
-  // Quote sidebar the wrapped items collided into each other's space instead of stacking cleanly,
-  // reading as literally overlapping text. Split into two explicit rows (identity+tags on top,
-  // price/action on bottom — see .rq-plant-row in the CSS) so there's no ambiguous wrapping left
-  // to get wrong at any width, narrow sidebar included.
-  return `
-      <div class="pkg-row rq-plant-row" id="rq_price_row_${p.id}" style="display:${showPriceRow ? 'flex' : 'none'};">
-        <div class="rq-plant-row-top">
-          ${avatarHtml}
-          <div class="pkg-plant-info">
-            <div class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" onclick="rqToggleCalculator('${p.id}')">${escapeHtml(p.name)}</div>
-            ${p.rqPrice ? `<span class="pkg-tag price" style="cursor:pointer;" title="View Quote" onclick="rqToggleCalculator('${p.id}')">$${Number(p.rqPrice).toFixed(4)}/lb</span>` : ''}
-            ${staleTagHtml}
-            ${calc ? `<span class="pkg-plant-sub">Cost $${calc.costPerLb.toFixed(4)}/lb</span>` : ''}
-          </div>
-        </div>
-        <div class="rq-plant-row-bottom">
-          ${fileButtonsHtml}
-          ${saleInfoHtml}
-          ${sendConfirmedBtns}
-          <div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div>
-        </div>
-      </div>
-      `;
+  // line (avatar, name, tags, sale info, action button all siblings) — collided at the ~380px
+  // Building Quote sidebar width. Real ask 2026-09-08 ("no quiero mas esa tabla de building...
+  // cambia lo que hay por esta nueva"): now a real table row instead, same fix's own concern
+  // (narrow-width collisions) addressed by keeping columns to a minimum (Plant/Price/Sale/Actions)
+  // rather than by stacking two flex lines.
+  if (kind === 'ready') return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
+      <td>${plantCellHtml}</td>
+      <td class="num">${p.rqPrice ? `<span class="pkg-tag price" style="cursor:pointer;" title="View Quote" onclick="rqToggleCalculator('${p.id}')">$${Number(p.rqPrice).toFixed(4)}/lb</span>` : '<span class="muted">—</span>'}</td>
+      <td>${saleHtml}</td>
+      <td><div style="display:flex;flex-direction:column;gap:6px;">${sendConfirmedBtns}${fileButtonsHtml}</div></td>
+    </tr>`;
+  if (kind === 'expired') return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
+      <td>${plantCellHtml}</td>
+      <td class="num">${staleTagHtml}</td>
+      <td><div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div></td>
+    </tr>`;
+  // waiting
+  return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
+      <td>${plantCellHtml}</td>
+      <td><div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div></td>
+    </tr>`;
 }
 
 // Real redesign, multi-variant quotes: used to be one flat list under one global product spec.
@@ -2687,10 +2680,19 @@ function renderRqPlants(){
       .sort((a, b) => (rqCalcRow(b)?.salePerLb || 0) - (rqCalcRow(a)?.salePerLb || 0));
     const expiredPlants = groupPlants.filter(p => rqRowReadiness(p) === 1);
     const waitingPlants = groupPlants.filter(p => rqRowReadiness(p) === 2);
-    const bucketHtml = (list, cls, title, sub) => list.length ? `
+    // Real ask 2026-09-08: "no quiero mas esa tabla de building... todas las updating quedan en
+    // una tabla, ready to send en otra, y expired en otra" — same conversion as the Dashboard,
+    // applied here per variant (the ✕ Remove action is scoped to one variant's own plants, a real
+    // action worth keeping grouped — unlike the Dashboard sweep, which had nothing equivalent to
+    // lose by flattening across products entirely). Kept to Plant/Price/Sale/Actions, no Product
+    // column — the variant's own group header already names the product once for every row here.
+    const bucketHtml = (list, cls, title, sub, kind, headCells) => list.length ? `
       <div class="qbucket ${cls}">
         <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">${title}</span>${sub ? `<span class="qbucket-sub">${sub}</span>` : ''}</div>
-        <div class="qbucket-rows">${list.map(p => rqPlantRowHtml(p, hasDeliveryDate)).join('')}</div>
+        <div class="table-scroll"><table>
+          <thead><tr>${headCells.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>${list.map(p => rqPlantRowHtml(p, hasDeliveryDate, kind)).join('')}</tbody>
+        </table></div>
       </div>` : '';
     return `
       <div class="pending-group" data-product-group="${pid}">
@@ -2702,9 +2704,9 @@ function renderRqPlants(){
           </div>
         </div>
         ${groupPlants.length
-          ? bucketHtml(readyPlants, 'qbucket-ready', 'Ready to send', '— pick one and confirm')
-            + bucketHtml(expiredPlants, 'qbucket-expired', 'Expired', '— your call')
-            + bucketHtml(waitingPlants, 'qbucket-waiting', 'Updating', '')
+          ? bucketHtml(readyPlants, 'qbucket-ready', 'Ready to send', '— pick one and confirm', 'ready', ['Plant', 'Price', 'Sale', ''])
+            + bucketHtml(expiredPlants, 'qbucket-expired', 'Expired', '— your call', 'expired', ['Plant', 'Price', ''])
+            + bucketHtml(waitingPlants, 'qbucket-waiting', 'Updating', '', 'waiting', ['Plant', ''])
           : `<div class="empty" style="padding:12px;">No plant has a current price for this variant yet — check Pending Quotes.</div>`}
       </div>`;
   }).join('');
