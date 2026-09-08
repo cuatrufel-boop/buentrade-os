@@ -746,24 +746,17 @@ function renderOffers(){
       <tr id="history_row_${o.id}" style="display:none;"><td colspan="5" style="padding:0 0 12px;"><div id="history_panel_${o.id}"></div></td></tr>`;
   }
 
-  // A live/pending offer — one row per plant quoting it. "bloinking la que tiene bid": the single
-  // row with a real bid/counter in (offerIsHot) pulses green via .pkg-tag.hot, same hotPulse
-  // animation this file already uses everywhere else for the exact same state.
-  // Real ask 2026-09-08: "en status debe estar normal si se envio y blinking si hay un bid" —
-  // just two visual states now: normal/muted once sent, pulsing green only once a real bid/counter
-  // is in. The age text itself still says "no response" once it's actually been a while (still
-  // real, useful info), it just no longer gets its own red "cold" color — that signal already
-  // lives one level up, in the group's own "N going cold" badge.
+  // A live/pending offer — one row per plant quoting it. Real ask 2026-09-08 (twice, explicit):
+  // "en status debe decir sent o bid blinking" — exactly two words, nothing else: "Sent" normal,
+  // "Bid" pulsing green (.pkg-tag hot, same hotPulse animation this file already uses everywhere
+  // else for this exact state) the moment a real bid/counter is in (offerIsHot). No day-count, no
+  // "no response" wording — that finer detail was a real ask (1), not this one; the group's own
+  // "N going cold" badge already carries the aging signal.
   function renderOpenRow(o){
     const hot = offerIsHot(o);
-    const cold = offerIsCold(o);
-    const ageDays = offerAgeDays(o.sent_at);
-    const ageLabel = hot ? '🔥 Bid In'
-      : cold ? `${ageDays}d, no response`
-      : (ageDays != null ? `sent ${ageDays === 0 ? 'today' : ageDays + 'd ago'}` : '');
     const statusHtml = hot
-      ? `<span class="pkg-tag hot">${ageLabel}</span>`
-      : `<span class="pkg-asof">${escapeHtml(ageLabel)}</span>`;
+      ? `<span class="pkg-tag hot">Bid</span>`
+      : `<span class="pkg-asof">Sent</span>`;
     return `<tr>
         <td>${escapeHtml(o.product_name || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
