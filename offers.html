@@ -26,6 +26,7 @@
     --ink-soft:rgba(255,255,255,.55);
     --red:#C4432E;
     --green:#0F8A5F;
+    --amber:#FFC876;
     --radius:8px;
   }
   *{box-sizing:border-box;}
@@ -166,15 +167,15 @@
   .pkg-tag.won{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);}
   .pkg-tag.lost{background:transparent;color:var(--ink-soft);border-color:var(--line);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
-  /* One button, two states — no separate "🔥 negotiating" pill anymore. Calm blue when it's just
-     a sent offer waiting; the same slot switches to a pulsing green the moment a real bid/counter
-     lands (negotiation_log gets its first entry), so the urgency lives on the one thing you'd
-     click anyway instead of a second element next to it. */
-  .pkg-trigger-btn{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#EDF4FF,#E0EDFE);color:#1656B0;border:1px solid #C8DCF7;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .1s,color .15s,border-color .15s;}
-  .pkg-trigger-btn svg{flex-shrink:0;}
-  .pkg-trigger-btn:hover{background:linear-gradient(180deg,#2E78E8,#1656B0);color:#fff;border-color:#1656B0;box-shadow:0 4px 10px rgba(30,106,219,.28);transform:translateY(-1px);}
-  .pkg-trigger-btn.hot{background:linear-gradient(180deg,#E3F6EC,#D2F0E1);color:#0F8A5F;border-color:rgba(15,138,95,.35);animation:hotPulse 1.4s ease-in-out infinite;}
-  .pkg-trigger-btn.hot:hover{background:linear-gradient(180deg,#0F8A5F,#0B6B48);color:#fff;border-color:#0B6B48;}
+  /* Real ask 2026-09-08: "el boton de negotiate solo diga QT en un circulo azul... igual que lo
+     que ya hicimos" — same circular QT button as orders.html's openOrderQT link (36px circle,
+     2px border, 10px bold mono-weight label), replacing the old pill+label button below. Hot
+     (a bid/counter is in) still reuses this file's own established green hotPulse convention,
+     just recolors this circle instead of a separate pill. */
+  .qt-circle{cursor:pointer;flex-shrink:0;width:36px;height:36px;border-radius:50%;border:2px solid var(--blue);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:.02em;transition:background .15s;}
+  .qt-circle:hover{background:var(--blue-light);}
+  .qt-circle.hot{border-color:var(--green);color:#3FCB7E;animation:hotPulse 1.4s ease-in-out infinite;}
+  .qt-circle.hot:hover{background:rgba(15,138,95,.14);}
   /* Real ask: customer-first drill-down (find Murgati, then her Sirloin, then the plants quoting
      it), not a flat list of every offer. A customer's card collapses to one line once you're not
      actively looking at it — opens on its own when it has a live bid, or when the search box
@@ -281,9 +282,9 @@
   .wa-btn svg{fill:currentColor;}
   .wa-btn.outline{background:var(--card);color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
   .wa-btn.outline:hover{background:rgba(29,168,81,.18);box-shadow:none;transform:none;}
-  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;border:1px solid transparent;}
-  .payment-badge.ok{background:transparent;color:var(--ink-soft);border-color:var(--line);}
-  .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
+  .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
+  .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
 </style>
 </head>
@@ -767,7 +768,7 @@ function renderOffers(){
           <span class="pkg-tag price">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</span>
           <span class="pkg-asof${cold ? ' cold' : ''}">${escapeHtml(ageLabel)}</span>
         </div>
-        <button class="pkg-trigger-btn${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Negotiate</button>
+        <div class="qt-circle${hot ? ' hot' : ''}" style="margin-left:auto;" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div>
         <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div id="history_row_${o.id}" style="display:none;padding:0 0 8px;"><div id="history_panel_${o.id}"></div></div>`;
