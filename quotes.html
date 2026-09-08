@@ -990,7 +990,17 @@ auth.onAuthStateChanged(user => {
         </div>
       </div>
 
-      <div id="rq_plant_rows" class="pkg-table-wrap" style="margin-top:10px;"></div>
+      <!-- Real ask 2026-09-08 ("no quiero la tabla building quiero la de collection"): one flat
+           table, same shape as collections.html's own (one <thead>, one <tbody>, no repeated
+           per-variant header/table like this used to have) — a Product column identifies which
+           variant each row belongs to, exactly like the Ready/Expired/Updating tables below
+           already do, instead of a separate mini-table per variant. -->
+      <div class="table-scroll" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>Product</th><th>Plant</th><th>Price</th><th>Sale</th><th></th></tr></thead>
+          <tbody id="rq_plant_rows"></tbody>
+        </table>
+      </div>
       <!-- Explicit ask 2026-09-04 ("algo bonito... no asi como si fuera un error"): the resting
            state of a brand-new quote is normal, not a failure — a plain grey sentence read like a
            warning banner. Same wordmark treatment as the header logo, on its own tinted panel,
@@ -2589,9 +2599,14 @@ function rqPlantFieldsHtml(p){
 // Purchase-price, with a SEPARATE "Offer list — highest to lowest" section below repeating the
 // same plant, cost, and delivery date just to add the sort order and the sale-price/total figures
 // — folded directly in here instead of keeping two lists of the same plants in sync.
-function rqPlantRowHtml(p, hasDeliveryDate){
+function rqPlantRowHtml(p, hasDeliveryDate, specText){
   const showPriceRow = hasDeliveryDate;
   const calc = rqCalcRow(p);
+  // Real ask 2026-09-08 ("no quiero la tabla building quiero la de collection"): one flat table
+  // (see renderRqPlants) means the per-variant group header/✕ Remove this used to sit under is
+  // gone — the Product cell now carries the variant's name AND its own remove action, same small
+  // transparent-pill pattern the Updating table's own ✕ Off-Spec already uses.
+  const productCellHtml = `<span class="pending-group-title-link" style="font-size:13px;">${escapeHtml(specText)}</span> <button type="button" class="qbucket-waiting-row-decline" title="Remove this variant from the quote" onclick="rqRemoveVariantFromQuote('${p.rqProductId}')">✕ Remove</button>`;
   const files = calc ? rqFindProductFilesFor(p) : {};
   // Real simplification 2026-09-01, explicit ask: this row's own "Cost $X/lb" sub-label used to
   // append " — Delivery [date]" here too — but rqDeliveryDates is one shared list for the whole
@@ -2634,9 +2649,9 @@ function rqPlantRowHtml(p, hasDeliveryDate){
   const isReady = !isStale && p.rqPrice != null;
   // Real ask 2026-09-08 ("no sobre esa tabla sino sobre el sistema nuevo de pantallas
   // transparentes"): one row shape for every plant regardless of status — a real table row
-  // (Plant/Price/Sale/Actions), same as before, just no longer split into 3 separate bucketed
-  // tables (see renderRqPlants). Price/Actions cells just show different content depending on
-  // whether this plant is ready, expired, or still waiting on a price.
+  // (Product/Plant/Price/Sale/Actions), same as before, just no longer split into 3 separate
+  // bucketed tables (see renderRqPlants). Price/Actions cells just show different content
+  // depending on whether this plant is ready, expired, or still waiting on a price.
   const priceCell = isReady
     ? `<span class="pkg-tag price" style="cursor:pointer;" title="View Quote" onclick="rqToggleCalculator('${p.id}')">$${Number(p.rqPrice).toFixed(4)}/lb</span>`
     : (isStale ? staleTagHtml : '<span class="muted">—</span>');
@@ -2644,6 +2659,7 @@ function rqPlantRowHtml(p, hasDeliveryDate){
     ? `<div style="display:flex;flex-direction:column;gap:6px;">${sendConfirmedBtns}${fileButtonsHtml}</div>`
     : `<div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div>`;
   return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
+      <td>${productCellHtml}</td>
       <td>${plantCellHtml}</td>
       <td class="num">${priceCell}</td>
       <td>${saleHtml}</td>
@@ -2651,12 +2667,12 @@ function rqPlantRowHtml(p, hasDeliveryDate){
     </tr>`;
 }
 
-// Real redesign, multi-variant quotes: used to be one flat list under one global product spec.
-// Now rqSelectedPlants can hold plants from several different variants at once (each plant already
-// carries its own rqProductId — see rqFetchPlantLinksForProduct), so this groups them back into one
-// card per variant, in the order they were added to rqQuoteProductIds — same "grouped search
-// results" shape the results panel itself uses, so the building quote reads as a direct extension
-// of what was just picked, not a different list.
+// Real redesign 2026-09-08 ("no quiero la tabla building quiero la de collection... quiero el
+// producto listo arriba. abajo el expired y abajo el updating"): one flat table across every
+// variant, same shape as collections.html's own tables — a Product column identifies which
+// variant each row belongs to (same pattern the Ready/Expired/Updating tables below already use),
+// sorted GLOBALLY by real readiness (every ready plant first, across every variant, then every
+// expired one, then every still-waiting one), not grouped per variant with its own mini-table.
 function renderRqPlants(){
   const container = document.getElementById('rq_plant_rows');
   const hasProduct = rqQuoteProductIds.length > 0;
@@ -2687,54 +2703,33 @@ function renderRqPlants(){
   // rqToggleCalculator), never inside a per-plant row — so rebuilding this whole list on every
   // render can no longer detach/reload a live iframe. A plain full rebuild is safe.
   const hasDeliveryDate = rqDeliveryDates.length > 0;
-  container.innerHTML = rqQuoteProductIds.map(pid => {
+  const specTextFor = pid => {
     const prod = products.find(p => p.id === pid);
-    const specText = prod ? (prod.full_name_en || prod.name_en || prod.name) : '(removed from catalog)';
-    // Highest to lowest sale price once a plant's calculator has actually run (rqCalcRow), same
-    // ranking as before — just scoped to this one variant's own plants instead of the whole list.
-    // Real bug fixed, explicit ask ("los que tiene precio listo arriba no?"): the old sort ranked
-    // purely by computed sale price (rqCalcRow), which only exists once a plant's calculator has
-    // actually been opened THIS session — a plant with a real, current price on file that nobody's
-    // clicked into yet sorted BELOW one with barely any real data at all just because that one's
-    // calculator happened to get opened first. Rank by real readiness first (priced-and-current >
-    // stale > missing), matching what rqPricedPlantsSorted/the send flow actually treat as ready —
-    // then by computed sale price only to break ties within the same tier.
-    const rqRowReadiness = p => {
-      const missing = p.rqPrice == null;
-      if (missing) return 2;
-      const stale = (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
-      return stale ? 1 : 0;
-    };
-    const groupPlants = rqSelectedPlants.filter(p => p.rqProductId === pid);
-    // Real ask 2026-09-08 ("building sigue funcionando... pero no sobre esa tabla sino sobre el
-    // sistema nuevo de pantallas transparentes"): Building had grown its own Ready/Expired/
-    // Updating 3-bucket breakdown (matching the Dashboard sweep's), which for what's usually a
-    // handful of plants on one variant was more table than the content needed. Back to ONE simple
-    // transparent table per variant (same .pkg-tag pills, same hairline dividers, same real
-    // actions — View Quote, Update Price, confirmed-send) — readiness still orders the rows
-    // (ready first, then expired, then waiting), it's just not split into separate headers.
-    const groupPlantsSorted = [...groupPlants].sort((a, b) => {
-      const ra = rqRowReadiness(a), rb = rqRowReadiness(b);
-      if (ra !== rb) return ra - rb;
-      return (rqCalcRow(b)?.salePerLb || 0) - (rqCalcRow(a)?.salePerLb || 0);
-    });
-    const tableHtml = groupPlantsSorted.length ? `
-      <div class="table-scroll"><table>
-        <thead><tr><th>Plant</th><th>Price</th><th>Sale</th><th></th></tr></thead>
-        <tbody>${groupPlantsSorted.map(p => rqPlantRowHtml(p, hasDeliveryDate)).join('')}</tbody>
-      </table></div>` : '';
-    return `
-      <div class="pending-group" data-product-group="${pid}">
-        <div class="pending-group-head">
-          <span class="pending-group-title">${escapeHtml(specText)}</span>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span class="pending-group-count">${groupPlants.length} plant${groupPlants.length === 1 ? '' : 's'}</span>
-            <button type="button" class="btn danger" title="Remove this variant from the quote" onclick="rqRemoveVariantFromQuote('${pid}')">✕ Remove</button>
-          </div>
-        </div>
-        ${groupPlants.length ? tableHtml : `<div class="empty" style="padding:12px;">No plant has a current price for this variant yet — check Pending Quotes.</div>`}
-      </div>`;
-  }).join('');
+    return prod ? (prod.full_name_en || prod.name_en || prod.name) : '(removed from catalog)';
+  };
+  // Highest to lowest sale price once a plant's calculator has actually run (rqCalcRow), same
+  // ranking as before. Real bug fixed, explicit ask ("los que tiene precio listo arriba no?"): the
+  // old sort ranked purely by computed sale price (rqCalcRow), which only exists once a plant's
+  // calculator has actually been opened THIS session — a plant with a real, current price on file
+  // that nobody's clicked into yet sorted BELOW one with barely any real data at all just because
+  // that one's calculator happened to get opened first. Rank by real readiness first
+  // (priced-and-current > stale > missing) — real ask 2026-09-08 ("quiero el producto listo
+  // arriba. abajo el expired y abajo el updating"), GLOBALLY across every variant, not scoped per
+  // product — then by computed sale price only to break ties within the same tier.
+  const rqRowReadiness = p => {
+    const missing = p.rqPrice == null;
+    if (missing) return 2;
+    const stale = (rqPriceAgeDays(p.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
+    return stale ? 1 : 0;
+  };
+  const allPlantsSorted = [...rqSelectedPlants].sort((a, b) => {
+    const ra = rqRowReadiness(a), rb = rqRowReadiness(b);
+    if (ra !== rb) return ra - rb;
+    return (rqCalcRow(b)?.salePerLb || 0) - (rqCalcRow(a)?.salePerLb || 0);
+  });
+  container.innerHTML = allPlantsSorted.length
+    ? allPlantsSorted.map(p => rqPlantRowHtml(p, hasDeliveryDate, specTextFor(p.rqProductId))).join('')
+    : '';
   // The moment there's at least one real offer, show who it can go to — no extra click needed,
   // this is just information (nothing gets sent until a per-customer button is pressed). Only
   // fetched once per exact set of variants to avoid re-querying every poll tick.
