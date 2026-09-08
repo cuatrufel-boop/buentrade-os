@@ -1419,13 +1419,17 @@ const RQ_EMPTY_MSG = {
   expired: 'Nothing expired.',
   updating: 'Nothing waiting on a price.',
 };
+// Real ask 2026-09-08 ("updating solo si le doy al boton arriba de resto no lo quiero ver"): none
+// of the 3 sweep tables show by default any more — Building is the only thing visible until the
+// trader clicks a specific stat card. Clicking one shows exactly that table; clicking it again (or
+// the hero "Products In Progress" card) hides it, back to just Building.
 function rqApplyStatFilterVisibility(){
   const apply = (id, kind) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.style.display = (!rqStatFilter || rqStatFilter === kind) ? '' : 'none';
+    el.style.display = (rqStatFilter === kind) ? '' : 'none';
     if (rqBucketCounts[kind] === 0){
-      el.innerHTML = (kind === rqStatFilter || (!rqStatFilter && kind === 'updating'))
+      el.innerHTML = (kind === rqStatFilter)
         ? `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>${RQ_EMPTY_MSG[kind]}</div></div>`
         : '';
     }
@@ -1653,11 +1657,12 @@ async function loadPendingPrices(){
   if (!qPendingRows.length){
     rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
     renderRqStats();
+    // Real ask 2026-09-08 ("de resto no lo quiero ver"): none of the 3 show by default at all
+    // any more, empty or not — rqApplyStatFilterVisibility below already leaves every bucket
+    // blank unless the trader clicked its own stat card, so there's no separate "nothing tracked
+    // anywhere" message to special-case here either.
     readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = '';
     rqApplyStatFilterVisibility();
-    // Genuinely nothing tracked anywhere (not just one empty bucket) — worth a more specific
-    // message than 3 blank sections, shown in the default "everything" view only.
-    if (!rqStatFilter) updatingList.innerHTML = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing pending — every plant is priced and sent. Search a cut above to build a new quote.</div></div>`;
     return;
   }
 
