@@ -460,10 +460,15 @@
   .stat-card{
     background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));
     border:1px solid rgba(232,181,76,.55); border-radius:12px;
-    box-shadow:0 3px 12px -3px rgba(232,181,76,.4), inset 0 1px 0 rgba(255,255,255,.1);
     padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:box-shadow .15s,transform .15s;
+    box-shadow:0 3px 12px -3px rgba(232,181,76,.4), inset 0 1px 0 rgba(255,255,255,.1);
+    cursor:pointer;
   }
   .stat-card:hover{box-shadow:0 6px 20px -4px rgba(232,181,76,.5), inset 0 1px 0 rgba(255,255,255,.12); transform:translateY(-1px);}
+  /* Real ask 2026-09-08 ("esos cuadros amarillos que me traigan cada categoria"): these are now
+     the filter buttons for the sweep tables below (rqSetStatFilter) — the active one needs to
+     read as pressed/selected, not just hovered. */
+  .stat-card.active{background:linear-gradient(135deg, rgba(232,181,76,.55), rgba(232,181,76,.18)); border-color:#E8B54C; box-shadow:0 0 0 2px rgba(232,181,76,.35), 0 6px 20px -4px rgba(232,181,76,.55), inset 0 1px 0 rgba(255,255,255,.15);}
   .stat-icon{width:38px;height:38px;border-radius:10px;background:rgba(232,181,76,.15);border:1.5px solid rgba(232,181,76,.55);color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .stat-icon svg{width:18px;height:18px;}
   .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
@@ -578,9 +583,10 @@
      Results live in a proper card grid on the left; the building quote is a floating glass panel
      on the right that stays in view while scrolling and visually overlaps the hero's bottom edge —
      the one deliberate "bold" move here, everything else stays quiet around it. ---- */
-  /* Real redesign 2026-09-08, explicit ask: Search/Building/Ready to Send/Expired/Updating are now
-     5 separate full-width tabs (setRqSubTab) instead of a 2-column grid (results | 380px Building
-     sidebar) — each tab shows exactly one clean table/panel, never two things side by side. */
+  /* Real redesign 2026-09-08, explicit ask ("todo facil en la misma pantalla"): one continuous
+     page, Building's tray always visible up top and the Ready/Expired/Updating sweep always
+     visible below it (filtered via the stat cards, see rqSetStatFilter) — no 2-column grid, no
+     tabs to click through. */
   .rq-board{padding-top:18px;position:relative;z-index:2;}
   /* Explicit ask 2026-09-04 ("todo el dashboard dale ese color azul"): same tinted panel the
      empty Building Quote card already uses, extended to the whole results/Dashboard column —
@@ -961,77 +967,51 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 
-  <!-- Real redesign 2026-09-08, explicit ask ("no quiero la lista de pending junto con la tabla
-       quiero una tabla transparente con el nuevo diseno por cada una... los botones de arriba con
-       link una con search otra de building otra de ready to send. otra de expired otra de
-       updating"): 5 second-level tabs, same .tab-row/.tab-btn component the top-level Quotes/
-       Product Coverage/Quoting Tool tabs already use — each shows exactly one full-width clean
-       table, never two things side by side. All 5 feed from the same search (rqAddVariantToQuote)
-       and share the exact same actions (View Quote, Update Price, confirmed-send, Off-Spec) —
-       only which table is visible changes. -->
-  <div class="tab-row" id="rq_subtab_row">
-    <button type="button" class="tab-btn active" id="rqSubTabBtn_search" onclick="setRqSubTab('search')">Search</button>
-    <button type="button" class="tab-btn" id="rqSubTabBtn_building" onclick="setRqSubTab('building')">Building<span id="rqBuildingCount" class="tab-count" style="display:none;"></span></button>
-    <button type="button" class="tab-btn" id="rqSubTabBtn_ready" onclick="setRqSubTab('ready')">Ready to Send<span id="rqReadyCount" class="tab-count" style="display:none;"></span></button>
-    <button type="button" class="tab-btn" id="rqSubTabBtn_expired" onclick="setRqSubTab('expired')">Expired<span id="rqExpiredCount" class="tab-count" style="display:none;"></span></button>
-    <button type="button" class="tab-btn" id="rqSubTabBtn_updating" onclick="setRqSubTab('updating')">Updating<span id="rqUpdatingCount" class="tab-count" style="display:none;"></span></button>
-  </div>
-
+  <!-- Real redesign 2026-09-08, explicit ask ("todo facil en la misma pantalla que cambia segun
+       le filtras con el boton de arriba... building sigue funcionando... pero no sobre esa tabla
+       sino sobre el sistema nuevo de pantallas transparentes"): no second tab row — the existing
+       stat cards ABOVE (rq_stats_row: Updating/Expired/Ready) are themselves the filter buttons
+       now (see rqSetStatFilter), and Building stays permanently visible (it's the live "what am I
+       building right now" tray, not a switchable view) instead of living behind its own tab. -->
   <div class="rq-board" id="rq_board">
-    <!-- Search: the real search UI is the hero banner's trigger above (⌘K / click), which opens
-         the palette overlay and renders live into #rq_palette_results inside it — nothing on this
-         page ever rendered search results into a board container (see rqRenderGroupedResults).
-         This tab is just the resting/landing state. -->
-    <div id="qSubPanel_search" class="rq-results-col">
-      <div class="rq-results-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><div>Press <b>⌘K</b> (or click the search bar above) to find a product and add it to a quote.</div></div>
-    </div>
-
-    <div id="qSubPanel_building" class="rq-results-col" style="display:none;">
-      <div class="rq-tray-card" id="rq_card">
-        <div id="rq_summary_strip" style="display:none;border-bottom:1px solid rgba(255,255,255,.15);padding:0 0 12px;margin-bottom:14px;">
-          <div class="pending-group-head" style="margin-bottom:0;">
-            <div id="rq_spec_line" class="pending-group-title"></div>
-            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
-              <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
-                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-                  <div id="rq_date_chips" style="display:contents;"></div>
-                  <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
-                </div>
+    <div class="rq-tray-card" id="rq_card">
+      <div id="rq_summary_strip" style="display:none;border-bottom:1px solid rgba(255,255,255,.15);padding:0 0 12px;margin-bottom:14px;">
+        <div class="pending-group-head" style="margin-bottom:0;">
+          <div id="rq_spec_line" class="pending-group-title"></div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+            <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
+              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                <div id="rq_date_chips" style="display:contents;"></div>
+                <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
               </div>
-              <span id="rq_spec_count" class="pending-group-count" style="display:none;"></span>
             </div>
+            <span id="rq_spec_count" class="pending-group-count" style="display:none;"></span>
           </div>
         </div>
+      </div>
 
-        <div id="rq_plant_rows" class="pkg-table-wrap" style="margin-top:10px;"></div>
-        <!-- Explicit ask 2026-09-04 ("algo bonito... no asi como si fuera un error"): the resting
-             state of a brand-new quote is normal, not a failure — a plain grey sentence read like a
-             warning banner. Same wordmark treatment as the header logo, on its own tinted panel,
-             reads as "start here" instead of "something's wrong." -->
-        <div id="rq_empty" class="rq-tray-empty" style="display:none;">
-          <div class="rq-tray-empty-mark">Buen<span>Trade</span></div>
-          <div class="rq-tray-empty-text">Nothing added yet</div>
-          <div class="rq-tray-empty-sub">Search a cut above and click <b>+ Add</b> on the variant(s) you want.</div>
-        </div>
+      <div id="rq_plant_rows" class="pkg-table-wrap" style="margin-top:10px;"></div>
+      <!-- Explicit ask 2026-09-04 ("algo bonito... no asi como si fuera un error"): the resting
+           state of a brand-new quote is normal, not a failure — a plain grey sentence read like a
+           warning banner. Same wordmark treatment as the header logo, on its own tinted panel,
+           reads as "start here" instead of "something's wrong." -->
+      <div id="rq_empty" class="rq-tray-empty" style="display:none;">
+        <div class="rq-tray-empty-mark">Buen<span>Trade</span></div>
+        <div class="rq-tray-empty-text">Nothing added yet</div>
+        <div class="rq-tray-empty-sub">Search a cut above and click <b>+ Add</b> on the variant(s) you want.</div>
+      </div>
 
-        <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
-            <div style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
-          </div>
-          <div id="rq_customers_list"></div>
+      <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
+          <div style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
         </div>
+        <div id="rq_customers_list"></div>
       </div>
     </div>
 
-    <div id="qSubPanel_ready" class="rq-results-col" style="display:none;">
+    <div class="rq-results-col" style="padding-top:28px;">
       <div id="rq_ready_results"></div>
-    </div>
-
-    <div id="qSubPanel_expired" class="rq-results-col" style="display:none;">
       <div id="rq_expired_results"></div>
-    </div>
-
-    <div id="qSubPanel_updating" class="rq-results-col" style="display:none;">
       <div id="rq_updating_results"></div>
     </div>
   </div>
@@ -1357,16 +1337,9 @@ function rqQuickPick(name, productId){
 // Quotes' inline panel physically relocates it in while a plant is open there (see
 // qOpenPendingPlantInline) so the trader sees the pixel-identical component (avatars/logos, bulk
 // Email all/WhatsApp all, per-customer rows), not a separate smaller stand-in. It has to be moved
-// back to its home — Building's own tray card (rq_card, inside qSubPanel_building) — before
-// anything clears an inline slot's innerHTML around it, or the node is destroyed outright instead
-// of just hidden.
+// back to its home — Building's own tray card (rq_card) — before anything clears an inline slot's
+// innerHTML around it, or the node is destroyed outright instead of just hidden.
 function rqReturnCustomersWrapHome(){
-  // Real fix 2026-09-08: home used to be qPanel_request itself — harmless back when that panel
-  // held nothing but Request Quote, but now qPanel_request also holds the Search/Ready/Expired/
-  // Updating sub-tabs (see setRqSubTab). Appending straight to qPanel_request would leave this
-  // node sitting loose OUTSIDE every sub-tab's own display:none toggle, visible no matter which
-  // one is active. rq_card (Building's own tray) is the one container this section actually
-  // belongs inside, same as its original nesting.
   const home = document.getElementById('rq_card');
   const wrap = document.getElementById('rq_customers_wrap');
   if (home && wrap && wrap.parentElement !== home) home.appendChild(wrap);
@@ -1377,15 +1350,15 @@ function rqReturnCustomersWrapHome(){
   // was never relocated at all, nothing needed hiding, yet it got hidden anyway with nothing left
   // to un-hide it on return (setQuoteTab's own restore path only re-shows it after an actual
   // Pending Quotes session). Simply glancing at Coverage, or at Pending without opening anything,
-  // and coming back silently lost "Customers who buy this" for good. Building's own sub-tab
-  // display:none while inactive already hides this wrap along with everything else in it — no
-  // separate, easy-to-strand display toggle needed here at all.
+  // and coming back silently lost "Customers who buy this" for good. rq_card's own display staying
+  // put on this one always-visible screen already keeps this wrap visible whenever there's a
+  // product in the quote — no separate, easy-to-strand display toggle needed here at all.
 }
 
 // Real redesign, explicit ask ("siento que solo necesitamos una pestaña"): Quotes and Pending
-// Quotes are one screen — the sweep list that used to live behind its own tab is now its own
-// always-live Ready/Expired/Updating sub-tabs inside it (see setRqSubTab, loadPendingPrices). Only
-// two real top-level destinations left: this merged Quotes screen, and Product Coverage (a
+// Quotes are one screen — Building's tray and the Ready/Expired/Updating sweep are both always
+// visible on it now (see rqSetStatFilter, loadPendingPrices), no sub-tab to switch between them.
+// Only two real top-level destinations left: this merged Quotes screen, and Product Coverage (a
 // genuinely separate lookup tool, not a to-do list). Everything the old 3-way switch used to
 // protect against — stale duplicate element ids, an orphaned calculator overlay, a lost
 // in-progress quote — only ever came from tearing down and rebuilding rq_plant_rows/Pending's own
@@ -1412,23 +1385,23 @@ function setQuoteTab(tab){
   }
 }
 
-// Second-level tabs inside Quotes itself (see rq_subtab_row): Search / Building / Ready to Send /
-// Expired / Updating. All 5 share the same data (rqSelectedPlants/rqQuoteProductIds for Building,
-// qPendingRows for the other 3) and the same actions — this only ever toggles which single panel
-// is visible, never rebuilds anything on its own except re-painting Building's own tray (cheap, no
-// fetch) so it's never stale after coming back from another sub-tab.
-function setRqSubTab(tab){
-  document.getElementById('rqSubTabBtn_search').classList.toggle('active', tab === 'search');
-  document.getElementById('rqSubTabBtn_building').classList.toggle('active', tab === 'building');
-  document.getElementById('rqSubTabBtn_ready').classList.toggle('active', tab === 'ready');
-  document.getElementById('rqSubTabBtn_expired').classList.toggle('active', tab === 'expired');
-  document.getElementById('rqSubTabBtn_updating').classList.toggle('active', tab === 'updating');
-  document.getElementById('qSubPanel_search').style.display = tab === 'search' ? 'block' : 'none';
-  document.getElementById('qSubPanel_building').style.display = tab === 'building' ? 'block' : 'none';
-  document.getElementById('qSubPanel_ready').style.display = tab === 'ready' ? 'block' : 'none';
-  document.getElementById('qSubPanel_expired').style.display = tab === 'expired' ? 'block' : 'none';
-  document.getElementById('qSubPanel_updating').style.display = tab === 'updating' ? 'block' : 'none';
-  if (tab === 'building') renderRqPlants();
+// Real redesign 2026-09-08, explicit ask ("esos cuadros amarillos que me traigan cada
+// categoria... que cambia segun le filtras con el boton de arriba"): the stat cards themselves
+// (rq_stats_row — Updating/Expired/Ready) are the filter control, not a separate tab row. null
+// means no filter — all 3 sweep tables show, stacked, at once (the original ask this whole
+// screen started from). Clicking the same stat again clears back to null (a toggle, not a
+// one-way switch) so there's always a way back to "show everything" besides reloading.
+let rqStatFilter = null;
+function rqSetStatFilter(kind){
+  rqStatFilter = (rqStatFilter === kind) ? null : kind;
+  renderRqStats();
+  rqApplyStatFilterVisibility();
+}
+function rqApplyStatFilterVisibility(){
+  const show = (id, kind) => { const el = document.getElementById(id); if (el) el.style.display = (!rqStatFilter || rqStatFilter === kind) ? '' : 'none'; };
+  show('rq_ready_results', 'ready');
+  show('rq_expired_results', 'expired');
+  show('rq_updating_results', 'updating');
 }
 
 // Answers "did this actually get recorded for every plant, or just one?" without opening
@@ -1519,25 +1492,37 @@ if (rqSearchKbdEl) rqSearchKbdEl.textContent = rqIsMac ? '⌘K' : 'Ctrl K';
 
 // Same stat-card component as Offers' Pipeline dashboard — fed straight from qPendingRows
 // (the same data already driving the Quotes tab's count badge), never invented numbers.
+//
+// Real fix 2026-09-08: Updating/Expired/Ready used to be computed here straight from
+// qPendingRows (missing/stale/priced) — a DIFFERENT definition than the actual 3 sweep tables
+// below use (allReady/allExpired/allWaiting in loadPendingPrices, which also account for
+// reaskedStale re-classifying some "stale" rows as Updating instead of Expired). The two
+// disagreed in real data (confirmed live: stats said "21 Updating" while the table underneath
+// had 26 rows). Now these cards ARE the filter buttons for those exact tables (rqSetStatFilter),
+// so showing a different number than the table they filter to would be a real, visible lie —
+// rqBucketCounts is the one shared source of truth, set by loadPendingPrices right where
+// allReady/allExpired/allWaiting themselves are computed.
+let rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
 function renderRqStats(){
   const wrap = document.getElementById('rq_stats_row');
   if (!wrap) return;
-  const missing = qPendingRows.filter(r => r.missing).length;
-  const stale = qPendingRows.filter(r => r.stale).length;
-  const ready = qPendingRows.filter(r => r.priced).length;
   const productsInProgress = new Set(qPendingRows.map(r => r.product_id)).size;
   const stats = [
-    { value: String(productsInProgress), label: 'Products In Progress', hero: true,
+    { value: String(productsInProgress), label: 'Products In Progress', hero: true, filterKind: null,
       icon: '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>' },
-    { value: String(missing), label: 'Updating',
+    { value: String(rqBucketCounts.updating), label: 'Updating', filterKind: 'updating',
       icon: '<path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>' },
-    { value: String(stale), label: 'Expired',
+    { value: String(rqBucketCounts.expired), label: 'Expired', filterKind: 'expired',
       icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-    { value: String(ready), label: 'Ready',
+    { value: String(rqBucketCounts.ready), label: 'Ready', filterKind: 'ready',
       icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];
+  // Explicit ask: "esos cuadros amarillos que me traigan cada categoria" — clicking Updating/
+  // Expired/Ready filters the sweep below down to just that table; clicking Products In Progress
+  // (filterKind null) always resets back to showing all 3. Only the 3 real category cards get the
+  // "active" highlight — Products In Progress is a reset action, not a state of its own.
   wrap.innerHTML = stats.map(s => `
-    <div class="stat-card${s.hero ? ' hero' : ''}">
+    <div class="stat-card${s.hero ? ' hero' : ''}${s.filterKind && rqStatFilter === s.filterKind ? ' active' : ''}" onclick="rqSetStatFilter(${s.filterKind ? `'${s.filterKind}'` : 'null'})">
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
       <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
     </div>`).join('');
@@ -1552,14 +1537,14 @@ function renderRqStats(){
 // Grouped by product, not by plant — the unit that matters to the trader is "this product I
 // already quoted with 1 price is hot, chasing 4 more gives the customer more options and a
 // better shot at the bid," not four disconnected plant rows that happen to share a name.
-// Real redesign 2026-09-08: renders into its own 3 dedicated sub-tab containers
-// (rq_ready_results/rq_expired_results/rq_updating_results — see setRqSubTab), always live
-// regardless of which sub-tab is currently showing or what's typed in the search box. Always
-// re-fetches and keeps qPendingRows/the count badges current, so the Quotes tab's own badge and
-// each sub-tab's badge stay true even while the trader is looking at a different sub-tab.
+// Real redesign 2026-09-08: renders into its own 3 dedicated containers
+// (rq_ready_results/rq_expired_results/rq_updating_results — see rqSetStatFilter), all always
+// live on the same page regardless of what's typed in the search box. Always re-fetches and
+// keeps qPendingRows/the stat-card counts current, so the Quotes tab's own badge and the 3 stat
+// cards stay true even while a filter is narrowing which of the 3 tables is visible.
 async function loadPendingPrices(){
-  // Real redesign 2026-09-08, explicit ask: Ready to Send/Expired/Updating are now their own
-  // full-width tabs (setRqSubTab), always live regardless of what's typed in the search box — the
+  // Real redesign 2026-09-08, explicit ask: Ready to Send/Expired/Updating are always live on
+  // the same page now (see rqSetStatFilter), regardless of what's typed in the search box — the
   // old searchEmpty gate (this list only rebuilt while the search box was empty, because it used
   // to share ONE container with the live search-results view) no longer applies now that each has
   // its own dedicated container.
@@ -1634,16 +1619,12 @@ async function loadPendingPrices(){
   const countBadge = document.getElementById('qPendingCount');
   if (qPendingRows.length){ countBadge.textContent = String(qPendingRows.length); countBadge.style.display = 'inline-flex'; }
   else countBadge.style.display = 'none';
-  renderRqStats();
-  const setSubCount = (id, n) => {
-    const el = document.getElementById(id);
-    if (n){ el.textContent = String(n); el.style.display = 'inline-flex'; }
-    else el.style.display = 'none';
-  };
   if (!qPendingRows.length){
     const emptyHtml = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing pending — every plant is priced and sent. Search a cut above to build a new quote.</div></div>`;
     readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = emptyHtml;
-    setSubCount('rqReadyCount', 0); setSubCount('rqExpiredCount', 0); setSubCount('rqUpdatingCount', 0);
+    rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
+    renderRqStats();
+    rqApplyStatFilterVisibility();
     return;
   }
 
@@ -1682,8 +1663,8 @@ async function loadPendingPrices(){
   // Real ask 2026-09-08: "todas las updating quedan en una tabla, ready to send en otra, y
   // expired en otra" — same conversion already applied to orders.html/offers.html: per-product
   // card buckets become 3 flat tables, one per real state, each row carrying its own Product
-  // column instead of a group header. Each bucket now renders into its own full-width sub-tab
-  // (rq_ready_results/rq_expired_results/rq_updating_results — see setRqSubTab), not a shared
+  // column instead of a group header. Each bucket renders into its own always-visible container
+  // (rq_ready_results/rq_expired_results/rq_updating_results — see rqSetStatFilter), not a shared
   // sidebar column, so there's no width constraint to work around here.
   const rqProductName = (productId) => {
     const prod = products.find(p => p.id === productId);
@@ -1768,9 +1749,11 @@ async function loadPendingPrices(){
       </table></div>
     </div>`;
 
-  setSubCount('rqReadyCount', allReady.length);
-  setSubCount('rqExpiredCount', allExpired.length);
-  setSubCount('rqUpdatingCount', allWaiting.length);
+  // These 3 counts are the exact same rows the tables below render — see renderRqStats for why
+  // that match matters now that the stat cards are the filter buttons for these tables.
+  rqBucketCounts = { ready: allReady.length, expired: allExpired.length, updating: allWaiting.length };
+  renderRqStats();
+  rqApplyStatFilterVisibility();
   readyList.innerHTML = allReady.length
     ? tableSection('Ready to send', '', 'qbucket-ready', allReady.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', ''])
     : `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing ready to send yet.</div></div>`;
@@ -1822,7 +1805,6 @@ async function qPopulateProductForSend(productId){
 
 async function qOpenProductInRequest(productId){
   setQuoteTab('request');
-  setRqSubTab('building');
   await qPopulateProductForSend(productId);
 }
 
@@ -2096,12 +2078,12 @@ async function rqRenderGroupedResults(){
   // box itself, always.
   const box = document.getElementById('rq_palette_results');
   const term = document.getElementById('rq_product_name').value.trim();
-  // Real redesign 2026-09-08: Ready/Expired/Updating are their own always-live sub-tabs now (see
-  // setRqSubTab), not something an empty search box swaps into view — clearing the box just
+  // Real redesign 2026-09-08: Ready/Expired/Updating are always live on the page now (see
+  // rqSetStatFilter), not something an empty search box swaps into view — clearing the box just
   // refreshes them (a cheap, real re-fetch) so they're current after whatever the trader was just
   // doing, same as the 45s poll already does.
   if (!term){
-    // A pending row's inline calculator lives inside one of those tabs' own containers — if one was
+    // A pending row's inline calculator lives inside one of those tables' own rows — if one was
     // open and the trader starts typing, close it properly (through the one real teardown path)
     // instead of silently orphaning its full-screen overlay when that container's content gets
     // replaced.
@@ -2607,7 +2589,7 @@ function rqPlantFieldsHtml(p){
 // Purchase-price, with a SEPARATE "Offer list — highest to lowest" section below repeating the
 // same plant, cost, and delivery date just to add the sort order and the sale-price/total figures
 // — folded directly in here instead of keeping two lists of the same plants in sync.
-function rqPlantRowHtml(p, hasDeliveryDate, kind){
+function rqPlantRowHtml(p, hasDeliveryDate){
   const showPriceRow = hasDeliveryDate;
   const calc = rqCalcRow(p);
   const files = calc ? rqFindProductFilesFor(p) : {};
@@ -2649,27 +2631,23 @@ function rqPlantRowHtml(p, hasDeliveryDate, kind){
         <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer" onclick="qSendConfirmedPlantOffer('${p.rqProductId}','${p.id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : '';
   const plantCellHtml = `<span class="rq-plant-name${p.rqCalculatorOpen ? ' tt-open' : ''}" id="rq_plant_name_${p.id}" style="cursor:pointer;" onclick="rqToggleCalculator('${p.id}')">${escapeHtml(p.name)}</span>${calc ? `<span class="muted" style="display:block;font-size:10.5px;">Cost $${calc.costPerLb.toFixed(4)}/lb</span>` : ''}`;
   const trStyle = `display:${showPriceRow ? 'table-row' : 'none'};`;
-  // Real bug fixed, confirmed live with a screenshot: this row used to be one single flex-wrap
-  // line (avatar, name, tags, sale info, action button all siblings) — collided at the ~380px
-  // Building Quote sidebar width. Real ask 2026-09-08 ("no quiero mas esa tabla de building...
-  // cambia lo que hay por esta nueva"): now a real table row instead, same fix's own concern
-  // (narrow-width collisions) addressed by keeping columns to a minimum (Plant/Price/Sale/Actions)
-  // rather than by stacking two flex lines.
-  if (kind === 'ready') return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
-      <td>${plantCellHtml}</td>
-      <td class="num">${p.rqPrice ? `<span class="pkg-tag price" style="cursor:pointer;" title="View Quote" onclick="rqToggleCalculator('${p.id}')">$${Number(p.rqPrice).toFixed(4)}/lb</span>` : '<span class="muted">—</span>'}</td>
-      <td>${saleHtml}</td>
-      <td><div style="display:flex;flex-direction:column;gap:6px;">${sendConfirmedBtns}${fileButtonsHtml}</div></td>
-    </tr>`;
-  if (kind === 'expired') return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
-      <td>${plantCellHtml}</td>
-      <td class="num">${staleTagHtml}</td>
-      <td><div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div></td>
-    </tr>`;
-  // waiting
+  const isReady = !isStale && p.rqPrice != null;
+  // Real ask 2026-09-08 ("no sobre esa tabla sino sobre el sistema nuevo de pantallas
+  // transparentes"): one row shape for every plant regardless of status — a real table row
+  // (Plant/Price/Sale/Actions), same as before, just no longer split into 3 separate bucketed
+  // tables (see renderRqPlants). Price/Actions cells just show different content depending on
+  // whether this plant is ready, expired, or still waiting on a price.
+  const priceCell = isReady
+    ? `<span class="pkg-tag price" style="cursor:pointer;" title="View Quote" onclick="rqToggleCalculator('${p.id}')">$${Number(p.rqPrice).toFixed(4)}/lb</span>`
+    : (isStale ? staleTagHtml : '<span class="muted">—</span>');
+  const actionsCell = isReady
+    ? `<div style="display:flex;flex-direction:column;gap:6px;">${sendConfirmedBtns}${fileButtonsHtml}</div>`
+    : `<div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div>`;
   return `<tr id="rq_price_row_${p.id}" style="${trStyle}">
       <td>${plantCellHtml}</td>
-      <td><div id="rq_action_${p.id}" class="rq-tt-action-bar">${rqTtActionLabel(p)}</div></td>
+      <td class="num">${priceCell}</td>
+      <td>${saleHtml}</td>
+      <td>${actionsCell}</td>
     </tr>`;
 }
 
@@ -2686,11 +2664,6 @@ function renderRqPlants(){
   emptyEl.style.display = !hasProduct ? 'block' : 'none';
   document.getElementById('rq_summary_strip').style.display = hasProduct ? 'block' : 'none';
   document.getElementById('rq_dates_wrap').style.display = hasProduct ? 'block' : 'none';
-  // Building tab's own badge (see rq_subtab_row) — same count as the "Building Quote — N variants"
-  // line below, just visible from any sub-tab, not only when Building is the one showing.
-  const buildingCount = document.getElementById('rqBuildingCount');
-  if (rqQuoteProductIds.length){ buildingCount.textContent = String(rqQuoteProductIds.length); buildingCount.style.display = 'inline-flex'; }
-  else buildingCount.style.display = 'none';
   // Real redesign 2026-09-04 ("pero quedamos en que para cada producto me sigue sacando para
   // todos"): a single Email/WhatsApp all header spanning the whole multi-variant quote had the
   // same problem as the Dashboard's old per-product button, one level up — it could bundle
@@ -2733,29 +2706,23 @@ function renderRqPlants(){
       return stale ? 1 : 0;
     };
     const groupPlants = rqSelectedPlants.filter(p => p.rqProductId === pid);
-    // Real redesign 2026-09-04 ("building salen al dia expired y posibles... con sus tres grupos
-    // claros"): Building never actually showed the Ready/Expired/Waiting breakdown the flow calls
-    // for — only the Dashboard sweep did, and only until it became status-only. Same three labeled
-    // buckets here now, same order, real rows underneath (rqPlantRowHtml keeps its own real
-    // actions — View Quote, Update Price, confirmed-send, Off-Spec on Waiting).
-    const readyPlants = groupPlants.filter(p => rqRowReadiness(p) === 0)
-      .sort((a, b) => (rqCalcRow(b)?.salePerLb || 0) - (rqCalcRow(a)?.salePerLb || 0));
-    const expiredPlants = groupPlants.filter(p => rqRowReadiness(p) === 1);
-    const waitingPlants = groupPlants.filter(p => rqRowReadiness(p) === 2);
-    // Real ask 2026-09-08: "no quiero mas esa tabla de building... todas las updating quedan en
-    // una tabla, ready to send en otra, y expired en otra" — same conversion as the Dashboard,
-    // applied here per variant (the ✕ Remove action is scoped to one variant's own plants, a real
-    // action worth keeping grouped — unlike the Dashboard sweep, which had nothing equivalent to
-    // lose by flattening across products entirely). Kept to Plant/Price/Sale/Actions, no Product
-    // column — the variant's own group header already names the product once for every row here.
-    const bucketHtml = (list, cls, title, sub, kind, headCells) => list.length ? `
-      <div class="qbucket ${cls}">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">${title}</span>${sub ? `<span class="qbucket-sub">${sub}</span>` : ''}</div>
-        <div class="table-scroll"><table>
-          <thead><tr>${headCells.map(h => `<th>${h}</th>`).join('')}</tr></thead>
-          <tbody>${list.map(p => rqPlantRowHtml(p, hasDeliveryDate, kind)).join('')}</tbody>
-        </table></div>
-      </div>` : '';
+    // Real ask 2026-09-08 ("building sigue funcionando... pero no sobre esa tabla sino sobre el
+    // sistema nuevo de pantallas transparentes"): Building had grown its own Ready/Expired/
+    // Updating 3-bucket breakdown (matching the Dashboard sweep's), which for what's usually a
+    // handful of plants on one variant was more table than the content needed. Back to ONE simple
+    // transparent table per variant (same .pkg-tag pills, same hairline dividers, same real
+    // actions — View Quote, Update Price, confirmed-send) — readiness still orders the rows
+    // (ready first, then expired, then waiting), it's just not split into separate headers.
+    const groupPlantsSorted = [...groupPlants].sort((a, b) => {
+      const ra = rqRowReadiness(a), rb = rqRowReadiness(b);
+      if (ra !== rb) return ra - rb;
+      return (rqCalcRow(b)?.salePerLb || 0) - (rqCalcRow(a)?.salePerLb || 0);
+    });
+    const tableHtml = groupPlantsSorted.length ? `
+      <div class="table-scroll"><table>
+        <thead><tr><th>Plant</th><th>Price</th><th>Sale</th><th></th></tr></thead>
+        <tbody>${groupPlantsSorted.map(p => rqPlantRowHtml(p, hasDeliveryDate)).join('')}</tbody>
+      </table></div>` : '';
     return `
       <div class="pending-group" data-product-group="${pid}">
         <div class="pending-group-head">
@@ -2765,11 +2732,7 @@ function renderRqPlants(){
             <button type="button" class="btn danger" title="Remove this variant from the quote" onclick="rqRemoveVariantFromQuote('${pid}')">✕ Remove</button>
           </div>
         </div>
-        ${groupPlants.length
-          ? bucketHtml(readyPlants, 'qbucket-ready', 'Ready to send', '— pick one and confirm', 'ready', ['Plant', 'Price', 'Sale', ''])
-            + bucketHtml(expiredPlants, 'qbucket-expired', 'Expired', '— your call', 'expired', ['Plant', 'Price', ''])
-            + bucketHtml(waitingPlants, 'qbucket-waiting', 'Updating', '', 'waiting', ['Plant', ''])
-          : `<div class="empty" style="padding:12px;">No plant has a current price for this variant yet — check Pending Quotes.</div>`}
+        ${groupPlants.length ? tableHtml : `<div class="empty" style="padding:12px;">No plant has a current price for this variant yet — check Pending Quotes.</div>`}
       </div>`;
   }).join('');
   // The moment there's at least one real offer, show who it can go to — no extra click needed,
