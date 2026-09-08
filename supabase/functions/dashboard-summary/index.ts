@@ -52,12 +52,34 @@ Deno.serve(async (req) => {
       select status, count(*)::int as count from shipments group by status
     `;
 
+    // Real ask 2026-09-08: "todos los pagos a plantas deben ser in advance" — there's no real
+    // "payables aging" the way Collections has for receivables (a payment should never sit unpaid
+    // for days by policy — the sequential gate in orders.html already blocks confirming pickup
+    // until Pay-Plant is done). What actually helps here is a cash-OUT forecast: every won order
+    // where the plant hasn't been paid yet, ranked by how close it is to physically needing that
+    // payment to move forward — pending_pickup first (payment is the one thing blocking it right
+    // now), then picked_up/unloading/delivered (already moved without payment on file — a real gap
+    // in older data, still worth surfacing, just not as urgent as one actively blocked today).
+    const stageUrgency = sql`case sh.status
+      when 'pending_pickup' then 0 when 'picked_up' then 1 when 'unloading' then 2 when 'delivered' then 3 else 4 end`;
+    const pendingPlantPayments = await sql`
+      select sh.order_number, sh.status, sh.pickup_date, sh.created_at,
+        po.plant_name, po.total_cost
+      from shipments sh
+      left join purchase_orders po on po.sent_offer_id = sh.sent_offer_id
+      where sh.plant_paid_at is null
+      order by ${stageUrgency}, sh.pickup_date asc nulls last, sh.created_at asc
+    `;
+    const pendingPlantPaymentsTotal = pendingPlantPayments.reduce((sum, r) => sum + Number(r.total_cost ?? 0), 0);
+
     return jsonResponse({
       invoiced_this_month,
       outstanding_by_customer: outstandingByCustomer,
       overdue,
       upcoming_due: upcomingDue,
       shipments_by_status: byStatus,
+      pending_plant_payments: pendingPlantPayments,
+      pending_plant_payments_total: pendingPlantPaymentsTotal,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);

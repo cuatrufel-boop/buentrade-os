@@ -176,6 +176,14 @@ auth.onAuthStateChanged(user => {
   <h1>Accounts Receivable</h1>
   <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Customer</th><th>Outstanding</th><th>Credit Limit</th><th>Overdue</th></tr></thead><tbody></tbody></table></div>
 
+  <!-- Real ask 2026-09-08: "todos los pagos a plantas deben ser in advance" — no aging like
+       receivables (a payment should never sit unpaid by policy — orders.html's own sequential gate
+       already blocks confirming pickup without it). What actually helps: a cash-OUT forecast, every
+       won order still owed to its plant, ranked by how close it is to actually needing that
+       payment to move forward. -->
+  <h1>Pending Plant Payments (Accounts Payable)</h1>
+  <div class="tbl-wrap"><table id="tblPlantPayments"><thead><tr><th>Order</th><th>Plant</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody></tbody></table></div>
+
   <h1>Active Shipments</h1>
   <div class="tbl-wrap"><table id="tblShipments"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Status</th><th>Delivery Date</th><th>Payment</th><th></th></tr></thead><tbody></tbody></table></div>
 
@@ -222,6 +230,7 @@ async function loadAll(){
     ]);
     renderKpis(summary);
     renderOutstanding(summary.outstanding_by_customer);
+    renderPendingPlantPayments(summary.pending_plant_payments, summary.pending_plant_payments_total);
     renderShipments(shipments.results);
     renderOffers(offers.results);
   } catch (e) {
@@ -250,6 +259,24 @@ function renderOutstanding(rows){
       <td>${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} overdue</span>` : '—'}</td>
     </tr>
   `).join('');
+}
+
+function renderPendingPlantPayments(rows, total){
+  const h1 = document.querySelector('#tblPlantPayments').closest('div').previousElementSibling;
+  if (h1 && h1.tagName === 'H1') h1.innerHTML = `Pending Plant Payments (Accounts Payable) <span style="color:#8A96A8;font-weight:400;font-size:15px;">— ${money(total || 0)} owed</span>`;
+  const tbody = document.querySelector('#tblPlantPayments tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">Nothing owed to plants.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => {
+    const blocked = r.status === 'pending_pickup';
+    return `
+    <tr>
+      <td><strong>${escapeHtml(r.order_number)}</strong></td>
+      <td>${escapeHtml(r.plant_name || '—')}</td>
+      <td>${money(r.total_cost)}</td>
+      <td><span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
+      <td>${blocked ? '<span class="tag unpaid">Blocking pickup</span>' : ''}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderShipments(rows){
