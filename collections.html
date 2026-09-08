@@ -76,6 +76,18 @@
   .btn:hover{background:var(--blue-light);}
   .btn.small{font-size:11px;padding:5px 10px;}
 
+  /* Per-order mini timeline — "un flujo para vision de este flujo en el tiempo de cada carga" —
+     same visual language as orders.html's unified timeline (transparent fill + colored border +
+     stroke icon, never a solid fill), scaled down for a table cell. */
+  .c-timeline{display:flex;align-items:center;gap:0;}
+  .c-node{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;}
+  .c-node svg{width:13px;height:13px;}
+  .c-node.done{border-color:var(--green);color:var(--green);background:rgba(15,138,95,.14);}
+  .c-node.current{animation:cNodePulse 1.5s ease-in-out infinite;}
+  @keyframes cNodePulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.55;transform:scale(1.15);}}
+  .c-line{width:16px;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);flex-shrink:0;}
+  .c-line.done{background:var(--green);}
+
   #urgentQueueOverlay,#applyPaymentOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6000;align-items:center;justify-content:center;padding:20px;}
   #urgentQueueBox{background:var(--card);border:2px solid var(--red);border-radius:16px;padding:32px;max-width:480px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(4,12,26,.6);animation:urgentQueueBlink 1.1s ease-in-out infinite;}
   @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
@@ -84,6 +96,10 @@
   #applyPaymentBox input{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;background:rgba(255,255,255,.05);color:var(--ink);}
   #applyPaymentBox input:focus{outline:none;border-color:var(--blue-bright);}
   #applyPaymentMsg{font-size:12.5px;margin-top:12px;}
+  #customerProfileOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6500;align-items:center;justify-content:center;padding:20px;}
+  #customerProfileBox{background:#0F2B52;border:1px solid var(--line);border-radius:16px;padding:26px 28px;max-width:760px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(4,12,26,.6);}
+  .cust-name{cursor:pointer;color:var(--blue-bright);}
+  .cust-name:hover{text-decoration:underline;}
 
   .toast-stack{position:fixed;bottom:20px;right:20px;z-index:7000;display:flex;flex-direction:column;gap:10px;}
   .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);--ink:#0F1F33;--ink-soft:#64748B;}
@@ -287,6 +303,12 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<!-- ============ CUSTOMER PROFILE — "un dashboard por el perfil de cada cliente debe saber en el
+     tiempo cuanto le debe el cliente" — a real per-customer view, not just a table row. ============ -->
+<div id="customerProfileOverlay">
+  <div id="customerProfileBox"></div>
+</div>
+
 <div class="toast-stack" id="toastStack"></div>
 
 <script>
@@ -382,7 +404,7 @@ function renderCustomers(){
     const pctUsed = hasLimit ? Math.min(100, (c.outstanding / Number(c.credit_limit)) * 100) : null;
     const gaugeColor = pctUsed == null ? 'var(--line)' : pctUsed >= 100 ? 'var(--red)' : pctUsed >= 80 ? 'var(--amber)' : 'var(--green)';
     return `<tr>
-      <td>${escapeHtml(c.customer_name || '—')}</td>
+      <td><span class="cust-name" onclick="openCustomerProfile('${c.customer_id}')">${escapeHtml(c.customer_name || '—')}</span></td>
       <td class="num">${hasLimit ? fmtMoney(c.credit_limit) : '<span class="muted">No limit</span>'}</td>
       <td class="num" style="color:#FF9C8A;">${fmtMoney(c.outstanding)}</td>
       <td class="num" style="color:${hasLimit ? (c.available_credit < 0 ? '#FF9C8A' : '#6FD3A8') : 'inherit'};">${hasLimit ? fmtMoney(c.available_credit) : '—'}</td>
@@ -393,6 +415,29 @@ function renderCustomers(){
   }).join('');
 }
 
+const CT_ICON_INVOICE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h6"/></svg>';
+const CT_ICON_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>';
+const CT_ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+// Real ask (twice, word-for-word): "en una linea de tiempo debe ver cuando debe cobrarle" /
+// "un flujo para vision de este flujo en el tiempo de cada carga que viene de invoices" — a real
+// visual timeline per order (Invoiced -> Due -> Paid), same visual language as orders.html's own
+// timeline (transparent fill, colored border, stroke icon, the single "current" step pulses),
+// not just a text badge.
+function renderOrderTimeline(s){
+  const invoicedNode = `<div class="c-node done" title="Invoiced ${fmtDateStr(s.invoice_sent_at)}">${CT_ICON_INVOICE}</div>`;
+  let dueClass = 'c-node', dueColor = 'var(--line)', dueTitle = `Due ${fmtDateStr(s.payment_due_date)}`;
+  if (!s.paid_at){
+    if (s.is_overdue){ dueColor = AGING_COLOR[s.aging_bucket]; dueTitle = `${s.days_overdue}d overdue (${AGING_LABEL[s.aging_bucket]})`; }
+    else { dueColor = 'var(--blue-bright)'; dueTitle = `Due ${fmtDateStr(s.payment_due_date)} — ${s.days_since_invoice}d since invoice`; }
+  }
+  const dueNode = `<div class="c-node${!s.paid_at ? ' current' : ' done'}" style="border-color:${s.paid_at ? '' : dueColor};color:${s.paid_at ? '' : dueColor};" title="${escapeHtml(dueTitle)}">${CT_ICON_CLOCK}</div>`;
+  const paidNode = `<div class="c-node${s.paid_at ? ' done' : ''}" title="${s.paid_at ? 'Paid ' + fmtDateStr(s.paid_at) : 'Not paid yet'}">${CT_ICON_CHECK}</div>`;
+  const line1 = `<div class="c-line done"></div>`;
+  const line2 = `<div class="c-line${s.paid_at ? ' done' : ''}"></div>`;
+  return `<div class="c-timeline">${invoicedNode}${line1}${dueNode}${line2}${paidNode}</div>`;
+}
+
 function renderOrders(){
   const body = document.getElementById('ordersBody');
   const rows = [...collData.shipments].sort((a, b) => {
@@ -401,15 +446,12 @@ function renderOrders(){
   });
   document.getElementById('ordersEmpty').style.display = rows.length ? 'none' : 'block';
   body.innerHTML = rows.map(s => {
-    let statusBadge;
-    if (s.paid_at) statusBadge = `<span class="payment-badge ok">Paid</span>`;
-    else if (s.is_overdue) statusBadge = `<span class="payment-badge overdue" style="color:${AGING_COLOR[s.aging_bucket]};border-color:${AGING_COLOR[s.aging_bucket]}66;">${AGING_LABEL[s.aging_bucket]} — ${s.days_overdue}d</span>`;
-    else statusBadge = `<span class="payment-badge due-soon">${s.days_since_invoice}d since invoice</span>`;
+    const statusBadge = renderOrderTimeline(s);
     const interest = s.paid_at ? s.interest_amount : s.interest_so_far;
     const profit = s.paid_at ? s.net_profit : s.profit_so_far;
     return `<tr>
       <td class="order-num">${escapeHtml(s.order_number)}</td>
-      <td>${escapeHtml(s.customer_trade_name || '—')}</td>
+      <td>${s.customer_id ? `<span class="cust-name" onclick="openCustomerProfile('${s.customer_id}')">${escapeHtml(s.customer_trade_name || '—')}</span>` : escapeHtml(s.customer_trade_name || '—')}</td>
       <td class="muted">${escapeHtml(s.product_name_es || s.product_name || '—')}</td>
       <td class="mono">${fmtDateStr(s.invoice_sent_at)}</td>
       <td class="mono">${fmtDateStr(s.payment_due_date)}</td>
@@ -420,6 +462,62 @@ function renderOrders(){
       <td>${s.paid_at ? '' : `<button class="btn small" onclick="openApplyPaymentModal('${s.customer_id}', '${escapeHtml(s.customer_trade_name || '').replace(/'/g, "\\'")}')">Payment</button>`}</td>
     </tr>`;
   }).join('');
+}
+
+// ============ CUSTOMER PROFILE ============
+// "un dashboard por el perfil de cada cliente debe saber en el tiempo cuanto le debe el cliente y
+// cuanto mas le puede vender dependiendo de su cupo" — a real per-customer view: their credit
+// standing plus every one of their invoiced orders, oldest first, so the trader sees how they've
+// actually paid OVER TIME, not just today's snapshot.
+function openCustomerProfile(customerId){
+  const c = collData.customers.find(x => x.customer_id === customerId);
+  const orders = collData.shipments.filter(s => s.customer_id === customerId)
+    .sort((a, b) => new Date(a.invoice_sent_at || 0) - new Date(b.invoice_sent_at || 0));
+  const name = (c && c.customer_name) || (orders[0] && orders[0].customer_trade_name) || 'Customer';
+  const hasLimit = c && c.credit_limit != null;
+  const pctUsed = hasLimit ? Math.min(100, (c.outstanding / Number(c.credit_limit)) * 100) : null;
+  const gaugeColor = pctUsed == null ? 'var(--line)' : pctUsed >= 100 ? 'var(--red)' : pctUsed >= 80 ? 'var(--amber)' : 'var(--green)';
+  const totalRealizedForCustomer = orders.filter(s => s.paid_at).reduce((sum, s) => sum + Number(s.net_profit || 0), 0);
+
+  document.getElementById('customerProfileBox').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+      <div>
+        <h2 style="margin:0 0 4px;">${escapeHtml(name)}</h2>
+        <div class="muted" style="font-size:12.5px;">${c ? c.payment_days + '-day credit terms' : ''}</div>
+      </div>
+      <button class="btn small" onclick="closeCustomerProfile()">✕ Close</button>
+    </div>
+    ${c ? `
+    <div class="stat-row" style="margin-top:0;">
+      <div class="stat"><div class="k">Credit Limit</div><div class="v">${hasLimit ? fmtMoney(c.credit_limit) : 'No limit'}</div></div>
+      <div class="stat bad"><div class="k">Owes Now</div><div class="v">${fmtMoney(c.outstanding)}</div></div>
+      <div class="stat good"><div class="k">Available Credit</div><div class="v">${hasLimit ? fmtMoney(c.available_credit) : '—'}</div></div>
+      <div class="stat good"><div class="k">Realized Profit (all time)</div><div class="v">${fmtMoney(totalRealizedForCustomer)}</div></div>
+    </div>
+    ${hasLimit ? `<div class="gauge-wrap" style="margin-top:16px;"><div class="gauge-track"><div class="gauge-fill" style="width:${pctUsed}%;background:${gaugeColor};"></div></div><div class="gauge-caption">${Math.round(pctUsed)}% of credit used</div></div>` : ''}
+    <div style="margin-top:6px;"><button class="btn small" onclick="closeCustomerProfile();openApplyPaymentModal('${customerId}','${escapeHtml(name).replace(/'/g, "\\'")}')">Apply Payment</button></div>
+    ` : ''}
+    <h2 style="margin-top:22px;">Order history (${orders.length})</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Order</th><th>Invoiced</th><th>Due</th><th>Timeline</th><th>Balance</th><th>Profit</th></tr></thead>
+        <tbody>
+          ${orders.map(s => `<tr>
+            <td class="order-num">${escapeHtml(s.order_number)}</td>
+            <td class="mono">${fmtDateStr(s.invoice_sent_at)}</td>
+            <td class="mono">${fmtDateStr(s.payment_due_date)}</td>
+            <td>${renderOrderTimeline(s)}</td>
+            <td class="num">${fmtMoney(s.balance)}</td>
+            <td class="num" style="color:${(s.paid_at ? s.net_profit : s.profit_so_far) >= 0 ? '#6FD3A8' : '#FF9C8A'};">${(s.paid_at ? s.net_profit : s.profit_so_far) != null ? fmtMoney(s.paid_at ? s.net_profit : s.profit_so_far) : '—'}</td>
+          </tr>`).join('') || `<tr><td colspan="6" class="empty">No invoiced orders yet.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('customerProfileOverlay').style.display = 'flex';
+}
+function closeCustomerProfile(){
+  document.getElementById('customerProfileOverlay').style.display = 'none';
 }
 
 // ============ APPLY PAYMENT ============

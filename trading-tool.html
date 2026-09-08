@@ -2089,10 +2089,13 @@ async function createAndShareInvoice(){
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(doc, filename)], { phone: waPhone, message: waMessage }, ccEmails);
     await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: orderNumber, doc_type: 'invoice' });
-    msgEl.textContent = 'Factura enviada — pendiente de firma del cliente.';
+    // Collections module (2026-09-08): "el flujo debe llevarme a collections" — the order now has
+    // an invoice, so it just became a real Collections item; give the trader the direct link
+    // instead of leaving them to remember to go look for it.
+    msgEl.innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
   } catch (e) {
     if (e.cancelled){ msgEl.textContent = ''; return; }
-    msgEl.textContent = 'No se pudo enviar: ' + e.message;
+    msgEl.textContent = 'Could not send: ' + e.message;
   }
 }
 

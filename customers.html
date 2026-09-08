@@ -522,6 +522,15 @@ function openForm(customer){
   document.getElementById('payment_days').value = '';
   document.getElementById('payment_terms_type').value = '';
   document.getElementById('paymentsContactDifferent').checked = false;
+  // Collections module (2026-09-08): "cada cliente va a tener unos dias de credito 30 dias para
+  // empezar todos los clientes" — every NEW customer starts on Credit 30 days by default (still
+  // fully editable before saving); an existing customer being edited keeps showing its own real
+  // saved terms below, untouched.
+  if (!customer){
+    document.getElementById('payment_terms_type').value = 'credit';
+    document.getElementById('payment_days').value = 30;
+    togglePaymentDaysInput();
+  }
   if (customer){
     document.getElementById('custId').value = customer.id;
     fields.slice(1).forEach(f => {
