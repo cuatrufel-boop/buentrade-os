@@ -4,7 +4,7 @@
 // a timestamp, so it actually surfaces on the customer's profile, not just in shipment history.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { jsonResponse, finalizeShipmentPaid } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -22,32 +22,11 @@ Deno.serve(async (req) => {
     if (!shipment) return jsonResponse({ error: "unknown shipment_id" }, 404);
     if (shipment.paid_at) return jsonResponse({ already_paid: true, shipment }, 200);
 
-    const result = await sql.begin(async (tx) => {
-      const [updatedShipment] = await tx`
-        update shipments set paid_at = now(), updated_at = now() where id = ${shipment_id} returning *
-      `;
-      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "shipments", record_id: shipment_id, before: shipment, after: updatedShipment });
-
-      let notification = null;
-      if (shipment.customer_id) {
-        const [customer] = await tx`select credit_limit from customers where id = ${shipment.customer_id}`;
-        const [{ outstanding }] = await tx`
-          select coalesce(sum(sale_amount), 0) as outstanding from shipments
-          where customer_id = ${shipment.customer_id} and paid_at is null
-        `;
-        const available = customer?.credit_limit != null ? Number(customer.credit_limit) - Number(outstanding) : null;
-        const amountFmt = shipment.sale_amount != null ? `$${Number(shipment.sale_amount).toLocaleString()}` : "this order";
-        const availableFmt = available != null ? ` Available credit now: $${available.toLocaleString()}.` : "";
-        const [n] = await tx`
-          insert into customer_notifications (customer_id, type, message)
-          values (${shipment.customer_id}, 'payment_received', ${`Payment received for order ${shipment.order_number} (${amountFmt}) — credit freed up.` + availableFmt})
-          returning *
-        `;
-        notification = n;
-      }
-
-      return { shipment: updatedShipment, notification };
-    });
+    // Real ask 2026-09-08 (Collections): "calcules los intereses dependiendo del dia en que pago
+    // la factura... numeros reales en el pnl" — marking a shipment paid is now the same real
+    // finalize path Collections' own payment-application waterfall uses (shipments-apply-payment),
+    // so this simple button also produces a real interest/net_profit number, not just a timestamp.
+    const result = await sql.begin(async (tx) => finalizeShipmentPaid(tx, shipment, HMAC_SECRET, actor));
 
     return jsonResponse({ paid: true, shipment: result.shipment, notification: result.notification });
   } catch (err) {

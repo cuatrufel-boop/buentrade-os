@@ -51,12 +51,16 @@ Deno.serve(async (req) => {
     }
 
     if (action === "redeem") {
-      const { token, invoice_url, signed_by_name } = body;
+      const { token, invoice_url = null, signed_by_name = null } = body;
       if (!token) return jsonResponse({ error: "missing required fields", missing: ["token"] }, 400);
       if (!shipment.invoice_token || shipment.invoice_token !== token) return jsonResponse({ error: "invalid_token" }, 403);
       if (shipment.invoice_signed_at) return jsonResponse({ already_signed: true });
 
-      const [updated] = await sql`update shipments set invoice_signed_at = now() where id = ${shipment.id} returning *`;
+      // Real bug found live 2026-09-08: "despues de la firma del cliente ya la invoice debe
+      // quedar guardada en esa orden entregada" — invoice_url/signed_by_name arrived in every
+      // redeem call but were never written anywhere, only invoice_signed_at. Now the signed PDF
+      // and who signed it are actually retained on the order, not silently discarded.
+      const [updated] = await sql`update shipments set invoice_signed_at = now(), invoice_url = ${invoice_url}, invoice_signed_by = ${signed_by_name} where id = ${shipment.id} returning *`;
       await writeAuditLog(sql, HMAC_SECRET, {
         actor: "customer-signature", action: "update", table_name: "shipments", record_id: shipment.id,
         before: shipment, after: updated,
