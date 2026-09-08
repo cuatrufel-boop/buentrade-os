@@ -173,11 +173,19 @@
   .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
   .payment-badge.active{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
-  /* Real ask 2026-09-08: "que este blinking el que falta por accion" — the compact table row still
-     needs to show, at a glance, the single next actionable step (same one that gets .blink-now
-     inside the full timeline in the detail modal). Reuses the exact mstopPulse keyframes already
-     defined below for .u-mini.blink-now — same visual language, not a new animation. */
-  .payment-badge.blink-row{animation:mstopPulse 1s ease-in-out infinite;}
+  /* Real ask 2026-09-08: "en next action ponlo como esta en collections... 3 steps una blinking
+     la que esta pendiente" — ported verbatim from collections.html's per-order mini timeline
+     (renderOrderTimeline): small stroke-icon circles connected by dashed lines, the pending one
+     pulsing. Here it shows the step just done, the pending one (blinking), and the one after it —
+     not a single bare text badge. */
+  .c-timeline{display:flex;align-items:center;gap:0;}
+  .c-node{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;}
+  .c-node svg{width:13px;height:13px;}
+  .c-node.done{border-color:var(--green);color:var(--green);background:rgba(15,138,95,.14);}
+  .c-node.current{animation:cNodePulse 1.5s ease-in-out infinite;}
+  @keyframes cNodePulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.55;transform:scale(1.15);}}
+  .c-line{width:16px;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);flex-shrink:0;}
+  .c-line.done{background:var(--green);}
   /* Real ask 2026-09-07, redone after the flat chip row was rejected as "tirado ahí" — a real
      timeline spread across time, each milestone a clickable button, with the real pickup city and
      the border as Point A / Point B, like a real freight-tracking route. */
@@ -885,6 +893,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       actionableNow: isNext,
       raised,
       label: displayLabel,
+      icon: STEP_ICONS[s.key],
     };
   }
 
@@ -908,6 +917,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       actionableNow: state === 'now',
       raised: !!st.raised,
       label: st.label,
+      icon: st.icon,
     };
   }
 
@@ -1017,12 +1027,31 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     return entryHtml + line;
   }).join('');
   const travelerOnCurve = travelerLineIdx >= 0 && (entries[travelerLineIdx].raised || (entries[travelerLineIdx + 1] && entries[travelerLineIdx + 1].raised));
-  // Real ask 2026-09-08: "que este blinking el que falta por accion" — the compact orders table
-  // needs this same "single next actionable step" the timeline already computes (blinkIdx), so the
-  // row can show it too without a second, separately-invented rule.
+
+  // Real ask 2026-09-08: "en next action ponlo como esta en collections no solo una accion...
+  // 3 steps una blinking la que esta pendiente" — same mini node-timeline as collections.html's
+  // renderOrderTimeline, sliced to the step just done, the pending one (pulsing), and the one
+  // after — not a single bare text badge. Reuses this same entries/blinkIdx computation, no second
+  // rule invented.
+  function nextActionPreview(){
+    if (blinkIdx < 0) return '<span class="muted">All caught up</span>';
+    const slice = [];
+    if (blinkIdx > 0) slice.push({ e: entries[blinkIdx - 1], state: 'done' });
+    slice.push({ e: entries[blinkIdx], state: 'current' });
+    if (blinkIdx < entries.length - 1) slice.push({ e: entries[blinkIdx + 1], state: 'wait' });
+    const nodesHtml = slice.map((s, i) => {
+      const cls = s.state === 'done' ? ' done' : s.state === 'current' ? ' current' : '';
+      const style = s.state === 'current' ? ' style="border-color:var(--amber);color:var(--amber);"' : '';
+      const node = `<div class="c-node${cls}"${style} title="${escapeHtml(s.e.label)}">${s.e.icon}</div>`;
+      const line = i < slice.length - 1 ? `<div class="c-line${s.state === 'done' ? ' done' : ''}"></div>` : '';
+      return node + line;
+    }).join('');
+    return `<div class="c-timeline">${nodesHtml}</div>`;
+  }
+
   return {
     html: `<div class="utimeline${travelerOnCurve ? ' needs-curve-clearance' : ''}">${html}</div>`,
-    nextAction: blinkIdx >= 0 ? entries[blinkIdx].label : null,
+    nextActionHtml: nextActionPreview(),
   };
 }
 
@@ -1419,12 +1448,9 @@ function renderStatusOrders(){
 }
 
 function renderOrderRow(o, attentionOrderNumbers){
-  const { nextAction } = renderUnifiedTimeline(o, attentionOrderNumbers);
+  const { nextActionHtml } = renderUnifiedTimeline(o, attentionOrderNumbers);
   const cp = o.catalogProduct;
   const productName = cp ? (cp.name_en || cp.name) : o.product_name;
-  const nextActionHtml = nextAction
-    ? `<span class="payment-badge due-soon blink-row">${escapeHtml(nextAction)}</span>`
-    : '<span class="muted">—</span>';
   return `<tr class="order-row">
     <td class="order-num">${escapeHtml(o.order_number)}</td>
     <td>${escapeHtml(o.customer_name || '—')}</td>
