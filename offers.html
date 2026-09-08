@@ -168,7 +168,13 @@
   .pkg-plant-avatar-logo img{width:auto;max-width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);}
   .pkg-plant-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:1;min-width:0;}
   .pkg-plant{font-weight:600;color:var(--ink);font-size:13.5px;}
-  .pkg-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
+  /* Real ask 2026-09-08: "funcionalidad bien diseno muy mal... bordes" — traced to a real,
+     longstanding bug: this rule was missing `border`, so every .pkg-tag variant's border-color
+     (won/lost/price/hot/sent/expired) did nothing — no border-width/style to paint it with. The
+     comment below always claimed "exact same outline-pill pattern as quotes.html's real Dashboard
+     tags," but quotes.html's own .pkg-tag (line 261 there) has `border:1px solid transparent`;
+     this file's copy silently dropped it. Restored verbatim from that real reference. */
+  .pkg-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;border:1px solid transparent;}
   /* Exact same outline-pill pattern as quotes.html's real Dashboard tags (.pkg-tag.missing/.stale/
      .price there) — transparent fill, colored border + text, not a tinted filled box. */
   .pkg-tag.price{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
@@ -180,9 +186,15 @@
      neutral, no-signal color as .pkg-tag.lost — it's not a bad outcome, just dead. */
   .pkg-tag.expired{background:transparent;color:var(--ink-soft);border-color:var(--line);}
   /* Real ask 2026-09-08: "bloinking la que tiene bid" — same green as .pkg-tag.won (a bid is good
-     news, same as a win), plus this file's own established hotPulse animation, already used
-     elsewhere for the exact same "a real bid just landed" state. */
-  .pkg-tag.hot{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);animation:hotPulse 1.4s ease-in-out infinite;}
+     news, same as a win). Blink is quotes.html's own real .pkg-tag-blink/rqTagBlink (plain opacity
+     fade), not hotPulse's box-shadow ring — that ring is built for round icons (QT circle,
+     stat-icon), and reads as a blurry halo bleeding off a rounded-rect pill's corners instead of a
+     clean pulse. Respects prefers-reduced-motion, same as the reference. */
+  .pkg-tag.hot{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);animation:pkgTagBlink 1.1s ease-in-out infinite;}
+  @keyframes pkgTagBlink{0%,100%{opacity:1;}50%{opacity:.35;}}
+  @media (prefers-reduced-motion: reduce){
+    .pkg-tag.hot{animation:none;}
+  }
   /* Real ask 2026-09-08: "algo bonito... un diseno acorde" — "Sent" was bare text next to "Bid"'s
      colored pill, an unfinished-looking mismatch. Same .pkg-tag pill shape as every other status
      in this column, just the neutral/muted color instead of a signal color. */
