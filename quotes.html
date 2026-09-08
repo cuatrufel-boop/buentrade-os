@@ -1407,11 +1407,32 @@ function rqSetStatFilter(kind){
   renderRqStats();
   rqApplyStatFilterVisibility();
 }
+// Real ask 2026-09-08 ("mira el flujo... no muestres esto"): a big dashed "Nothing ready to send
+// yet" box was dead space in the default "show everything" view, where Ready/Expired are empty
+// most days — real content only ever needs an empty-state message when the trader specifically
+// asked to see that one bucket via its stat card and it's genuinely empty; showing nothing at all
+// is the right answer otherwise. This has to run on every filter change (not just once inside
+// loadPendingPrices) or clicking a stat card on an empty bucket would toggle visibility onto a
+// container whose content was baked in back when a different filter (or none) was active.
+const RQ_EMPTY_MSG = {
+  ready: 'Nothing ready to send yet.',
+  expired: 'Nothing expired.',
+  updating: 'Nothing waiting on a price.',
+};
 function rqApplyStatFilterVisibility(){
-  const show = (id, kind) => { const el = document.getElementById(id); if (el) el.style.display = (!rqStatFilter || rqStatFilter === kind) ? '' : 'none'; };
-  show('rq_ready_results', 'ready');
-  show('rq_expired_results', 'expired');
-  show('rq_updating_results', 'updating');
+  const apply = (id, kind) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = (!rqStatFilter || rqStatFilter === kind) ? '' : 'none';
+    if (rqBucketCounts[kind] === 0){
+      el.innerHTML = (kind === rqStatFilter || (!rqStatFilter && kind === 'updating'))
+        ? `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>${RQ_EMPTY_MSG[kind]}</div></div>`
+        : '';
+    }
+  };
+  apply('rq_ready_results', 'ready');
+  apply('rq_expired_results', 'expired');
+  apply('rq_updating_results', 'updating');
 }
 
 // Answers "did this actually get recorded for every plant, or just one?" without opening
@@ -1630,11 +1651,13 @@ async function loadPendingPrices(){
   if (qPendingRows.length){ countBadge.textContent = String(qPendingRows.length); countBadge.style.display = 'inline-flex'; }
   else countBadge.style.display = 'none';
   if (!qPendingRows.length){
-    const emptyHtml = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing pending — every plant is priced and sent. Search a cut above to build a new quote.</div></div>`;
-    readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = emptyHtml;
     rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
     renderRqStats();
+    readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = '';
     rqApplyStatFilterVisibility();
+    // Genuinely nothing tracked anywhere (not just one empty bucket) — worth a more specific
+    // message than 3 blank sections, shown in the default "everything" view only.
+    if (!rqStatFilter) updatingList.innerHTML = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing pending — every plant is priced and sent. Search a cut above to build a new quote.</div></div>`;
     return;
   }
 
@@ -1763,16 +1786,20 @@ async function loadPendingPrices(){
   // that match matters now that the stat cards are the filter buttons for these tables.
   rqBucketCounts = { ready: allReady.length, expired: allExpired.length, updating: allWaiting.length };
   renderRqStats();
-  rqApplyStatFilterVisibility();
+  // Raw content first, unconditionally — an empty bucket just gets '' here. Whether that empty
+  // bucket then shows a "Nothing X" message or stays truly blank is rqApplyStatFilterVisibility's
+  // call below, which has to run AFTER this (not before) so it's overlaying the real, current
+  // counts instead of being immediately overwritten by them.
   readyList.innerHTML = allReady.length
     ? tableSection('Ready to send', '', 'qbucket-ready', allReady.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', ''])
-    : `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing ready to send yet.</div></div>`;
+    : '';
   expiredList.innerHTML = allExpired.length
     ? tableSection('Expired', '— your call', 'qbucket-expired', allExpired.map(x => rqExpiredRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price'])
-    : `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing expired.</div></div>`;
+    : '';
   updatingList.innerHTML = allWaiting.length
     ? tableSection('Updating', '', 'qbucket-waiting', allWaiting.map(x => rqWaitingRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Requested', ''])
-    : `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Nothing waiting on a price.</div></div>`;
+    : '';
+  rqApplyStatFilterVisibility();
   } catch (e) {
     const errHtml = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Something went wrong loading this list: ${escapeHtml(e.message)}</div><button type="button" class="pkg-trigger-btn" style="margin:12px auto 0;" onclick="loadPendingPrices()">↻ Retry</button></div>`;
     readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = errHtml;
