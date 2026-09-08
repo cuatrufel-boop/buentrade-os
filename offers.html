@@ -125,10 +125,18 @@
   .toast-text{font-size:13px;color:var(--ink);line-height:1.35;}
   .toast-text b{display:block;font-size:13px;margin-bottom:1px;}
   @keyframes toastIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
+  /* Real ask 2026-09-08: "organiza cada offer igual que esta en collections" — same table
+     conventions as collections.html/orders.html: uppercase muted headers, hairline row dividers,
+     near-invisible hover, mono/tabular numbers. Replaces this file's own older, unused
+     center-aligned table rules (no <table> existed anywhere in this file before this change). */
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:center;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);white-space:nowrap;}
-  td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;text-align:center;}
-  tr:last-child td{border-bottom:none;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,.03);}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .muted{color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto;}
   .field{margin-bottom:0;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -166,6 +174,10 @@
   .pkg-tag.price{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   .pkg-tag.won{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);}
   .pkg-tag.lost{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  /* Real ask 2026-09-08: "bloinking la que tiene bid" — same green as .pkg-tag.won (a bid is good
+     news, same as a win), plus this file's own established hotPulse animation, already used
+     elsewhere for the exact same "a real bid just landed" state. */
+  .pkg-tag.hot{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);animation:hotPulse 1.4s ease-in-out infinite;}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   /* Real ask 2026-09-08: "el boton de negotiate solo diga QT en un circulo azul... igual que lo
      que ya hicimos" — same circular QT button as orders.html's openOrderQT link (36px circle,
@@ -717,83 +729,64 @@ function renderOffers(){
       }).join('')}
     </div>` : '';
 
-  // A won/lost row keeps the exact original rendering (price, status tag, kebab menu/History) —
-  // nothing about how a closed deal is shown or acted on changes here.
+  // Real ask 2026-09-08: "analiza todo lo que hemos hecho... en lugar de eso tan grandes con
+  // botones gigantes que hicimos en orden. organiza cada offer igual que esta en collections" —
+  // same conversion already done for orders.html: plant-avatar cards become plain table rows
+  // (Product/Plant/Price/Status/Actions), no logos, no per-product sub-grouping (Product is just
+  // its own column now, exactly how collections lists Order/Customer/Product per row).
+
+  // A won/lost row keeps the exact original actions (kebab menu/History) — nothing about how a
+  // closed deal is acted on changes here, just the row's own markup (table row, not a card).
   function renderClosedRow(o){
-    const plant = o.plant_id ? offerPlantsById[o.plant_id] : null;
-    const logo = plant && (plant.logo_url || plant.logo_url_dark);
-    const initial = (o.plant_name || '?').trim().charAt(0).toUpperCase();
-    const avatarHtml = logo
-      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
     const statusTag = o.status === 'won'
       ? `<span class="pkg-tag won">Win${o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`
       : `<span class="pkg-tag lost">Lost</span>`;
     const actionsHtml = o.status === 'won'
-      ? `<button class="row-menu-btn" style="margin-left:auto;" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`
+      ? `<button class="row-menu-btn" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`
       : '';
-    return `<div class="pkg-row">
-        ${avatarHtml}
-        <div class="pkg-plant-info">
-          <span class="pkg-plant">${escapeHtml(o.product_name)}</span>
-          <span class="pkg-asof">${escapeHtml(o.plant_name)}</span>
-          <span class="pkg-tag price">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</span>
-          ${statusTag}
-        </div>
-        ${actionsHtml}
-      </div>
-      <div id="history_row_${o.id}" style="display:none;padding:0 0 8px;"><div id="history_panel_${o.id}"></div></div>`;
+    return `<tr>
+        <td>${escapeHtml(o.product_name || '—')}</td>
+        <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
+        <td class="num">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</td>
+        <td>${statusTag}</td>
+        <td>${actionsHtml}</td>
+      </tr>
+      <tr id="history_row_${o.id}" style="display:none;"><td colspan="5" style="padding:0 0 12px;"><div id="history_panel_${o.id}"></div></td></tr>`;
   }
 
-  // A live/pending offer renders one row per plant quoting it, nested under its product — this is
-  // the "find Murgati, then her Sirloin, then the 3 plants quoting it" drill-down, not a flat list
-  // of every offer regardless of what it's for.
+  // A live/pending offer — one row per plant quoting it. "bloinking la que tiene bid": the single
+  // row with a real bid/counter in (offerIsHot) pulses green via .pkg-tag.hot, same hotPulse
+  // animation this file already uses everywhere else for the exact same state.
   function renderOpenRow(o){
     const hot = offerIsHot(o);
     const cold = offerIsCold(o);
-    const plant = o.plant_id ? offerPlantsById[o.plant_id] : null;
-    const logo = plant && (plant.logo_url || plant.logo_url_dark);
-    const initial = (o.plant_name || '?').trim().charAt(0).toUpperCase();
-    const avatarHtml = logo
-      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
     const ageDays = offerAgeDays(o.sent_at);
-    const ageLabel = hot ? 'bid received'
+    const ageLabel = hot ? '🔥 Bid In'
       : cold ? `${ageDays}d, no response`
       : (ageDays != null ? `sent ${ageDays === 0 ? 'today' : ageDays + 'd ago'}` : '');
-    return `<div class="pkg-row">
-        ${avatarHtml}
-        <div class="pkg-plant-info">
-          <span class="pkg-plant">${escapeHtml(o.plant_name)}</span>
-          <span class="pkg-tag price">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</span>
-          <span class="pkg-asof${cold ? ' cold' : ''}">${escapeHtml(ageLabel)}</span>
-        </div>
-        <div class="qt-circle${hot ? ' hot' : ''}" style="margin-left:auto;" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div>
-        <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div id="history_row_${o.id}" style="display:none;padding:0 0 8px;"><div id="history_panel_${o.id}"></div></div>`;
+    const statusHtml = hot
+      ? `<span class="pkg-tag hot">${ageLabel}</span>`
+      : `<span class="pkg-asof${cold ? ' cold' : ''}">${escapeHtml(ageLabel)}</span>`;
+    return `<tr>
+        <td>${escapeHtml(o.product_name || '—')}</td>
+        <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
+        <td class="num">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</td>
+        <td>${statusHtml}</td>
+        <td>
+          <div style="display:inline-flex;align-items:center;gap:8px;">
+            <div class="qt-circle${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div>
+            <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+        </td>
+      </tr>
+      <tr id="history_row_${o.id}" style="display:none;"><td colspan="5" style="padding:0 0 12px;"><div id="history_panel_${o.id}"></div></td></tr>`;
   }
 
   wrap.innerHTML = attnHtml + groupList.map(g => {
     const openRows = g.rows.filter(o => o.status === 'sent');
     const closedRows = g.rows.filter(o => o.status !== 'sent');
     const coldCount = openRows.filter(offerIsCold).length;
-
-    // Open rows nest under their product — same product, multiple plants quoting it (exactly the
-    // "Murgati wants Sirloin, 3 plants have quoted it" case), grouped in whatever order they were
-    // first sent rather than re-sorted, so a trader scanning top to bottom sees them consistently.
-    const byProduct = {};
-    const productOrder = [];
-    openRows.forEach(o => {
-      const key = o.product_name || '—';
-      if (!byProduct[key]){ byProduct[key] = []; productOrder.push(key); }
-      byProduct[key].push(o);
-    });
-    const openHtml = productOrder.map(name => `
-      <div class="prod-subhead">${escapeHtml(name)} <span class="n">${byProduct[name].length} plant${byProduct[name].length === 1 ? '' : 's'} quoting</span></div>
-      ${byProduct[name].map(renderOpenRow).join('')}
-    `).join('');
-    const closedHtml = closedRows.map(renderClosedRow).join('');
+    const rowsHtml = openRows.map(renderOpenRow).join('') + closedRows.map(renderClosedRow).join('');
 
     // Real bug, confirmed against the real 11-offer dataset: "open only when hot" collapsed
     // EVERY customer the moment none of them had a live negotiation yet (the normal state early
@@ -810,7 +803,12 @@ function renderOffers(){
         ${coldCount ? `<span class="pkg-tag" style="background:rgba(196,67,46,.12);color:#FF9C8A;">${coldCount} going cold</span>` : ''}
       </div>
       <div class="pending-group-body">
-        <div class="pkg-table-wrap">${openHtml}${closedHtml}</div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Product</th><th>Plant</th><th>Price</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -822,18 +820,20 @@ function renderOffers(){
 // buttons — this is the only way to look back at "how did we land on this price" afterward.
 let historyOpenId = null;
 
+// history_row_ is now a <tr> (the offer list moved from pkg-row cards to a table) — 'table-row',
+// not 'block', or the expanded panel would render as a stray non-row child of <tbody>.
 function toggleHistory(offerId){
   const row = document.getElementById('history_row_' + offerId);
   if (historyOpenId && historyOpenId !== offerId){
     const prev = document.getElementById('history_row_' + historyOpenId);
     if (prev) prev.style.display = 'none';
   }
-  if (row.style.display === 'block'){
+  if (row.style.display === 'table-row'){
     row.style.display = 'none';
     historyOpenId = null;
     return;
   }
-  row.style.display = 'block';
+  row.style.display = 'table-row';
   historyOpenId = offerId;
   renderHistoryPanel(offerId);
 }
