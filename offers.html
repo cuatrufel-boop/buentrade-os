@@ -875,7 +875,6 @@ function renderOffers(){
   wrap.innerHTML = attnHtml + groupList.map(g => {
     const openRows = g.rows.filter(o => o.status === 'sent');
     const closedRows = g.rows.filter(o => o.status !== 'sent');
-    const coldCount = openRows.filter(offerIsCold).length;
     const rowsHtml = openRows.map(renderOpenRow).join('') + closedRows.map(renderClosedRow).join('');
 
     // Real bug, confirmed against the real 11-offer dataset: "open only when hot" collapsed
@@ -890,10 +889,6 @@ function renderOffers(){
         <div style="display:flex;align-items:center;gap:9px;min-width:0;">
           <span class="cust-chevron"></span>
           <span class="pending-group-title">${escapeHtml(g.customerName)}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          <span class="pending-group-count">${g.rows.length} offer${g.rows.length === 1 ? '' : 's'}</span>
-          ${coldCount ? `<span class="pkg-tag" style="background:rgba(196,67,46,.12);color:#FF9C8A;">${coldCount} going cold</span>` : ''}
         </div>
       </div>
       <div class="pending-group-body">
