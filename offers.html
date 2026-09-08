@@ -469,8 +469,7 @@ auth.onAuthStateChanged(user => {
   <div id="offerPanel_pipeline">
     <div class="stats-row" id="pipelineStats"></div>
     <div class="card">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
-        <div class="field"><label>Search (product, plant, customer)</label><input id="f_search" oninput="renderOffers()" placeholder="Search…"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:end;">
         <div class="field"><label>Status</label>
           <input type="hidden" id="f_status" value="sent">
           <div class="seg-control" id="f_status_seg">
@@ -660,10 +659,9 @@ function toggleCustGroup(name, currentlyOpen){
   custOpenOverride.set(name, !currentlyOpen);
   renderOffers();
 }
-// Jumping from an attention pill reuses the existing search box — same filtering everything
-// else already goes through, no separate "jump to customer" mechanism to keep in sync.
+// Jumping from an attention pill just force-opens that customer's group — no search box to sync
+// with anymore (real ask 2026-09-08: "esa fila de search quitala").
 function jumpToCustomer(name){
-  document.getElementById('f_search').value = name;
   custOpenOverride.set(name, true);
   renderOffers();
 }
@@ -678,13 +676,8 @@ function setStatusFilter(val, btn){
 
 function renderOffers(){
   renderStats();
-  const term = (document.getElementById('f_search').value || '').trim().toLowerCase();
   const status = document.getElementById('f_status').value;
-  const filtered = offers.filter(o => {
-    if (status && o.status !== status) return false;
-    if (!term) return true;
-    return [o.product_name, o.plant_name, o.customer_name].some(v => (v || '').toLowerCase().includes(term));
-  });
+  const filtered = offers.filter(o => !status || o.status === status);
   const wrap = document.getElementById('offerRows');
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = 'No offers match.';
@@ -757,6 +750,11 @@ function renderOffers(){
   // A live/pending offer — one row per plant quoting it. "bloinking la que tiene bid": the single
   // row with a real bid/counter in (offerIsHot) pulses green via .pkg-tag.hot, same hotPulse
   // animation this file already uses everywhere else for the exact same state.
+  // Real ask 2026-09-08: "en status debe estar normal si se envio y blinking si hay un bid" —
+  // just two visual states now: normal/muted once sent, pulsing green only once a real bid/counter
+  // is in. The age text itself still says "no response" once it's actually been a while (still
+  // real, useful info), it just no longer gets its own red "cold" color — that signal already
+  // lives one level up, in the group's own "N going cold" badge.
   function renderOpenRow(o){
     const hot = offerIsHot(o);
     const cold = offerIsCold(o);
@@ -766,18 +764,13 @@ function renderOffers(){
       : (ageDays != null ? `sent ${ageDays === 0 ? 'today' : ageDays + 'd ago'}` : '');
     const statusHtml = hot
       ? `<span class="pkg-tag hot">${ageLabel}</span>`
-      : `<span class="pkg-asof${cold ? ' cold' : ''}">${escapeHtml(ageLabel)}</span>`;
+      : `<span class="pkg-asof">${escapeHtml(ageLabel)}</span>`;
     return `<tr>
         <td>${escapeHtml(o.product_name || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
         <td class="num">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</td>
         <td>${statusHtml}</td>
-        <td>
-          <div style="display:inline-flex;align-items:center;gap:8px;">
-            <div class="qt-circle${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div>
-            <button class="icon-btn lose" onclick="markOffer('${o.id}','lost')" title="Mark as lost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-          </div>
-        </td>
+        <td><div class="qt-circle${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div></td>
       </tr>
       <tr id="history_row_${o.id}" style="display:none;"><td colspan="5" style="padding:0 0 12px;"><div id="history_panel_${o.id}"></div></td></tr>`;
   }
@@ -794,13 +787,17 @@ function renderOffers(){
     // ARE the thing a trader watches for day to day — they should be visible by default, not
     // hidden behind a click; only a customer with nothing left to act on (every offer already
     // won/lost) collapses down to its one-line summary.
-    const isOpen = custOpenOverride.has(g.customerName) ? custOpenOverride.get(g.customerName) : (!!term || openRows.length > 0);
+    const isOpen = custOpenOverride.has(g.customerName) ? custOpenOverride.get(g.customerName) : (openRows.length > 0);
     return `<div class="pending-group${isOpen ? ' open' : ''}">
       <div class="pending-group-head" onclick="toggleCustGroup('${escapeHtml(g.customerName).replace(/'/g, "\\'")}', ${isOpen})">
-        <span class="cust-chevron"></span>
-        <span class="pending-group-title">${escapeHtml(g.customerName)}</span>
-        <span class="pending-group-count">${g.rows.length} offer${g.rows.length === 1 ? '' : 's'}</span>
-        ${coldCount ? `<span class="pkg-tag" style="background:rgba(196,67,46,.12);color:#FF9C8A;">${coldCount} going cold</span>` : ''}
+        <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+          <span class="cust-chevron"></span>
+          <span class="pending-group-title">${escapeHtml(g.customerName)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          <span class="pending-group-count">${g.rows.length} offer${g.rows.length === 1 ? '' : 's'}</span>
+          ${coldCount ? `<span class="pkg-tag" style="background:rgba(196,67,46,.12);color:#FF9C8A;">${coldCount} going cold</span>` : ''}
+        </div>
       </div>
       <div class="pending-group-body">
         <div class="table-scroll">
