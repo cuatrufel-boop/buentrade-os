@@ -381,6 +381,18 @@
   .qbucket-waiting .qbucket-title{color:rgba(255,255,255,.65);}
   .qbucket-sub{font-size:11px;color:rgba(255,255,255,.55);margin-left:2px;}
   .qbucket-rows{display:flex;flex-direction:column;gap:8px;}
+  /* Real ask 2026-09-08: "todas las updating quedan en una tabla, ready to send en otra, y
+     expired en otra" — same table conventions as collections.html/orders.html/offers.html:
+     left-aligned uppercase headers, hairline row dividers, near-invisible hover, mono/tabular
+     numbers. Did not exist in this file before (the qbucket rows were always flex cards). */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,.03);}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .muted{color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto;}
 
   /* Waiting bucket: flat rows, same family as Ready/Expired. A plant here needs zero action from
      the trader day-to-day (it's already been asked, automatically) — Off-Spec is the one real,
@@ -1615,136 +1627,100 @@ async function loadPendingPrices(){
   // one of three real states, and the trader's job is different in each one. Ready/Expired reuse
   // the same full .pkg-row card and the exact same buttons/handlers this list already had —
   // nothing about what a click does changes here, only which labeled group it renders under.
-  const rqFullPkgRow = (r, g, opts = {}) => {
-    const initial = (r.plant.name || '?').trim().charAt(0).toUpperCase();
-    const logo = r.plant.logo_url || r.plant.logo_url_dark;
-    const avatarHtml = logo
-      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
-    // Explicit ask 2026-09-04: "solo miro los blinking con precio y los mando" — the trader's own
-    // scan pattern for this list is "find the blinking ones," so Ready rows blink for as long as
-    // they're sitting here unsent, not just once when the price first lands. Stops the moment the
-    // row actually leaves (sent → graduates to Offers, see loadPendingPrices).
-    const cachedCalc = r.priced ? rqPendingCalcCache[r.plant_id + '|' + g.productId] : null;
-    const statusTagHtml = r.priced
-      ? (cachedCalc
-        ? `<span class="pkg-tag price pkg-tag-blink">$${Number(r.current_price).toFixed(4)}/lb</span>`
-        : `<span class="pkg-tag price pkg-tag-blink" style="cursor:pointer;" title="View Quote" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">$${Number(r.current_price).toFixed(4)}/lb</span>`)
-      : `<span class="pkg-tag stale">Expired · ${rqFmtDate(r.price_date)}</span>`;
-    // Bloomberg mode only (display:none by default, see --dash-bar-display) — where this plant's
-    // price actually sits against every other plant already compared for this same cut right now,
-    // real data already on hand from the sort above, not invented for decoration.
-    const barHtml = r.priced && opts.maxPrice
-      ? `<div class="pkg-price-bar-track"><div class="pkg-price-bar-fill" style="width:${Math.max(8, Math.round(Number(r.current_price) / opts.maxPrice * 100))}%;"></div></div>`
-      : '';
-    const saleInfoHtml = cachedCalc ? `
-      <div style="text-align:right;flex-shrink:0;">
-        <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;">$${cachedCalc.salePerLb.toFixed(4)}/lb</div>
-        <div style="font-size:11px;color:var(--ink-soft);">Total $${cachedCalc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
-      </div>` : '';
-    // Real redesign 2026-09-04, explicit and repeated ("esto no se hace en dashboard... dashboard
-    // [con] cosas de building"): Send anyway / Enter Price / View Quote all open or act on the
-    // Trading Tool — that belongs to Building (search a product, work it in the tray), never to
-    // this passive Dashboard sweep. A row here is status only, plus its own send trigger once
-    // already confirmed elsewhere; clicking the product title above (qOpenProductInRequest) is how
-    // the trader jumps into Building to actually do anything about a Ready/Expired row.
+  // Real ask 2026-09-08: "todas las updating quedan en una tabla, ready to send en otra, y
+  // expired en otra" — same conversion already applied to orders.html/offers.html: per-product
+  // card buckets become 3 flat tables, one per real state, each row carrying its own Product
+  // column instead of a group header. Confirmed via .rq-board's own grid (1fr 380px) that this is
+  // safe ONLY for this column — #rq_search_results is the wide 1fr side; Building's own plant rows
+  // (#rq_plant_rows, the fixed 380px sidebar) stay as cards, a table would not fit that column.
+  const rqProductName = (productId) => {
+    const prod = products.find(p => p.id === productId);
+    return prod ? (prod.full_name_en || prod.name_en || prod.name) : '(removed from catalog)';
+  };
+  const rqProductCellHtml = (productId) => `<span class="pending-group-title-link" style="font-size:13px;" onclick="qOpenProductInRequest('${productId}')" title="Open this product in Quotes">${escapeHtml(rqProductName(productId))}</span>`;
+  // Same q-pending-inline-slot mechanism as before (qOpenPendingPlantInline/rqCloseCalculator),
+  // completely untouched — only its wrapper changed from a plain div to a table row, so a real,
+  // already-hardened piece of DOM (multiple past "duplicated ficha" bugs fixed here) keeps working
+  // exactly as-is. The <tr> itself never toggles; the inner div's own display:none/block (set
+  // elsewhere, unchanged) is what shows or hides it, same as always.
+  const rqInlineSlotRowHtml = (plantId, productId, colspan) =>
+    `<tr><td colspan="${colspan}" style="padding:0;border-top:none;">
+      <div class="q-pending-inline-slot" id="q_pending_inline_${plantId}_${productId}" style="display:none;padding:0 0 12px;"></div>
+    </td></tr>`;
+
+  // Explicit ask 2026-09-04: "solo miro los blinking con precio y los mando" — Ready rows blink
+  // for as long as they're sitting here unsent (same rule as before, unchanged).
+  const rqReadyRowHtml = (r, g) => {
+    const cachedCalc = rqPendingCalcCache[r.plant_id + '|' + g.productId];
+    const priceHtml = cachedCalc
+      ? `<span class="pkg-tag price pkg-tag-blink">$${Number(r.current_price).toFixed(4)}/lb</span>`
+      : `<span class="pkg-tag price pkg-tag-blink" style="cursor:pointer;" title="View Quote" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">$${Number(r.current_price).toFixed(4)}/lb</span>`;
+    const saleHtml = cachedCalc
+      ? `<span class="num">$${cachedCalc.salePerLb.toFixed(4)}/lb</span><span class="muted" style="display:block;font-size:11px;">Total $${cachedCalc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</span>`
+      : '<span class="muted">—</span>';
     // Real redesign 2026-09-04 ("el boton va a aparecer solo cuando... purchase y sales price
-    // CONFIRMADO... confirmo uno, sale un boton"): only a row that already has both prices gets a
-    // real send trigger — no group-level "Email/WhatsApp all" spanning Ready+Expired+Waiting any
-    // more (see qSendConfirmedPlantOffer).
-    const sendConfirmedBtns = cachedCalc ? `
+    // CONFIRMADO"): only a row with both prices confirmed gets a real send trigger.
+    const actionsHtml = cachedCalc ? `
       <button type="button" class="rq-customer-bulk-btn email" style="padding:7px 10px;" title="Email this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','email')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
-      <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : '';
-    // Real bug found 2026-09-04, confirmed by the trader: Off-Spec ("doesn't carry this") never
-    // belonged on a Ready or Expired row — either one means this plant already sent a real price
-    // for this exact product at some point, which is direct proof it DOES carry it. Declining it
-    // now would contradict the plant's own evidence and permanently block a plant that's proven to
-    // work. "Doesn't carry this" only makes sense where that's genuinely unknown — the Waiting
-    // bucket's own small text link (qbucket-waiting-row-decline), left untouched here.
-    // Real ask 2026-09-04: no separate "View Quote →" button — the blinking price tag itself is
-    // the click target that opens the calculator (see statusTagHtml above), once it isn't confirmed
-    // yet (cachedCalc null). Only Expired/Waiting's own ask actions belong to Building.
-    return `<div class="pkg-row">
-      ${avatarHtml}
-      <div class="pkg-plant-info">
-        <span class="pkg-plant">${escapeHtml(r.plant.name)}</span>
-        ${statusTagHtml}
-        ${barHtml}
-      </div>
-      ${saleInfoHtml}
-      <div style="display:flex;gap:8px;flex-shrink:0;">
-        ${sendConfirmedBtns}
-      </div>
-    </div>
-    <div class="q-pending-inline-slot" id="q_pending_inline_${r.plant_id}_${g.productId}" style="display:none;padding:0 0 12px;"></div>`;
+      <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>`
+      : '<span class="muted">—</span>';
+    return `<tr>
+        <td>${rqProductCellHtml(g.productId)}</td>
+        <td class="muted">${escapeHtml(r.plant.name)}</td>
+        <td class="num">${priceHtml}</td>
+        <td>${saleHtml}</td>
+        <td><div style="display:flex;gap:8px;">${actionsHtml}</div></td>
+      </tr>
+      ${rqInlineSlotRowHtml(r.plant_id, g.productId, 5)}`;
   };
 
-  list.innerHTML = groupList.map(g => {
-    const prod = products.find(p => p.id === g.productId);
-    const name = prod.full_name_en || prod.name_en || prod.name;
-    // Explicit ask 2026-09-03: highest price first within Ready — the trader is comparing offers
-    // from every plant that carries this cut to decide what to quote a customer, same reading
-    // order as a real bid sheet.
-    const readyRows = g.rows.filter(r => r.priced).sort((a, b) => Number(b.current_price) - Number(a.current_price));
-    // Real ask 2026-09-04 ("el expired ya le pedimos update desde building, no deberia estar ahi"):
-    // a stale price the trader already re-asked for (Update Price → real email sent, last_requested_at
-    // moved past price_date) isn't an untouched, needs-a-decision row any more — it's the same "we're
-    // waiting on a reply" state as a plant that never had a price. Same bucket, not still sitting in
-    // Expired looking like nothing was done about it.
-    const reaskedStale = r => r.stale && r.last_requested_at && (!r.price_date || new Date(r.last_requested_at) > new Date(r.price_date));
-    const expiredRows = g.rows.filter(r => r.stale && !reaskedStale(r));
-    const waitingRows = g.rows.filter(r => r.missing || reaskedStale(r));
+  // Real redesign 2026-09-04 ("esto no se hace en dashboard... dashboard [con] cosas de
+  // building"): Expired is status-only here — no send trigger, no calculator shortcut. Jumping
+  // into Building (via the Product cell) is the only real action, same as before.
+  const rqExpiredRowHtml = (r, g) => `<tr>
+      <td>${rqProductCellHtml(g.productId)}</td>
+      <td class="muted">${escapeHtml(r.plant.name)}</td>
+      <td class="num"><span class="pkg-tag stale">Expired · ${rqFmtDate(r.price_date)}</span></td>
+    </tr>`;
 
-    const readyBucketHtml = readyRows.length ? `
-      <div class="qbucket qbucket-ready">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Ready</span></div>
-        <div class="qbucket-rows">${readyRows.map(r => rqFullPkgRow(r, g, { maxPrice: Number(readyRows[0].current_price) })).join('')}</div>
-      </div>` : '';
+  // Real ask 2026-09-04 ("quitar dropdown de plantas waiting... no quiero mas fondos blancos"):
+  // flat rows, same .pkg-tag treatment as Ready/Expired — unchanged, just a table row now.
+  const rqWaitingRowHtml = (r, g) => `<tr>
+      <td>${rqProductCellHtml(g.productId)}</td>
+      <td class="muted">${escapeHtml(r.plant.name)}</td>
+      <td class="num">${rqFmtDate(r.last_requested_at)}</td>
+      <td><button type="button" class="qbucket-waiting-row-decline" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Off-Spec</button></td>
+    </tr>`;
 
-    const expiredBucketHtml = expiredRows.length ? `
-      <div class="qbucket qbucket-expired">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Expired</span><span class="qbucket-sub">— your call</span></div>
-        <div class="qbucket-rows">${expiredRows.map(r => rqFullPkgRow(r, g, { showSendStale: true })).join('')}</div>
-      </div>` : '';
+  // Real ask 2026-09-04 ("el expired ya le pedimos update desde building, no deberia estar ahi"):
+  // a stale price already re-asked for (Update Price sent, last_requested_at past price_date) is
+  // the same "waiting on a reply" state as a plant that never had a price — unchanged rule.
+  const reaskedStale = r => r.stale && r.last_requested_at && (!r.price_date || new Date(r.last_requested_at) > new Date(r.price_date));
+  const allReady = [], allExpired = [], allWaiting = [];
+  groupList.forEach(g => {
+    // Explicit ask 2026-09-03: highest price first within Ready — same real bid-sheet order,
+    // scoped per product group before flattening so the global table still reads bid-sheet-first
+    // within each product's own run of rows.
+    g.rows.filter(r => r.priced).sort((a, b) => Number(b.current_price) - Number(a.current_price))
+      .forEach(r => allReady.push({ r, g }));
+    g.rows.filter(r => r.stale && !reaskedStale(r)).forEach(r => allExpired.push({ r, g }));
+    g.rows.filter(r => r.missing || reaskedStale(r)).forEach(r => allWaiting.push({ r, g }));
+  });
 
-    // Real ask 2026-09-04 ("quitar dropdown de plantas waiting... dejar mismo font de plantas
-    // normales con las del dropdown, no quiero mas fondos blancos"): the collapsed/expandable
-    // strip opened its own separate light card with its own font, different from every other row
-    // in this list. Flat rows now, same .pkg-row/.pkg-tag treatment (and font) as Ready/Expired —
-    // one consistent family, no second surface to open or close.
-    const waitingBucketHtml = waitingRows.length ? `
-      <div class="qbucket qbucket-waiting">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Updating</span></div>
-        <div class="qbucket-rows">${waitingRows.map(r => {
-          const initial = (r.plant.name || '?').trim().charAt(0).toUpperCase();
-          const logo = r.plant.logo_url || r.plant.logo_url_dark;
-          const avatarHtml = logo
-            ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(logo)}" alt=""></div>`
-            : `<div class="pkg-plant-avatar">${escapeHtml(initial)}</div>`;
-          return `<div class="pkg-row">
-            ${avatarHtml}
-            <div class="pkg-plant-info">
-              <span class="pkg-plant">${escapeHtml(r.plant.name)}</span>
-              <span class="pkg-tag missing">${rqFmtDate(r.last_requested_at)}</span>
-            </div>
-            <button type="button" class="qbucket-waiting-row-decline" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Off-Spec</button>
-          </div>`;
-        }).join('')}</div>
-      </div>` : '';
-
-    // Real redesign 2026-09-04 ("no puedo poner un boton a mandar emails a fichas con status
-    // diferentes"): removed the group-level "Email/WhatsApp all" spanning every status in this
-    // product — each confirmed row now carries its own send trigger (see sendConfirmedBtns in
-    // rqFullPkgRow above), which is also where multiple-confirmed-plants get bundled together.
-    return `<div class="pending-group">
-      <div class="pending-group-head">
-        <span class="pending-group-title pending-group-title-link" onclick="qOpenProductInRequest('${g.productId}')" title="Open this product in Quotes">${escapeHtml(name)}</span>
-      </div>
-      ${readyBucketHtml}
-      ${expiredBucketHtml}
-      ${waitingBucketHtml}
+  const tableSection = (title, sub, cls, rowsHtml, headCells) => `
+    <div class="qbucket ${cls}">
+      <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">${title}</span>${sub ? `<span class="qbucket-sub">${sub}</span>` : ''}</div>
+      <div class="table-scroll"><table>
+        <thead><tr>${headCells.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table></div>
     </div>`;
-  }).join('');
+
+  list.innerHTML = [
+    allReady.length ? tableSection('Ready to send', '', 'qbucket-ready', allReady.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', '']) : '',
+    allExpired.length ? tableSection('Expired', '— your call', 'qbucket-expired', allExpired.map(x => rqExpiredRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price']) : '',
+    allWaiting.length ? tableSection('Updating', '', 'qbucket-waiting', allWaiting.map(x => rqWaitingRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Requested', '']) : '',
+  ].join('');
   } catch (e) {
     if (list) list.innerHTML = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Something went wrong loading this list: ${escapeHtml(e.message)}</div><button type="button" class="pkg-trigger-btn" style="margin:12px auto 0;" onclick="loadPendingPrices()">↻ Retry</button></div>`;
   }
