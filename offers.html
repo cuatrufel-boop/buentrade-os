@@ -137,6 +137,18 @@
   .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
   .muted{color:var(--ink-soft);}
   .table-scroll{overflow-x:auto;}
+  /* Real ask 2026-09-08: "quiero linkeable el precio... que el precio que este pendiente este
+     blinking" — the cell itself is the click target (opens the same negotiation view as QT), an
+     underline-on-hover is the only affordance it needs since the numbers keep their normal color.
+     The pending side (whichever we're awaiting a reply on) gets its own color + the same plain
+     opacity blink already established for .pkg-tag.hot (pkgTagBlink) — amber matches this app's
+     own "needs a reply / pending" hue elsewhere (orders.html's due-soon badges). */
+  .price-link{cursor:pointer;}
+  .price-link:hover{text-decoration:underline;}
+  .price-pending{color:var(--amber);animation:pkgTagBlink 1.1s ease-in-out infinite;}
+  @media (prefers-reduced-motion: reduce){
+    .price-pending{animation:none;}
+  }
   .field{margin-bottom:0;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -784,15 +796,31 @@ function renderOffers(){
   // else for this exact state) the moment a real bid/counter is in (offerIsHot). No day-count, no
   // "no response" wording — that finer detail was a real ask (1), not this one; the group's own
   // "N going cold" badge already carries the aging signal.
+  // Real ask 2026-09-08: "quiero linkeable el precio. que el link me abra negotiation elmismo del
+  // qt." — the price cell opens the exact same trading-tool.html overlay the QT circle does
+  // (toggleTT), which already shows its own real #negoCard/Negotiation chart whenever it's opened
+  // for an existing offer — no second negotiation view built here, just reuse the real one.
+  //
+  // "que el precio que este pendiente este blinking... si le escribi a planta purchase price
+  // blinking, si le escribi a cliente sales price blinking" — whichever side we're actually
+  // waiting on a reply for pulses amber. That's decided by the LAST negotiation_log entry's `to`:
+  // 'plant' means we just sent the plant our number and are waiting on them (purchase blinks);
+  // 'customer' means the same on the customer side (sale blinks). An incoming reply already
+  // logged (plant_reply/customer_bid) means we're not waiting on anyone — the ball is back in the
+  // trader's court — so neither side blinks; matches only the two cases actually described.
   function renderOpenRow(o){
     const hot = offerIsHot(o);
     const statusHtml = hot
       ? `<span class="pkg-tag hot">Bid</span>`
       : `<span class="pkg-tag sent">Sent</span>`;
+    const log = o.negotiation_log || [];
+    const lastTo = log.length ? log[log.length - 1].to : null;
+    const purchaseHtml = `<span${lastTo === 'plant' ? ' class="price-pending"' : ''}>$${(o.purchase_price || 0).toFixed(4)}</span>`;
+    const saleHtml = `<span${lastTo === 'customer' ? ' class="price-pending"' : ''}>$${(o.sale_per_lb || 0).toFixed(4)}</span>`;
     return `<tr>
         <td>${escapeHtml(o.product_name || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
-        <td class="num">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</td>
+        <td class="num price-link" onclick="toggleTT('${o.id}')" title="Open negotiation">${purchaseHtml} → ${saleHtml}</td>
         <td>${statusHtml}</td>
         <td><div class="qt-circle${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div></td>
       </tr>
