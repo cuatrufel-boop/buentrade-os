@@ -174,6 +174,11 @@
   .pkg-tag.price{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   .pkg-tag.won{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);}
   .pkg-tag.lost{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  /* Real ask 2026-09-08: "que se expiren las ofertas en 10 dias y donde quedan?" — a stale, never-
+     replied-to offer auto-flips to its own 'expired' status (sent-offers-expire-stale, daily cron),
+     kept distinct from a real competitive 'lost' so it never dilutes the win-rate stat. Same
+     neutral, no-signal color as .pkg-tag.lost — it's not a bad outcome, just dead. */
+  .pkg-tag.expired{background:transparent;color:var(--ink-soft);border-color:var(--line);}
   /* Real ask 2026-09-08: "bloinking la que tiene bid" — same green as .pkg-tag.won (a bid is good
      news, same as a win), plus this file's own established hotPulse animation, already used
      elsewhere for the exact same "a real bid just landed" state. */
@@ -736,6 +741,8 @@ function renderOffers(){
   function renderClosedRow(o){
     const statusTag = o.status === 'won'
       ? `<span class="pkg-tag won">Win${o.order_number ? ' · ' + escapeHtml(o.order_number) : ''}</span>`
+      : o.status === 'expired'
+      ? `<span class="pkg-tag expired">Expired</span>`
       : `<span class="pkg-tag lost">Lost</span>`;
     const actionsHtml = o.status === 'won'
       ? `<button class="row-menu-btn" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`
