@@ -137,6 +137,24 @@
   .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
   .muted{color:var(--ink-soft);}
   .table-scroll{overflow-x:auto;}
+  /* Real ask 2026-09-08 (corrected — "el precio abre la grafica de negotiation solamente", NOT the
+     full QT/calculator overlay, that's what the QT circle is already for): same visual component
+     as trading-tool.html's own #negoCard (title/legend/sparkline/step-track, .nego-* classes
+     below ported verbatim from there), rendered here directly from data offers.html already has
+     (negotiation_log, purchase_price, sale_per_lb, sent_at, plant_name, customer_name) — no iframe,
+     no extra API call, no second copy of the negotiation business logic. */
+  #negoViewOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:2200;align-items:center;justify-content:center;padding:20px;}
+  #negoViewBox{background:#0F2B52;border:1px solid var(--line);border-radius:16px;padding:26px 28px;max-width:900px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(4,12,26,.6);}
+  .nego-track{display:flex;align-items:flex-end;gap:0;padding:4px 2px 8px;}
+  .nego-step{display:flex;flex-direction:column;align-items:center;flex:1 1 0;min-width:0;position:relative;}
+  .nego-step:not(:last-child)::after{content:'';position:absolute;top:15px;left:calc(50% + 17px);width:calc(100% - 34px);height:2px;background:linear-gradient(90deg, var(--line), var(--line));}
+  .nego-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0;z-index:1;box-shadow:0 2px 6px rgba(15,31,51,.18);}
+  .nego-dot.in{background:linear-gradient(160deg,#22C17B,#0F8A5F);}
+  .nego-dot.out{background:linear-gradient(160deg,#4C8FEE,var(--blue));}
+  .nego-price{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:13px;color:var(--ink);margin-top:6px;white-space:nowrap;}
+  .nego-label{font-size:10px;color:var(--ink-soft);text-align:center;margin-top:2px;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .nego-date{font-size:9.5px;color:var(--ink-soft);opacity:.75;margin-top:2px;white-space:nowrap;}
+  .nego-chart-wrap{padding:2px 2px 0;}
   /* Real ask 2026-09-08: "quiero linkeable el precio... que el precio que este pendiente este
      blinking" — the cell itself is the click target (opens the same negotiation view as QT), an
      underline-on-hover is the only affordance it needs since the numbers keep their normal color.
@@ -533,6 +551,24 @@ auth.onAuthStateChanged(user => {
 </div>
 </div>
 
+<div id="negoViewOverlay" onclick="if(event.target===this) closeNegotiationView()">
+  <div id="negoViewBox">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+      <div>
+        <h2 style="margin:0 0 2px;font-family:'Space Grotesk',sans-serif;font-size:16px;">Negotiation</h2>
+        <div id="negoViewTitle" class="muted" style="font-size:12.5px;"></div>
+      </div>
+      <button class="row-menu-btn" onclick="closeNegotiationView()" title="Close">✕</button>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">
+      <span><span style="color:#0F8A5F;font-weight:700;">←</span> Received (their number)</span>
+      <span><span style="color:var(--blue);font-weight:700;">→</span> Sent (your number)</span>
+    </div>
+    <div id="negoViewChart"></div>
+    <div id="negoViewLog" class="nego-track"></div>
+  </div>
+</div>
+
 <div id="menuOverlay" class="menu-overlay" style="display:none;" onclick="closeFloatingMenus()">
   <div id="docsMenu" class="docs-menu" style="display:none;" onclick="event.stopPropagation()"></div>
 </div>
@@ -796,10 +832,12 @@ function renderOffers(){
   // else for this exact state) the moment a real bid/counter is in (offerIsHot). No day-count, no
   // "no response" wording — that finer detail was a real ask (1), not this one; the group's own
   // "N going cold" badge already carries the aging signal.
-  // Real ask 2026-09-08: "quiero linkeable el precio. que el link me abra negotiation elmismo del
-  // qt." — the price cell opens the exact same trading-tool.html overlay the QT circle does
-  // (toggleTT), which already shows its own real #negoCard/Negotiation chart whenever it's opened
-  // for an existing offer — no second negotiation view built here, just reuse the real one.
+  // Real ask 2026-09-08 (corrected — "el precio no te abre el QT... el precio abre la grafica de
+  // negotiation solamente", the QT circle already opens the full calculator, this is deliberately
+  // NOT that): the price cell opens openNegotiationView, a lightweight modal with the exact same
+  // negotiation chart trading-tool.html's own #negoCard shows (see the .nego-* CSS block above) —
+  // rendered directly from data already loaded here, no iframe, no second negotiation business
+  // logic invented.
   //
   // "que el precio que este pendiente este blinking... si le escribi a planta purchase price
   // blinking, si le escribi a cliente sales price blinking" — whichever side we're actually
@@ -820,7 +858,7 @@ function renderOffers(){
     return `<tr>
         <td>${escapeHtml(o.product_name || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
-        <td class="num price-link" onclick="toggleTT('${o.id}')" title="Open negotiation">${purchaseHtml} → ${saleHtml}</td>
+        <td class="num price-link" onclick="openNegotiationView('${o.id}')" title="Open negotiation">${purchaseHtml} → ${saleHtml}</td>
         <td>${statusHtml}</td>
         <td><div class="qt-circle${hot ? ' hot' : ''}" onclick="toggleTT('${o.id}')" title="${hot ? 'A bid is in — negotiate now' : 'Open the calculator to negotiate and close this offer'}">QT</div></td>
       </tr>
@@ -958,6 +996,69 @@ function closeTTOverlay(){
   document.getElementById('ttOverlay').style.display = 'none';
   document.getElementById('ttOverlayBody').innerHTML = '';
   ttOpenId = null;
+}
+
+// ============ NEGOTIATION VIEW (price cell) ============
+// Real ask 2026-09-08 (corrected): "el precio no te abre el QT para eso ya hay un boton de qt...
+// el precio abre la grafica de negotiation solamente." Same exact chart trading-tool.html's own
+// #negoCard renders (title/legend/sparkline/step-track) — ported verbatim (see the .nego-* CSS
+// above) since offers.html already has every field this needs in the `offers` array already
+// loaded (negotiation_log, purchase_price, sale_per_lb, sent_at, plant_name, customer_name).
+const NEGO_STEP_META = {
+  plant_original: { dir: 'in', label: (o) => `Plant quoted${o.plant_name ? ' (' + escapeHtml(o.plant_name) + ')' : ''}` },
+  customer_original: { dir: 'out', label: (o) => `You offered${o.customer_name ? ' (' + escapeHtml(o.customer_name) + ')' : ''}` },
+  plant_reply: { dir: 'in', label: (o) => `Plant replied${o.plant_name ? ' (' + escapeHtml(o.plant_name) + ')' : ''}` },
+  customer_bid: { dir: 'in', label: (o) => `Customer bid${o.customer_name ? ' (' + escapeHtml(o.customer_name) + ')' : ''}` },
+  plant: { dir: 'out', label: (o) => `You countered Plant${o.plant_name ? ' (' + escapeHtml(o.plant_name) + ')' : ''}` },
+  customer: { dir: 'out', label: (o) => `You offered Customer${o.customer_name ? ' (' + escapeHtml(o.customer_name) + ')' : ''}` },
+};
+
+// Same line-chart-of-the-price-arc as trading-tool.html's negoSparklineSvg — in (received) green,
+// out (sent) blue, one equal 1/n slice per step so each dot lines up with its step below it.
+function negoViewSparklineSvg(steps){
+  if (steps.length < 2) return '';
+  const w = 1000, h = 46, padY = 8, n = steps.length;
+  const prices = steps.map(s => Number(s.price));
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const range = (max - min) || 1;
+  const x = i => ((i + 0.5) / n) * w;
+  const y = p => h - padY - ((p - min) / range) * (h - padY * 2);
+  const points = prices.map((p, i) => `${x(i)},${y(p)}`).join(' ');
+  const dots = steps.map((s, i) => {
+    const meta = NEGO_STEP_META[s.to] || { dir: 'out' };
+    const color = meta.dir === 'in' ? '#0F8A5F' : '#1E6ADB';
+    return `<circle cx="${x(i)}" cy="${y(prices[i])}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+  }).join('');
+  return `<div class="nego-chart-wrap"><svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" style="display:block;overflow:visible;">
+    <polyline points="${points}" fill="none" stroke="#C7D6EA" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+  </svg></div>`;
+}
+
+function openNegotiationView(offerId){
+  const o = offers.find(x => x.id === offerId);
+  if (!o) return;
+  const steps = [
+    { to: 'plant_original', price: o.purchase_price, at: o.sent_at },
+    { to: 'customer_original', price: o.sale_per_lb, at: o.sent_at },
+    ...(o.negotiation_log || []),
+  ];
+  document.getElementById('negoViewTitle').textContent = `${o.product_name || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}`;
+  document.getElementById('negoViewChart').innerHTML = negoViewSparklineSvg(steps);
+  document.getElementById('negoViewLog').innerHTML = steps.map(e => {
+    const meta = NEGO_STEP_META[e.to] || { dir: 'out', label: () => e.to };
+    const when = new Date(e.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return `<div class="nego-step">
+      <div class="nego-dot ${meta.dir}" title="${meta.dir === 'in' ? 'Received' : 'Sent'}">${meta.dir === 'in' ? '↓' : '↑'}</div>
+      <div class="nego-price">$${Number(e.price).toFixed(4)}</div>
+      <div class="nego-label">${meta.label(o)}</div>
+      <div class="nego-date">${when}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('negoViewOverlay').style.display = 'flex';
+}
+function closeNegotiationView(){
+  document.getElementById('negoViewOverlay').style.display = 'none';
 }
 
 function loadTTPanel(id){
