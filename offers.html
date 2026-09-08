@@ -179,12 +179,18 @@
      .price there) — transparent fill, colored border + text, not a tinted filled box. */
   .pkg-tag.price{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   .pkg-tag.won{background:transparent;color:#3FCB7E;border-color:rgba(63,203,126,.4);}
-  .pkg-tag.lost{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  /* Real ask 2026-09-08 (2nd pass): "ese fue el cambio de diseno?????" — the border-property fix
+     was real but border-color:var(--line) (rgba(255,255,255,.18), the hairline table-divider
+     color) is nearly invisible against this page's own dark background. Every OTHER real badge in
+     this app (payment-badge.ok/due-soon/overdue, pkg-tag.won/hot) uses a saturated hue at .4 alpha
+     — bumped Lost/Expired to the same .4-alpha visibility, still plain white/gray (a closed-dead
+     offer, deliberately no color signal), just actually visible now. */
+  .pkg-tag.lost{background:transparent;color:var(--ink-soft);border-color:rgba(255,255,255,.35);}
   /* Real ask 2026-09-08: "que se expiren las ofertas en 10 dias y donde quedan?" — a stale, never-
      replied-to offer auto-flips to its own 'expired' status (sent-offers-expire-stale, daily cron),
      kept distinct from a real competitive 'lost' so it never dilutes the win-rate stat. Same
      neutral, no-signal color as .pkg-tag.lost — it's not a bad outcome, just dead. */
-  .pkg-tag.expired{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  .pkg-tag.expired{background:transparent;color:var(--ink-soft);border-color:rgba(255,255,255,.35);}
   /* Real ask 2026-09-08: "bloinking la que tiene bid" — same green as .pkg-tag.won (a bid is good
      news, same as a win). Blink is quotes.html's own real .pkg-tag-blink/rqTagBlink (plain opacity
      fade), not hotPulse's box-shadow ring — that ring is built for round icons (QT circle,
@@ -195,10 +201,13 @@
   @media (prefers-reduced-motion: reduce){
     .pkg-tag.hot{animation:none;}
   }
-  /* Real ask 2026-09-08: "algo bonito... un diseno acorde" — "Sent" was bare text next to "Bid"'s
-     colored pill, an unfinished-looking mismatch. Same .pkg-tag pill shape as every other status
-     in this column, just the neutral/muted color instead of a signal color. */
-  .pkg-tag.sent{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  /* Real ask 2026-09-08 (2nd pass): "revisa toda la data... colores bordes" — gray-on-gray
+     (var(--ink-soft) text + var(--line) border) reads as no color at all against the dark page,
+     the exact "no sale status" complaint restated. Real fix: give "Sent" its own actual color
+     instead of trying to make gray "visible enough." Blue-bright is this app's own established
+     "in progress / waiting" hue — orders.html's stage badge (.payment-badge.active) already uses
+     the identical color+border for the same "not done, not urgent, just moving along" meaning. */
+  .pkg-tag.sent{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   /* Real ask 2026-09-08: "el boton de negotiate solo diga QT en un circulo azul... igual que lo
      que ya hicimos" — same circular QT button as orders.html's openOrderQT link (36px circle,
