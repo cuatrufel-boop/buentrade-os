@@ -64,17 +64,19 @@
   .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
   .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
   /* Same glass-pill search as Plants/Products, scoped "pv-" for this page. */
-  .pv-search-wrap{position:relative;width:280px;}
-  /* Real ask 2026-09-09 ("no la de vidrio... que queden todas de vidrio" / "que llegue hasta el
-     borde redondo que no se corte en todos los modulos"): glossy highlight cap, ported from
-     Quotes' search trigger (.rq-search-trigger::before) — an <input> can't take generated
-     content itself, so it goes on the wrap div. Edge-to-edge so it reaches the pill's fully-
-     rounded ends instead of stopping short mid-curve. */
+  /* Real bug found 2026-09-09 ("no la de vidrio... que llegue hasta el borde redondo que no se
+     corte en todos los modulos"): the pill's background/border/shadow used to live on the <input>
+     while this wrap had neither radius nor clipping, so the glass highlight (::before) floated
+     unclipped, misaligned with the pill's actual rounded shape. Fixed properly, matching Quotes'
+     own structure — the wrap IS the pill now (background/border/shadow/radius/blur all here,
+     clipped via overflow:hidden), the input inside is just a plain transparent field. */
+  .pv-search-wrap{position:relative;width:280px;height:40px;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pv-search-wrap:focus-within{border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
   .pv-search-wrap::before{content:'';position:absolute;top:1px;left:0;right:0;height:42%;background:linear-gradient(180deg, rgba(255,255,255,.4), rgba(255,255,255,0));border-radius:999px 999px 100% 100%/100% 100% 30% 30%;pointer-events:none;}
   .pv-search-ico{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(255,255,255,.55);pointer-events:none;}
-  .pv-search-input{width:100%;height:40px;padding:0 14px 0 38px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pv-search-input{width:100%;height:100%;padding:0 14px 0 38px;border:none;background:transparent;color:#fff;font-size:13px;font-family:inherit;}
   .pv-search-input::placeholder{color:rgba(255,255,255,.5);}
-  .pv-search-input:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
+  .pv-search-input:focus{outline:none;}
   .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;transition:background .18s,border-color .18s;}
   .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
