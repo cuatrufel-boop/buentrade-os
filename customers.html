@@ -992,7 +992,7 @@ function renderCustomers(){
   const wrap = document.getElementById('customerRows');
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
   const filtered = term ? customers.filter(c =>
-    [c.trade_name, c.city, c.contact_name, c.email].some(v => (v || '').toLowerCase().includes(term))
+    [c.trade_name, c.legal_name, c.city, c.contact_name, c.email].some(v => (v || '').toLowerCase().includes(term))
   ) : customers;
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = customers.length && !filtered.length
@@ -1012,15 +1012,16 @@ function renderCustomers(){
     const stateName = c.state || (allStates.find(s => s.id === c.state_id) || {}).name_en || null;
     const location = [c.city, stateName, countryName(c.country_id)].filter(Boolean).join(', ') || '—';
     const creditLimit = c.credit_limit != null ? '$' + Number(c.credit_limit).toLocaleString('en-US') : '—';
-    const sub = [
-      c.preferred_currency,
-      c.usual_delivery_type,
-      paymentDaysLabel(c.payment_days),
-      c.contact_name,
-    ].filter(Boolean).join(' · ');
+    // Real ask 2026-09-09 ("nombre de cliente cambialo por razon social completa... en lugar de
+    // delivered y credit y contacto va a ir el nombre de la aduana y la ciudad donde recibe"):
+    // legal_name replaces trade_name as the primary name; the subtitle now shows the customs
+    // agency + destination city (e.g. "Mcallen · EB International Logistics LLC") instead of
+    // delivery type / payment terms / contact name.
+    const agency = customsAgencies.find(a => a.id === c.customs_agency_provider_id);
+    const sub = [c.usual_destination, agency ? agency.name : null].filter(Boolean).join(' · ');
     return `<tr>
       <td>
-        <a class="name-link" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a>
+        <a class="name-link" onclick="viewCustomer('${c.id}')">${escapeHtml(c.legal_name || c.trade_name || '')}</a>
         <div class="muted" style="font-size:11.5px;margin-top:2px;">${escapeHtml(sub || '—')}</div>
       </td>
       <td class="muted">${escapeHtml(location)}</td>
