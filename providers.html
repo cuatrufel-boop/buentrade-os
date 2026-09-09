@@ -299,14 +299,18 @@ auth.onAuthStateChanged(user => {
   <div id="providerToolbarRow" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 20px;">
     <div class="pv-search-wrap">
       <svg class="pv-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()" class="pv-search-input">
+      <input type="text" id="searchBox" placeholder="Search" oninput="renderProviders()" class="pv-search-input">
     </div>
     <button class="btn" onclick="openNewProviderForm()">+ Add Provider</button>
   </div>
   <div class="card" id="providerListCard">
     <div class="table-scroll">
-      <table>
-        <thead><tr><th>Provider</th><th style="min-width:110px;"></th></tr></thead>
+      <!-- Real bug found 2026-09-09: min-width is only a FLOOR — table-layout:auto let this
+           column grow arbitrarily wide on a wide screen, centering the icon pair inside whatever
+           leftover gap resulted instead of a tight, consistent-width column. table-layout:fixed
+           makes the un-widthed first column absorb 100% of the remainder deterministically. -->
+      <table style="table-layout:fixed;">
+        <thead><tr><th>Provider</th><th style="width:110px;"></th></tr></thead>
         <tbody id="providerRows"></tbody>
       </table>
     </div>

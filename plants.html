@@ -440,7 +440,7 @@ auth.onAuthStateChanged(user => {
 
       <div class="pl-search-wrap" style="margin-bottom:14px;">
         <svg class="pl-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="plantProductSearchBox" type="text" placeholder="Search products…" oninput="renderPlantProducts()" class="pl-search-input">
+        <input id="plantProductSearchBox" type="text" placeholder="Search" oninput="renderPlantProducts()" class="pl-search-input">
       </div>
       <!-- Real ask 2026-09-09 ("ejecutalo en el modulo de plants"): same transparent table
            convention as Products/Quotes — full_name_en + full_name_es stacked in one column,
@@ -636,15 +636,21 @@ auth.onAuthStateChanged(user => {
   <div id="plantToolbarRow" style="display:flex;align-items:center;margin:0 0 20px;gap:10px;flex-wrap:wrap;">
     <div class="pl-search-wrap">
       <svg class="pl-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" class="pl-search-input">
+      <input id="plantSearchBox" type="text" placeholder="Search" oninput="renderPlants()" class="pl-search-input">
     </div>
     <select id="plantListCategoryFilter" onchange="renderPlants()" class="pl-cat-select"><option value="">All categories</option></select>
     <button class="btn" onclick="openNewPlant()">+ New Plant</button>
   </div>
   <div class="card" id="plantListCard">
     <div class="table-scroll">
-      <table>
-        <thead><tr><th>Plant</th><th style="min-width:110px;"></th></tr></thead>
+      <!-- Real bug found 2026-09-09 ("en plants botones quedaron metidos hacia el centro"):
+           min-width is only a FLOOR — table-layout:auto let this column balloon to 400+px on a
+           wide screen (whatever space was left after the name column), centering the icon pair
+           inside that huge gap instead of a tight, consistent-width column. table-layout:fixed
+           makes the un-widthed first column absorb 100% of the remainder deterministically, so
+           the action column is always exactly 110px, matching Providers/Customers pixel for pixel. -->
+      <table style="table-layout:fixed;">
+        <thead><tr><th>Plant</th><th style="width:110px;"></th></tr></thead>
         <tbody id="plantRows"></tbody>
       </table>
     </div>

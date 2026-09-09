@@ -549,14 +549,18 @@ auth.onAuthStateChanged(user => {
   <div id="customerToolbarRow" style="display:flex;align-items:center;margin:0 0 20px;gap:10px;">
     <div class="cu-search-wrap">
       <svg class="cu-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" class="cu-search-input">
+      <input id="searchBox" type="text" placeholder="Search" oninput="renderCustomers()" class="cu-search-input">
     </div>
     <button class="btn" onclick="openForm()">+ Add Customer</button>
   </div>
   <div class="card" id="customerListCard">
     <div class="table-scroll">
-      <table>
-        <thead><tr><th>Customer</th><th style="min-width:110px;"></th></tr></thead>
+      <!-- Real bug found 2026-09-09: min-width is only a FLOOR — table-layout:auto let this
+           column grow arbitrarily wide on a wide screen, centering the icon pair inside whatever
+           leftover gap resulted instead of a tight, consistent-width column. table-layout:fixed
+           makes the un-widthed first column absorb 100% of the remainder deterministically. -->
+      <table style="table-layout:fixed;">
+        <thead><tr><th>Customer</th><th style="width:110px;"></th></tr></thead>
         <tbody id="customerRows"></tbody>
       </table>
     </div>
