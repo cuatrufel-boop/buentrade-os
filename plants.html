@@ -219,6 +219,13 @@
   .pending-match-badge{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;background:transparent;color:#FFC876;border:1px solid rgba(255,200,118,.4);border-radius:20px;padding:3px 10px 3px 8px;font-size:10.5px;font-weight:700;font-family:'IBM Plex Mono',monospace;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s;}
   .pending-match-badge:hover{background:rgba(255,200,118,.14);border-color:#FFC876;}
   .pending-match-badge svg{width:11px;height:11px;flex-shrink:0;}
+  /* Real ask 2026-09-09: a pending match older than PENDING_MATCH_STALE_DAYS can't just look like
+     every other one — it's been sitting long enough that its price is probably already wrong. Same
+     amber-vs-red escalation as every other staleness flag in this app, plus a slow, permanent pulse
+     so it doesn't blend into a list of plants scanned quickly. */
+  .pending-match-badge-stale{color:#FF9C8A;border-color:rgba(196,67,46,.55);animation:pending-stale-pulse 2s ease-in-out infinite;}
+  .pending-match-badge-stale:hover{background:rgba(196,67,46,.14);border-color:#FF9C8A;}
+  @keyframes pending-stale-pulse{0%,100%{box-shadow:0 0 0 0 rgba(196,67,46,0);}50%{box-shadow:0 0 0 3px rgba(196,67,46,.35);}}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   /* Profile tab — a real info panel instead of a loose grid, so rows stay aligned no matter how
      much content is in the field next to them. */
@@ -1071,6 +1078,18 @@ let plantProteins = {};
 // for whichever plant is currently open lives in plantPendingMatches.
 let plantPendingMatchCounts = {};
 let plantPendingMatches = [];
+// Real ask 2026-09-09: a pending match sitting unresolved can't just blend in forever — these
+// prices are volatile enough that the email poll itself already treats anything older than 3 days
+// as too stale to trust (see plant-price-emails-poll's own freshness guard). Same threshold here:
+// plantPendingMatchStale (plant_id -> bool) flags a plant whose oldest pending match has crossed
+// it, so the badge on the plants list itself turns red instead of blending in with a fresh one.
+const PENDING_MATCH_STALE_DAYS = 3;
+let plantPendingMatchStale = {};
+function pendingMatchAgeDays(createdAt){
+  if (!createdAt) return null;
+  const ms = new Date().setHours(0,0,0,0) - new Date(String(createdAt).slice(0, 10) + 'T00:00:00').setHours(0,0,0,0);
+  return Math.round(ms / 86400000);
+}
 
 let categories = [];
 let usdCurrencyId = null;
@@ -1130,8 +1149,10 @@ async function loadEverything(){
   ]);
   plants = plantsRes.results || [];
   plantPendingMatchCounts = {};
+  plantPendingMatchStale = {};
   (pendingMatchesRes.results || []).forEach(m => {
     plantPendingMatchCounts[m.plant_id] = (plantPendingMatchCounts[m.plant_id] || 0) + 1;
+    if ((pendingMatchAgeDays(m.created_at) || 0) > PENDING_MATCH_STALE_DAYS) plantPendingMatchStale[m.plant_id] = true;
   });
   temperatures = lookupsRes.temperatures || [];
   packagings = lookupsRes.packagings || [];
@@ -1447,8 +1468,9 @@ function renderPlants(){
   wrap.innerHTML = filtered.map(p => {
     const proteins = plantProteins[p.id] ? [...plantProteins[p.id]].sort().join(', ') : '—';
     const pendingCount = plantPendingMatchCounts[p.id] || 0;
+    const pendingStale = !!plantPendingMatchStale[p.id];
     const pendingBadgeHtml = pendingCount
-      ? `<button type="button" class="pending-match-badge" onclick="event.stopPropagation();openPlantPendingMatches('${p.id}')" title="Review pending matches"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${pendingCount} pending match${pendingCount > 1 ? 'es' : ''}</button>` : '';
+      ? `<button type="button" class="pending-match-badge${pendingStale ? ' pending-match-badge-stale' : ''}" onclick="event.stopPropagation();openPlantPendingMatches('${p.id}')" title="${pendingStale ? `Review pending matches — some older than ${PENDING_MATCH_STALE_DAYS} days` : 'Review pending matches'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${pendingCount} pending match${pendingCount > 1 ? 'es' : ''}${pendingStale ? ' — old' : ''}</button>` : '';
     return `<tr>
       <td>
         <a class="name-link" onclick="selectPlant('${p.id}')">${escapeHtml(p.name || '')}</a>
@@ -1890,8 +1912,11 @@ function renderPlantPendingMatches(){
     // auto-applied there, always waiting here for a human to actually confirm which real catalog
     // product it means before permanently marking that plant off-spec for it.
     const isDeclined = m.signal_type === 'declined';
+    const ageDays = pendingMatchAgeDays(m.created_at);
+    const isStale = (ageDays || 0) > PENDING_MATCH_STALE_DAYS;
+    const staleBadge = isStale ? ` <span style="font-size:10.5px;font-weight:700;color:#FF9C8A;background:transparent;border:1px solid rgba(196,67,46,.5);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">${ageDays}d old</span>` : '';
     return `<tr>
-      <td style="max-width:280px;">${escapeHtml(m.raw_text)}${isDeclined ? ' <span style="font-size:10.5px;font-weight:700;color:#FFC876;background:transparent;border:1px solid rgba(255,200,118,.4);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">Does not produce</span>' : ''}</td>
+      <td style="max-width:280px;">${escapeHtml(m.raw_text)}${staleBadge}${isDeclined ? ' <span style="font-size:10.5px;font-weight:700;color:#FFC876;background:transparent;border:1px solid rgba(255,200,118,.4);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">Does not produce</span>' : ''}</td>
       <td>${m.detected_price != null ? '$' + Number(m.detected_price).toFixed(4) : (isDeclined ? '—' : '—')}</td>
       <td><div class="plr-candidates" id="ppmCandidates_${m.id}">${tightChips}</div>${browseToggle}${browseChips}</td>
       <td class="row-actions">
