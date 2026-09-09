@@ -536,6 +536,9 @@ auth.onAuthStateChanged(user => {
          matcher couldn't confidently resolve to one catalog product. A confident match never
          shows up here at all; it applies itself straight to Products & Prices. ============ -->
     <div id="plantTab_pending" style="display:none;">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <button class="btn secondary small" onclick="matchAllConfirmedPendingMatches()">Match All Confirmed</button>
+      </div>
       <table>
         <thead><tr><th>From the plant's email</th><th>Price detected</th><th>Match to product</th><th></th></tr></thead>
         <tbody id="plantPendingMatchRows"></tbody>
@@ -2029,8 +2032,33 @@ async function resolvePlantPendingMatch(id){
     alert(`Couldn't save this match: ${e.message}`);
     return;
   }
+  // Real bug, confirmed live 2026-09-10 ("le doy match a uno y se pierden todos los matches que
+  // habia hecho en los otros"): this used to reload the WHOLE pending list from the server after
+  // every single resolve — _pickedProductId is a client-only field, never persisted, so a fresh
+  // fetch silently wiped every OTHER row's already-clicked chip too, forcing one-at-a-time work
+  // even though nothing stopped picking several first. Just drop the one row that's actually
+  // resolved instead of replacing the whole array — every other row's pick survives.
+  plantPendingMatches = plantPendingMatches.filter(m => m.id !== id);
+  plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
   await loadPlantProducts();
-  await loadPlantPendingMatches();
+  renderPlantPendingMatches();
+}
+
+// Real ask 2026-09-10 ("habia un boton para que hicieran match todos juntos") — same "Apply All"
+// convenience Price List Review already has (applyPriceList), for whichever rows here already
+// have a confirmed pick (a clicked chip, or a single non-conflicted candidate) — never touches a
+// row that still genuinely needs a human decision (multiple candidates, none picked, or zero
+// candidates at all).
+async function matchAllConfirmedPendingMatches(){
+  const eligible = plantPendingMatches.filter(m => {
+    const tightIds = Array.isArray(m.candidate_product_ids) ? m.candidate_product_ids : [];
+    return m._pickedProductId || (tightIds.length === 1 && !m.candidates_conflicted);
+  });
+  if (!eligible.length){ alert('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch, or wait for a row that already has a single confident match.'); return; }
+  if (!confirm(`Apply ${eligible.length} confirmed match${eligible.length > 1 ? 'es' : ''}?`)) return;
+  for (const m of eligible) {
+    await resolvePlantPendingMatch(m.id);
+  }
 }
 
 const PLANT_TABS = ['details', 'products', 'locations', 'pending'];
