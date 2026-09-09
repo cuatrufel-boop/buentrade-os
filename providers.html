@@ -712,13 +712,20 @@ function renderLocationsList(){
   wrap.innerHTML = (locationsAddingNew ? renderNewLocationTableRow(colCount) : '') + rowsHtml;
 }
 
-// Jumps from the Locations Catalog straight into that one carrier's own US Freight "Load Prices"
-// box — same panel, same parser, same review step, nothing duplicated. Just gets you there in one
-// click instead of leaving this tab to go find the carrier in Carriers first.
+// Opens that one carrier's own US Freight "Load Prices" box right on top of the Locations Catalog
+// — same panel, same parser, same review step as Plants' own Load Prices, nothing duplicated.
+// Real fix 2026-09-09: the first version of this navigated to the Carriers tab and that provider's
+// own profile first, so closing the box afterward landed you on the carrier's page instead of back
+// on Locations — felt like it "did nothing" here. rateListCard is a fixed, full-screen overlay
+// (position:fixed;inset:0) completely independent of whatever tab sits under it, so setting the
+// state it reads and opening it directly never has to leave this screen at all.
 function loadPricesForCarrierFromLocations(providerId){
-  setProviderTab('carriers');
-  selectProvider(providerId); // defaults to that provider's US Freight rates tab already
+  const carrier = providers.find(p => p.id === providerId);
+  if (!carrier) return;
+  currentProviderId = providerId;
+  currentRateTab = 'us_freight';
   openRateListPanel();
+  document.getElementById('rateListTitle').textContent = `Load Price List — ${carrier.name}`;
 }
 
 function renderNewLocationTableRow(colCount){
@@ -1154,6 +1161,7 @@ let rateListRows = [];
 async function openRateListPanel(){
   const isUs = currentRateTab === 'us_freight';
   const isCustoms = currentRateTab === 'customs';
+  document.getElementById('rateListTitle').textContent = 'Load Price List';
   document.getElementById('rateListHint').textContent = isUs
     ? 'Paste from Excel (columns: Price, Name, City, State), or a plain-text list like "IA to McAllen/Laredo - $5200 + lumper" — one row per line. Nothing is saved until you review and confirm.'
     : isCustoms
@@ -1453,6 +1461,10 @@ async function applyRateList(){
   }
   await loadEverything();
   renderRateTable();
+  // Loaded from the Locations Catalog shortcut (loadPricesForCarrierFromLocations) without ever
+  // navigating away from it — refresh that table too so the new prices show the moment the overlay
+  // closes, not only after switching tabs and back.
+  if (providerTab === 'locations') renderLocationsList();
 }
 
 function ratesForCurrentTab(){
