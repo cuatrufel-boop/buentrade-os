@@ -53,6 +53,31 @@
   .pd-search-input{width:100%;height:40px;padding:0 14px 0 38px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
   .pd-search-input::placeholder{color:rgba(255,255,255,.5);}
   .pd-search-input:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
+
+  /* Same colored stat-card component as quotes.html (ported verbatim) — one real BuenTrade token
+     per card: hero=blue-bright (neutral total), ok=green (has a real plant price), danger=red
+     (still needs one), warn=amber (category count, informational). */
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
+  .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .stat-card.hero{background:linear-gradient(135deg, rgba(90,170,255,.32), rgba(90,170,255,.08));border:1px solid rgba(90,170,255,.55);box-shadow:0 3px 12px -3px rgba(90,170,255,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.hero .stat-icon{background:rgba(90,170,255,.15);border:1.5px solid rgba(90,170,255,.55);color:#5AAAFF;}
+  .stat-card.hero .stat-label::before{background:#5AAAFF;box-shadow:0 0 7px 1.5px rgba(90,170,255,.8);}
+  .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
+  .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
+  .stat-card.danger{background:linear-gradient(135deg, rgba(196,67,46,.32), rgba(196,67,46,.08));border:1px solid rgba(255,156,138,.55);box-shadow:0 3px 12px -3px rgba(196,67,46,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.danger .stat-icon{background:rgba(196,67,46,.18);border:1.5px solid rgba(255,156,138,.55);color:#FF9C8A;}
+  .stat-card.danger .stat-label::before{background:#FF9C8A;box-shadow:0 0 7px 1.5px rgba(255,156,138,.8);}
+  .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
+  .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   /* A visible "+" next to a closed dropdown, instead of burying "add new" as the last option
@@ -265,6 +290,11 @@ auth.onAuthStateChanged(user => {
 
 <div class="wrap">
   <h1 onclick="closeForm()" style="cursor:pointer;">Products</h1>
+
+  <!-- Real ask 2026-09-09 ("aplica este mismo diseno... b"): same colored stat-card component as
+       Quotes, option B from the mockup — price coverage across the catalog (cross-referenced
+       against plant_products, see renderProductStats) instead of just a bare product count. -->
+  <div class="stats-row" id="pdStatsRow"></div>
 
   <div class="card" id="formCard">
     <strong id="formTitle">New product</strong>
@@ -757,10 +787,49 @@ async function loadProducts(){
     const catSel = document.getElementById('categoryFilter');
     cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(categoryEnByName(c))}</option>`);
     renderProducts();
+    renderProductStats();
   } catch (e) {
     document.getElementById('emptyState').style.display = 'block';
     document.getElementById('emptyState').textContent = 'Error loading products: ' + e.message;
   }
+}
+
+// Real ask 2026-09-09 ("aplica este mismo diseno... b"): same stat-card component as Quotes,
+// option B from the mockup — price coverage, not just a bare product count. Cross-references
+// the real catalog against plant_products (the same real source loadPendingPrices/rqFetchPlant-
+// LinksForProduct read in quotes.html) — "With a Plant Price" is a product with at least one
+// plant_products row whose current_price is actually set; everything else (never linked to any
+// plant, or linked but still waiting on a number) falls into "No Price Yet".
+async function renderProductStats(){
+  const wrap = document.getElementById('pdStatsRow');
+  if (!wrap) return;
+  const total = products.length;
+  const categories = new Set(products.map(p => p.category).filter(Boolean)).size;
+  let withPrice = 0;
+  try {
+    const links = (await callApi('plant-products-search', {})).results || [];
+    const pricedProductIds = new Set(links.filter(l => l.current_price != null).map(l => l.product_id));
+    withPrice = products.filter(p => pricedProductIds.has(p.id)).length;
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty">Error loading price coverage: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const noPrice = total - withPrice;
+  const stats = [
+    { value: String(total), label: 'Total Products', cls: 'hero',
+      icon: '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>' },
+    { value: String(withPrice), label: 'With a Plant Price', cls: 'ok',
+      icon: '<path d="M20 6 9 17l-5-5"/>' },
+    { value: String(noPrice), label: 'No Price Yet', cls: 'danger',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+    { value: String(categories), label: 'Categories', cls: 'warn',
+      icon: '<path d="M4 7h16M4 12h16M4 17h10"/>' },
+  ];
+  wrap.innerHTML = stats.map(s => `
+    <div class="stat-card ${s.cls}">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
+      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
+    </div>`).join('');
 }
 
 function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? (t.name_en || t.name) : null; }
