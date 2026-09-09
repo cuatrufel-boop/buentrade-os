@@ -1416,8 +1416,29 @@ function processRateListText(){
   const isUs = currentRateTab === 'us_freight';
   const isCustoms = currentRateTab === 'customs';
   rateListRows = [];
+  // Real bug, confirmed live 2026-09-10: the "Request Update" ask (loadPricesForCarrierFromLocations's
+  // askBody) sends the carrier a real fill-in template — a bare state code on its own line, then
+  // one "City: price" line per city in it — but this parser had no format for that at all, so a
+  // carrier filling in exactly the template we sent them got "No valid rows were recognized." A
+  // bare 2-letter line sets which state the "City: price" lines under it belong to, until the next
+  // one; the city itself is checked against the real catalog (allLocations) so a typo or a city
+  // not actually in it is never silently guessed into a new row.
+  let currentState = null;
   for (const line of lines){
-    const parsed = isCustoms ? parseCustomsLine(line) : (isUs ? parseUsFreightLine(line) : parseMexicanFreightLine(line));
+    if (isUs){
+      const bareState = line.match(/^([A-Za-z]{2})$/);
+      if (bareState){ currentState = bareState[1].toUpperCase(); continue; }
+    }
+    let parsed = isCustoms ? parseCustomsLine(line) : (isUs ? parseUsFreightLine(line) : parseMexicanFreightLine(line));
+    if (!parsed && isUs && currentState){
+      const cityPrice = line.match(/^([A-Za-z .\/]+?)\s*:\s*\$?\s*([\d,]+\.?\d*)\s*$/);
+      if (cityPrice){
+        const cityName = cityPrice[1].trim().toLowerCase();
+        const price = parseFloat(cityPrice[2].replace(/,/g, ''));
+        const realLoc = allLocations.find(l => (l.city || '').toLowerCase() === cityName && (l.state || '').toUpperCase() === currentState);
+        if (realLoc && !isNaN(price)) parsed = { origin: `${realLoc.city} ${realLoc.state}`, price, notes: null, isState: false };
+      }
+    }
     if (!parsed) continue; // not a data row (header, note, blank) — silently skipped, never guessed
     // A per-STATE quote ("IA to McAllen/Laredo - $5320") is never saved as one literal "IA" row —
     // confirmed real requirement 2026-08-30: it must apply to EVERY real city already known in
