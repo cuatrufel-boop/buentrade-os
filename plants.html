@@ -128,6 +128,12 @@
   .plr-chip-current{background:var(--blue);color:#fff;}
   .plr-chip-new{border-color:var(--ink-soft);color:var(--ink-soft);}
   .plr-chip-new:hover{background:var(--ink-soft);color:#fff;}
+  /* Real bug found 2026-09-09: "Match" silently did nothing when the matcher flagged its one
+     suggested chip as conflicted (never auto-picked, by design — see resolvePlantPendingMatch) —
+     a plain browser alert() gave no visual pointer to WHICH chip to click, and an unpicked chip
+     (outline only) looks close enough to a picked one (solid fill) to miss the difference. */
+  @keyframes plr-nudge{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,0);}25%,75%{box-shadow:0 0 0 3px rgba(255,200,118,.55);}}
+  .plr-candidates-nudge{animation:plr-nudge .5s ease-in-out 2;border-radius:8px;}
   .plr-teach{margin-top:6px;padding:9px 11px;background:rgba(255,200,118,.08);border:1px solid rgba(255,200,118,.4);border-radius:8px;font-size:11.5px;color:#FFC876;}
   .plr-teach-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;}
   .plr-teach select,.plr-teach input{padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:11.5px;font-family:inherit;}
@@ -1887,8 +1893,11 @@ function renderPlantPendingMatches(){
     return `<tr>
       <td style="max-width:280px;">${escapeHtml(m.raw_text)}${isDeclined ? ' <span style="font-size:10.5px;font-weight:700;color:#FFC876;background:transparent;border:1px solid rgba(255,200,118,.4);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">Does not produce</span>' : ''}</td>
       <td>${m.detected_price != null ? '$' + Number(m.detected_price).toFixed(4) : (isDeclined ? '—' : '—')}</td>
-      <td><div class="plr-candidates">${tightChips}</div>${browseToggle}${browseChips}</td>
-      <td class="row-actions"><button class="btn${isDeclined ? ' danger' : ''}" onclick="resolvePlantPendingMatch('${m.id}')">${isDeclined ? 'Mark Off-Spec' : 'Match'}</button></td>
+      <td><div class="plr-candidates" id="ppmCandidates_${m.id}">${tightChips}</div>${browseToggle}${browseChips}</td>
+      <td class="row-actions">
+        <button class="btn${isDeclined ? ' danger' : ''}" onclick="resolvePlantPendingMatch('${m.id}')">${isDeclined ? 'Mark Off-Spec' : 'Match'}</button>
+        <div id="ppmMsg_${m.id}" style="font-size:11px;color:#FFC876;margin-top:5px;max-width:140px;"></div>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1932,7 +1941,18 @@ async function resolvePlantPendingMatch(id){
   if (!match) return;
   const tightIds = Array.isArray(match.candidate_product_ids) ? match.candidate_product_ids : [];
   const productId = match._pickedProductId || (tightIds.length === 1 && !match.candidates_conflicted ? tightIds[0] : null);
-  if (!productId){ alert('Pick a product first.'); return; }
+  if (!productId){
+    const candidatesEl = document.getElementById(`ppmCandidates_${id}`);
+    const msgEl = document.getElementById(`ppmMsg_${id}`);
+    if (candidatesEl){
+      candidatesEl.classList.remove('plr-candidates-nudge');
+      void candidatesEl.offsetWidth; // restart the animation if it's already run once
+      candidatesEl.classList.add('plr-candidates-nudge');
+      candidatesEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (msgEl) msgEl.textContent = tightIds.length ? 'Click the match above first' : 'Search and click a match first';
+    return;
+  }
   try {
     if (match.signal_type === 'declined'){
       let link;
