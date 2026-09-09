@@ -32,6 +32,14 @@
   }
   *{box-sizing:border-box;}
   input,select,textarea{background:var(--card);color:var(--ink);}
+  /* Real bug, confirmed live 2026-09-10 ("fondos blancos... cada que entro hay algo
+     diferente"): Chrome forces its own solid white/yellow background on any text input it
+     decides to autofill, overriding this rule entirely and only for whichever fields it
+     remembers on a given visit — exactly the "random, changes every time" pattern reported.
+     The inset box-shadow trick repaints over Chrome's own autofill background since a real
+     background-color can't win against it; text-fill-color keeps the text itself visible
+     against that same dark fill instead of Chrome's own (often black-on-white) choice. */
+  input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active{-webkit-box-shadow:0 0 0 1000px var(--card) inset !important;-webkit-text-fill-color:var(--ink) !important;caret-color:var(--ink);transition:background-color 5000s ease-in-out 0s;}
   body{
     margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
     background:

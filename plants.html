@@ -24,6 +24,14 @@
   }
   *{box-sizing:border-box;}
   input,select,textarea{background:var(--card);color:var(--ink);}
+  /* Real bug, confirmed live 2026-09-10 ("fondos blancos... cada que entro hay algo
+     diferente"): Chrome forces its own solid white/yellow background on any text input it
+     decides to autofill, overriding this rule entirely and only for whichever fields it
+     remembers on a given visit — exactly the "random, changes every time" pattern reported.
+     The inset box-shadow trick repaints over Chrome's own autofill background since a real
+     background-color can't win against it; text-fill-color keeps the text itself visible
+     against that same dark fill instead of Chrome's own (often black-on-white) choice. */
+  input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active{-webkit-box-shadow:0 0 0 1000px var(--card) inset !important;-webkit-text-fill-color:var(--ink) !important;caret-color:var(--ink);transition:background-color 5000s ease-in-out 0s;}
   body{
     margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
     background:
@@ -1913,7 +1921,7 @@ function renderPlantPendingMatches(){
     // drop focus/cursor position after every character typed, real catalog now 77 products and
     // growing, plain visual scanning stops scaling well past this size.
     const browseChips = showBrowse ? `
-      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
+      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
       <div class="plr-candidates plr-browse" id="ppmBrowse_${m.id}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
@@ -2954,7 +2962,7 @@ function renderPriceListReview(){
     // fix, both places. See that call site for why this filters the DOM directly instead of
     // re-rendering (would drop the input's own focus on every keystroke).
     const browseChips = showBrowse ? `
-      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
+      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
       <div class="plr-candidates plr-browse" id="plrBrowse_${i}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
@@ -2979,7 +2987,7 @@ function renderPriceListReview(){
       <div class="plr-teach">
         <strong>${teachHint}</strong>
         <div class="plr-teach-row">
-          <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. XF">
+          <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. XF" autocomplete="off">
           <select id="termMeaning_${i}">
             <option value="">Esta palabra significa…</option>
             <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
