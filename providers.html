@@ -13,6 +13,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* Real ask 2026-09-09 ("aplicalo en logistics"): same dark-native-popup fix as plants.html —
+       color-scheme is the standard CSS property telling the browser this page's own form controls
+       (select popups, checkboxes, scrollbars) should render in their dark variant. */
+    color-scheme:dark;
     --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF; --blue-light:rgba(90,170,255,.14);
     --bg:#0A2547; --card:rgba(255,255,255,.08); --line:rgba(255,255,255,.18); --ink:#FFFFFF; --ink-soft:rgba(255,255,255,.55); --red:#C4432E; --green:#1E9E6B;
   }
@@ -33,16 +37,54 @@
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 4px;}
+  h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
   .subtitle{color:var(--ink-soft);font-size:13px;margin:0 0 16px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
-  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  /* Real ask 2026-09-09 ("aplicalo en logistics"): same colored stat-card component as
+     Plants/Products/Quotes, ported verbatim. See renderProviderStats(). */
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
+  .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .stat-card.hero{background:linear-gradient(135deg, rgba(90,170,255,.32), rgba(90,170,255,.08));border:1px solid rgba(90,170,255,.55);box-shadow:0 3px 12px -3px rgba(90,170,255,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.hero .stat-icon{background:rgba(90,170,255,.15);border:1.5px solid rgba(90,170,255,.55);color:#5AAAFF;}
+  .stat-card.hero .stat-label::before{background:#5AAAFF;box-shadow:0 0 7px 1.5px rgba(90,170,255,.8);}
+  .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
+  .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
+  .stat-card.danger{background:linear-gradient(135deg, rgba(196,67,46,.32), rgba(196,67,46,.08));border:1px solid rgba(255,156,138,.55);box-shadow:0 3px 12px -3px rgba(196,67,46,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.danger .stat-icon{background:rgba(196,67,46,.18);border:1.5px solid rgba(255,156,138,.55);color:#FF9C8A;}
+  .stat-card.danger .stat-label::before{background:#FF9C8A;box-shadow:0 0 7px 1.5px rgba(255,156,138,.8);}
+  .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
+  .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
+  /* Same glass-pill search as Plants/Products, scoped "pv-" for this page. */
+  .pv-search-wrap{position:relative;width:280px;}
+  .pv-search-ico{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(255,255,255,.55);pointer-events:none;}
+  .pv-search-input{width:100%;height:40px;padding:0 14px 0 38px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pv-search-input::placeholder{color:rgba(255,255,255,.5);}
+  .pv-search-input:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
+  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;transition:background .18s,border-color .18s;}
+  .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:var(--card);color:#FF9C8A;border:1.5px solid rgba(196,67,46,.4);padding:5px 10px;font-size:12px;}
   .btn.small{padding:5px 10px;font-size:12px;}
+  /* Real ask 2026-09-09 ("aplicalo en logistics"): same transparent table convention as
+     collections.html/quotes.html/products.html/plants.html — left-aligned uppercase headers,
+     hairline dividers, near-invisible hover — replacing the older center-aligned/border-bottom
+     style. Upgrades the existing Customs Agencies rate table for free, no HTML change needed. */
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:center;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
-  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:center;}
-  tr:last-child td{border-bottom:none;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,.03);}
+  .table-scroll{overflow-x:auto;}
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .muted{color:var(--ink-soft);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -234,6 +276,9 @@ auth.onAuthStateChanged(user => {
 </header>
 
 <div class="wrap">
+  <!-- Real ask 2026-09-09 ("aplicalo en logistics"): same stat cards + glass-pill search +
+       transparent table already shipped on Plants/Products/Quotes. See renderProviderStats(). -->
+  <div class="stats-row" id="providerStatsRow"></div>
   <div class="tab-row" style="margin-bottom:20px;">
     <button class="tab-btn active" id="tabCarriersBtn" onclick="setProviderTab('carriers')">Carriers</button>
     <button class="tab-btn" id="tabAgenciesBtn" onclick="setProviderTab('agencies')">Customs Agencies</button>
@@ -242,10 +287,18 @@ auth.onAuthStateChanged(user => {
 
   <div class="card" id="providerListCard">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-      <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);">
+      <div class="pv-search-wrap">
+        <svg class="pv-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="searchBox" placeholder="Search by name, city, or role..." oninput="renderProviders()" class="pv-search-input">
+      </div>
       <button class="btn" onclick="openNewProviderForm()">+ Add Provider</button>
     </div>
-    <div id="providerRows" class="pkg-table-wrap"></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Provider</th><th></th></tr></thead>
+        <tbody id="providerRows"></tbody>
+      </table>
+    </div>
     <div id="emptyMsg" class="empty" style="display:none;">No providers found.</div>
   </div>
 
@@ -261,7 +314,12 @@ auth.onAuthStateChanged(user => {
       <strong style="font-size:15px;">Locations Catalog</strong>
       <button class="btn secondary small" style="margin-left:auto;" onclick="startAddLocationMaster()">+ Add New City to Catalog</button>
     </div>
-    <div id="locationRows" class="pkg-table-wrap"></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>City</th><th>Carrier Rates</th></tr></thead>
+        <tbody id="locationRows"></tbody>
+      </table>
+    </div>
     <div id="locationsEmptyMsg" class="empty" style="display:none;">No locations in the catalog yet.</div>
   </div>
 
@@ -528,6 +586,7 @@ async function loadEverything(){
       providerRolesMap[r.provider_id].push(r.role);
     });
     renderProviders();
+    renderProviderStats();
   } catch (e) {
     document.getElementById('providerRows').innerHTML = `<div class="empty">Error loading from API: ${escapeHtml(e.message)}</div>`;
   }
@@ -557,11 +616,15 @@ function setProviderTab(tab){
 // master view that makes a gap visible without opening each carrier one at a time.
 let locationsAddingNew = false;
 
+// Real ask 2026-09-09 ("aplicalo en logistics"): transparent table row now — the 📍 avatar drops
+// (no table in the app shows one). renderNewLocationFicha() stays untouched for its OTHER, still
+// card-based use in a carrier's own US Freight rate-editing list (a different, inline-editable
+// grid this pass doesn't touch) — this table gets its own small "add new" row builder instead.
 function renderLocationsList(){
   const wrap = document.getElementById('locationRows');
   document.getElementById('locationsEmptyMsg').style.display = allLocations.length ? 'none' : 'block';
   const carriers = providers.filter(p => (providerRolesMap[p.id] || []).includes('carrier'));
-  const newRowHtml = locationsAddingNew ? renderNewLocationFicha('saveNewLocationMaster', 'cancelLocationsAdd') : '';
+  const newRowHtml = locationsAddingNew ? renderNewLocationTableRow() : '';
   wrap.innerHTML = newRowHtml + allLocations.map(loc => {
     const statusHtml = carriers.length ? carriers.map(c => {
       const rate = allRates.find(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id);
@@ -571,14 +634,25 @@ function renderLocationsList(){
       const flag = isStale ? ' ⚠ expired' : '';
       return `<span style="color:${color};">${escapeHtml(c.name)}: $${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${flag}</span>`;
     }).join(' &nbsp;·&nbsp; ') : '<span style="color:var(--ink-soft);">No carriers on file yet</span>';
-    return `<div class="pkg-row">
-      <div class="pkg-plant-avatar">📍</div>
-      <div class="pkg-plant-info">
-        <span class="pkg-plant-name">${escapeHtml(loc.city)} ${escapeHtml(loc.state)}</span>
-        <span class="pkg-plant-sub">${statusHtml}</span>
-      </div>
-    </div>`;
+    return `<tr>
+      <td>${escapeHtml(loc.city)} ${escapeHtml(loc.state)}</td>
+      <td class="muted">${statusHtml}</td>
+    </tr>`;
   }).join('');
+}
+
+function renderNewLocationTableRow(){
+  return `<tr>
+    <td colspan="2">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="newLocationCity" placeholder="City" style="flex:1;min-width:140px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
+        <input id="newLocationState" placeholder="State (2 letters)" maxlength="2" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;text-transform:uppercase;">
+        <button class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="saveNewLocationMaster()">Add to Catalog</button>
+        <button class="btn secondary" style="padding:6px 12px;font-size:12.5px;" onclick="cancelLocationsAdd()">Cancel</button>
+      </div>
+      <div id="newLocationMsg" style="font-size:11.5px;color:var(--red);margin-top:6px;"></div>
+    </td>
+  </tr>`;
 }
 
 function startAddLocationMaster(){
@@ -632,24 +706,48 @@ function renderProviders(){
   });
   const wrap = document.getElementById('providerRows');
   document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
+  // Real ask 2026-09-09 ("aplicalo en logistics"): same transparent table convention as
+  // Plants/Products/Quotes — logo avatar drops (no table in the app shows one), name + city/
+  // contact subtitle stack in column 1, WhatsApp/Email actions in their own right-aligned column.
   wrap.innerHTML = filtered.map(p => {
-    const roles = providerRolesMap[p.id] || [];
     const city = [p.city, countryName(p.country_id)].filter(Boolean).join(', ');
-    const avatarHtml = p.logo_url
-      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(p.logo_url)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml((p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
-    return `<div class="pkg-row">
-      ${avatarHtml}
-      <div class="pkg-plant-info" style="cursor:pointer;" onclick="selectProvider('${p.id}')">
-        <a class="name-link pkg-plant-name">${escapeHtml(p.name || '')}</a>
-        <span class="pkg-plant-sub">${escapeHtml(city || '—')}${p.contact_name ? ' · ' + escapeHtml(p.contact_name) : ''}</span>
-      </div>
-      <div style="margin-left:auto;flex-shrink:0;white-space:nowrap;display:flex;gap:6px;">
-        ${(p.whatsapp || p.phone) ? `<a class="wa-btn" style="padding:6px 10px;" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${escapeHtml(p.whatsapp || p.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}
-        ${p.email ? `<a class="wa-btn outline" style="padding:6px 10px;" href="https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(p.email)}" target="bt_gmail" rel="noopener" onclick="event.stopPropagation()" title="${escapeHtml(p.email)}"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></a>` : ''}
-      </div>
-    </div>`;
+    return `<tr>
+      <td>
+        <a class="name-link" onclick="selectProvider('${p.id}')">${escapeHtml(p.name || '')}</a>
+        <div class="pkg-plant-sub">${escapeHtml(city || '—')}${p.contact_name ? ' · ' + escapeHtml(p.contact_name) : ''}</div>
+      </td>
+      <td style="text-align:right;">
+        ${(p.whatsapp || p.phone) ? `<a class="wa-btn" style="padding:6px 10px;" href="https://wa.me/${escapeHtml((p.whatsapp || p.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(p.whatsapp || p.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}
+        ${p.email ? `<a class="wa-btn outline" style="padding:6px 10px;" href="https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(p.email)}" target="bt_gmail" rel="noopener" title="${escapeHtml(p.email)}"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></a>` : ''}
+      </td>
+    </tr>`;
   }).join('');
+}
+
+// Real ask 2026-09-09 ("aplicalo en logistics"): same colored stat-card row as Plants/Products —
+// real, already-tracked counts only (Total/Carriers/Agencies/Stale Rates), no invented metrics.
+function renderProviderStats(){
+  const wrap = document.getElementById('providerStatsRow');
+  if (!wrap) return;
+  const total = providers.length;
+  const carrierCount = providers.filter(p => (providerRolesMap[p.id] || []).includes('carrier')).length;
+  const agencyCount = providers.filter(p => (providerRolesMap[p.id] || []).includes('customs_broker')).length;
+  const staleCount = allRates.filter(r => (rateAgeDays(r.updated_at) || 0) > RATE_STALE_DAYS).length;
+  const stats = [
+    { value: String(total), label: 'Total Providers', cls: 'hero',
+      icon: '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>' },
+    { value: String(carrierCount), label: 'Carriers', cls: 'ok',
+      icon: '<rect x="1" y="7" width="15" height="10" rx="1"/><path d="M16 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/>' },
+    { value: String(agencyCount), label: 'Customs Agencies', cls: 'warn',
+      icon: '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M15 9h.01M15 13h.01"/>' },
+    { value: String(staleCount), label: 'Stale Rates', cls: 'danger',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+  ];
+  wrap.innerHTML = stats.map(s => `
+    <div class="stat-card ${s.cls}">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
+      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
+    </div>`).join('');
 }
 
 function openNewProviderForm(){
