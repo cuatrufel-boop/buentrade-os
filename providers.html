@@ -115,6 +115,12 @@
   .loc-pill.stale::before{background:#FFC876;box-shadow:0 0 5px 1px rgba(255,200,118,.7);}
   .loc-pill.pending{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.14);color:var(--ink-soft);font-family:'Inter',sans-serif;font-weight:500;font-size:11.5px;}
   .loc-pill.pending::before{background:#FF9C8A;box-shadow:0 0 5px 1px rgba(255,156,138,.6);}
+  /* Real gap found 2026-09-09: this master view had no way to actually get a new price in —
+     "Cargar precios" only ever lived inside one carrier's own US Freight tab. One click here jumps
+     straight to that same, unchanged paste box for the right carrier, instead of the trader having
+     to know to leave this screen and find the carrier in the other tab first. */
+  .loc-load-prices-btn{display:block;margin:6px auto 0;padding:3px 9px;border-radius:6px;border:1px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  .loc-load-prices-btn:hover{background:rgba(90,170,255,.12);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -679,7 +685,9 @@ function renderLocationsList(){
     allRates.some(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id)
   ).length);
   headRow.innerHTML = '<th class="loc-city-head">City</th>' + carriers.map((c, i) => `
-    <th><span class="loc-carrier-name">${escapeHtml(c.name)}</span><span class="loc-carrier-coverage">${coverage[i]}<small> / ${allLocations.length}</small></span></th>
+    <th><span class="loc-carrier-name">${escapeHtml(c.name)}</span><span class="loc-carrier-coverage">${coverage[i]}<small> / ${allLocations.length}</small></span>
+      <button type="button" class="loc-load-prices-btn" onclick="loadPricesForCarrierFromLocations('${c.id}')" title="Load ${escapeHtml(c.name)}'s prices">📋 Load Prices</button>
+    </th>
   `).join('');
 
   // Grouped by state — a flat list of 28+ cities reads as a wall of text without this, same
@@ -702,6 +710,15 @@ function renderLocationsList(){
     rowsHtml += `<tr><td>${escapeHtml(loc.city)}</td>${cells}</tr>`;
   });
   wrap.innerHTML = (locationsAddingNew ? renderNewLocationTableRow(colCount) : '') + rowsHtml;
+}
+
+// Jumps from the Locations Catalog straight into that one carrier's own US Freight "Load Prices"
+// box — same panel, same parser, same review step, nothing duplicated. Just gets you there in one
+// click instead of leaving this tab to go find the carrier in Carriers first.
+function loadPricesForCarrierFromLocations(providerId){
+  setProviderTab('carriers');
+  selectProvider(providerId); // defaults to that provider's US Freight rates tab already
+  openRateListPanel();
 }
 
 function renderNewLocationTableRow(colCount){
