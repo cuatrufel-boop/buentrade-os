@@ -490,6 +490,12 @@
   .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
   .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
   .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
+
+  /* Real ask 2026-09-09 ("deja por default SOLO los updating no saques los otros"): Ready/Expired
+     are click-to-reveal now (rqToggleReadySection/rqToggleExpiredSection) — this is their
+     "currently shown" state, a brighter ring on top of whichever color (danger/ok) the card
+     already has, so it's obvious which of the two is expanded right now. */
+  .stat-card.active{box-shadow:0 0 0 2px rgba(255,255,255,.4), 0 3px 14px -2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);}
   .rq-hero-banner{position:relative;background:transparent;padding:64px 42px 46px;overflow:hidden;}
   .rq-hero-banner.rq-hero-banner-compact{padding:52px 32px 28px;}
   .rq-hero-orb{position:absolute;border-radius:50%;filter:blur(64px);pointer-events:none;}
@@ -1081,18 +1087,18 @@ auth.onAuthStateChanged(user => {
       </div>
     </div>
 
-    <!-- Real ask 2026-09-09 ("1 sobre otra deben estar en este orden Ready, expired y
-         updating"), same pattern as collections.html's own stacked cards (Aging report /
-         Customers / Invoiced Orders — each with its own static title, always visible whether
-         or not it currently has rows): the 3 section titles live here in the page's own HTML,
-         not built by JS only when non-empty, so a genuinely empty bucket still shows its
-         heading and a plain "Nothing X" line instead of disappearing outright. -->
+    <!-- Real ask 2026-09-09 ("deja por default SOLO los updating no saques los otros"): Ready
+         and Expired stay fully built (never deleted — just click their stat card above to reveal
+         them, see rqToggleReadySection/rqToggleExpiredSection), hidden by default so they don't
+         sit there as unrelated-looking clutter while the trader is heads-down on new searches.
+         Updating is the one section that's always visible — it's the actionable "needs a reply"
+         list, not a to-do the trader has to remember to check for. -->
     <div class="rq-results-col" style="padding-top:28px;">
-      <div class="qbucket qbucket-ready">
+      <div class="qbucket qbucket-ready" id="rq_ready_section" style="display:none;">
         <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Ready to send</span></div>
         <div id="rq_ready_results"></div>
       </div>
-      <div class="qbucket qbucket-expired">
+      <div class="qbucket qbucket-expired" id="rq_expired_section" style="display:none;">
         <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Expired</span><span class="qbucket-sub">— your call</span></div>
         <div id="rq_expired_results"></div>
       </div>
@@ -1489,6 +1495,8 @@ function rqApplyStatFilterVisibility(){
     el.style.display = '';
     if (rqBucketCounts[kind] === 0) el.innerHTML = `<div class="empty">${RQ_EMPTY_MSG[kind]}</div>`;
   };
+  document.getElementById('rq_ready_section').style.display = rqShowReady ? '' : 'none';
+  document.getElementById('rq_expired_section').style.display = rqShowExpired ? '' : 'none';
   apply('rq_ready_results', 'ready');
   apply('rq_expired_results', 'expired');
   apply('rq_updating_results', 'updating');
@@ -1592,9 +1600,17 @@ if (rqSearchKbdEl) rqSearchKbdEl.textContent = rqIsMac ? '⌘K' : 'Ctrl K';
 // where allReady/allExpired/allWaiting themselves are computed, so these numbers always match
 // what the tables below actually show.
 //
-// Real ask 2026-09-09: plain counters now, like Collections' own summary numbers — the 3 tables
-// below are always visible, stacked, so there's nothing left for these cards to filter.
 let rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
+
+// Real ask 2026-09-09 ("deja por default SOLO los updating no saques los otros se esta quedando
+// ahi gravados en las nuevas busquedas"): Ready/Expired hidden by default now — sitting there
+// permanently made them read as stuck/unrelated clutter while searching for something else.
+// Clicking their own stat card reveals them (a real toggle, not gone) — Updating has no toggle,
+// it's always on since that's the one section the trader actually needs to see unprompted.
+let rqShowReady = false, rqShowExpired = false;
+function rqToggleReadySection(){ rqShowReady = !rqShowReady; rqApplyStatFilterVisibility(); renderRqStats(); }
+function rqToggleExpiredSection(){ rqShowExpired = !rqShowExpired; rqApplyStatFilterVisibility(); renderRqStats(); }
+
 function renderRqStats(){
   const wrap = document.getElementById('rq_stats_row');
   if (!wrap) return;
@@ -1605,17 +1621,17 @@ function renderRqStats(){
   // decision now), ok=green (good to go), same meaning those 4 colors already carry everywhere
   // else in the app (Collections' aging report, payment badges).
   const stats = [
-    { value: String(productsInProgress), label: 'Products In Progress', cls: 'hero',
-      icon: '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>' },
+    { value: String(productsInProgress), label: 'Products In Progress', cls: 'hero' },
     { value: String(rqBucketCounts.updating), label: 'Updating', cls: 'warn',
       icon: '<path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>' },
-    { value: String(rqBucketCounts.expired), label: 'Expired', cls: 'danger',
-      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-    { value: String(rqBucketCounts.ready), label: 'Ready', cls: 'ok',
-      icon: '<path d="M20 6 9 17l-5-5"/>' },
+    { value: String(rqBucketCounts.expired), label: 'Expired', cls: 'danger', active: rqShowExpired,
+      onclick: 'rqToggleExpiredSection()', icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+    { value: String(rqBucketCounts.ready), label: 'Ready', cls: 'ok', active: rqShowReady,
+      onclick: 'rqToggleReadySection()', icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];
+  stats[0].icon = '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>';
   wrap.innerHTML = stats.map(s => `
-    <div class="stat-card ${s.cls}">
+    <div class="stat-card ${s.cls}${s.active ? ' active' : ''}"${s.onclick ? ` onclick="${s.onclick}" style="cursor:pointer;" title="Click to ${s.active ? 'hide' : 'show'} this list"` : ''}>
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
       <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
     </div>`).join('');
