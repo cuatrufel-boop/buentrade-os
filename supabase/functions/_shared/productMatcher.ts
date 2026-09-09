@@ -29,8 +29,19 @@ function normalizeForMatchLoose(s: string | null | undefined): string {
   return normalizeForMatch(s).replace(/\b(pork|beef|chicken|lamb)\b/g, "").replace(/\s+/g, " ").trim();
 }
 
+// Real bug, confirmed live 2026-09-09 against a real Seaboard line ("Frozen — #2 Skinless
+// Bellies"): a plain \b boundary never matches next to a symbol like "#" — \b only exists at a
+// transition between a word character and a non-word one, and "#" is itself non-word, so a space
+// immediately before it ("... — #2 ...") is non-word-to-non-word, no boundary, no match, ever.
+// Every "#2" product (Backribs #2, Spareribs #2, Skinless Bellies #2, ...) silently lost its own
+// defining variation this way — the line then narrowed on temperature alone and confidently
+// landed on a same-temperature product with a completely different size (e.g. "9/11") instead of
+// ever seeing "#2" as a real signal. Lookaround assertions on "is this a word character" replace
+// \b here — they don't require either side to itself be a word character, so a symbol-led term
+// like "#2" is bounded exactly the same way a plain word is.
 function wordBoundary(w: string): RegExp {
-  return new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+  const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("(?<![A-Za-z0-9_])" + escaped + "(?![A-Za-z0-9_])", "i");
 }
 
 type TempPack = { name: string; name_en: string | null; id: string };
