@@ -725,8 +725,21 @@ function renderLocationsList(){
   // open wa.me / a Gmail compose window and let the trader review and hit send themselves). Same
   // two icons here now, same pattern, prefilled with the ask — nothing gets sent without the
   // trader's own click in their own WhatsApp/Gmail.
+  // Real ask 2026-09-10: "debe mandar la tabla para que llenen... me va a decir cual de todas las
+  // tarifas" — asking a carrier for "updated rates" with no list attached leaves them guessing
+  // which cities BuenTrade even means. The message now carries the real, closed city catalog
+  // (grouped by state, same order as the table itself) as a literal fill-in list, one line per
+  // city, so replying is just filling in numbers next to a name they were already given.
+  const citiesByState = new Map();
+  [...allLocations].sort((a, b) => (a.state || '').localeCompare(b.state || '') || (a.city || '').localeCompare(b.city || '')).forEach(loc => {
+    if (!citiesByState.has(loc.state)) citiesByState.set(loc.state, []);
+    citiesByState.get(loc.state).push(loc.city);
+  });
+  const cityListText = [...citiesByState.entries()].map(([state, cities]) =>
+    `${state}\n${cities.map(city => `${city}: `).join('\n')}`
+  ).join('\n\n');
   const askSubject = 'BuenTrade — Solicitud de actualización de tarifas';
-  const askBody = 'Hola,\n\n¿Podrían enviarnos su lista de tarifas de flete actualizada (US Freight) para las ciudades que manejamos con ustedes?\n\nGracias,\nBuenTrade';
+  const askBody = `Hola,\n\n¿Podrían enviarnos su tarifa de flete actualizada (US Freight) para cada una de estas ciudades?\n\n${cityListText}\n\nGracias,\nBuenTrade`;
   actionRow.innerHTML = carriers.map((c, i) => {
     const askedDays = c.last_rate_update_requested_at ? rateAgeDays(c.last_rate_update_requested_at) : null;
     const askedNote = askedDays == null ? 'Never asked' : askedDays === 0 ? 'Asked today' : `Asked ${askedDays}d ago`;
