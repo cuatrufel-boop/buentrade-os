@@ -536,8 +536,9 @@ auth.onAuthStateChanged(user => {
          matcher couldn't confidently resolve to one catalog product. A confident match never
          shows up here at all; it applies itself straight to Products & Prices. ============ -->
     <div id="plantTab_pending" style="display:none;">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
-        <button class="btn secondary small" onclick="matchAllConfirmedPendingMatches()">Match All Confirmed</button>
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
+        <span id="matchAllStatus" style="font-size:12px;color:var(--ink-soft);"></span>
+        <button class="btn secondary small" id="matchAllBtn" onclick="matchAllConfirmedPendingMatches()">Match All Confirmed</button>
       </div>
       <table>
         <thead><tr><th>From the plant's email</th><th>Price detected</th><th>Match to product</th><th></th></tr></thead>
@@ -2056,9 +2057,21 @@ async function matchAllConfirmedPendingMatches(){
   });
   if (!eligible.length){ alert('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch, or wait for a row that already has a single confident match.'); return; }
   if (!confirm(`Apply ${eligible.length} confirmed match${eligible.length > 1 ? 'es' : ''}?`)) return;
+  // Real gap found live 2026-09-10 ("no graba" — the data was actually all saved, confirmed
+  // against the real DB, but a several-second run of sequential API calls with zero visible
+  // feedback while a native confirm() dialog had just closed reads exactly like it did nothing.
+  const btn = document.getElementById('matchAllBtn');
+  const status = document.getElementById('matchAllStatus');
+  btn.disabled = true;
+  let done = 0;
   for (const m of eligible) {
+    status.textContent = `Applying ${done + 1} of ${eligible.length}…`;
     await resolvePlantPendingMatch(m.id);
+    done++;
   }
+  status.textContent = `${done} match${done > 1 ? 'es' : ''} applied.`;
+  btn.disabled = false;
+  setTimeout(() => { if (status.textContent === `${done} match${done > 1 ? 'es' : ''} applied.`) status.textContent = ''; }, 4000);
 }
 
 const PLANT_TABS = ['details', 'products', 'locations', 'pending'];
