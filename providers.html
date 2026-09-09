@@ -119,9 +119,19 @@
      "Cargar precios" only ever lived inside one carrier's own US Freight tab. One click here jumps
      straight to that same, unchanged paste box for the right carrier, instead of the trader having
      to know to leave this screen and find the carrier in the other tab first. */
-  .loc-load-prices-btn{display:block;margin:6px auto 0;padding:3px 9px;border-radius:6px;border:1px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  /* Real fix 2026-09-09: these used to live stacked inside each table header cell — fine for 3
+     carriers, genuinely broke the table's own columns at 4 (headers wrapping 3+ lines, squeezed
+     rate columns). Own row of compact cards instead, same component language as everywhere else
+     in the app that shows a set of like-things side by side (profile-grid, stats-row). */
+  .loc-carrier-actions{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .loc-carrier-card{flex:1 1 190px;min-width:170px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .loc-carrier-card-name{font-size:12px;font-weight:700;color:#fff;margin-bottom:4px;}
+  .loc-carrier-card-coverage{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;margin-bottom:10px;}
+  .loc-carrier-card-coverage small{font-family:'Inter',sans-serif;font-size:10.5px;font-weight:600;color:var(--ink-soft);}
+  .loc-carrier-card-btns{display:flex;gap:6px;flex-wrap:wrap;}
+  .loc-load-prices-btn{padding:4px 9px;border-radius:6px;border:1px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;}
   .loc-load-prices-btn:hover{background:rgba(90,170,255,.12);}
-  .loc-asked-note{display:block;margin-top:4px;font-size:9.5px;font-weight:600;color:var(--ink-soft);text-transform:none;letter-spacing:0;}
+  .loc-asked-note{margin-top:8px;font-size:10.5px;font-weight:600;color:var(--ink-soft);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -358,6 +368,12 @@ auth.onAuthStateChanged(user => {
       <strong style="font-size:15px;">Locations Catalog</strong>
       <button class="btn secondary small" style="margin-left:auto;" onclick="startAddLocationMaster()">+ Add New City to Catalog</button>
     </div>
+    <!-- Real fix 2026-09-09: a 4th carrier made the two action buttons + "Asked Nd ago" crammed
+         into each table header cell genuinely break the table's own design (columns squeezed,
+         headers wrapping to 3+ lines). Actions get their own row of compact cards here instead —
+         the table itself goes back to just City + coverage per carrier, like it was before any
+         button lived in it. -->
+    <div id="carrierActionRow" class="loc-carrier-actions"></div>
     <div class="table-scroll">
       <table>
         <colgroup><col class="loc-city-col"></colgroup>
@@ -669,11 +685,13 @@ let locationsAddingNew = false;
 function renderLocationsList(){
   const wrap = document.getElementById('locationRows');
   const headRow = document.getElementById('locationsHeadRow');
+  const actionRow = document.getElementById('carrierActionRow');
   document.getElementById('locationsEmptyMsg').style.display = allLocations.length ? 'none' : 'block';
   const carriers = providers.filter(p => (providerRolesMap[p.id] || []).includes('carrier'));
   const colCount = 1 + carriers.length;
 
   if (!carriers.length){
+    actionRow.innerHTML = '';
     headRow.innerHTML = '<th class="loc-city-head">City</th>';
     wrap.innerHTML = (locationsAddingNew ? renderNewLocationTableRow(colCount) : '')
       + allLocations.map(loc => `<tr><td>${escapeHtml(loc.city)} ${escapeHtml(loc.state)}</td></tr>`).join('');
@@ -685,15 +703,26 @@ function renderLocationsList(){
   const coverage = carriers.map(c => allLocations.filter(loc =>
     allRates.some(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id)
   ).length);
-  headRow.innerHTML = '<th class="loc-city-head">City</th>' + carriers.map((c, i) => {
+  headRow.innerHTML = '<th class="loc-city-head">City</th>' + carriers.map((c, i) => `
+    <th><span class="loc-carrier-name">${escapeHtml(c.name)}</span><span class="loc-carrier-coverage">${coverage[i]}<small> / ${allLocations.length}</small></span></th>
+  `).join('');
+
+  // Real fix 2026-09-09: a 4th carrier made two buttons + an "Asked Nd ago" note crammed into
+  // every table header genuinely break the table (columns squeezed, headers wrapping 3+ lines).
+  // Same actions, own compact row of cards above the table instead — the table stays just a table.
+  actionRow.innerHTML = carriers.map((c, i) => {
     const askedDays = c.last_rate_update_requested_at ? rateAgeDays(c.last_rate_update_requested_at) : null;
     const askedNote = askedDays == null ? 'Never asked' : askedDays === 0 ? 'Asked today' : `Asked ${askedDays}d ago`;
     return `
-    <th><span class="loc-carrier-name">${escapeHtml(c.name)}</span><span class="loc-carrier-coverage">${coverage[i]}<small> / ${allLocations.length}</small></span>
-      <button type="button" class="loc-load-prices-btn" onclick="loadPricesForCarrierFromLocations('${c.id}')" title="Load ${escapeHtml(c.name)}'s prices">📋 Load Prices</button>
-      <button type="button" class="loc-load-prices-btn" onclick="requestRateUpdateFromCarrier('${c.id}')" title="Email ${escapeHtml(c.name)} asking for updated US Freight rates">✉️ Request Update</button>
-      <span class="loc-asked-note">${askedNote}</span>
-    </th>`;
+    <div class="loc-carrier-card">
+      <div class="loc-carrier-card-name">${escapeHtml(c.name)}</div>
+      <div class="loc-carrier-card-coverage">${coverage[i]}<small> / ${allLocations.length} priced</small></div>
+      <div class="loc-carrier-card-btns">
+        <button type="button" class="loc-load-prices-btn" onclick="loadPricesForCarrierFromLocations('${c.id}')" title="Load ${escapeHtml(c.name)}'s prices">📋 Load Prices</button>
+        <button type="button" class="loc-load-prices-btn" onclick="requestRateUpdateFromCarrier('${c.id}')" title="Email ${escapeHtml(c.name)} asking for updated US Freight rates">✉️ Request Update</button>
+      </div>
+      <div class="loc-asked-note">${askedNote}</div>
+    </div>`;
   }).join('');
 
   // Grouped by state — a flat list of 28+ cities reads as a wall of text without this, same
