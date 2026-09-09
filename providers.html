@@ -93,6 +93,28 @@
   .table-scroll{overflow-x:auto;}
   .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
   .muted{color:var(--ink-soft);}
+  /* Real ask 2026-09-09 ("arregla la tabla"): Locations Catalog was one cell with every carrier's
+     status crammed into dot-separated inline text. Real columns instead — one per carrier, grouped
+     by state so 28+ cities read as something, price/pending as a pill instead of colored text. */
+  #locationsListCard table{table-layout:fixed;}
+  #locationsListCard .loc-city-col{width:200px;}
+  #locationsListCard thead th{text-align:center;}
+  #locationsListCard thead th.loc-city-head{text-align:left;}
+  .loc-carrier-name{font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;}
+  .loc-carrier-coverage{display:block;margin-top:4px;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;}
+  .loc-carrier-coverage small{font-family:'Inter',sans-serif;font-size:10.5px;font-weight:600;color:var(--ink-soft);}
+  .loc-state-row td{padding:14px 10px 6px;border-top:none;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--blue-bright);}
+  .loc-state-row:first-child td{padding-top:0;}
+  .loc-state-row td::after{content:'';display:block;height:1px;background:var(--line);margin-top:6px;}
+  .loc-rate-cell{text-align:center;}
+  .loc-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .loc-pill::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+  .loc-pill.ok{background:rgba(15,138,95,.16);border:1px solid rgba(111,211,168,.4);color:#8FE3BE;}
+  .loc-pill.ok::before{background:#6FD3A8;box-shadow:0 0 5px 1px rgba(111,211,168,.7);}
+  .loc-pill.stale{background:rgba(255,200,118,.14);border:1px solid rgba(255,200,118,.4);color:#FFC876;}
+  .loc-pill.stale::before{background:#FFC876;box-shadow:0 0 5px 1px rgba(255,200,118,.7);}
+  .loc-pill.pending{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.14);color:var(--ink-soft);font-family:'Inter',sans-serif;font-weight:500;font-size:11.5px;}
+  .loc-pill.pending::before{background:#FF9C8A;box-shadow:0 0 5px 1px rgba(255,156,138,.6);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -331,7 +353,8 @@ auth.onAuthStateChanged(user => {
     </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>City</th><th>Carrier Rates</th></tr></thead>
+        <colgroup><col class="loc-city-col"></colgroup>
+        <thead><tr id="locationsHeadRow"><th class="loc-city-head">City</th></tr></thead>
         <tbody id="locationRows"></tbody>
       </table>
     </div>
@@ -638,28 +661,52 @@ let locationsAddingNew = false;
 // grid this pass doesn't touch) — this table gets its own small "add new" row builder instead.
 function renderLocationsList(){
   const wrap = document.getElementById('locationRows');
+  const headRow = document.getElementById('locationsHeadRow');
   document.getElementById('locationsEmptyMsg').style.display = allLocations.length ? 'none' : 'block';
   const carriers = providers.filter(p => (providerRolesMap[p.id] || []).includes('carrier'));
-  const newRowHtml = locationsAddingNew ? renderNewLocationTableRow() : '';
-  wrap.innerHTML = newRowHtml + allLocations.map(loc => {
-    const statusHtml = carriers.length ? carriers.map(c => {
+  const colCount = 1 + carriers.length;
+
+  if (!carriers.length){
+    headRow.innerHTML = '<th class="loc-city-head">City</th>';
+    wrap.innerHTML = (locationsAddingNew ? renderNewLocationTableRow(colCount) : '')
+      + allLocations.map(loc => `<tr><td>${escapeHtml(loc.city)} ${escapeHtml(loc.state)}</td></tr>`).join('');
+    return;
+  }
+
+  // Each carrier's own header shows its coverage fraction — the gap ("Key Global has 13/28") is
+  // visible here without opening that carrier's own US Freight tab.
+  const coverage = carriers.map(c => allLocations.filter(loc =>
+    allRates.some(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id)
+  ).length);
+  headRow.innerHTML = '<th class="loc-city-head">City</th>' + carriers.map((c, i) => `
+    <th><span class="loc-carrier-name">${escapeHtml(c.name)}</span><span class="loc-carrier-coverage">${coverage[i]}<small> / ${allLocations.length}</small></span></th>
+  `).join('');
+
+  // Grouped by state — a flat list of 28+ cities reads as a wall of text without this, same
+  // reasoning as the carrier's own US Freight rate list (sortRatesByPlace).
+  const sorted = [...allLocations].sort((a, b) => (a.state || '').localeCompare(b.state || '') || (a.city || '').localeCompare(b.city || ''));
+  let rowsHtml = '';
+  let lastState = null;
+  sorted.forEach(loc => {
+    if (loc.state !== lastState){
+      rowsHtml += `<tr class="loc-state-row"><td colspan="${colCount}">${escapeHtml(loc.state || '—')}</td></tr>`;
+      lastState = loc.state;
+    }
+    const cells = carriers.map(c => {
       const rate = allRates.find(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id);
-      if (!rate) return `<span style="color:var(--red);">${escapeHtml(c.name)}: Pending</span>`;
+      if (!rate) return `<td class="loc-rate-cell"><span class="loc-pill pending">Pending</span></td>`;
       const isStale = (rateAgeDays(rate.updated_at) || 0) > RATE_STALE_DAYS;
-      const color = isStale ? '#B7791F' : 'var(--green)';
-      const flag = isStale ? ' ⚠ expired' : '';
-      return `<span style="color:${color};">${escapeHtml(c.name)}: $${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${flag}</span>`;
-    }).join(' &nbsp;·&nbsp; ') : '<span style="color:var(--ink-soft);">No carriers on file yet</span>';
-    return `<tr>
-      <td>${escapeHtml(loc.city)} ${escapeHtml(loc.state)}</td>
-      <td class="muted">${statusHtml}</td>
-    </tr>`;
-  }).join('');
+      const amount = `$${Number(rate.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `<td class="loc-rate-cell"><span class="loc-pill ${isStale ? 'stale' : 'ok'}">${amount}${isStale ? ' ⚠' : ''}</span></td>`;
+    }).join('');
+    rowsHtml += `<tr><td>${escapeHtml(loc.city)}</td>${cells}</tr>`;
+  });
+  wrap.innerHTML = (locationsAddingNew ? renderNewLocationTableRow(colCount) : '') + rowsHtml;
 }
 
-function renderNewLocationTableRow(){
+function renderNewLocationTableRow(colCount){
   return `<tr>
-    <td colspan="2">
+    <td colspan="${colCount}">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <input id="newLocationCity" placeholder="City" style="flex:1;min-width:140px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;">
         <input id="newLocationState" placeholder="State (2 letters)" maxlength="2" style="width:130px;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;text-transform:uppercase;">
