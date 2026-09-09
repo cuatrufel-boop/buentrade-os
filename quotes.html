@@ -493,10 +493,10 @@
      eyebrow badge, floating orbs — all removed already, this is what's left of that padding) just
      to center one search pill. Shrunk to a slim toolbar row sitting above the real result cards,
      not its own standalone section. */
-  /* Real ask 2026-09-09 ("centrado no tan arriba"): more breathing room above and below so the
-     search bar sits centered in the gap between the stat cards and the results cards, not hugging
-     the stat row's bottom edge. */
-  .rq-hero-banner.rq-hero-banner-compact{padding:34px 32px 34px;}
+  /* Real ask 2026-09-09 ("centrado no tan arriba" then "bajarlo un poco esta muy lejos de la
+     tabla"): more room above so it's not hugging the stat row, much less below so it sits close
+     to the first results card instead of floating in a big empty gap above it. */
+  .rq-hero-banner.rq-hero-banner-compact{padding:38px 32px 14px;}
   .rq-hero-orb{position:absolute;border-radius:50%;filter:blur(64px);pointer-events:none;}
   .rq-hero-orb-1{width:440px;height:440px;top:-190px;left:-100px;background:radial-gradient(circle,var(--blue-bright),transparent 70%);opacity:.5;animation:rqOrbFloat1 15s ease-in-out infinite;}
   .rq-hero-orb-2{width:380px;height:380px;top:-140px;right:-110px;background:radial-gradient(circle,#7C5CFF,transparent 70%);opacity:.45;animation:rqOrbFloat2 18s ease-in-out infinite;}
@@ -550,14 +550,10 @@
   .rq-search-trigger:hover{background:linear-gradient(180deg, rgba(255,255,255,.24) 0%, rgba(255,255,255,.1) 45%, rgba(255,255,255,.04) 100%);border-color:rgba(255,255,255,.4);transform:translateY(-1px);box-shadow:0 14px 34px rgba(4,12,26,.5),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -12px 16px -12px rgba(0,0,0,.25);}
   .rq-search-trigger:active{transform:translateY(0);}
   .rq-search-trigger svg.rq-search-ico{width:15px;height:15px;flex-shrink:0;color:rgba(255,255,255,.6);position:relative;z-index:1;}
-  /* Real ask 2026-09-09 ("eres malo para la simetria y centrar las cosas"): the pill's own math
-     centers it perfectly under the stat cards (verified live) — the real imbalance was inside it,
-     the label sitting flush left with a big gap before the ⌘K badge. Centering the label in the
-     space between the fixed icon and badge instead reads as deliberate, not lopsided. */
-  .rq-search-trigger span{flex:1;min-width:0;position:relative;z-index:1;text-align:center;}
-  /* Scoped smaller than the shared .rq-search-kbd base (line ~526, still used as-is by the
-     palette's own full-size searchbar input) — only this trigger's badge shrinks with it. */
-  .rq-search-trigger .rq-search-kbd{position:static;flex-shrink:0;z-index:1;font-size:9.5px;padding:2.5px 5px;border-radius:5px;}
+  /* Real ask 2026-09-09 ("quitar el command k del boton"): the ⌘K badge that used to sit at the
+     far right is gone — no more far-right bookend to center the label against, so it's flush
+     left after the icon again, same as any normal search input. */
+  .rq-search-trigger span{flex:1;min-width:0;position:relative;z-index:1;text-align:left;}
 
   /* The palette itself — a real overlay (⌘K, click the trigger, or Escape/click-outside to
      close), same family as .rq-modal-overlay/.rq-modal-box but positioned near the top like an
@@ -995,10 +991,11 @@ auth.onAuthStateChanged(user => {
   </div>
   <div class="rq-hero-banner rq-hero-banner-compact" id="rq_hero_banner">
     <div class="rq-hero-banner-inner">
+      <!-- Real ask 2026-09-09 ("quitar el command k del boton"): rqSearchKbdEl lookup in the JS
+           below already null-checks, so dropping this <kbd> needs no script change. -->
       <button type="button" class="rq-search-trigger" id="rq_search_trigger" onclick="rqOpenSearchPalette()">
         <svg class="rq-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <span id="rq_search_trigger_label">Search products…</span>
-        <kbd class="rq-search-kbd" id="rq_search_kbd"></kbd>
       </button>
     </div>
   </div>
