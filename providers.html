@@ -714,16 +714,29 @@ function renderLocationsList(){
 
 // Opens that one carrier's own US Freight "Load Prices" box right on top of the Locations Catalog
 // — same panel, same parser, same review step as Plants' own Load Prices, nothing duplicated.
-// Real fix 2026-09-09: the first version of this navigated to the Carriers tab and that provider's
-// own profile first, so closing the box afterward landed you on the carrier's page instead of back
-// on Locations — felt like it "did nothing" here. rateListCard is a fixed, full-screen overlay
-// (position:fixed;inset:0) completely independent of whatever tab sits under it, so setting the
-// state it reads and opening it directly never has to leave this screen at all.
+// Real fix 2026-09-09 (first pass): the first version of this navigated to the Carriers tab and
+// that provider's own profile first, so closing the box afterward landed you on the carrier's page
+// instead of back on Locations.
+//
+// Real fix 2026-09-09 (second pass — confirmed live with a REAL click, not just calling the
+// function from the console): that first pass avoided navigating, but rateListCard lives nested
+// inside #providerCard > #provTab_rates in the actual HTML, and BOTH default to display:none.
+// position:fixed;inset:0 only sizes an element once it and every ancestor are actually rendered —
+// a display:none ancestor removes the whole subtree from layout, fixed-position child included, so
+// the overlay silently computed to a real 0×0 box despite display:flex on itself (confirmed via
+// getBoundingClientRect — width/height both 0 — this is why clicking visibly did nothing, with no
+// console error at all). Now forces just enough of that ancestor chain visible for the overlay to
+// actually paint, and rateListOpenedFromLocations remembers to quietly undo it again on close so
+// the carrier's own profile card never flashes into view here.
+let rateListOpenedFromLocations = false;
 function loadPricesForCarrierFromLocations(providerId){
   const carrier = providers.find(p => p.id === providerId);
   if (!carrier) return;
   currentProviderId = providerId;
   currentRateTab = 'us_freight';
+  rateListOpenedFromLocations = true;
+  document.getElementById('providerCard').style.display = 'block';
+  document.getElementById('provTab_rates').style.display = 'block';
   openRateListPanel();
   document.getElementById('rateListTitle').textContent = `Load Price List — ${carrier.name}`;
 }
@@ -1183,6 +1196,14 @@ async function openRateListPanel(){
 function closeRateListPanel(){
   document.getElementById('rateListCard').style.display = 'none';
   rateListEditingIndex = null;
+  // Undo the "just enough to render" trick from loadPricesForCarrierFromLocations — only when this
+  // is really how we got here, so closing "Load Prices" from a carrier's own real profile page
+  // (the normal flow) never hides that page out from under the trader.
+  if (rateListOpenedFromLocations){
+    document.getElementById('providerCard').style.display = 'none';
+    document.getElementById('provTab_rates').style.display = 'none';
+    rateListOpenedFromLocations = false;
+  }
 }
 
 function titleCaseWords(s){
