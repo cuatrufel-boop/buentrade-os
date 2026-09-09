@@ -1869,6 +1869,13 @@ async function loadPlantPendingMatches(){
   try {
     const res = await callApi('plant-pending-matches-search', { plant_id: currentPlantId });
     plantPendingMatches = res.results || [];
+    plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
+    // Real bug found live 2026-09-10 ("nada" — tab showed only its own header, nothing below, no
+    // error): this call used to sit AFTER the try/catch below instead of inside it, one line away
+    // from the exact fix for the same failure mode — a transient failure here threw uncaught,
+    // renderPlantPendingMatches() never ran, and the tab was left showing whatever the tbody
+    // already had (nothing, the first time it's opened), completely silently.
+    await fetchAllCatalogProducts();
   } catch (e) {
     // Real gap found live 2026-09-06: this used to silently fall back to an empty list on any
     // failure (a transient network blip included) — indistinguishable from "genuinely nothing
@@ -1879,8 +1886,6 @@ async function loadPlantPendingMatches(){
     renderPlantPendingMatches();
     return;
   }
-  plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
-  await fetchAllCatalogProducts();
   renderPlantPendingMatches();
 }
 
