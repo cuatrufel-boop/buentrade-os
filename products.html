@@ -44,6 +44,15 @@
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  /* Real ask 2026-09-09 ("aplica este mismo diseno en el modulo de productos"): same glass-pill
+     search trigger already shipped on quotes.html — full-pill radius, layered gradient, icon
+     inset left, 40px tall. This one's a real live-filter input (renderProducts on every
+     keystroke), not a button that opens a modal, so it's just the input itself restyled. */
+  .pd-search-wrap{position:relative;width:280px;}
+  .pd-search-ico{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(255,255,255,.55);pointer-events:none;}
+  .pd-search-input{width:100%;height:40px;padding:0 14px 0 38px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pd-search-input::placeholder{color:rgba(255,255,255,.5);}
+  .pd-search-input:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   /* A visible "+" next to a closed dropdown, instead of burying "add new" as the last option
@@ -344,7 +353,13 @@ auth.onAuthStateChanged(user => {
 
   <div class="card" id="productListCard">
     <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
-      <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <!-- Real ask 2026-09-09 ("aplica este mismo diseno"): same compact glass pill as Quotes'
+           search trigger (pd-search-* here, scoped to this page) — full-pill radius, layered
+           gradient, icon inset on the left, same 40px height/13px type. -->
+      <div class="pd-search-wrap">
+        <svg class="pd-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" class="pd-search-input">
+      </div>
       <button class="btn" onclick="openForm()">+ Add Product</button>
       <select id="categoryFilter" onchange="renderProducts()" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
         <option value="">All categories</option>
