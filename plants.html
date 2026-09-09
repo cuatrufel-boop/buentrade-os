@@ -134,7 +134,17 @@
   .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:#fff;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
   .plr-chip:hover{background:var(--blue);color:#fff;}
   .plr-chip-current{background:var(--blue);color:#fff;}
-  .plr-chip-new{border-color:var(--ink-soft);color:var(--ink-soft);}
+  /* Real bug, confirmed live 2026-09-10 across every single screenshot sent this whole session
+     ("no puedo ver... productos... colores que no se de donde salieron") — never autofill, that
+     was my wrong diagnosis. .plr-chip's own background is solid #fff (needed so the normal blue
+     chips read on the dark page), but var(--ink-soft) is rgba(255,255,255,.55) — translucent
+     WHITE, meant for the dark navy background this file uses everywhere else. On THIS chip's own
+     white background that's white-on-white: the "+ Crear producto nuevo" text was never
+     malfunctioning, it was invisible the entire time. Same file already carries the correct fix
+     for a white surface elsewhere (auth-box, variationDropdownPanel: --ink-soft:#64748B) — this
+     class just never got it.*/
+  .plr-chip-new{border-color:#94A3B8;color:#475569;}
+  .plr-chip-new:hover{background:#475569;color:#fff;}
   .plr-chip-new:hover{background:var(--ink-soft);color:#fff;}
   /* Real bug found 2026-09-09: "Match" silently did nothing when the matcher flagged its one
      suggested chip as conflicted (never auto-picked, by design — see resolvePlantPendingMatch) —
