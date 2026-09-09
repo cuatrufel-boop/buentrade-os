@@ -88,6 +88,8 @@
   .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
+  .wa-btn.outline{background:var(--card);color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
+  .wa-btn.outline:hover{background:rgba(29,168,81,.18);box-shadow:none;transform:none;}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;fill:currentColor;}
   /* Real ask 2026-09-09 ("ahora en clients"): same transparent table convention as
      collections.html/quotes.html/products.html/plants.html/providers.html — left-aligned uppercase
@@ -546,7 +548,7 @@ auth.onAuthStateChanged(user => {
   <div class="card" id="customerListCard">
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Customer</th><th>Contact</th><th></th></tr></thead>
+        <thead><tr><th>Customer</th><th></th></tr></thead>
         <tbody id="customerRows"></tbody>
       </table>
     </div>
@@ -977,24 +979,27 @@ function renderCustomers(){
   document.getElementById('emptyState').textContent = customers.length && !filtered.length
     ? 'No customers match your search.'
     : 'No customers yet. Click "+ Add Customer" to create the first one.';
-  // Real ask 2026-09-09 ("ahora en clients"): same transparent table convention as
-  // Plants/Products/Quotes/Logistics — logo avatar drops (no table in the app shows one), name +
-  // city/currency/delivery/terms subtitle stack in column 1, Contact and WhatsApp in their own
-  // columns.
+  // Real ask 2026-09-09 ("cambia nombre por dos logos igual que en la otra foto"): matches
+  // providers.html's exact pattern now — contact name folds into the subtitle line instead of its
+  // own column, and the action column shows both WhatsApp and Email as icon buttons (was
+  // WhatsApp-only, with email reachable only via the contact name link).
   wrap.innerHTML = filtered.map(c => {
     const sub = [
       [c.city, countryName(c.country_id)].filter(Boolean).join(', '),
       c.preferred_currency,
       c.usual_delivery_type,
       paymentDaysLabel(c.payment_days),
+      c.contact_name,
     ].filter(Boolean).join(' · ');
     return `<tr>
       <td>
         <a class="name-link" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a>
         <div class="muted" style="font-size:11.5px;margin-top:2px;">${escapeHtml(sub || '—')}</div>
       </td>
-      <td>${c.contact_name && c.email ? `<a href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(c.email))}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</td>
-      <td style="text-align:right;">${(c.whatsapp || c.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</td>
+      <td style="text-align:right;">
+        ${(c.whatsapp || c.phone) ? `<a class="wa-btn" style="padding:6px 10px;" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}
+        ${c.email ? `<a class="wa-btn outline" style="padding:6px 10px;" href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(c.email))}" target="bt_gmail" rel="noopener" title="${escapeHtml(c.email)}"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></a>` : ''}
+      </td>
     </tr>`;
   }).join('');
 }
