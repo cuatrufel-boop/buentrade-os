@@ -152,13 +152,29 @@ function detectVariationNamesFromLine(line: string, variationNames: string[]): S
   return matched;
 }
 
-function candidateVariationSet(p: any): Set<string> {
-  return new Set(
+// Real bug, confirmed live 2026-09-10: a candidate's real distinguishing qualifier isn't always
+// in subcategory_en — the catalog is inconsistent about it (e.g. "Pork Skinless Bellies 13/15
+// Frozen, Box" carries "13/15" in name_en with subcategory_en just "Skinless", while "Pork
+// Skinless Bellies #2 Frozen, Box" carries "#2" in name_en too, ALSO with subcategory_en just
+// "Skinless" — so a line that says "#2" could never match the #2 product's real qualifier via
+// subcategory_en alone). Union in whatever registered variation names word-bound-match the
+// candidate's own name/name_en, the same way a line's variations are detected, so a candidate
+// that carries its qualifier in its name is never invisible to this check just because that
+// qualifier isn't ALSO duplicated into subcategory_en.
+function candidateVariationSet(p: any, variationNames?: string[]): Set<string> {
+  const set = new Set<string>(
     (p.subcategory_en || "")
       .split(",")
       .map((s: string) => s.trim().toLowerCase())
       .filter(Boolean),
   );
+  if (variationNames) {
+    const nameNorm = [p.name_en, p.name].filter(Boolean).join(" ").toLowerCase();
+    for (const v of variationNames) {
+      if (v && wordBoundary(v).test(nameNorm)) set.add(v.toLowerCase());
+    }
+  }
+  return set;
 }
 
 function productSummary(p: any): ProductRow {
@@ -260,7 +276,7 @@ export async function matchProductFromPlantText(
       const tempConflict = tempId && product.temperature_id && tempId !== product.temperature_id;
       const packConflict = packagingId && product.packaging_id && packagingId !== product.packaging_id;
       const lineVariations = new Set([...detectVariationNamesFromLine(raw_text, variationNames), ...taughtVariationNamesFromLine(raw_text)]);
-      const productVariations = candidateVariationSet(product);
+      const productVariations = candidateVariationSet(product, variationNames);
       const variationConflict = [...lineVariations].some((v) => !productVariations.has(v));
       if (!tempConflict && !packConflict && !variationConflict) {
         return { matched: true, source: "alias", product: productSummary(product) };
@@ -271,6 +287,10 @@ export async function matchProductFromPlantText(
   const allInCategoryProducts = plantCategoryId
     ? await sql`select * from products where category_id = ${plantCategoryId}`
     : await sql`select * from products`;
+
+  // Computed early (not just before the temp/pack/variation narrowing below) so the widening step
+  // right after the name tiers can check it too — see that block's own comment for why.
+  const lineVariations = new Set([...detectVariationNamesFromLine(raw_text, variationNames), ...taughtVariationNamesFromLine(raw_text)]);
 
   let nameMatches: any[] = [];
   if (!name_en && !name_es) {
@@ -391,18 +411,45 @@ export async function matchProductFromPlantText(
 
   if (!nameMatches.length) return { matched: false, candidates: [] };
 
+  // Real bug, confirmed live 2026-09-10 against a real Seaboard line ("Frozen — #2 Skinless
+  // Bellies"): the tiers above stop at the FIRST one that finds anything, so a short generic name
+  // ("Bellies" — the 9/11 product's own bare name_en, with no size/count in it at all) can
+  // substring-match the line and win before a more specific sibling ("Bellies #2") ever gets a
+  // chance — its full name doesn't appear as one contiguous phrase in that word order, so it never
+  // even entered the tier-3 pool. The line clearly names a real, already-detected variation ("#2")
+  // that only the sibling actually has; if nothing in the current pool satisfies a variation the
+  // line clearly names, widen the search (same "every word present, any order" rule as the
+  // loosest tier) and add whatever that finds, rather than silently keeping the narrower pool and
+  // never even considering the actually-correct product.
+  if (lineVariations.size && !nameMatches.some((p: any) => {
+    const pv = candidateVariationSet(p, variationNames);
+    return [...lineVariations].every((v) => pv.has(v));
+  })) {
+    const stemW = (s: string) => s.split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ");
+    const wordsOfW = (s: string) => stemW(normalizeForMatchLoose(s || "")).split(" ").filter((w) => w.length > 1);
+    const allWordsPresentW = (candidateWords: string[], lineNorm: string): boolean =>
+      candidateWords.length > 0 && candidateWords.every((w) => wordBoundary(w).test(lineNorm));
+    const rawTarget = stemW(normalizeForMatchLoose(raw_text));
+    for (const p of allInCategoryProducts) {
+      if (!inCategory(p)) continue;
+      if (nameMatches.some((existing: any) => existing.id === p.id)) continue;
+      if (allWordsPresentW(wordsOfW(p.name_en), rawTarget) || allWordsPresentW(wordsOfW(p.name), rawTarget)) {
+        nameMatches.push(p);
+      }
+    }
+  }
+
   // Temperature, packaging, then variation — each narrows the pool left by the one before it, and
   // each is independent: a mismatch on ONE attribute (see narrowStep above) never erases progress
   // already made by another. `conflicted` is sticky (true if ANY step conflicted) — a pool that
   // narrowed to exactly one candidate only via a step that couldn't actually satisfy the line is
   // never treated as a confident match, no matter which attribute caused it.
   const { tempId, packagingId } = detectTempPackFromLine(raw_text, temperatures, packagings, plantTermAliasMap);
-  const lineVariations = new Set([...detectVariationNamesFromLine(raw_text, variationNames), ...taughtVariationNamesFromLine(raw_text)]);
 
   const tempStep = narrowStep(nameMatches, (p) => p.temperature_id === tempId, !!tempId);
   const packStep = narrowStep(tempStep.pool, (p) => p.packaging_id === packagingId, !!packagingId);
   const variationStep = narrowStep(packStep.pool, (p) => {
-    const pVariations = candidateVariationSet(p);
+    const pVariations = candidateVariationSet(p, variationNames);
     for (const v of lineVariations) if (!pVariations.has(v)) return false;
     return true;
   }, lineVariations.size > 0);
