@@ -158,7 +158,13 @@
   .plr-change-btn{flex-shrink:0;background:none;border:none;color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;padding:2px 4px;}
   .plr-open-rawtext{font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;}
   .plr-open-rawtext strong{color:var(--ink);font-weight:600;}
-  .plr-browse{max-height:210px;overflow-y:auto;padding:2px;}
+  /* Real bug, confirmed live 2026-09-10 ("y esta desastre"): a raw_text with zero tight
+     candidates dumped the entire 77-product catalog as loose chips the instant the row rendered
+     — max-height+overflow-y already scrolled it, but with no background/border around it, it just
+     read as a wall of pills bleeding into the row underneath, and a full catalog visible before
+     typing anything defeats the whole point of a search box. Now a real contained panel, empty
+     (search-first) until something is typed. */
+  .plr-browse{max-height:210px;overflow-y:auto;padding:8px;display:none;background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:8px;}
   .plr-browse-search{display:block;width:100%;max-width:340px;padding:7px 10px;margin-bottom:8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;background:var(--card);color:var(--ink);}
   .plr-browse-search:focus{outline:none;border-color:var(--blue);}
   .plr-browse-toggle,.plr-teach-toggle{background:none;border:none;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px;}
@@ -1900,7 +1906,7 @@ function renderPlantPendingMatches(){
     // drop focus/cursor position after every character typed, real catalog now 77 products and
     // growing, plain visual scanning stops scaling well past this size.
     const browseChips = showBrowse ? `
-      <input type="text" class="plr-browse-search" placeholder="Search catalog…" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
+      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
       <div class="plr-candidates plr-browse" id="ppmBrowse_${m.id}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
@@ -1943,8 +1949,13 @@ function filterBrowseChips(inputEl){
   const container = document.getElementById(inputEl.dataset.for);
   if (!container) return;
   const query = inputEl.value.trim().toLowerCase();
+  // Search-first: the panel itself stays hidden (see .plr-browse) until there's something to
+  // filter by — showing all 77 products unfiltered the instant a zero-candidate row rendered was
+  // the actual "desastre", not a missing scrollbar.
+  container.style.display = query ? 'flex' : 'none';
+  if (!query) return;
   container.querySelectorAll('.plr-chip').forEach(chip => {
-    chip.style.display = (!query || chip.dataset.label.includes(query)) ? '' : 'none';
+    chip.style.display = chip.dataset.label.includes(query) ? '' : 'none';
   });
 }
 
@@ -2936,7 +2947,7 @@ function renderPriceListReview(){
     // fix, both places. See that call site for why this filters the DOM directly instead of
     // re-rendering (would drop the input's own focus on every keystroke).
     const browseChips = showBrowse ? `
-      <input type="text" class="plr-browse-search" placeholder="Search catalog…" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
+      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
       <div class="plr-candidates plr-browse" id="plrBrowse_${i}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
