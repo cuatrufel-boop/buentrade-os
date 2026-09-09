@@ -121,6 +121,7 @@
      to know to leave this screen and find the carrier in the other tab first. */
   .loc-load-prices-btn{display:block;margin:6px auto 0;padding:3px 9px;border-radius:6px;border:1px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
   .loc-load-prices-btn:hover{background:rgba(90,170,255,.12);}
+  .loc-asked-note{display:block;margin-top:4px;font-size:9.5px;font-weight:600;color:var(--ink-soft);text-transform:none;letter-spacing:0;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -684,11 +685,16 @@ function renderLocationsList(){
   const coverage = carriers.map(c => allLocations.filter(loc =>
     allRates.some(r => r.provider_id === c.id && r.service_type === 'us_freight' && r.location_id === loc.id)
   ).length);
-  headRow.innerHTML = '<th class="loc-city-head">City</th>' + carriers.map((c, i) => `
+  headRow.innerHTML = '<th class="loc-city-head">City</th>' + carriers.map((c, i) => {
+    const askedDays = c.last_rate_update_requested_at ? rateAgeDays(c.last_rate_update_requested_at) : null;
+    const askedNote = askedDays == null ? 'Never asked' : askedDays === 0 ? 'Asked today' : `Asked ${askedDays}d ago`;
+    return `
     <th><span class="loc-carrier-name">${escapeHtml(c.name)}</span><span class="loc-carrier-coverage">${coverage[i]}<small> / ${allLocations.length}</small></span>
       <button type="button" class="loc-load-prices-btn" onclick="loadPricesForCarrierFromLocations('${c.id}')" title="Load ${escapeHtml(c.name)}'s prices">📋 Load Prices</button>
-    </th>
-  `).join('');
+      <button type="button" class="loc-load-prices-btn" onclick="requestRateUpdateFromCarrier('${c.id}')" title="Email ${escapeHtml(c.name)} asking for updated US Freight rates">✉️ Request Update</button>
+      <span class="loc-asked-note">${askedNote}</span>
+    </th>`;
+  }).join('');
 
   // Grouped by state — a flat list of 28+ cities reads as a wall of text without this, same
   // reasoning as the carrier's own US Freight rate list (sortRatesByPlace).
@@ -729,6 +735,27 @@ function renderLocationsList(){
 // actually paint, and rateListOpenedFromLocations remembers to quietly undo it again on close so
 // the carrier's own profile card never flashes into view here.
 let rateListOpenedFromLocations = false;
+// Real ask 2026-09-09: "mandar un update a los carriers" — distinct from Load Prices, which only
+// ever pastes rates already received. This actually emails the carrier asking for fresh US
+// Freight numbers (provider-rate-update-request — real send, same Gmail account
+// plant-price-emails-poll already sends trader notifications from), and stamps
+// last_rate_update_requested_at so "never asked" vs "asked today" is visible right in the header.
+async function requestRateUpdateFromCarrier(providerId){
+  const carrier = providers.find(p => p.id === providerId);
+  if (!carrier) return;
+  if (!carrier.email){ alert(`${carrier.name} has no email on file — add one in their Profile first.`); return; }
+  if (!confirm(`Send ${carrier.name} (${carrier.email}) an email asking for updated US Freight rates?`)) return;
+  try {
+    const result = await callApi('provider-rate-update-request', { actor: currentActor(), provider_id: providerId });
+    const idx = providers.findIndex(p => p.id === providerId);
+    if (idx >= 0) providers[idx] = result.provider;
+    if (providerTab === 'locations') renderLocationsList();
+    alert(`Sent — ${carrier.name} has been asked for updated rates.`);
+  } catch (e) {
+    alert(`Couldn't send: ${e.message}`);
+  }
+}
+
 function loadPricesForCarrierFromLocations(providerId){
   const carrier = providers.find(p => p.id === providerId);
   if (!carrier) return;
