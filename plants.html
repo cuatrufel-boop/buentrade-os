@@ -620,17 +620,20 @@ auth.onAuthStateChanged(user => {
 
   <!-- Real ask 2026-09-09 ("analiza todo lo que hicimos de diseno... ejecutalo en el modulo de
        plants"): same stat cards + glass-pill search/filter + transparent table already shipped on
-       Products/Quotes, ported here. See renderPlantStats()/renderPlants(). -->
+       Products/Quotes, ported here. See renderPlantStats()/renderPlants().
+       Corrected 2026-09-09 ("la unica que estaba bien era quotes... ve uno por uno y ponlos
+       igual"): Quotes' reference is the search floating OUTSIDE the results card, not sharing a
+       border with the table — toolbar moved above plantListCard, not inside it. -->
   <div class="stats-row" id="plantStatsRow"></div>
-  <div class="card" id="plantListCard">
-    <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
-      <div class="pl-search-wrap">
-        <svg class="pl-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" class="pl-search-input">
-      </div>
-      <select id="plantListCategoryFilter" onchange="renderPlants()" class="pl-cat-select"><option value="">All categories</option></select>
-      <button class="btn" onclick="openNewPlant()">+ New Plant</button>
+  <div id="plantToolbarRow" style="display:flex;align-items:center;margin:0 0 20px;gap:10px;flex-wrap:wrap;">
+    <div class="pl-search-wrap">
+      <svg class="pl-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="plantSearchBox" type="text" placeholder="Search by name, city, or country…" oninput="renderPlants()" class="pl-search-input">
     </div>
+    <select id="plantListCategoryFilter" onchange="renderPlants()" class="pl-cat-select"><option value="">All categories</option></select>
+    <button class="btn" onclick="openNewPlant()">+ New Plant</button>
+  </div>
+  <div class="card" id="plantListCard">
     <div class="table-scroll">
       <table>
         <thead><tr><th>Plant</th><th></th></tr></thead>
@@ -1476,6 +1479,7 @@ async function deletePlant(id){
 }
 
 function openNewPlant(){
+  document.getElementById('plantToolbarRow').style.display = 'none';
   document.getElementById('plantListCard').style.display = 'none';
   document.getElementById('newPlantCard').style.display = 'block';
   document.getElementById('newPlantCard').scrollIntoView({behavior:'smooth'});
@@ -1484,6 +1488,7 @@ function openNewPlant(){
 
 function closeNewPlant(){
   document.getElementById('newPlantCard').style.display = 'none';
+  document.getElementById('plantToolbarRow').style.display = 'flex';
   document.getElementById('plantListCard').style.display = 'block';
 }
 
@@ -1656,6 +1661,7 @@ async function selectPlant(id){
   plantCard.style.display = 'block';
   // Viewing one plant's full profile — the list of every other plant underneath is just noise
   // until you come back to it (click the "Meat Packers" title).
+  document.getElementById('plantToolbarRow').style.display = 'none';
   document.getElementById('plantListCard').style.display = 'none';
   renderProfileView(plant);
   document.getElementById('profileView').style.display = 'block';
@@ -1670,6 +1676,7 @@ async function selectPlant(id){
 
 function closePlantView(){
   document.getElementById('plantCard').style.display = 'none';
+  document.getElementById('plantToolbarRow').style.display = 'flex';
   document.getElementById('plantListCard').style.display = 'block';
   currentPlantId = null;
 }

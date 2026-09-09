@@ -402,20 +402,24 @@ auth.onAuthStateChanged(user => {
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
-  <div class="card" id="productListCard">
-    <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
-      <!-- Real ask 2026-09-09 ("aplica este mismo diseno"): same compact glass pill as Quotes'
-           search trigger (pd-search-* here, scoped to this page) — full-pill radius, layered
-           gradient, icon inset on the left, same 40px height/13px type. -->
-      <div class="pd-search-wrap">
-        <svg class="pd-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" class="pd-search-input">
-      </div>
-      <button class="btn" onclick="openForm()">+ Add Product</button>
-      <select id="categoryFilter" onchange="renderProducts()" class="pd-cat-select">
-        <option value="">All categories</option>
-      </select>
+  <!-- Real ask 2026-09-09 ("la unica que estaba bien era quotes... ve uno por uno y ponlos
+       igual"): Quotes' reference is the search sitting OUTSIDE the results card, floating on the
+       bare page background — not sharing a border with the table. Same here: toolbar lives above
+       productListCard now, not inside it. -->
+  <div id="productToolbarRow" style="display:flex;align-items:center;margin:0 0 20px;gap:10px;flex-wrap:wrap;">
+    <!-- Real ask 2026-09-09 ("aplica este mismo diseno"): same compact glass pill as Quotes'
+         search trigger (pd-search-* here, scoped to this page) — full-pill radius, layered
+         gradient, icon inset on the left, same 40px height/13px type. -->
+    <div class="pd-search-wrap">
+      <svg class="pd-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" class="pd-search-input">
     </div>
+    <button class="btn" onclick="openForm()">+ Add Product</button>
+    <select id="categoryFilter" onchange="renderProducts()" class="pd-cat-select">
+      <option value="">All categories</option>
+    </select>
+  </div>
+  <div class="card" id="productListCard">
     <!-- Real ask 2026-09-09 ("depende de planta no de producto... dejalo como estaba antes, una
          sola columna"): a Spec/photo link was tried here, but that data lives per-plant
          (plant_products.spec_url/photo_url, uploaded from Meat Packers) — showing it on the
@@ -490,6 +494,7 @@ let packagings = [];
 async function openForm(product){
   if (!product) editingProductId = null;
   document.getElementById('formCard').style.display = 'block';
+  document.getElementById('productToolbarRow').style.display = 'none';
   document.getElementById('productListCard').style.display = 'none';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product';
   document.getElementById('formDeleteBtn').style.display = product ? 'inline-block' : 'none';
@@ -539,6 +544,7 @@ async function openForm(product){
 
 function closeForm(){
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('productToolbarRow').style.display = 'flex';
   document.getElementById('productListCard').style.display = 'block';
   editingProductId = null;
 }

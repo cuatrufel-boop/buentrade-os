@@ -532,14 +532,18 @@ auth.onAuthStateChanged(user => {
        transparent table already shipped on Plants/Products/Quotes/Logistics. See
        renderCustomerStats()/renderCustomers(). -->
   <div class="stats-row" id="customerStatsRow"></div>
-  <div class="card" id="customerListCard">
-    <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;">
-      <div class="cu-search-wrap">
-        <svg class="cu-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" class="cu-search-input">
-      </div>
-      <button class="btn" onclick="openForm()">+ Add Customer</button>
+  <!-- Corrected 2026-09-09 ("la unica que estaba bien era quotes... ve uno por uno y ponlos
+       igual"): Quotes' reference is the search floating OUTSIDE the results card — toolbar moved
+       above customerListCard, not inside it (see openForm/closeForm/viewCustomer/
+       closeCustomerDetail for the matching visibility toggle). -->
+  <div id="customerToolbarRow" style="display:flex;align-items:center;margin:0 0 20px;gap:10px;">
+    <div class="cu-search-wrap">
+      <svg class="cu-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" class="cu-search-input">
     </div>
+    <button class="btn" onclick="openForm()">+ Add Customer</button>
+  </div>
+  <div class="card" id="customerListCard">
     <div class="table-scroll">
       <table>
         <thead><tr><th>Customer</th><th>Contact</th><th></th></tr></thead>
@@ -556,6 +560,7 @@ let customers = [];
 
 function openForm(customer){
   document.getElementById('viewCard').style.display = 'none';
+  document.getElementById('customerToolbarRow').style.display = 'none';
   document.getElementById('customerListCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
@@ -660,12 +665,14 @@ function updateCustomerProfile(){
 
 function closeForm(){
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('customerToolbarRow').style.display = 'flex';
   document.getElementById('customerListCard').style.display = 'block';
 }
 
 function closeCustomerDetail(){
   document.getElementById('viewCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('customerToolbarRow').style.display = 'flex';
   document.getElementById('customerListCard').style.display = 'block';
   viewingCustomerId = null;
 }
@@ -1036,6 +1043,7 @@ function viewCustomer(id){
   if (!c) return;
   viewingCustomerId = id;
   document.getElementById('formCard').style.display = 'none';
+  document.getElementById('customerToolbarRow').style.display = 'none';
   document.getElementById('customerListCard').style.display = 'none';
   viewCard.style.display = 'block';
   document.getElementById('viewTitle').textContent = c.trade_name || '';
