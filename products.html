@@ -54,6 +54,14 @@
   .pd-search-input::placeholder{color:rgba(255,255,255,.5);}
   .pd-search-input:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
 
+  /* Real ask 2026-09-09 ("esos botones... no hacen parte del diseno"): a plain browser <select>
+     always pops its OPTION LIST in the OS's own native (usually light) rendering — no CSS reaches
+     inside that popup. color-scheme:dark tells Chrome/Safari/Firefox to draw that native popup in
+     dark mode instead, which fixes exactly the jarring white dropdown here — the trigger itself
+     gets the same glass-pill treatment as the search input beside it. */
+  .pd-cat-select{height:40px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;cursor:pointer;color-scheme:dark;}
+  .pd-cat-select:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.25);}
+
   /* Same colored stat-card component as quotes.html (ported verbatim) — one real BuenTrade token
      per card: hero=blue-bright (neutral total), ok=green (has a real plant price), danger=red
      (still needs one), warn=amber (category count, informational). */
@@ -78,7 +86,13 @@
   .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
   .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
   .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
-  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  /* Real ask 2026-09-09 ("esos botones... no hacen parte del diseno"): the old solid-fill blue
+     button — already retired everywhere else this OS has actually been rebuilt dark/glass (see
+     quotes.html's own note: "hace cuanto ya no hacemos esos botones azules llenos"). Same
+     transparent-bg + colored-border + colored-text formula as .btn.secondary right below it and
+     quotes.html's Done button, just the primary action's own weight (bolder text, brighter hover). */
+  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;transition:background .18s,border-color .18s;}
+  .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   /* A visible "+" next to a closed dropdown, instead of burying "add new" as the last option
      inside the select itself where it's easy to never notice. */
@@ -391,7 +405,7 @@ auth.onAuthStateChanged(user => {
         <input id="searchBox" type="text" placeholder="Search by name…" oninput="renderProducts()" class="pd-search-input">
       </div>
       <button class="btn" onclick="openForm()">+ Add Product</button>
-      <select id="categoryFilter" onchange="renderProducts()" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;">
+      <select id="categoryFilter" onchange="renderProducts()" class="pd-cat-select">
         <option value="">All categories</option>
       </select>
     </div>
