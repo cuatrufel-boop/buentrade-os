@@ -870,6 +870,15 @@ function renderProducts(){
   let filtered = products;
   if (cat) filtered = filtered.filter(p => p.category === cat);
   if (term) filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(term) || (p.name_en || '').toLowerCase().includes(term));
+  // Real ask 2026-09-09 ("cuero no quedo con cuero"): the API already orders by name_en, which
+  // groups same-cut variants together (Picnic with Picnic, Loin with Loin) — but skin/cuero cuts
+  // (Back Skin, Belly Skins, Ham Skins, Jowl Skin, Picnic Skins) each have their OWN name_en tied
+  // to their base cut, so they land scattered across the whole list instead of together as the
+  // "Cuero" family the trader thinks of them as. Pull them out and group them as their own block
+  // at the end, keeping everything else in the API's already-correct order.
+  const isCuero = p => (p.full_name_es || '').toLowerCase().includes('cuero');
+  const cueroItems = filtered.filter(isCuero).sort((a, b) => (a.name_en || '').localeCompare(b.name_en || ''));
+  filtered = [...filtered.filter(p => !isCuero(p)), ...cueroItems];
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = products.length && !filtered.length
     ? 'No products match your search/filter.'
