@@ -971,12 +971,19 @@ auth.onAuthStateChanged(user => {
 
   <!-- Real redesign 2026-09-08, explicit ask ("todo facil en la misma pantalla que cambia segun
        le filtras con el boton de arriba... building sigue funcionando... pero no sobre esa tabla
-       sino sobre el sistema nuevo de pantallas transparentes"): no second tab row — the existing
-       stat cards ABOVE (rq_stats_row: Updating/Expired/Ready) are plain counters now, not a filter —
-       all 3 sweep tables stay visible, stacked, always (see rqApplyStatFilterVisibility), and Building stays permanently visible (it's the live "what am I
-       building right now" tray, not a switchable view) instead of living behind its own tab. -->
+       sino sobre el sistema nuevo de pantallas transparentes"): no second tab row — the stat
+       cards ABOVE (rq_stats_row: Updating/Expired/Ready) are plain counters, and the 3 sweep
+       tables stay visible, stacked, always (see rqApplyStatFilterVisibility).
+       Real ask 2026-09-09, final and explicit ("NO LA QUIERO MAS... sigues con esa tabla de
+       building"): the Building tray itself is no longer shown at all — searching (rqAddVariantToQuote)
+       now feeds straight into the same 3 sweep tables below (loadPendingPrices runs right after
+       an add), which already carry their own real actions (View Quote/send, Ask for Update).
+       #rq_card stays in the DOM, just hidden — rq_customers_wrap and the delivery-date pieces
+       inside it are still real, shared nodes other code (qOpenPendingPlantInline, rqFindCustomers,
+       rqOpenCalendarModal) relies on finding by id; removing the elements outright would break
+       those, not just hide a view. -->
   <div class="rq-board" id="rq_board">
-    <div class="rq-tray-card" id="rq_card">
+    <div class="rq-tray-card" id="rq_card" style="display:none;">
       <div id="rq_summary_strip" style="display:none;border-bottom:1px solid rgba(255,255,255,.15);padding:0 0 12px;margin-bottom:14px;">
         <div class="pending-group-head" style="margin-bottom:0;">
           <div id="rq_spec_line" class="pending-group-title"></div>
@@ -2348,6 +2355,20 @@ async function rqAddVariantToQuote(productId){
     return;
   }
   rqSelectedPlants = rqSelectedPlants.filter(p => p.rqProductId !== productId).concat(result.plants);
+  // Real fix 2026-09-09, confirmed live ("cuando busco un producto me salen las 3 tablas" — a
+  // priced plant that had simply never been individually asked yet, e.g. a fresh price-list
+  // import, was invisible everywhere once the Building tray was removed: the sweep below only
+  // ever shows rows with last_requested_at set, on purpose (never the whole catalog — see
+  // loadPendingPrices), and nothing was stamping that for a plant that already HAD a price and
+  // so was never a target of the auto-ask above. Stamping it here (a pure timestamp write, no
+  // email — see plant-products-request-price) is exactly what searching for it is supposed to
+  // mean: this plant is now on the trader's radar, whether or not it needed a fresh price.
+  // Awaited (unlike the fire-and-forget auto-ask below) — these are plain, fast timestamp writes,
+  // and loadPendingPrices() runs at the end of this function; not waiting here would mean this
+  // exact plant still wouldn't show up in Ready until the next 45s poll, defeating the point.
+  await Promise.all(result.plants.filter(p => !p.rqLastRequestedAt).map(p =>
+    callApi('plant-products-request-price', { actor: currentActor(), plant_id: p.id, product_id: productId }).catch(() => {})
+  ));
   // Suggestion, not a to-do: a plant sharing this product's category but with NO plant_products
   // row for it at all (never asked, never declined) is worth surfacing as "you could ask them
   // too" — real gap confirmed 2026-08-31, plants like a new chicken supplier whose whole portfolio
