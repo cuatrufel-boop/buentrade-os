@@ -111,6 +111,7 @@
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
+  h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
   .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
@@ -374,18 +375,9 @@
      keep the familiar full .pkg-row card (a real decision lives in both); Waiting collapses to a
      single compact strip by default — nothing to decide there, so nothing here should compete for
      attention with the two buckets that do need a decision. */
-  .qbucket + .qbucket{margin-top:16px;}
-  .qbucket-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
-  .qbucket-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0;}
-  .qbucket-ready .qbucket-dot{background:var(--blue-bright);}
-  .qbucket-expired .qbucket-dot{background:#FFC876;}
-  .qbucket-waiting .qbucket-dot{background:rgba(255,255,255,.5);}
-  .qbucket-title{font-family:var(--dash-font-mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;}
-  .qbucket-ready .qbucket-title{color:var(--blue-bright);}
-  .qbucket-expired .qbucket-title{color:#FFC876;}
-  .qbucket-waiting .qbucket-title{color:rgba(255,255,255,.65);}
-  .qbucket-sub{font-size:11px;color:rgba(255,255,255,.55);margin-left:2px;}
-  .qbucket-rows{display:flex;flex-direction:column;gap:8px;}
+  /* Real ask 2026-09-09 ("debe quedr como invoices"): each bucket is a real .card now (see
+     qPanel_request HTML) — .card's own margin-bottom handles spacing between them, same as every
+     stacked-card screen in the app, so the old dot/mono-label header treatment above is gone. */
   /* Real ask 2026-09-08: "todas las updating quedan en una tabla, ready to send en otra, y
      expired en otra" — same table conventions as collections.html/orders.html/offers.html:
      left-aligned uppercase headers, hairline row dividers, near-invisible hover, mono/tabular
@@ -497,7 +489,11 @@
      already has, so it's obvious which of the two is expanded right now. */
   .stat-card.active{box-shadow:0 0 0 2px rgba(255,255,255,.4), 0 3px 14px -2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);}
   .rq-hero-banner{position:relative;background:transparent;padding:64px 42px 46px;overflow:hidden;}
-  .rq-hero-banner.rq-hero-banner-compact{padding:52px 32px 28px;}
+  /* Real ask 2026-09-09 ("el search no va ahi"): this used to be a full decorative hero (headline,
+     eyebrow badge, floating orbs — all removed already, this is what's left of that padding) just
+     to center one search pill. Shrunk to a slim toolbar row sitting above the real result cards,
+     not its own standalone section. */
+  .rq-hero-banner.rq-hero-banner-compact{padding:20px 32px 22px;}
   .rq-hero-orb{position:absolute;border-radius:50%;filter:blur(64px);pointer-events:none;}
   .rq-hero-orb-1{width:440px;height:440px;top:-190px;left:-100px;background:radial-gradient(circle,var(--blue-bright),transparent 70%);opacity:.5;animation:rqOrbFloat1 15s ease-in-out infinite;}
   .rq-hero-orb-2{width:380px;height:380px;top:-140px;right:-110px;background:radial-gradient(circle,#7C5CFF,transparent 70%);opacity:.45;animation:rqOrbFloat2 18s ease-in-out infinite;}
@@ -1093,17 +1089,20 @@ auth.onAuthStateChanged(user => {
          sit there as unrelated-looking clutter while the trader is heads-down on new searches.
          Updating is the one section that's always visible — it's the actionable "needs a reply"
          list, not a to-do the trader has to remember to check for. -->
-    <div class="rq-results-col" style="padding-top:28px;">
-      <div class="qbucket qbucket-ready" id="rq_ready_section" style="display:none;">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Ready to send</span></div>
+    <!-- Real ask 2026-09-09 ("debe quedr como invoices... no tiene tabla no tiene el formato"):
+         same .card + <h2> treatment as collections.html's Invoiced Orders — a real bordered,
+         filled card around each table instead of bare text floating on the page background. -->
+    <div class="rq-results-col" style="padding-top:12px;">
+      <div class="card qbucket qbucket-ready" id="rq_ready_section" style="display:none;">
+        <h2>Ready to Send</h2>
         <div id="rq_ready_results"></div>
       </div>
-      <div class="qbucket qbucket-expired" id="rq_expired_section" style="display:none;">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Expired</span><span class="qbucket-sub">— your call</span></div>
+      <div class="card qbucket qbucket-expired" id="rq_expired_section" style="display:none;">
+        <h2>Expired <span class="muted" style="font-weight:400;font-size:13px;">— your call</span></h2>
         <div id="rq_expired_results"></div>
       </div>
-      <div class="qbucket qbucket-waiting">
-        <div class="qbucket-head"><span class="qbucket-dot"></span><span class="qbucket-title">Updating</span></div>
+      <div class="card qbucket qbucket-waiting">
+        <h2>Updating</h2>
         <div id="rq_updating_results"></div>
       </div>
     </div>
