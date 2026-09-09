@@ -136,16 +136,13 @@
   .name-link:hover{text-decoration:underline;}
   #formCard{display:none;}
   .thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--line);display:block;}
-  /* Same card-row language as Quotes/Pending/Offers/Meat Packers/Providers/Customers — bordered
-     rounded row instead of a plain table row. */
-  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
-  .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:var(--card);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
-  .pkg-row:hover{border-color:rgba(255,255,255,.4);box-shadow:0 3px 12px rgba(4,12,26,.25);}
-  .pkg-plant-avatar{width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-  .pkg-plant-avatar img{width:100%;height:100%;object-fit:cover;}
-  .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
-  .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
-  .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:160px;}
+  /* Transparent-table convention — same as collections.html/quotes.html: hairline row dividers,
+     uppercase mono headers, no per-row card/border. */
+  .table-scroll{overflow-x:auto;}
+  .prod-table-wrap table{width:100%;border-collapse:collapse;font-size:13px;}
+  .prod-table-wrap th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  .prod-table-wrap td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  .prod-table-wrap tr:hover td{background:rgba(255,255,255,.03);}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
   /* Real modals, not native prompt()/confirm() boxes — same visual language as the rest of the
      OS (Space Grotesk heading, rounded white card, blue primary button). */
@@ -409,7 +406,15 @@ auth.onAuthStateChanged(user => {
         <option value="">All categories</option>
       </select>
     </div>
-    <div id="productRows" class="pkg-table-wrap"></div>
+    <!-- Real ask 2026-09-09 ("este tampoco es el diseno nuevo de buentrade"): same transparent
+         table convention as collections.html/quotes.html (hairline row dividers, uppercase mono
+         headers) — not the old .pkg-row card-per-item list this used to be. -->
+    <div class="prod-table-wrap table-scroll">
+      <table>
+        <thead><tr><th>Product</th><th>Spanish Name</th></tr></thead>
+        <tbody id="productRows"></tbody>
+      </table>
+    </div>
     <div id="emptyState" class="empty" style="display:none;">No products yet. Click "+ Add Product" to create the first one.</div>
   </div>
 </div>
@@ -860,18 +865,10 @@ function renderProducts(){
   document.getElementById('emptyState').textContent = products.length && !filtered.length
     ? 'No products match your search/filter.'
     : 'No products yet. Click "+ Add Product" to create the first one.';
-  wrap.innerHTML = filtered.map(p => {
-    // No photo here — it's per-plant now, not on the shared product. A letter avatar is all this
-    // screen can show; the real photo lives on each plant's own product row in Meat Packers.
-    const avatarHtml = `<div class="pkg-plant-avatar">${escapeHtml((p.full_name_en || p.name_en || p.name || '?').trim().charAt(0).toUpperCase())}</div>`;
-    return `<div class="pkg-row">
-      ${avatarHtml}
-      <div class="pkg-plant-info">
-        <a class="name-link pkg-plant-name" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a>
-        <span class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}</span>
-      </div>
-    </div>`;
-  }).join('');
+  wrap.innerHTML = filtered.map(p => `<tr>
+      <td><a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a></td>
+      <td class="muted">${escapeHtml(p.full_name_es || '—')}</td>
+    </tr>`).join('');
 }
 
 let editingProductId = null;
