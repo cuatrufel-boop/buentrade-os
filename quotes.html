@@ -458,18 +458,38 @@
   .rq-panel-stats-wrap{padding:26px 32px 0;}
   .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;}
   .stat-card{
-    background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));
-    border:1px solid rgba(232,181,76,.55); border-radius:12px;
+    border-radius:12px;
     padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;
   }
-  .stat-icon{width:38px;height:38px;border-radius:10px;background:rgba(232,181,76,.15);border:1.5px solid rgba(232,181,76,.55);color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .stat-icon svg{width:18px;height:18px;}
   .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
   .stat-card.hero .stat-value{font-size:28px;}
   .stat-value.empty{font-size:14px;font-weight:600;color:rgba(255,255,255,.7);font-family:'Inter',sans-serif;text-shadow:none;}
   .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
-  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;background:#E8B54C;box-shadow:0 0 7px 1.5px rgba(232,181,76,.8);flex-shrink:0;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
   @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+
+  /* Real ask 2026-09-09 ("no todos del mismo color... pruebalo con quotes"): each stat card gets
+     its own color now, one per real semantic meaning — not 4 invented hues, the exact same 4
+     tokens already used elsewhere in this app (Collections' aging report / payment badges):
+     blue-bright for the neutral "in progress" count, amber for "waiting on someone else"
+     (Updating), red for "needs a decision now" (Expired), green for "good to go" (Ready). */
+  .stat-card.hero{background:linear-gradient(135deg, rgba(90,170,255,.32), rgba(90,170,255,.08));border:1px solid rgba(90,170,255,.55);box-shadow:0 3px 12px -3px rgba(90,170,255,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.hero .stat-icon{background:rgba(90,170,255,.15);border:1.5px solid rgba(90,170,255,.55);color:#5AAAFF;}
+  .stat-card.hero .stat-label::before{background:#5AAAFF;box-shadow:0 0 7px 1.5px rgba(90,170,255,.8);}
+
+  .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
+  .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
+
+  .stat-card.danger{background:linear-gradient(135deg, rgba(196,67,46,.32), rgba(196,67,46,.08));border:1px solid rgba(255,156,138,.55);box-shadow:0 3px 12px -3px rgba(196,67,46,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.danger .stat-icon{background:rgba(196,67,46,.18);border:1.5px solid rgba(255,156,138,.55);color:#FF9C8A;}
+  .stat-card.danger .stat-label::before{background:#FF9C8A;box-shadow:0 0 7px 1.5px rgba(255,156,138,.8);}
+
+  .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
+  .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
   .rq-hero-banner{position:relative;background:transparent;padding:64px 42px 46px;overflow:hidden;}
   .rq-hero-banner.rq-hero-banner-compact{padding:22px 32px 28px;}
   .rq-hero-orb{position:absolute;border-radius:50%;filter:blur(64px);pointer-events:none;}
@@ -1553,18 +1573,23 @@ function renderRqStats(){
   const wrap = document.getElementById('rq_stats_row');
   if (!wrap) return;
   const productsInProgress = new Set(qPendingRows.map(r => r.product_id)).size;
+  // Real ask 2026-09-09 ("no todos del mismo color... pruebalo con quotes"): one real BuenTrade
+  // token per card (see the .stat-card.hero/warn/danger/ok CSS), not 4 copies of the same hue —
+  // hero=blue-bright (neutral count), warn=amber (waiting on someone else), danger=red (needs a
+  // decision now), ok=green (good to go), same meaning those 4 colors already carry everywhere
+  // else in the app (Collections' aging report, payment badges).
   const stats = [
-    { value: String(productsInProgress), label: 'Products In Progress', hero: true,
+    { value: String(productsInProgress), label: 'Products In Progress', cls: 'hero',
       icon: '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>' },
-    { value: String(rqBucketCounts.updating), label: 'Updating',
+    { value: String(rqBucketCounts.updating), label: 'Updating', cls: 'warn',
       icon: '<path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>' },
-    { value: String(rqBucketCounts.expired), label: 'Expired',
+    { value: String(rqBucketCounts.expired), label: 'Expired', cls: 'danger',
       icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-    { value: String(rqBucketCounts.ready), label: 'Ready',
+    { value: String(rqBucketCounts.ready), label: 'Ready', cls: 'ok',
       icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];
   wrap.innerHTML = stats.map(s => `
-    <div class="stat-card${s.hero ? ' hero' : ''}">
+    <div class="stat-card ${s.cls}">
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
       <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
     </div>`).join('');
