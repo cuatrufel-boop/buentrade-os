@@ -998,7 +998,13 @@ function renderCustomers(){
   // under the customer name (same "name + secondary facts" pattern as every other converted
   // table), and the action column keeps both WhatsApp and Email as icon buttons.
   wrap.innerHTML = filtered.map(c => {
-    const location = [c.city, countryName(c.country_id)].filter(Boolean).join(', ') || '—';
+    // Real bug found 2026-09-09: this never included state, so the many customers with a state
+    // set but no city (Bonnacarne, El Ingrato, Empacadora Murgati, La Blanquita, Los Corrales,
+    // Productos Neza) showed just "Mexico" with no visible change after saving their real state.
+    // Same stateName fallback viewCustomer() already uses (c.state free text, or resolve
+    // c.state_id against the real states catalog).
+    const stateName = c.state || (allStates.find(s => s.id === c.state_id) || {}).name_en || null;
+    const location = [c.city, stateName, countryName(c.country_id)].filter(Boolean).join(', ') || '—';
     const creditLimit = c.credit_limit != null ? '$' + Number(c.credit_limit).toLocaleString('en-US') : '—';
     const sub = [
       c.preferred_currency,
