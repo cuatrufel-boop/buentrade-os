@@ -520,7 +520,11 @@
      badge. Quick picks sit right under it with a fraction of the old gap. */
   .rq-hero-searchbar{position:relative;}
   .rq-hero-searchbar svg.rq-search-ico{position:absolute;left:18px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:rgba(255,255,255,.55);pointer-events:none;}
-  .rq-hero-searchbar input{width:100%;height:46px;padding:0 68px 0 48px;border-radius:12px;border:1.5px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;font-size:14.5px;font-family:inherit;box-shadow:0 8px 22px rgba(4,12,26,.3),inset 0 1px 0 rgba(255,255,255,.1);transition:background .15s ease,border-color .15s ease,box-shadow .2s ease;}
+  /* Real ask 2026-09-09 ("mejora esta tabla muy mal diseno"): full-pill radius now, matching the
+     outer trigger it opens from (rq-search-trigger, itself already redesigned as a glass pill) —
+     the input used to be a plain rounded rectangle, a visibly different shape from the button
+     the trader just clicked, breaking the "one continuous piece of UI" this was meant to be. */
+  .rq-hero-searchbar input{width:100%;height:46px;padding:0 68px 0 48px;border-radius:999px;border:1.5px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;font-size:14.5px;font-family:inherit;box-shadow:0 8px 22px rgba(4,12,26,.3),inset 0 1px 0 rgba(255,255,255,.1);transition:background .15s ease,border-color .15s ease,box-shadow .2s ease;}
   .rq-hero-searchbar input::placeholder{color:rgba(255,255,255,.45);}
   .rq-hero-searchbar input:focus{outline:none;border-color:var(--blue-bright);background:rgba(255,255,255,.15);box-shadow:0 10px 26px rgba(4,12,26,.35),inset 0 1px 0 rgba(255,255,255,.12),0 0 0 4px rgba(90,170,255,.18);}
   .rq-search-kbd{position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:rgba(255,255,255,.55);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:4px 7px;pointer-events:none;white-space:nowrap;}
@@ -551,7 +555,11 @@
      close), same family as .rq-modal-overlay/.rq-modal-box but positioned near the top like an
      actual spotlight/command bar, not centered like a dialog. */
   .rq-palette-overlay{position:fixed;inset:0;background:rgba(4,12,26,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:2200;display:flex;align-items:flex-start;justify-content:center;padding:12vh 20px 20px;}
-  .rq-palette-box{width:100%;max-width:640px;background:rgba(20,40,74,.75);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1.5px solid rgba(232,181,76,.4);border-radius:16px;padding:20px;box-shadow:0 32px 80px rgba(4,12,26,.55);animation:rqPaletteIn .16s ease-out;}
+  /* Real ask 2026-09-09 ("mejora esta tabla muy mal diseno"): this box's border was a leftover
+     amber (rgba(232,181,76) — not even a real token, same stray color the stat cards had) while
+     its own Done button, quickpick hover, and the trigger that opens it are all blue-bright — one
+     modal disagreeing with its own trigger and its own footer button. Blue throughout now. */
+  .rq-palette-box{width:100%;max-width:640px;background:rgba(20,40,74,.75);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1.5px solid rgba(90,170,255,.35);border-radius:16px;padding:20px;box-shadow:0 32px 80px rgba(4,12,26,.55);animation:rqPaletteIn .16s ease-out;}
   @keyframes rqPaletteIn{from{opacity:0;transform:translateY(-8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
   .rq-palette-box .rq-quickpicks{margin-top:14px;}
   .rq-palette-box .rq-quickpicks-label{color:rgba(255,255,255,.55);}
@@ -600,8 +608,13 @@
   .rq-hero-stat-value{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1.1;font-variant-numeric:tabular-nums;}
   .rq-hero-stat-label{font-size:10.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;white-space:nowrap;}
   .rq-search-wrap{position:relative;}
-  .rq-quickpicks{display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:14px;}
-  .rq-quickpicks-label{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-right:3px;}
+  .rq-quickpicks{display:flex;align-items:center;justify-content:center;gap:9px 10px;flex-wrap:wrap;margin-top:14px;}
+  /* Real ask 2026-09-09 ("mejora esta tabla muy mal diseno"): the label used to sit inline with
+     the chips in the same wrapping flex row — with "Most Requested" plus the first chip eating
+     the whole first line, the remaining 2 chips wrapped alone below, unbalanced (1 chip on top,
+     2 underneath, confirmed live with a screenshot). flex-basis:100% forces the label onto its
+     own line regardless of chip lengths, so every chip wraps together as one clean group below it. */
+  .rq-quickpicks-label{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;flex-basis:100%;margin-bottom:2px;}
   .rq-quickpicks-label svg{width:13px;height:13px;color:var(--blue);}
   .rq-quickpick-chip{font-size:12.5px;font-weight:600;color:var(--navy-2);background:var(--blue-light);border:1px solid rgba(30,106,219,.15);border-radius:20px;padding:7px 15px;cursor:pointer;white-space:nowrap;transition:background .12s ease,transform .12s ease,box-shadow .12s ease;}
   .rq-quickpick-chip:hover{background:var(--blue);color:#fff;border-color:var(--blue);transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,106,219,.3);}
