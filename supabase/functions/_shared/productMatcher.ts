@@ -125,7 +125,18 @@ function detectVariationNamesFromLine(line: string, variationNames: string[]): S
     if (!name) continue;
     if (wordBoundary(name).test(norm)) { matched.add(name.toLowerCase()); continue; }
     const bareNumber = name.match(/^(\d+)%$/)?.[1];
-    if (bareNumber && wordBoundary(bareNumber).test(norm)) matched.add(name.toLowerCase());
+    // Real bug, confirmed live 2026-09-09 against Seaboard's own repeat price list: a plain
+    // \b boundary treats "/" as a non-word character, so the bare-number fallback for "15%" also
+    // matched the "15" inside a completely unrelated size code like "13/15" or "15/17" — every
+    // Skinless Bellies 13/15 or 15/17 line then looked like it named a "15%" trim variation the
+    // product doesn't have, permanently defeating its own alias (variationConflict always true, no
+    // matter how many times a trader confirmed the exact same match) and re-queuing it as a new
+    // pending row on every future email instead of ever learning it. A percent variation's bare
+    // number only ever appears as a genuinely standalone number ("72 trim combos"), never
+    // slash-adjacent, so exclude a digit sitting next to "/" on either side.
+    if (bareNumber && wordBoundary(bareNumber).test(norm) && !new RegExp(`/\\s*${bareNumber}\\b|\\b${bareNumber}\\s*/`).test(norm)) {
+      matched.add(name.toLowerCase());
+    }
   }
   return matched;
 }
