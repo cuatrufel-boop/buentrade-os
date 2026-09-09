@@ -1533,6 +1533,7 @@ async function deletePlant(id){
 
 function openNewPlant(){
   document.getElementById('plantToolbarRow').style.display = 'none';
+  document.getElementById('plantStatsRow').style.display = 'none';
   document.getElementById('plantListCard').style.display = 'none';
   document.getElementById('newPlantCard').style.display = 'block';
   document.getElementById('newPlantCard').scrollIntoView({behavior:'smooth'});
@@ -1542,6 +1543,7 @@ function openNewPlant(){
 function closeNewPlant(){
   document.getElementById('newPlantCard').style.display = 'none';
   document.getElementById('plantToolbarRow').style.display = 'flex';
+  document.getElementById('plantStatsRow').style.display = 'grid';
   document.getElementById('plantListCard').style.display = 'block';
 }
 
@@ -1713,8 +1715,12 @@ async function selectPlant(id){
   renderPlantLogo(plant);
   plantCard.style.display = 'block';
   // Viewing one plant's full profile — the list of every other plant underneath is just noise
-  // until you come back to it (click the "Meat Packers" title).
+  // until you come back to it (click the "Meat Packers" title). Real bug found live 2026-09-10:
+  // plantStatsRow is a sibling of plantListCard, not nested inside it — hiding the list alone left
+  // the OTHER plants' totals ("10 Total Plants", "3 Pending Matches"...) sitting directly under
+  // this one plant's own tabs, reading as a broken layout bleeding two screens together.
   document.getElementById('plantToolbarRow').style.display = 'none';
+  document.getElementById('plantStatsRow').style.display = 'none';
   document.getElementById('plantListCard').style.display = 'none';
   renderProfileView(plant);
   document.getElementById('profileView').style.display = 'block';
@@ -1730,6 +1736,7 @@ async function selectPlant(id){
 function closePlantView(){
   document.getElementById('plantCard').style.display = 'none';
   document.getElementById('plantToolbarRow').style.display = 'flex';
+  document.getElementById('plantStatsRow').style.display = 'grid';
   document.getElementById('plantListCard').style.display = 'block';
   currentPlantId = null;
 }

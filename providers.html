@@ -926,6 +926,7 @@ function renderProviderStats(){
 
 function openNewProviderForm(){
   document.getElementById('providerToolbarRow').style.display = 'none';
+  document.getElementById('providerStatsRow').style.display = 'none';
   document.getElementById('providerListCard').style.display = 'none';
   document.getElementById('newProviderCard').style.display = 'block';
   document.getElementById('np_name').value = '';
@@ -943,6 +944,7 @@ function openNewProviderForm(){
 function closeNewProviderForm(){
   document.getElementById('newProviderCard').style.display = 'none';
   document.getElementById('providerToolbarRow').style.display = 'flex';
+  document.getElementById('providerStatsRow').style.display = 'grid';
   document.getElementById('providerListCard').style.display = 'block';
 }
 
@@ -989,6 +991,7 @@ async function saveNewProvider(){
 
 function closeProviderCard(){
   document.getElementById('providerCard').style.display = 'none';
+  document.getElementById('providerStatsRow').style.display = 'grid';
   currentProviderId = null;
 }
 
@@ -1092,6 +1095,11 @@ function selectProvider(id){
   if (!p) return;
   currentProviderId = id;
   document.getElementById('providerToolbarRow').style.display = 'none';
+  // Real bug found live 2026-09-10 (same pattern confirmed in plants.html/customers.html):
+  // providerStatsRow is a sibling of providerListCard, never nested inside it — hiding the list
+  // alone left "Total Providers / Carriers / Customs Agencies / Stale Rates" sitting directly
+  // under this one provider's own tabs.
+  document.getElementById('providerStatsRow').style.display = 'none';
   document.getElementById('providerListCard').style.display = 'none';
   document.getElementById('newProviderCard').style.display = 'none';
   document.getElementById('providerCard').style.display = 'block';

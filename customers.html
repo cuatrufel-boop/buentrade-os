@@ -582,6 +582,7 @@ let customers = [];
 function openForm(customer){
   document.getElementById('viewCard').style.display = 'none';
   document.getElementById('customerToolbarRow').style.display = 'none';
+  document.getElementById('customerStatsRow').style.display = 'none';
   document.getElementById('customerListCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
@@ -687,6 +688,7 @@ function updateCustomerProfile(){
 function closeForm(){
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('customerToolbarRow').style.display = 'flex';
+  document.getElementById('customerStatsRow').style.display = 'grid';
   document.getElementById('customerListCard').style.display = 'block';
 }
 
@@ -694,6 +696,7 @@ function closeCustomerDetail(){
   document.getElementById('viewCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('customerToolbarRow').style.display = 'flex';
+  document.getElementById('customerStatsRow').style.display = 'grid';
   document.getElementById('customerListCard').style.display = 'block';
   viewingCustomerId = null;
 }
@@ -1090,6 +1093,10 @@ function viewCustomer(id){
   viewingCustomerId = id;
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('customerToolbarRow').style.display = 'none';
+  // Real bug found live 2026-09-10 (same pattern confirmed in plants.html/providers.html):
+  // customerStatsRow is a sibling of customerListCard, never nested inside it — hiding the list
+  // alone left the aggregate totals sitting directly under this one customer's own detail view.
+  document.getElementById('customerStatsRow').style.display = 'none';
   document.getElementById('customerListCard').style.display = 'none';
   viewCard.style.display = 'block';
   document.getElementById('viewTitle').textContent = c.trade_name || '';
