@@ -991,9 +991,18 @@ function paymentDaysLabel(days){
 function renderCustomers(){
   const wrap = document.getElementById('customerRows');
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
-  const filtered = term ? customers.filter(c =>
+  let filtered = term ? customers.filter(c =>
     [c.trade_name, c.legal_name, c.city, c.contact_name, c.email].some(v => (v || '').toLowerCase().includes(term))
   ) : customers;
+  // Real ask 2026-09-09 ("el orden que deberian estar es de arriba a abajo orden alfabetico y por
+  // ciudad"): city first (same value the Location column itself leads with — city, or state when
+  // there's no city on file), then the displayed legal name as the tiebreaker within each city.
+  filtered = [...filtered].sort((a, b) => {
+    const cityA = (a.city || a.state || (allStates.find(s => s.id === a.state_id) || {}).name_en || '').toLowerCase();
+    const cityB = (b.city || b.state || (allStates.find(s => s.id === b.state_id) || {}).name_en || '').toLowerCase();
+    if (cityA !== cityB) return cityA.localeCompare(cityB);
+    return (a.legal_name || a.trade_name || '').toLowerCase().localeCompare((b.legal_name || b.trade_name || '').toLowerCase());
+  });
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = customers.length && !filtered.length
     ? 'No customers match your search.'
