@@ -148,6 +148,11 @@
   .prod-table-wrap td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;text-align:left;}
   .prod-table-wrap tr:hover td{background:rgba(255,255,255,.03);}
   .prod-name-es{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  /* Real ask 2026-09-09 ("la palabra pork... ponla rosada, la palabra chicken amarilla"): no
+     existing pink token in the app, so this is a new one, scoped to just this word — chicken
+     reuses #FFC876, the same amber/yellow already used by .stat-card.warn above. */
+  .prod-species-pork{color:#FF8FC7;}
+  .prod-species-chicken{color:#FFC876;}
   .photo-preview{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--line);display:block;margin-bottom:8px;}
   /* Real modals, not native prompt()/confirm() boxes — same visual language as the rest of the
      OS (Space Grotesk heading, rounded white card, blue primary button). */
@@ -861,6 +866,15 @@ async function renderProductStats(){
 function tempName(id){ const t = temperatures.find(x => x.id === id); return t ? (t.name_en || t.name) : null; }
 function packName(id){ const p = packagings.find(x => x.id === id); return p ? (p.name_en || p.name) : null; }
 
+// Real ask 2026-09-09: color the species word inside the product name link — Pork pink, Chicken
+// yellow — so the two proteins are visually distinguishable at a glance in the list.
+function speciesColoredName(name){
+  const escaped = escapeHtml(name);
+  return escaped
+    .replace(/^Pork\b/, '<span class="prod-species-pork">Pork</span>')
+    .replace(/^Chicken\b/, '<span class="prod-species-chicken">Chicken</span>');
+}
+
 function renderProducts(){
   const wrap = document.getElementById('productRows');
   const term = (document.getElementById('searchBox').value || '').trim().toLowerCase();
@@ -883,7 +897,7 @@ function renderProducts(){
     : 'No products yet. Click "+ Add Product" to create the first one.';
   wrap.innerHTML = filtered.map(p => `<tr>
       <td>
-        <a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a>
+        <a class="name-link" onclick="editProduct('${p.id}')">${speciesColoredName(p.full_name_en || p.name_en || p.name || '')}</a>
         <div class="prod-name-es">${escapeHtml(p.full_name_es || '—')}</div>
       </td>
     </tr>`).join('');
