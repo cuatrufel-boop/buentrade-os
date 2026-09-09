@@ -13,6 +13,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* Real ask 2026-09-09 ("ahora en clients"): same dark-native-popup fix as plants.html/
+       providers.html — color-scheme tells the browser this page's own form controls (select
+       popups, checkboxes, scrollbars) should render in their dark variant. */
+    color-scheme:dark;
     --navy:#0A2547;
     --navy-2:#0E3D8F;
     --blue:#1E6ADB;
@@ -44,8 +48,39 @@
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
+  h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
-  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  /* Real ask 2026-09-09 ("ahora en clients"): same colored stat-card component as
+     Plants/Products/Quotes/Logistics, ported verbatim. See renderCustomerStats(). */
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
+  .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .stat-card.hero{background:linear-gradient(135deg, rgba(90,170,255,.32), rgba(90,170,255,.08));border:1px solid rgba(90,170,255,.55);box-shadow:0 3px 12px -3px rgba(90,170,255,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.hero .stat-icon{background:rgba(90,170,255,.15);border:1.5px solid rgba(90,170,255,.55);color:#5AAAFF;}
+  .stat-card.hero .stat-label::before{background:#5AAAFF;box-shadow:0 0 7px 1.5px rgba(90,170,255,.8);}
+  .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
+  .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
+  .stat-card.danger{background:linear-gradient(135deg, rgba(196,67,46,.32), rgba(196,67,46,.08));border:1px solid rgba(255,156,138,.55);box-shadow:0 3px 12px -3px rgba(196,67,46,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.danger .stat-icon{background:rgba(196,67,46,.18);border:1.5px solid rgba(255,156,138,.55);color:#FF9C8A;}
+  .stat-card.danger .stat-label::before{background:#FF9C8A;box-shadow:0 0 7px 1.5px rgba(255,156,138,.8);}
+  .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
+  .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
+  /* Same glass-pill search as Plants/Products/Logistics, scoped "cu-" for this page. */
+  .cu-search-wrap{position:relative;width:280px;}
+  .cu-search-ico{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(255,255,255,.55);pointer-events:none;}
+  .cu-search-input{width:100%;height:40px;padding:0 14px 0 38px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .cu-search-input::placeholder{color:rgba(255,255,255,.5);}
+  .cu-search-input:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
+  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;transition:background .18s,border-color .18s;}
+  .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:var(--card);color:#FF9C8A;border:1.5px solid rgba(196,67,46,.4);padding:5px 10px;font-size:12px;}
   /* Real fix 2026-09-02, explicit ask ("unifica... revisa todos los tabs") — same gradient+shadow
@@ -54,10 +89,15 @@
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;fill:currentColor;}
+  /* Real ask 2026-09-09 ("ahora en clients"): same transparent table convention as
+     collections.html/quotes.html/products.html/plants.html/providers.html — left-aligned uppercase
+     headers, hairline dividers, near-invisible hover. */
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:center;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
-  td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:center;}
-  tr:last-child td{border-bottom:none;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,.03);}
+  .table-scroll{overflow-x:auto;}
+  .muted{color:var(--ink-soft);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -81,21 +121,13 @@
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
-  /* Same card-row language as Quotes/Pending/Offers/Meat Packers/Providers — bordered rounded
-     row with an avatar instead of a plain table row. */
-  .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
-  .pkg-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:var(--card);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;transition:border-color .15s,box-shadow .15s;}
-  .pkg-row:hover{border-color:rgba(255,255,255,.4);box-shadow:0 3px 12px rgba(4,12,26,.25);}
+  /* Real ask 2026-09-09 ("ahora en clients"): the customer list is a real <table> now (see
+     renderCustomers()) — .pkg-table-wrap/.pkg-row/.pkg-plant-name/.pkg-plant-info/.pkg-plant-sub
+     no longer used anywhere. .pkg-plant-avatar(-logo) survives — still real: the customer profile
+     view's own logo header. */
   .pkg-plant-avatar{width:44px;height:44px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,#E7F0FE,#D5E5FC);color:#1E6ADB;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-  /* Same real fix as plants.html/providers.html/offers.html/quotes.html — a wordmark logo forced
-     into a 44×44 square reads tiny once it's wider than tall. No customer has uploaded a logo yet
-     as of this fix, so nothing visibly changes today, but the first one that does won't get
-     squeezed into a square the way plants' logos did. Transparent, matching quotes' Dashboard. */
   .pkg-plant-avatar-logo{width:auto;max-width:70px;background:none;border:none;padding:2px;}
   .pkg-plant-avatar-logo img{width:auto;max-width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);}
-  .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
-  .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
-  .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:160px;}
   .view-label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
   #formCard{display:none;}
   .tab-row{display:flex;gap:6px;margin:14px 0 18px;border-bottom:1.5px solid var(--line);}
@@ -496,12 +528,24 @@ auth.onAuthStateChanged(user => {
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
   </div>
 
+  <!-- Real ask 2026-09-09 ("ahora en clients"): same stat cards + glass-pill search +
+       transparent table already shipped on Plants/Products/Quotes/Logistics. See
+       renderCustomerStats()/renderCustomers(). -->
+  <div class="stats-row" id="customerStatsRow"></div>
   <div class="card" id="customerListCard">
     <div style="display:flex;align-items:center;margin-bottom:14px;gap:10px;">
-      <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" style="width:320px;padding:8px 12px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);">
+      <div class="cu-search-wrap">
+        <svg class="cu-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="searchBox" type="text" placeholder="Search by name, city, or contact…" oninput="renderCustomers()" class="cu-search-input">
+      </div>
       <button class="btn" onclick="openForm()">+ Add Customer</button>
     </div>
-    <div id="customerRows" class="pkg-table-wrap"></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Customer</th><th>Contact</th><th></th></tr></thead>
+        <tbody id="customerRows"></tbody>
+      </table>
+    </div>
     <div id="emptyState" class="empty" style="display:none;">No customers yet. Click "+ Add Customer" to create the first one.</div>
   </div>
 </div>
@@ -745,6 +789,7 @@ async function loadCustomers(){
     const res = await callApi('customers-search', {});
     customers = res.results || [];
     renderCustomers();
+    renderCustomerStats();
   } catch (e) {
     document.getElementById('emptyState').style.display = 'block';
     document.getElementById('emptyState').textContent = 'Error loading customers: ' + e.message;
@@ -925,6 +970,10 @@ function renderCustomers(){
   document.getElementById('emptyState').textContent = customers.length && !filtered.length
     ? 'No customers match your search.'
     : 'No customers yet. Click "+ Add Customer" to create the first one.';
+  // Real ask 2026-09-09 ("ahora en clients"): same transparent table convention as
+  // Plants/Products/Quotes/Logistics — logo avatar drops (no table in the app shows one), name +
+  // city/currency/delivery/terms subtitle stack in column 1, Contact and WhatsApp in their own
+  // columns.
   wrap.innerHTML = filtered.map(c => {
     const sub = [
       [c.city, countryName(c.country_id)].filter(Boolean).join(', '),
@@ -932,19 +981,42 @@ function renderCustomers(){
       c.usual_delivery_type,
       paymentDaysLabel(c.payment_days),
     ].filter(Boolean).join(' · ');
-    const avatarHtml = c.logo_url
-      ? `<div class="pkg-plant-avatar pkg-plant-avatar-logo"><img src="${escapeHtml(c.logo_url)}" alt=""></div>`
-      : `<div class="pkg-plant-avatar">${escapeHtml((c.trade_name || '?').trim().charAt(0).toUpperCase())}</div>`;
-    return `<div class="pkg-row">
-      ${avatarHtml}
-      <div class="pkg-plant-info">
-        <a class="name-link pkg-plant-name" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a>
-        <span class="pkg-plant-sub">${escapeHtml(sub || '—')}</span>
-      </div>
-      <div style="min-width:160px;font-size:12.5px;">${c.contact_name && c.email ? `<a href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(c.email))}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</div>
-      <div style="margin-left:auto;flex-shrink:0;">${(c.whatsapp || c.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</div>
-    </div>`;
+    return `<tr>
+      <td>
+        <a class="name-link" onclick="viewCustomer('${c.id}')">${escapeHtml(c.trade_name || '')}</a>
+        <div class="muted" style="font-size:11.5px;margin-top:2px;">${escapeHtml(sub || '—')}</div>
+      </td>
+      <td>${c.contact_name && c.email ? `<a href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(c.email))}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:none;">${escapeHtml(c.contact_name)}</a>` : escapeHtml(c.contact_name || '—')}</td>
+      <td style="text-align:right;">${(c.whatsapp || c.phone) ? `<a class="wa-btn" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}</td>
+    </tr>`;
   }).join('');
+}
+
+// Real ask 2026-09-09 ("ahora en clients"): same colored stat-card row as Plants/Products/
+// Logistics — real, already-tracked counts only (Total/With Credit Limit/No Credit Limit/
+// Countries), no invented metrics.
+function renderCustomerStats(){
+  const wrap = document.getElementById('customerStatsRow');
+  if (!wrap) return;
+  const total = customers.length;
+  const withCredit = customers.filter(c => c.credit_limit != null).length;
+  const noCredit = total - withCredit;
+  const countryCount = new Set(customers.map(c => c.country_id).filter(Boolean)).size;
+  const stats = [
+    { value: String(total), label: 'Total Customers', cls: 'hero',
+      icon: '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>' },
+    { value: String(withCredit), label: 'With Credit Limit', cls: 'ok',
+      icon: '<path d="M20 6 9 17l-5-5"/>' },
+    { value: String(noCredit), label: 'No Credit Limit', cls: 'danger',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+    { value: String(countryCount), label: 'Countries', cls: 'warn',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/>' },
+  ];
+  wrap.innerHTML = stats.map(s => `
+    <div class="stat-card ${s.cls}">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
+      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
+    </div>`).join('');
 }
 
 function editCustomer(id){
