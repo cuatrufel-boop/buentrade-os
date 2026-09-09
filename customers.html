@@ -561,7 +561,13 @@ auth.onAuthStateChanged(user => {
            leftover gap resulted instead of a tight, consistent-width column. table-layout:fixed
            makes the un-widthed first column absorb 100% of the remainder deterministically. -->
       <table style="table-layout:fixed;">
-        <thead><tr><th>Customer</th><th style="width:180px;">Location</th><th style="width:150px;">Credit Limit (USD)</th><th style="width:110px;">Contact</th></tr></thead>
+        <!-- Real bug found 2026-09-09 ("las 4 columnas simetricas... no unas a un lado a otras a
+             otro"): 180px was measured against the OLD 2-part location text (city+country); now
+             that Location shows city+state+country, the longest real value ("Mexicali, Baja
+             California, Mexico") needs ~198px and was wrapping to 2 lines in some rows but not
+             others, breaking uniform row height. Measured every customer's actual rendered
+             location text live and sized the column to the true longest one plus padding. -->
+        <thead><tr><th>Customer</th><th style="width:240px;">Location</th><th style="width:150px;">Credit Limit (USD)</th><th style="width:110px;">Contact</th></tr></thead>
         <tbody id="customerRows"></tbody>
       </table>
     </div>
