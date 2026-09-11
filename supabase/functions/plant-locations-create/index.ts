@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
     const {
       actor, plant_id, location_name, protein = null, freight_to_border_usd = null,
       delivered_by_plant = null, contact_name = null, phone = null, email = null, notes = null,
-      idempotency_key = null,
+      region = null, idempotency_key = null,
     } = body;
 
     const [plant] = await sql`select id from plants where id = ${plant_id}`;
@@ -31,8 +31,8 @@ Deno.serve(async (req) => {
     const location = await sql.begin(async (tx) => {
       const location_id = await matchOrCreateLocationId(tx, location_name);
       const [location] = await tx`
-        insert into plant_locations (plant_id, location_name, protein, freight_to_border_usd, delivered_by_plant, contact_name, phone, email, notes, idempotency_key, location_id)
-        values (${plant_id}, ${location_name}, ${protein}, ${freight_to_border_usd}, ${delivered_by_plant}, ${contact_name}, ${phone}, ${email}, ${notes}, ${idempotency_key}, ${location_id})
+        insert into plant_locations (plant_id, location_name, protein, freight_to_border_usd, delivered_by_plant, contact_name, phone, email, notes, region, idempotency_key, location_id)
+        values (${plant_id}, ${location_name}, ${protein}, ${freight_to_border_usd}, ${delivered_by_plant}, ${contact_name}, ${phone}, ${email}, ${notes}, ${region}, ${idempotency_key}, ${location_id})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_locations", record_id: location.id, after: location });

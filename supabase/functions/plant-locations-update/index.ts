@@ -5,7 +5,7 @@ import { jsonResponse, writeAuditLog, matchOrCreateLocationId } from "../_shared
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
-const UPDATABLE_FIELDS = ["location_name", "protein", "freight_to_border_usd", "delivered_by_plant", "contact_name", "phone", "email", "notes"];
+const UPDATABLE_FIELDS = ["location_name", "protein", "freight_to_border_usd", "delivered_by_plant", "contact_name", "phone", "email", "notes", "region"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
           location_name = ${merged.location_name}, protein = ${merged.protein},
           freight_to_border_usd = ${merged.freight_to_border_usd}, delivered_by_plant = ${merged.delivered_by_plant},
           contact_name = ${merged.contact_name}, phone = ${merged.phone}, email = ${merged.email}, notes = ${merged.notes},
-          location_id = ${location_id},
+          region = ${merged.region}, location_id = ${location_id},
           updated_at = now()
         where id = ${id} returning *
       `;
