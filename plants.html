@@ -936,6 +936,22 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<!-- Real ask 2026-09-11 ("no quiero que se creen automaticamente ni que se dupliquen... una
+     ventana pidiendo permiso" — both channels, "loads y correo deben sacar confirmacion"): a price
+     mentioning a pickup location this plant doesn't have yet on its own Locations list never
+     creates it silently (see plant-pending-locations-resolve) — this is the real Yes/No window a
+     human actually answers, one suggestion at a time. -->
+<div id="plNewLocationModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:420px;">
+    <h3>New pickup location?</h3>
+    <div id="plNewLocationModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:4px;"></div>
+    <div class="email-modal-actions">
+      <button onclick="plNewLocationModalResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Not now</button>
+      <button onclick="plNewLocationModalResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Add to this plant's Locations</button>
+    </div>
+  </div>
+</div>
+
 <!-- Replaces native prompt() dialogs for adding a new Brand/Variation/Cut Name — same visual
      language as every other modal, not the browser's generic gray box. -->
 <div id="addCatalogModalOverlay" class="email-modal-overlay" style="display:none;">
@@ -1069,6 +1085,44 @@ function plDupModalResolve(saveAsNew){
   document.getElementById('plDupModalOverlay').style.display = 'none';
   if (plDupModalResolver) plDupModalResolver(saveAsNew);
   plDupModalResolver = null;
+}
+
+let plNewLocationModalResolver = null;
+function showNewLocationModal(pendingLocation, plantName){
+  return new Promise(resolve => {
+    plNewLocationModalResolver = resolve;
+    const priceNote = pendingLocation.detected_price != null
+      ? ` A price of $${Number(pendingLocation.detected_price).toFixed(4)} arrived tied to it${pendingLocation.raw_text ? ` ("${escapeHtml(pendingLocation.raw_text)}")` : ''}.`
+      : '';
+    document.getElementById('plNewLocationModalText').innerHTML =
+      `<p style="margin:0;"><strong>${escapeHtml(pendingLocation.location_name)}</strong> is a new pickup location for <strong>${escapeHtml(plantName)}</strong> — not yet in this plant's own Locations list.${priceNote} Add it?</p>`;
+    document.getElementById('plNewLocationModalOverlay').style.display = 'flex';
+  });
+}
+function plNewLocationModalResolve(add){
+  document.getElementById('plNewLocationModalOverlay').style.display = 'none';
+  if (plNewLocationModalResolver) plNewLocationModalResolver(add);
+  plNewLocationModalResolver = null;
+}
+// Real ask 2026-09-11 ("no quiero que se creen automaticamente ni que se dupliquen... una ventana
+// pidiendo permiso" — both channels, "loads y correo deben sacar confirmacion"): a price mentioning
+// a pickup location this plant doesn't have yet on its own Locations list is queued as a suggestion
+// (see applyPlantProductMatch.ts), never created silently. This is where a human actually answers,
+// one suggestion at a time — run whenever this plant is opened (catches an email-sourced one, since
+// nobody was present when the cron actually applied that price) and right after Load Prices' own
+// Apply (catches a paste-sourced one immediately, not on the next visit to this plant).
+async function checkPendingLocations(plantId, plantName){
+  let pending;
+  try { pending = (await callApi('plant-pending-locations-search', { plant_id: plantId })).results || []; }
+  catch (e) { return; }
+  if (!pending.length) return;
+  for (const loc of pending) {
+    const add = await showNewLocationModal(loc, plantName);
+    try {
+      await callApi('plant-pending-locations-resolve', { actor: currentActor(), id: loc.id, approved: add });
+    } catch (e) { /* leave it open — it asks again the next time this plant is opened */ }
+  }
+  await loadPlantLocations();
 }
 
 // One shared modal for every "+ Add new X" catalog escape hatch (Brand, Variation, Cut Name).
@@ -1770,6 +1824,7 @@ async function selectPlant(id){
   await loadPlantDocuments();
   await loadPlantPendingMatches();
   document.getElementById('plantCard').scrollIntoView({behavior:'smooth', block:'start'});
+  await checkPendingLocations(currentPlantId, plant.name);
 }
 
 function closePlantView(){
@@ -3256,6 +3311,11 @@ async function applyPriceList(){
     .filter(p => p && (!p.full_name_en || !p.full_name_es));
   const uniqueMissing = [...new Map(missingFullName.map(p => [p.id, p])).values()];
   plShowNotice(`${applied.length} price(s) updated.${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}`);
+  // Real ask 2026-09-11 ("loads y correo deben sacar confirmacion"): a pickup location this apply
+  // just mentioned but that isn't on this plant's own Locations list yet was queued as a suggestion
+  // (see applyPlantProductMatch.ts), never created silently — ask right now, not on the next visit.
+  const applyPlant = plants.find(pl => pl.id === applyPlantId);
+  if (applyPlant) await checkPendingLocations(applyPlantId, applyPlant.name);
   if (uniqueMissing.length){
     const names = uniqueMissing.map(p => `• ${p.name_en || p.name}`).join('\n');
     const goEdit = confirm(`${uniqueMissing.length} priced product(s) still have no full name (PO/FO/SO text):\n\n${names}\n\nOpen the first one now to fill it in?`);

@@ -36,6 +36,25 @@ export async function applyPlantProductMatch(
 
   const result = await sql.begin(async (tx: any) => {
     const location_id = location_name ? await matchOrCreateLocationId(tx, location_name) : null;
+    // Real ask 2026-09-11 ("no quiero que se creen automaticamente ni que se dupliquen. quiero
+    // que me salga un aviso... pidiendo permiso para crear" — both channels, "loads y correo deben
+    // sacar confirmacion"): a price mentioning a pickup location this plant doesn't have yet on its
+    // own Locations list (plant_locations) never creates that entry here — it queues a suggestion
+    // in plant_pending_locations instead, surfaced as a real Yes/No window in plants.html (right
+    // after Load Prices' own Apply, or the next time that plant is opened for an email-sourced
+    // one). The price itself still applies below regardless — never blocked on this decision.
+    // ON CONFLICT DO NOTHING against the partial unique index (plant_id, location_id) where still
+    // open: idempotent under a retried email/apply, and under both channels racing the same city.
+    if (location_id) {
+      const [existingPlantLocation] = await tx`select id from plant_locations where plant_id = ${plant_id} and location_id = ${location_id}`;
+      if (!existingPlantLocation) {
+        await tx`
+          insert into plant_pending_locations (plant_id, location_id, location_name, raw_text, detected_price)
+          values (${plant_id}, ${location_id}, ${location_name}, ${raw_text}, ${price})
+          on conflict (plant_id, location_id) where resolved_at is null do nothing
+        `;
+      }
+    }
     const [plantProduct] = await tx`
       insert into plant_products (plant_id, product_id, current_price, price_currency_id, price_date, docs_included, notes, location_id, freight_included)
       values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${price_date}, ${docs_included}, ${notes}, ${location_id}, ${freight_included})
