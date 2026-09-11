@@ -231,6 +231,13 @@
      Load / Closing). Each lane is still its own .utimeline underneath (same row markup, same blink/
      traveler/curve logic, unchanged) — this only stacks them with a title above each. */
   .utimeline-lanes{display:flex;flex-direction:column;gap:4px;}
+  /* Real bug found live 2026-09-12: connectors keep .u-line's flex:1 1 auto (built for ONE row of
+     13 items filling the whole card width) — split into 3 shorter lanes, that same rule stretched
+     a 5-6-item lane's lines across the full card, way more spread out than the picked mockup's
+     compact, closely-grouped nodes. Fixed width instead of elastic growth, lanes only, so a short
+     lane (Closing, 2 nodes) doesn't try to fill the same width a 6-node lane naturally fills. */
+  .utimeline-lane .u-line,.utimeline-lane .u-line-curve{flex:0 1 56px;}
+  .utimeline-lane .utimeline{justify-content:flex-start;}
   /* A short lead-in stub before a lane's first node, only when the walker/truck's real position is
      "everything in the PREVIOUS lane is done, on the way here" — same traveler icon/animation as a
      normal connector, just a fixed short width instead of flex-1 (there's no node to connect FROM
