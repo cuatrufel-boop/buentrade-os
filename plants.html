@@ -450,7 +450,7 @@ auth.onAuthStateChanged(user => {
 
       <div class="tt-overlay" id="priceListCard">
         <div class="tt-overlay-head">
-          <div class="tt-overlay-title">Load Price List</div>
+          <div class="tt-overlay-title" id="priceListCardTitle">Load Price List</div>
           <button class="tt-overlay-close" onclick="closePriceListPanel()" title="Close">✕</button>
         </div>
         <div class="tt-overlay-body">
@@ -458,30 +458,40 @@ auth.onAuthStateChanged(user => {
              unfinished page (real feedback) — capping the width and giving the textarea real
              height makes this look like an intentional workspace instead of a mostly-blank one. -->
         <div style="max-width:900px;margin:0 auto;">
-        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Paste the text as it arrived (email, message, or copied from Excel) — one line per product, price at the end of each line. Nothing is saved until you review and confirm.</p>
-        <textarea id="priceListInput" rows="16" style="width:100%;min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;"></textarea>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-          <button class="btn" onclick="processPriceListText()">Process</button>
-          <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
-        </div>
-        <div id="priceListDocsNote" style="display:none;margin-top:14px;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
-        <div id="priceListCategoryNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
-        <div id="priceListLocationsNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
-        <div id="priceListReviewWrap" style="display:none;margin-top:16px;">
-          <div id="priceListSummary" class="plr-summary"></div>
-          <!-- Real ask 2026-09-10 ("mismo diseno y formato de pending matches"): same table shape
-               as that screen (renderPlantPendingMatches) — same columns, same row language. The
-               teach/learn feature is unchanged underneath, just laid out inline in the third
-               column instead of its own separate bordered block. -->
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>From the plant's email</th><th>Price</th><th>Match to product</th><th></th></tr></thead>
-              <tbody id="priceListReviewRows"></tbody>
-            </table>
-          </div>
-          <div style="display:flex;gap:10px;margin-top:12px;">
-            <button class="btn" onclick="applyPriceList()">Apply All</button>
+        <!-- Real ask 2026-09-12 ("no quiero que me deje en la misma pantalla... la nueva con el
+             diseno buentrade"): paste and review used to stack in one long scroll, the review
+             table appearing BELOW the still-visible textarea/Process button instead of replacing
+             it — this is step 1, the paste step; #priceListReviewStep (below) is step 2, shown
+             only once there's something real to review. -->
+        <div id="priceListPasteStep">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Paste the text as it arrived (email, message, or copied from Excel) — one line per product, price at the end of each line. Nothing is saved until you review and confirm.</p>
+          <textarea id="priceListInput" rows="16" style="width:100%;min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;"></textarea>
+          <div style="display:flex;gap:10px;margin-top:10px;">
+            <button class="btn" onclick="processPriceListText()">Process</button>
             <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
+          </div>
+        </div>
+        <div id="priceListReviewStep" style="display:none;">
+          <div id="priceListDocsNote" style="margin-top:0;padding:10px 14px;border-radius:8px;font-size:12.5px;"></div>
+          <div id="priceListCategoryNote" style="margin-top:10px;font-size:12.5px;"></div>
+          <div id="priceListLocationsNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
+          <div id="priceListReviewWrap" style="margin-top:16px;">
+            <div id="priceListSummary" class="plr-summary"></div>
+            <!-- Real ask 2026-09-10 ("mismo diseno y formato de pending matches"): same table shape
+                 as that screen (renderPlantPendingMatches) — same columns, same row language. The
+                 teach/learn feature is unchanged underneath, just laid out inline in the third
+                 column instead of its own separate bordered block. -->
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>From the plant's email</th><th>Price</th><th>Match to product</th><th></th></tr></thead>
+                <tbody id="priceListReviewRows"></tbody>
+              </table>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:12px;">
+              <button class="btn" onclick="applyPriceList()">Apply All</button>
+              <button class="btn secondary" onclick="backToPriceListPaste()">← Back to paste</button>
+              <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
+            </div>
           </div>
         </div>
         <div id="priceListMsg" style="font-size:12.5px;margin-top:10px;"></div>
@@ -2399,9 +2409,9 @@ function setPriceListCategoryFilter(value){
 function openPriceListPanel(){
   document.getElementById('priceListCard').style.display = 'flex';
   document.getElementById('priceListInput').value = '';
-  document.getElementById('priceListReviewWrap').style.display = 'none';
-  document.getElementById('priceListDocsNote').style.display = 'none';
-  document.getElementById('priceListCategoryNote').style.display = 'none';
+  document.getElementById('priceListReviewStep').style.display = 'none';
+  document.getElementById('priceListPasteStep').style.display = 'block';
+  document.getElementById('priceListCardTitle').textContent = 'Load Price List';
   document.getElementById('priceListLocationsNote').style.display = 'none';
   document.getElementById('priceListMsg').textContent = '';
   priceListRows = [];
@@ -3131,9 +3141,32 @@ async function processPriceListText(){
   }
 
   renderPriceListReview();
-  document.getElementById('priceListMsg').textContent = priceListRows.length
-    ? ''
-    : 'No price found in the pasted text.';
+  // Real ask 2026-09-12 ("no quiero que me deje en la misma pantalla... la nueva con el diseno
+  // buentrade"): a real result replaces the paste step with the review step — a genuine new
+  // screen, not a table appended below the still-visible textarea. Nothing found stays on the
+  // paste step (with the message below) so the trader can fix the text right there.
+  if (priceListRows.length){
+    document.getElementById('priceListPasteStep').style.display = 'none';
+    document.getElementById('priceListReviewStep').style.display = 'block';
+    const plant = plants.find(p => p.id === currentPlantId);
+    document.getElementById('priceListCardTitle').textContent = `Review Prices${plant ? ' — ' + plant.name : ''}`;
+    document.getElementById('priceListMsg').textContent = '';
+  } else {
+    document.getElementById('priceListMsg').textContent = 'No price found in the pasted text.';
+  }
+}
+
+// "← Back to paste" on the review step — real ask 2026-09-12, same message: a two-step flow needs
+// a way back, not just forward-or-close. Keeps whatever text is still in the textarea (so a typo
+// fix doesn't mean starting over) but drops the current review batch, since re-clicking Process
+// builds a fresh one anyway.
+function backToPriceListPaste(){
+  priceListRows = [];
+  pendingTermAliases = [];
+  document.getElementById('priceListReviewStep').style.display = 'none';
+  document.getElementById('priceListPasteStep').style.display = 'block';
+  document.getElementById('priceListCardTitle').textContent = 'Load Price List';
+  document.getElementById('priceListMsg').textContent = '';
 }
 
 // First time this plant's exact wording happens to already match a fixed product's own name —
