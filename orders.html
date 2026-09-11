@@ -583,6 +583,22 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<!-- Real ask 2026-09-12: "las que no debe poderse escoger manualmente hasta decidir al final" — a
+     price with no known ship-from city never gets a pickup location until THIS exact moment
+     (Confirm Load, right before physical pickup). Same overlay/box classes as the email modal, no
+     new container invented. Scoped to only the plant's own real locations (never another plant's),
+     same rule quotes.html's freight picker already enforces. -->
+<div id="pickupLocationModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:480px;">
+    <h3>Pick a pickup location</h3>
+    <div class="email-modal-from" id="pickupLocationModalPlantName"></div>
+    <div id="pickupLocationModalList" style="display:flex;flex-direction:column;gap:8px;margin-top:14px;"></div>
+    <div class="email-modal-actions">
+      <button onclick="pickupLocationModalResolve(null)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -659,11 +675,13 @@ async function loadStatusOrders(){
     ...o,
     load_status: o.status,
     freight: o.freight_origin ? { origin: o.freight_origin } : null,
-    carrier: o.carrier_provider_id ? { phone: o.carrier_phone, name: o.carrier_name } : null,
+    carrier: o.carrier_provider_id ? { phone: o.carrier_phone, name: o.carrier_name, email: o.carrier_email } : null,
     plant: {
       whatsapp: o.plant_whatsapp, phone: o.plant_phone, email: o.plant_email,
       payments_contact_name: o.plant_payments_contact_name, payments_email: o.plant_payments_email, payments_whatsapp: o.plant_payments_whatsapp,
     },
+    plant_id: o.plant_id,
+    pickup_location: o.pickup_location || null,
     customer: {
       contact_name: o.customer_contact_name, whatsapp: o.customer_whatsapp, phone: o.customer_phone, email: o.customer_email, email_cc: o.customer_email_cc, payment_days: o.customer_payment_days,
       payments_contact_name: o.customer_payments_contact_name, payments_contact_email: o.customer_payments_email, payments_contact_whatsapp: o.customer_payments_whatsapp, payments_contact_phone: o.customer_payments_phone,
@@ -745,16 +763,82 @@ function requestCustomsDocsClick(orderNumber){
   if (!phone){ alert('No carrier/plant phone on file to request customs documents.'); return; }
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(requestCustomsDocsMessage(o)), '_blank');
 }
+// Approved copy 2026-09-12 — see project_approved_email_whatsapp_copy_table.md for the full table;
+// this is the newest entry, "Confirm Load — to Plant location (+ CC Carrier when FOB)", same
+// English/no-emoji style as PO/FO. {orderNumber} is the shared order_number (e.g. "2026-1001") —
+// the same value every PO/SO/FO/INV prefix composes onto, per the frozen numbering format.
+function confirmLoadEmailSubject(orderNumber, locationName){
+  return `Pick-up appointment — Order PO-${orderNumber} — ${locationName}`;
+}
+function confirmLoadEmailBody(orderNumber, productName, locationName){
+  return `Hi,\n\nWe'd like to schedule pick-up for Order PO-${orderNumber} (${productName || ''}) at ${locationName}. Please confirm the earliest available appointment.\n\nPO Number: PO-${orderNumber}\nOrder Number: ${orderNumber}\n\nThank you,\nBuenTrade Team`;
+}
+
 // Real ask 2026-09-07: "antes de esa fecha [FOB] un boton confirmar con carrier o con planta de
-// que este todo ok y punto" — the Pending Pickup node's "Confirm" button. Reuses
-// askFleteroWhatsApp/askPlantWhatsApp unchanged: their statusCheckMessage's pending_pickup branch
-// ("Could you please confirm if everything is on track for pickup?") already IS this exact ask.
-function confirmPickupReadyClick(orderNumber){
+// que este todo ok y punto" — the Pending Pickup node's "Confirm" button.
+// Rebuilt 2026-09-12 — real gaps found live (see project_order_lifecycle_and_alerting_spec.md point
+// 5, "FOB = both plant and carrier"): the old version was WhatsApp-only, either the carrier OR the
+// plant never both, had no order number in the message at all, and had no way to know WHICH of a
+// plant's several real locations the load was even picking up from. Now:
+// 1. Resolves the real pickup location — automatic when the price named a real city (carried
+//    through live via shipments-search's pickup_location, never re-typed here), or a one-time
+//    manual pick (this plant's own real locations only) when it didn't, saved so it's asked once.
+// 2. Sends a real EMAIL with the order number in the frozen PO-{orderNumber} format (approved copy
+//    above), to that location's own contact — falling back to the plant's general email, then to
+//    the old WhatsApp-only path if neither plant nor location has an email on file at all, so this
+//    never blocks a trader who simply has no email to send to yet.
+// 3. CCs the carrier's email whenever one is actually booked (FOB) — the plant-only case (DAP,
+//    self-delivered) never CCs anyone, since there's no carrier in that picture at all.
+// The old WhatsApp check-in (statusCheckMessage) is folded in as the SAME email modal's WhatsApp
+// button (openEmailModal's waInfo) rather than removed — approved copy, still available with one
+// click, never a second separate action to take.
+async function confirmPickupReadyClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  if (o.carrier && o.carrier.phone) askFleteroWhatsApp(orderNumber);
-  else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
-  else alert('No carrier/plant phone on file to confirm pickup.');
+  const hasCarrier = !!(o.carrier && o.carrier.phone);
+  const waPhone = (hasCarrier ? o.carrier.phone : (o.plant.whatsapp || o.plant.phone) || '').replace(/\D/g, '');
+
+  let location = o.pickup_location || null;
+  if (!location){
+    let locations;
+    try { locations = (await callApi('plant-locations-search', { plant_id: o.plant_id })).results || []; }
+    catch (e) { locations = []; }
+    if (locations.length){
+      const pickedId = await showPickupLocationPicker(o.plant_name, locations);
+      if (!pickedId) return; // trader cancelled — nothing sent, nothing saved
+      location = locations.find(l => l.id === pickedId);
+      try { await callApi('shipments-set-pickup-location', { actor: currentActor(), order_number: orderNumber, pickup_location_id: pickedId }); }
+      catch (e) { alert('Could not save the pickup location: ' + e.message); return; }
+    }
+  }
+
+  const toEmail = (location && location.email) || o.plant.email || null;
+  if (!toEmail){
+    // Neither the resolved location nor the plant has an email on file at all — same fallback the
+    // old version always had, never a dead end for the trader.
+    if (hasCarrier) askFleteroWhatsApp(orderNumber);
+    else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
+    else alert('No carrier/plant phone or email on file to confirm pickup.');
+    return;
+  }
+
+  const locationLabel = (location && location.location_name) || o.plant_name || 'the plant';
+  const subject = confirmLoadEmailSubject(orderNumber, locationLabel);
+  const body = confirmLoadEmailBody(orderNumber, o.product_name, locationLabel);
+  const cc = (hasCarrier && o.carrier.email) ? [o.carrier.email] : [];
+  const waInfo = waPhone ? { phone: waPhone, message: statusCheckMessage(o) } : null;
+
+  try {
+    await sendEmailApi('logistics', [toEmail], subject, body, [], waInfo, cc);
+    showToast('Pick-up appointment requested', toEmail);
+  } catch (e) {
+    if (e.cancelled) return;
+    // No doc_type passed — this isn't a PO/SO/FO/customs/invoice document (no VALID_DOC_TYPES
+    // entry fits, and there's nothing to mark "sent" on the shipment for it), same as the old
+    // WhatsApp-only version never tracked a "sent" timestamp for this action either.
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      gmailFallbackLinkHtml([toEmail], subject, body));
+  }
 }
 // Real ask 2026-09-07: "todos deben ser linkeables con una accion" — Signature has no real
 // trader-side action (only the customer signs remotely), but it still needs to respond to a click
@@ -2253,6 +2337,29 @@ function emailModalConfirm(){
   document.getElementById('emailModalOverlay').style.display = 'none';
   if (emailModalResolve) emailModalResolve({ to, cc, subject, text });
   emailModalResolve = null;
+}
+
+let pickupLocationModalResolveFn = null;
+// Only ever shown when a price never named a real ship-from city — see confirmPickupReadyClick.
+// Scoped strictly to THIS plant's own real locations (plant-locations-search by plant_id), same
+// no-cross-plant rule quotes.html's freight picker already enforces.
+function showPickupLocationPicker(plantName, locations){
+  document.getElementById('pickupLocationModalPlantName').textContent =
+    `This price didn't state a ship-from city — pick which ${plantName || 'plant'} location this load is picking up from.`;
+  const list = document.getElementById('pickupLocationModalList');
+  list.innerHTML = locations.map(loc => `
+    <button type="button" class="btn secondary" style="width:100%;text-align:left;padding:10px 14px;"
+      onclick="pickupLocationModalResolve('${loc.id}')">
+      ${escapeHtml(loc.location_name)}${loc.region ? ` <span style="opacity:.7;">(${escapeHtml(loc.region)})</span>` : ''}
+    </button>
+  `).join('');
+  document.getElementById('pickupLocationModalOverlay').style.display = 'flex';
+  return new Promise(resolve => { pickupLocationModalResolveFn = resolve; });
+}
+function pickupLocationModalResolve(locationId){
+  document.getElementById('pickupLocationModalOverlay').style.display = 'none';
+  if (pickupLocationModalResolveFn) pickupLocationModalResolveFn(locationId);
+  pickupLocationModalResolveFn = null;
 }
 
 async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo, cc){

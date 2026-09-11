@@ -24,8 +24,8 @@ Deno.serve(async (req) => {
       select
         sh.*,
         o.product_id, o.product_name, o.product_name_es, o.product_spec, o.product_spec_es,
-        o.plant_name, o.customer_name,
-        p.name as carrier_name, p.phone as carrier_phone,
+        o.plant_id, o.plant_name, o.customer_name,
+        p.name as carrier_name, p.phone as carrier_phone, p.email as carrier_email,
         cu.contact_name as customer_contact_name, cu.whatsapp as customer_whatsapp, cu.phone as customer_phone,
         cu.email as customer_email, cu.email_cc as customer_email_cc,
         cu.payment_days as customer_payment_days,
@@ -57,6 +57,28 @@ Deno.serve(async (req) => {
         (
           select po.docs_on from purchase_orders po where po.order_number = sh.order_number limit 1
         ) as docs_on,
+        (
+          -- Real ask 2026-09-12: "la que lo trae desde el pricing ese es el location que debe
+          -- traer a través de todo el proceso hasta cerrar" — Case 1 (a real ship-from city was on
+          -- the price) is never stored separately; it's resolved live via the SAME rate the offer
+          -- was quoted with, so it can never drift from what the deal was actually priced on. A
+          -- manual pick (sh.pickup_location_id, Case 2 — no known city, decided at Confirm Load)
+          -- always wins if present, since that's a real trader decision made after the fact.
+          select row_to_json(pl) from (
+            select l.id, l.location_name, l.email, l.phone, l.contact_name, l.notes, l.region
+            from plant_locations l
+            where l.id = coalesce(
+              sh.pickup_location_id,
+              (
+                select l2.id from sent_offers o2
+                join provider_rates pr2 on pr2.id = o2.us_freight_rate_id
+                join plant_locations l2 on l2.location_id = pr2.location_id and l2.plant_id = o2.plant_id
+                where o2.id = sh.sent_offer_id
+                limit 1
+              )
+            )
+          ) pl
+        ) as pickup_location,
         (
           select coalesce(json_agg(e.* order by e.at), '[]'::json)
           from shipment_events e where e.shipment_id = sh.id
