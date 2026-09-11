@@ -131,21 +131,17 @@
      one row at a time, and one clear "this word means…" picker for teaching a plant's own
      shorthand (temperature, packaging, variation, or the cut name itself). */
   .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
-  .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:#fff;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
+  .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:var(--card);color:var(--blue-bright);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
   .plr-chip:hover{background:var(--blue);color:#fff;}
   .plr-chip-current{background:var(--blue);color:#fff;}
-  /* Real bug, confirmed live 2026-09-10 across every single screenshot sent this whole session
-     ("no puedo ver... productos... colores que no se de donde salieron") — never autofill, that
-     was my wrong diagnosis. .plr-chip's own background is solid #fff (needed so the normal blue
-     chips read on the dark page), but var(--ink-soft) is rgba(255,255,255,.55) — translucent
-     WHITE, meant for the dark navy background this file uses everywhere else. On THIS chip's own
-     white background that's white-on-white: the "+ Crear producto nuevo" text was never
-     malfunctioning, it was invisible the entire time. Same file already carries the correct fix
-     for a white surface elsewhere (auth-box, variationDropdownPanel: --ink-soft:#64748B) — this
-     class just never got it.*/
-  .plr-chip-new{border-color:#94A3B8;color:#475569;}
-  .plr-chip-new:hover{background:#475569;color:#fff;}
-  .plr-chip-new:hover{background:var(--ink-soft);color:#fff;}
+  /* Real correction 2026-09-12 ("NO fondos blancos en botones ni dropdowns... en todo el sistema"):
+     this chip used to be solid #fff — a real fix for a real white-on-white invisibility bug
+     (2026-09-10), but the fix itself was off-brand (a light chip sitting on the dark page instead
+     of matching the app's own translucent-card look). Same translucent background every other
+     chip/button on this dark page already uses (var(--card)), with blue-bright text/border for the
+     contrast var(--blue) alone doesn't reliably give on a background this dark.*/
+  .plr-chip-new{border-color:var(--ink-soft);color:var(--ink-soft);}
+  .plr-chip-new:hover{background:var(--ink-soft);color:var(--navy);}
   /* Real bug found 2026-09-09: "Match" silently did nothing when the matcher flagged its one
      suggested chip as conflicted (never auto-picked, by design — see resolvePlantPendingMatch) —
      a plain browser alert() gave no visual pointer to WHICH chip to click, and an unpicked chip
@@ -853,13 +849,13 @@ auth.onAuthStateChanged(user => {
         <div class="field" style="text-align:left;position:relative;">
           <label style="text-align:left;">Variation</label>
           <div style="display:flex;gap:6px;">
-            <button type="button" onclick="toggleVariationDropdown()" id="variationDropdownBtn" style="flex:1;min-width:0;text-align:left;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+            <button type="button" onclick="toggleVariationDropdown()" id="variationDropdownBtn" style="flex:1;min-width:0;text-align:left;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
               <span id="variationDropdownLabel" style="color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">— None —</span><span style="color:var(--ink-soft);flex-shrink:0;">▾</span>
             </button>
             <button type="button" class="btn-add-inline" onclick="addNewVariation()" title="Add a new variation">+</button>
             <button type="button" class="btn-add-inline" onclick="manageVariations()" title="Remove a variation" style="font-size:15px;">🗑</button>
           </div>
-          <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:#fff;border:1.5px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,31,51,.12);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;--ink:#0F1F33;--ink-soft:#64748B;">
+          <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:var(--navy-2);border:1.5px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(4,12,26,.45);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;">
             <div id="variationCheckboxes" style="display:flex;flex-direction:column;gap:8px;"></div>
           </div>
         </div>
@@ -931,7 +927,7 @@ auth.onAuthStateChanged(user => {
     <h3>This might already exist</h3>
     <div id="plDupModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:4px;"></div>
     <div class="email-modal-actions">
-      <button onclick="plDupModalResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Use the existing product instead</button>
+      <button onclick="plDupModalResolve(false)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Use the existing product instead</button>
       <button onclick="plDupModalResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">This is genuinely different — save it</button>
     </div>
   </div>
@@ -947,7 +943,7 @@ auth.onAuthStateChanged(user => {
     <h3>New pickup location?</h3>
     <div id="plNewLocationModalText" style="font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:4px;"></div>
     <div class="email-modal-actions">
-      <button onclick="plNewLocationModalResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Not now</button>
+      <button onclick="plNewLocationModalResolve(false)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Not now</button>
       <button onclick="plNewLocationModalResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Add to this plant's Locations</button>
     </div>
   </div>
@@ -962,7 +958,7 @@ auth.onAuthStateChanged(user => {
     <div class="email-modal-field"><label id="addCatalogModalLabelEs">Spanish</label><input type="text" id="addCatalogModalEs" autocomplete="off"></div>
     <div id="addCatalogModalMsg" style="font-size:12.5px;color:var(--red);min-height:16px;"></div>
     <div class="email-modal-actions">
-      <button onclick="addCatalogModalResolve(null)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="addCatalogModalResolve(null)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
       <button onclick="addCatalogModalSubmit()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Add</button>
     </div>
   </div>
@@ -1011,7 +1007,7 @@ auth.onAuthStateChanged(user => {
     <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject"></div>
     <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody"></textarea></div>
     <div class="email-modal-actions">
-      <button onclick="emailModalCancel()" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="emailModalCancel()" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
       <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
     </div>
   </div>
@@ -1449,7 +1445,7 @@ function renderManageCutNamesList(){
   wrap.innerHTML = cutNames.map(c => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);">
       <span style="font-size:13.5px;">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</span>
-      <button type="button" onclick="deleteCutNameFromCatalog('${c.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:#fff;color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
+      <button type="button" onclick="deleteCutNameFromCatalog('${c.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:var(--card);color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
     </div>
   `).join('');
 }
@@ -1550,7 +1546,7 @@ function renderManageVariationsList(){
   wrap.innerHTML = variations.map(v => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);">
       <span style="font-size:13.5px;">${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}</span>
-      <button type="button" onclick="deleteVariationFromCatalog('${v.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:#fff;color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
+      <button type="button" onclick="deleteVariationFromCatalog('${v.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:var(--card);color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
     </div>
   `).join('');
 }
@@ -2646,7 +2642,7 @@ function renderManageTermAliasesList(){
     <div style="padding:8px 0;border-bottom:1px solid var(--line);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <span style="font-size:13.5px;font-weight:600;">"${escapeHtml(a.term)}"</span>
-        <button type="button" onclick="deleteTermAlias('${a.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:#fff;color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
+        <button type="button" onclick="deleteTermAlias('${a.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:var(--card);color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
         <span style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">${termMeaningTypeLabel(a.meaning_type)}:</span>
