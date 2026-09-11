@@ -226,6 +226,19 @@
   .u-line-curve .u-walker-ride{top:-46px;}
   .u-line-curve .u-truck-ride{top:-40px;}
   .utimeline::-webkit-scrollbar{display:none;}
+  /* Real ask 2026-09-12: "la B con el numero del consecutivo bien hecho y con el flujo pendiente
+     blinking" — the single 13-stop row split into 3 labeled phases (Paperwork & Money / Physical
+     Load / Closing). Each lane is still its own .utimeline underneath (same row markup, same blink/
+     traveler/curve logic, unchanged) — this only stacks them with a title above each. */
+  .utimeline-lanes{display:flex;flex-direction:column;gap:4px;}
+  /* A short lead-in stub before a lane's first node, only when the walker/truck's real position is
+     "everything in the PREVIOUS lane is done, on the way here" — same traveler icon/animation as a
+     normal connector, just a fixed short width instead of flex-1 (there's no node to connect FROM
+     within this lane). */
+  .u-line-lead{position:relative;flex:0 0 22px;height:2px;margin-top:19px;overflow:visible;}
+  .utimeline-lane-title{font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft);margin:14px 0 2px;}
+  .utimeline-lane:first-child .utimeline-lane-title{margin-top:6px;}
+  .utimeline-lane .utimeline{margin-bottom:0;}
   .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:6px;}
   .u-line.done{background:var(--green);}
   /* Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
@@ -1102,19 +1115,62 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     const d = dir === 'up' ? 'M0,18 Q50,0 100,0' : 'M0,0 Q50,0 100,18';
     return `<svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${stroke}" stroke-width="2" ${dash}/></svg>`;
   }
-  const html = entries.map((e, i) => {
-    const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-    let line = '';
-    if (i < entries.length - 1){
-      const nextRaised = !!entries[i + 1].raised;
-      if (e.raised) line = `<div class="u-line-curve">${curveSvg('down', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
-      else if (nextRaised) line = `<div class="u-line-curve">${curveSvg('up', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
-      else line = `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>`;
-    }
-    const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
-    return entryHtml + line;
-  }).join('');
+  // Real ask 2026-09-12: "la B con el numero del consecutivo bien hecho y con el flujo pendiente
+  // blinking" — split the one long row into 3 labeled phases (same real grouping the code already
+  // reasoned about via confirmIdx/deliveredIdxInEntries, just made visible): Paperwork & Money,
+  // Physical Load, Closing. Renders each phase as its own row so a 13-stop card isn't one crowded
+  // line, but reuses every entry's already-built html/line/curve/traveler/blink logic completely
+  // unchanged — a lane boundary just means "no connecting line past the last entry in this lane"
+  // (same as the old code already did at the very end of the row), never a second blinking rule.
+  // blinkIdx/travelerLineIdx stay computed against the FULL flat sequence above, so "exactly one
+  // thing blinks across the whole card" and the walker/truck's real position are untouched by this
+  // split — a lane is only a visual grouping, not a second state machine.
+  function renderLane(laneEntries, globalOffset, leadTravelerHtml){
+    const lead = leadTravelerHtml ? `<div class="u-line-lead">${leadTravelerHtml}</div>` : '';
+    return lead + laneEntries.map((e, j) => {
+      const i = globalOffset + j;
+      const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
+      let line = '';
+      if (j < laneEntries.length - 1){
+        const nextRaised = !!laneEntries[j + 1].raised;
+        if (e.raised) line = `<div class="u-line-curve">${curveSvg('down', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
+        else if (nextRaised) line = `<div class="u-line-curve">${curveSvg('up', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
+        else line = `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>`;
+      }
+      const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
+      return entryHtml + line;
+    }).join('');
+  }
+  // Extra top padding is only ever needed on the ONE lane that actually has the traveler icon
+  // riding a curved connector right now (same trigger as the original single-row version) — a
+  // raised entry elsewhere with no traveler on it needs no extra clearance.
   const travelerOnCurve = travelerLineIdx >= 0 && (entries[travelerLineIdx].raised || (entries[travelerLineIdx + 1] && entries[travelerLineIdx + 1].raised));
+  const lane1 = entries.slice(0, confirmIdx);
+  const lane2 = entries.slice(confirmIdx, deliveredIdxInEntries + 1);
+  const lane3 = entries.slice(deliveredIdxInEntries + 1);
+  const lanesHtml = [
+    { title: 'Paperwork & Money', entries: lane1, offset: 0 },
+    { title: 'Physical Load', entries: lane2, offset: confirmIdx },
+    { title: 'Closing', entries: lane3, offset: deliveredIdxInEntries + 1 },
+  ].filter(l => l.entries.length).map(l => {
+    const laneHasTravelerOnCurve = travelerOnCurve && travelerLineIdx >= l.offset && travelerLineIdx < l.offset + l.entries.length;
+    // The traveler's own connector can land on the LAST entry of a lane (e.g. every paperwork step
+    // done, walking toward Confirm PU) — that connector used to just be "the next one over" in the
+    // old single row, but a lane boundary means there's no entry after it to draw a line TO here.
+    // Rather than silently dropping the walker/truck at exactly the moment it's most informative
+    // (everything in this lane is done, on the way to the next phase), it leads into the NEXT
+    // lane instead, as a short stub before that lane's first node.
+    // Not a curve — the lead stub uses the same flat, non-raised traveler positioning every normal
+    // (non-curved) connector already uses elsewhere in this row, so it needs no extra clearance.
+    const travelerLeadsIntoThisLane = travelerLineIdx >= 0 && travelerLineIdx === l.offset - 1;
+    const leadTravelerHtml = travelerLeadsIntoThisLane ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
+    return `
+    <div class="utimeline-lane">
+      <div class="utimeline-lane-title">${escapeHtml(l.title)}</div>
+      <div class="utimeline${laneHasTravelerOnCurve ? ' needs-curve-clearance' : ''}">${renderLane(l.entries, l.offset, leadTravelerHtml)}</div>
+    </div>
+  `;
+  }).join('');
 
   // Real ask 2026-09-08: "en next action ponlo como esta en collections no solo una accion...
   // 3 steps una blinking la que esta pendiente" — same mini node-timeline as collections.html's
@@ -1138,7 +1194,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   }
 
   return {
-    html: `<div class="utimeline${travelerOnCurve ? ' needs-curve-clearance' : ''}">${html}</div>`,
+    html: `<div class="utimeline-lanes">${lanesHtml}</div>`,
     nextActionHtml: nextActionPreview(),
   };
 }
