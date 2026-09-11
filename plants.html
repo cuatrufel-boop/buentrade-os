@@ -1959,7 +1959,7 @@ function renderPlantPendingMatches(){
     const browseChips = showBrowse ? `
       <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
       <div class="plr-candidates plr-browse" id="ppmBrowse_${m.id}">
-        ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
+        ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml([p.full_name_en, p.name_en, p.full_name_es, p.name].filter(Boolean).join(' ').toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !m._browseAll)
       ? `<button type="button" class="plr-browse-toggle" onclick="togglePendingMatchBrowseAll('${m.id}')">View rest of catalog (${browseCandidates.length})</button>`
@@ -2016,9 +2016,15 @@ function filterBrowseChips(inputEl){
     container.after(emptyMsg);
   }
   if (!query){ emptyMsg.style.display = 'none'; return; }
+  // Real bug found live 2026-09-11 ("recorte 42 en caja tampoco trae nada"): a plain
+  // label.includes(query) needs the whole query as one contiguous substring, so "recorte 42"
+  // never matched "recorte cerdo 42% congelado, caja" — the real word "cerdo" sits between them.
+  // Match on every typed word independently (any order, anywhere in the label) instead.
+  const queryWords = query.split(/\s+/).filter(Boolean);
   let visibleCount = 0;
   container.querySelectorAll('.plr-chip').forEach(chip => {
-    const match = chip.dataset.label.includes(query);
+    const label = chip.dataset.label;
+    const match = queryWords.every(w => label.includes(w));
     chip.style.display = match ? '' : 'none';
     if (match) visibleCount++;
   });
@@ -3053,7 +3059,7 @@ function renderPriceListReview(){
     const browseChips = showBrowse ? `
       <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
       <div class="plr-candidates plr-browse" id="plrBrowse_${i}">
-        ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
+        ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml([p.full_name_en, p.name_en, p.full_name_es, p.name].filter(Boolean).join(' ').toLowerCase())}" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !row._browseAll)
       ? `<button type="button" class="plr-browse-toggle" onclick="toggleBrowseAll(${i})">View rest of catalog (${browseCandidates.length})</button>`
