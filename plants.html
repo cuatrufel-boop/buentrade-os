@@ -921,6 +921,20 @@ auth.onAuthStateChanged(user => {
 </div>
 </div>
 
+<!-- Real ask 2026-09-12 ("no veo tabla... esa misma tabla en loads de plants"): Load Prices' table
+     rows never expand inline anymore — "Match"/"Change" open this modal instead, same as Orders'
+     Active Loads opens a separate detail view instead of growing a row. Same overlay/box classes
+     as every other modal here, no new component. -->
+<div id="plrMatchModalOverlay" class="email-modal-overlay" style="display:none;" onclick="if(event.target===this) closePlrMatchModal()">
+  <div class="email-modal-box" style="max-width:640px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;">
+      <h3 id="plrMatchModalTitle" style="margin:0;font-size:15px;"></h3>
+      <button class="btn secondary small" onclick="closePlrMatchModal()">✕ Close</button>
+    </div>
+    <div id="plrMatchModalContent"></div>
+  </div>
+</div>
+
 <div id="plNoticeOverlay" class="email-modal-overlay" style="display:none;" onclick="if(event.target===this) plCloseNotice()">
   <div class="email-modal-box" style="max-width:380px;text-align:center;">
     <div style="width:52px;height:52px;border-radius:50%;background:rgba(63,203,126,.14);border:1.5px solid #3FCB7E;color:#3FCB7E;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">✓</div>
@@ -2374,6 +2388,9 @@ let priceListCreateForRowIndex = null;
 // separately).
 async function startCreateProductForRow(i){
   priceListCreateForRowIndex = i;
+  // Hand off from the match modal to the (separate) new-product form overlay — never both open
+  // at once. matchedProductId gets linked back and the match modal reflects it once saved (below).
+  closePlrMatchModal();
   // openProductForm itself now defaults Category to this plant's fixed species (rule 15) before
   // loading Cut Name/Variation scoped to it — awaited here so temp/packaging below never race
   // that load.
@@ -2791,19 +2808,6 @@ function confirmLeftoverWord(i, accept, meaningVal){
   const entry = plantTermAliasMap.get(term) || {};
   entry[meaningType] = meaningId;
   plantTermAliasMap.set(term, entry);
-  renderPriceListReview();
-}
-
-// "Cambiar" on an already-resolved ficha — re-opens it into the same click-to-pick view as an
-// unresolved row (current pick highlighted, rest of the category one click away), without losing
-// the existing match unless the trader actually clicks something else.
-function reopenRow(i){
-  priceListRows[i]._forceOpen = true;
-  priceListRows[i]._sendToPending = false;
-  renderPriceListReview();
-}
-function closeRow(i){
-  priceListRows[i]._forceOpen = false;
   renderPriceListReview();
 }
 
@@ -3346,17 +3350,21 @@ function renderPriceListReview(){
     // whole screen that saved anything before "Apply All". Now it's just a closed, staged ficha,
     // same shape as a resolved match — the real save happens inside applyPriceList, in the same
     // batch as every matched row's price.
-    if (row._sendToPending && !row._forceOpen){
+    if (row._sendToPending){
       return `<tr id="plrRow_${i}">
         <td title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</td>
         <td class="num">${priceLabel}</td>
         <td><span class="hint" style="margin:0;">→ Will be sent to Pending Matches on Apply</span></td>
-        <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Change</button></td>
+        <td><button type="button" class="btn secondary small" onclick="openPlrMatchModal(${i})">Change</button></td>
       </tr>`;
     }
 
-    // Resolved and not manually reopened — one compact confirmed line, nothing to click.
-    if (row.matchedProductId && !row._forceOpen){
+    // Resolved — one compact confirmed line, nothing expands inline. Real ask 2026-09-12 ("no veo
+    // tabla... esa misma tabla en loads de plants"): every row in this table now stays exactly this
+    // height always, matching Orders' Active Loads — "Match"/"Change" open a modal instead of
+    // inline-expanding the row, same as Active Loads' "View" opens a separate detail overlay
+    // instead of growing the table row itself.
+    if (row.matchedProductId){
       const p = allCatalogProducts.find(x => x.id === row.matchedProductId);
       // The real, official catalog name (same field Products/Meat Packers/Quotes/POs all show) —
       // never a label recomposed from name_en+spec here. Real correction 2026-08-30: showing
@@ -3399,31 +3407,33 @@ function renderPriceListReview(){
           <div style="display:flex;align-items:center;gap:8px;"><span class="plr-check">✓</span> ${escapeHtml(label)}</div>
           ${confirmHtml}
         </td>
-        <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Change</button></td>
+        <td><button type="button" class="btn secondary small" onclick="openPlrMatchModal(${i})">Change</button></td>
       </tr>`;
     }
 
-    // Real ask 2026-09-12 ("esa no es la tabla de diseno transparente de buentrade... esa misma
-    // tabla en loads de plants"): closed by default, same as Orders' Active Loads table — a compact
-    // pill (same .pending-match-badge amber pill used elsewhere for "needs attention") and one
-    // action button, not an always-open search box + candidate list + two buttons + a link
-    // ballooning this row's height compared to every resolved row around it. Clicking it reuses
-    // reopenRow (the exact same "open this row to work on it" trigger resolved rows already use),
-    // not a new mechanism.
-    if (!row._forceOpen){
-      return `<tr id="plrRow_${i}">
-        <td>${escapeHtml(row.rawText)}</td>
-        <td class="num">${priceLabel}</td>
-        <td><button type="button" class="pending-match-badge" onclick="reopenRow(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>No product yet</button></td>
-        <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Match</button></td>
-      </tr>`;
-    }
+    // Unresolved — same compact row, an amber "needs attention" pill (.pending-match-badge, already
+    // used elsewhere in this file) instead of a check, "Match" opens the same modal.
+    return `<tr id="plrRow_${i}">
+      <td>${escapeHtml(row.rawText)}</td>
+      <td class="num">${priceLabel}</td>
+      <td><button type="button" class="pending-match-badge" onclick="openPlrMatchModal(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>No product yet</button></td>
+      <td><button type="button" class="btn secondary small" onclick="openPlrMatchModal(${i})">Match</button></td>
+    </tr>`;
+  }).join('');
+  refreshPlrMatchModal();
+}
 
+// The search/candidates/create/pending/teach UI — same mechanism as always, just built for the
+// modal (openPlrMatchModal) instead of expanding a table row inline. Real ask 2026-09-12 ("no veo
+// tabla... esa misma tabla en loads de plants"): Active Loads never grows a row to show detail, it
+// opens a separate view — "Match"/"Change" do the same here now.
+function renderMatchRowContent(i){
+    const row = priceListRows[i];
     // Needs a click — tight candidates (if any) plus the current pick (if reopening an already-
     // resolved row) come first; the rest of the plant's own category is one toggle away, never a
     // text box. This is the "connect the incoming line to the right existing card" game.
     const tightIds = row.candidateIds || [];
-    const currentId = row._forceOpen ? row.matchedProductId : null;
+    const currentId = row.matchedProductId || null;
     const shownIds = new Set([...(currentId ? [currentId] : []), ...tightIds]);
     const tightChips = [...shownIds].map(id => {
       const p = allCatalogProducts.find(x => x.id === id);
@@ -3492,24 +3502,46 @@ function renderPriceListReview(){
       </div>
       <div id="termMsg_${i}" style="font-size:11px;color:var(--red);margin-top:4px;font-weight:600;"></div>` : '';
 
-    return `<tr id="plrRow_${i}">
-      <td>${escapeHtml(row.rawText)}</td>
-      <td class="num">${priceLabel}</td>
-      <td>
-        ${tightChips ? `<div class="plr-candidates">${tightChips}</div>` : ''}
-        ${browseChips}
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-          ${browseToggle}
-          ${newChip}
-          ${sendToPendingChip}
-          <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Hide' : 'Is this an abbreviation?'}</button>
-        </div>
-        ${teachPanel}
-        <div id="plrSendMsg_${i}" style="font-size:11px;color:var(--ink-soft);margin-top:4px;"></div>
-      </td>
-      <td>${row._forceOpen ? `<button type="button" class="btn secondary small" onclick="closeRow(${i})">Close</button>` : ''}</td>
-    </tr>`;
-  }).join('');
+    return `
+      ${tightChips ? `<div class="plr-candidates">${tightChips}</div>` : ''}
+      ${browseChips}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+        ${browseToggle}
+        ${newChip}
+        ${sendToPendingChip}
+        <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Hide' : 'Is this an abbreviation?'}</button>
+      </div>
+      ${teachPanel}
+      <div id="plrSendMsg_${i}" style="font-size:11px;color:var(--ink-soft);margin-top:4px;"></div>
+    `;
+}
+
+// One modal, reused for every row's search/candidates/create/pending/teach UI — same overlay/box
+// classes as every other modal in this file, no new component invented. plrMatchModalRowIndex is
+// null when closed; renderPriceListReview() (called after every mutation: pickCandidate,
+// markRowForPending, toggleBrowseAll, etc.) calls refreshPlrMatchModal() at its end, which closes
+// the modal the instant that row is no longer "open" (a pick was made, or sent to pending) and
+// otherwise just re-renders its content in place — same one-render-loop pattern as everywhere else
+// in this file, not a second state machine.
+let plrMatchModalRowIndex = null;
+function openPlrMatchModal(i){
+  priceListRows[i]._forceOpen = true;
+  priceListRows[i]._sendToPending = false;
+  plrMatchModalRowIndex = i;
+  document.getElementById('plrMatchModalOverlay').style.display = 'flex';
+  renderPriceListReview();
+}
+function closePlrMatchModal(){
+  if (plrMatchModalRowIndex !== null && priceListRows[plrMatchModalRowIndex]) priceListRows[plrMatchModalRowIndex]._forceOpen = false;
+  plrMatchModalRowIndex = null;
+  document.getElementById('plrMatchModalOverlay').style.display = 'none';
+}
+function refreshPlrMatchModal(){
+  if (plrMatchModalRowIndex === null) return;
+  const row = priceListRows[plrMatchModalRowIndex];
+  if (!row || !row._forceOpen){ closePlrMatchModal(); return; }
+  document.getElementById('plrMatchModalTitle').textContent = row.rawText;
+  document.getElementById('plrMatchModalContent').innerHTML = renderMatchRowContent(plrMatchModalRowIndex);
 }
 
 async function applyPriceList(){
@@ -4160,6 +4192,7 @@ async function saveProduct(forceOverride){
   // now-longer dropdown.
   if (newProduct && createdForRow !== null && priceListRows[createdForRow]){
     priceListRows[createdForRow].matchedProductId = productId;
+    priceListRows[createdForRow]._forceOpen = false;
     renderPriceListReview();
     document.getElementById('priceListMsg').textContent = 'Product created and linked to this row.';
   }
