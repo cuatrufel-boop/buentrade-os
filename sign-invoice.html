@@ -394,7 +394,7 @@ async function submitSignature(){
     const signatureDataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
     const { composed, so, customer, orderNumber, token } = pageState;
     const { doc } = buildInvoicePdf(composed, so, customer, signatureDataUrl, name, orderNumber);
-    const invoiceUrl = await uploadOrderPdf(doc, `Factura-${orderNumber}.pdf`);
+    const invoiceUrl = await uploadOrderPdf(doc, `INV-${orderNumber}.pdf`);
 
     const redeemRes = await callApi('orders-invoice-signature', { action: 'redeem', order_number: orderNumber, token, invoice_url: invoiceUrl, signed_by_name: name });
     if (redeemRes.already_signed){ showState('alreadySignedState'); return; }

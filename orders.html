@@ -1308,7 +1308,7 @@ async function toggleOrderDocs(orderNumber){
     // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
     // the start of the filename). One list() call per real filename prefix instead.
     try {
-      const prefixes = ['PO-', 'SO-', 'FO-', 'Factura-'].map(p => `${p}${orderNumber}`);
+      const prefixes = ['PO-', 'SO-', 'FO-', 'INV-'].map(p => `${p}${orderNumber}`);
       const results = await Promise.all(prefixes.map(prefix =>
         storageClient.storage.from('order-documents').list('', { search: prefix })
       ));
@@ -1367,7 +1367,7 @@ function renderOrderDocsPanel(o){
     const poFiles = findFiles(`PO-${o.order_number}`);
     const soFiles = findFiles(`SO-${o.order_number}`);
     const foFiles = findFiles(`FO-${o.order_number}`);
-    const invoiceFiles = findFiles(`Factura-${o.order_number}`);
+    const invoiceFiles = findFiles(`INV-${o.order_number}`);
     const poActions = emailBtn(`sharePO('${o.order_number}')`) + waBtn(`waCardPO('${o.order_number}')`);
     const soActions = emailBtn(`shareSO('${o.order_number}')`) + waBtn(`waCardSO('${o.order_number}')`);
     const foActions = emailBtn(`shareFO('${o.order_number}')`) + waBtn(`waCardFO('${o.order_number}')`);
