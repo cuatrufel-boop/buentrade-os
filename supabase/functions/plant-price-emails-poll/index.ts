@@ -36,7 +36,7 @@
 import postgres from "npm:postgres@3.4.4";
 import * as XLSX from "npm:xlsx@0.18.5";
 import { jsonResponse, normalize } from "../_shared/matching.ts";
-import { detectBlockFormatItems, isSectionHeaderLine, looksLikeBlockFormat, parsePriceListLineBasic } from "../_shared/priceListLine.ts";
+import { detectBlockFormatItems, isSectionHeaderLine, looksLikeBlockFormat, looksLikeContactLine, parsePriceListLineBasic } from "../_shared/priceListLine.ts";
 import { matchProductFromPlantText } from "../_shared/productMatcher.ts";
 import { applyPlantProductMatch } from "../_shared/applyPlantProductMatch.ts";
 import { createPendingMatch } from "../_shared/pendingMatch.ts";
@@ -285,6 +285,14 @@ Deno.serve(async (req) => {
     // just read) can be confirmed live without waiting for a genuine "price someone was waiting on
     // just arrived" moment to happen naturally.
     const testNotificationEmail = body.test_notification_email || null;
+    // Diagnostic aid, real incident 2026-09-10: "hoy llego seaboard no lo leyo" — the normal
+    // recency scan only ever proves an email isn't in the most recent N; it can't prove an email
+    // was never delivered to this mailbox at all, or landed somewhere the default list call
+    // doesn't reach (e.g. a Gmail filter that skips the inbox but doesn't touch Spam/Trash either
+    // still shows up here, but one applied here AND labeled Spam/Trash would not). Read-only,
+    // never touches the apply/pending pipeline — just answers "does a message matching this Gmail
+    // search exist in this mailbox, and who was it actually addressed to."
+    const searchQuery = body.search_query || null;
 
     const accessToken = await getAccessToken();
     const authHeaders = { Authorization: `Bearer ${accessToken}` };
@@ -296,6 +304,20 @@ Deno.serve(async (req) => {
       } catch (e) {
         return jsonResponse({ test_notification: "failed", error: String(e) }, 500);
       }
+    }
+
+    if (searchQuery) {
+      const searchRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(searchQuery)}&maxResults=10`, { headers: authHeaders });
+      const searchData = await searchRes.json();
+      if (!searchRes.ok) return jsonResponse({ search_failed: true, error: searchData }, 500);
+      const found = [];
+      for (const m of searchData.messages || []) {
+        const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`, { headers: authHeaders });
+        const msgData = await msgRes.json();
+        const h = (name: string) => headerValue(msgData.payload?.headers || [], name);
+        found.push({ id: m.id, from: h("From"), to: h("To"), subject: h("Subject"), date: h("Date"), labelIds: msgData.labelIds });
+      }
+      return jsonResponse({ search_query: searchQuery, total_found: searchData.resultSizeEstimate ?? found.length, messages: found });
     }
 
     let listData: { messages?: { id: string }[] };
@@ -345,7 +367,11 @@ Deno.serve(async (req) => {
       // line (Gmail's plain-text flattening of an HTML table inserts one after every cell) breaks
       // the block-format detector's "consume the whole run of consecutive price lines" step, so
       // skipping this step silently produces wrong names and misses the two-column Delivered price.
-      const lines = bodyText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      // looksLikeContactLine strips signature phone/fax/extension lines here too — see its own
+      // comment for the two real incidents (Wholestone, Tyson) this closes for both the regex path
+      // AND the LLM path (cleanedBodyText below), not just the regex path's own separate guard.
+      const lines = bodyText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !looksLikeContactLine(l));
+      const cleanedBodyText = lines.join("\n");
 
       if (debugMessageId === m.id) {
         const html = extractHtml(msgData.payload);
@@ -446,7 +472,7 @@ Deno.serve(async (req) => {
       let declinedTextItems: { rawText: string }[] = [];
       let llmError: string | null = null;
       try {
-        const extracted = await extractItemsWithLLM(bodyText);
+        const extracted = await extractItemsWithLLM(cleanedBodyText);
         declinedTextItems = extracted.declinedItems.map((it) => ({
           rawText: it.temperature === "Unknown" ? it.name : `${it.temperature} — ${it.name}`,
         }));

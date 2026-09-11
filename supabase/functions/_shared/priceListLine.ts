@@ -29,6 +29,20 @@ export function cleanNameText(s: string): string {
 const MAX_NAME_LENGTH = 80;
 const MIN_LETTER_COUNT = 4;
 
+// Real, confirmed noise from two different plants' actual signature blocks — a phone/fax/extension
+// line the LLM extractor (unlike the regex path below, which the MIN_LETTER_COUNT/MAX_NAME_LENGTH
+// guards above already protect) has no length-based guard against, because it reads the whole raw
+// email body directly rather than one line at a time. Wholestone: "m: (913) 300-0063" got read as
+// a product "m: (913) 300" priced at $0.63. Tyson: "(Desk) 479-290-4864; ext. 4864" — sitting right
+// after an "Offals:" section header with real items above it — got read as "Offals — (Desk) 479"
+// priced at $2.90, a fake product that landed in the pending-matches queue for a human to notice
+// and dismiss. Stripped from the text before either extractor ever sees it, rather than trusting
+// the LLM prompt's existing "don't extract a phone number" instruction alone — confirmed by both
+// incidents to not be reliable enough on its own.
+export function looksLikeContactLine(line: string): boolean {
+  return /^\(?(desk|office|cell|mobile|tel|telephone|phone|fax|ext|m|o|c|d|w)\.?\)?\s*[:.]?\s*\(?\d[\d\s().+-]{5,}\)?(\s*;?\s*ext\.?\s*\d+)?\.?$/i.test(line.trim());
+}
+
 export function parsePriceListLineBasic(line: string): { rawText: string; price: number } | null {
   const m = line.match(/\$\s*(\.?\d+(?:[.,]\d+)?)/) || line.match(/[-–—]\s*(\.?\d+(?:[.,]\d+)?)\b/);
   if (!m) return null;
