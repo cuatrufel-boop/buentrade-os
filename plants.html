@@ -140,8 +140,8 @@
      of matching the app's own translucent-card look). Same translucent background every other
      chip/button on this dark page already uses (var(--card)), with blue-bright text/border for the
      contrast var(--blue) alone doesn't reliably give on a background this dark.*/
-  .plr-chip-new{border-color:var(--ink-soft);color:var(--ink-soft);}
-  .plr-chip-new:hover{background:var(--ink-soft);color:var(--navy);}
+  .plr-chip-new{border-color:#FFC876;color:#FFC876;}
+  .plr-chip-new:hover{background:rgba(255,200,118,.14);}
   /* Real bug found 2026-09-09: "Match" silently did nothing when the matcher flagged its one
      suggested chip as conflicted (never auto-picked, by design — see resolvePlantPendingMatch) —
      a plain browser alert() gave no visual pointer to WHICH chip to click, and an unpicked chip
@@ -3400,6 +3400,22 @@ function renderPriceListReview(){
           ${confirmHtml}
         </td>
         <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Change</button></td>
+      </tr>`;
+    }
+
+    // Real ask 2026-09-12 ("esa no es la tabla de diseno transparente de buentrade... esa misma
+    // tabla en loads de plants"): closed by default, same as Orders' Active Loads table — a compact
+    // pill (same .pending-match-badge amber pill used elsewhere for "needs attention") and one
+    // action button, not an always-open search box + candidate list + two buttons + a link
+    // ballooning this row's height compared to every resolved row around it. Clicking it reuses
+    // reopenRow (the exact same "open this row to work on it" trigger resolved rows already use),
+    // not a new mechanism.
+    if (!row._forceOpen){
+      return `<tr id="plrRow_${i}">
+        <td>${escapeHtml(row.rawText)}</td>
+        <td class="num">${priceLabel}</td>
+        <td><button type="button" class="pending-match-badge" onclick="reopenRow(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>No product yet</button></td>
+        <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Match</button></td>
       </tr>`;
     }
 
