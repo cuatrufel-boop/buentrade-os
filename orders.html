@@ -968,7 +968,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     // picked_up_at date shows on the next node read as an on-time/late comparison the user does not
     // want. Once picked up, Pending Pickup's own date stops being shown — only one date at a time.
     let dateStr = '';
-    if (s.key === 'pending_pickup') dateStr = (i === stageIdx && o.pickup_date) ? `FOB ${fmtDateStr(o.pickup_date)}` : '';
+    // Real ask 2026-09-12: "revisa que funcione con esta nueva tabla" — the pickup location built
+    // earlier today (automatic from the price's own freight rate, or the trader's one-time manual
+    // pick — see shipments-search's pickup_location and confirmPickupReadyClick) was only ever
+    // visible once you clicked Confirm PU; showing it right here means the trader sees WHERE this
+    // load picks up from without a click. Falls back to the FOB date when no location is resolved
+    // yet — the same real "no debe poderse escoger manualmente hasta decidir al final" case where
+    // showing a date is still informative but a location genuinely isn't decided yet.
+    if (s.key === 'pending_pickup') dateStr = (i === stageIdx)
+      ? (o.pickup_location ? o.pickup_location.location_name : (o.pickup_date ? `FOB ${fmtDateStr(o.pickup_date)}` : ''))
+      : '';
     else if (s.key === 'picked_up') dateStr = o.picked_up_at ? fmtDateStr(o.picked_up_at.slice(0, 10)) : (i === stageIdx + 1 ? fmtDateStr(o.pickup_date) : '');
     else if (s.key === 'unloading'){
       if (o.unloading_at) dateStr = fmtDateStr(o.unloading_at.slice(0, 10));
