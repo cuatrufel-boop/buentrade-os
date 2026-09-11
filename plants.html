@@ -2014,9 +2014,7 @@ function renderPlantPendingMatches(){
       const label = p.full_name_en || p.name_en || p.name;
       return `<button type="button" class="plr-chip${isCurrent ? ' plr-chip-current' : ''}" onclick="pickPendingMatchCandidate('${m.id}', '${id}')">${isCurrent ? '✓ ' : ''}${escapeHtml(label)}</button>`;
     }).join('');
-    const browseCandidates = allCatalogProducts
-      .filter(p => !shownIds.has(p.id))
-      .sort((a, b) => (a.full_name_en || a.name_en || a.name).localeCompare(b.full_name_en || b.name_en || b.name));
+    const browseCandidates = sortCandidatesBySimilarity(m.raw_text, allCatalogProducts.filter(p => !shownIds.has(p.id)));
     const showBrowse = m._browseAll || !tightIds.length;
     // Search box filters chips directly in the DOM (filterBrowseChips) instead of re-rendering
     // this whole table on every keystroke — a full re-render would rebuild the <input> itself and
@@ -2677,6 +2675,28 @@ function normalizeWordToken(w){
   return (w || '').toLowerCase().replace(/[^a-z0-9%]/g, '');
 }
 
+// Real correction 2026-09-12 ("no pone los productos parecidos primero"): the full "browse rest of
+// catalog" list used to sort purely alphabetically, so a genuinely similar product (e.g. "Pork 42%
+// Trim Fresh, Combo" for a line reading "42 Trim Combos") could sit dozens of chips away from
+// anything actually worth clicking. Scores by how many of the raw line's own words the catalog
+// name shares — ties keep the alphabetical order as the fallback, never a random shuffle.
+function candidateSimilarityScore(rawText, product){
+  const rawWords = new Set(normalizeForMatchLoose(rawText).split(/\s+/).map(normalizeWordToken).filter(Boolean));
+  if (!rawWords.size) return 0;
+  const nameWords = normalizeForMatchLoose([product.full_name_en, product.name_en, product.name].filter(Boolean).join(' '))
+    .split(/\s+/).map(normalizeWordToken).filter(Boolean);
+  let score = 0;
+  for (const w of nameWords) if (rawWords.has(w)) score++;
+  return score;
+}
+function sortCandidatesBySimilarity(rawText, products){
+  return [...products].sort((a, b) => {
+    const diff = candidateSimilarityScore(rawText, b) - candidateSimilarityScore(rawText, a);
+    if (diff !== 0) return diff;
+    return (a.full_name_en || a.name_en || a.name).localeCompare(b.full_name_en || b.name_en || b.name);
+  });
+}
+
 // Real correction 2026-09-12 ("si yo ya le estoy diciendo al sistema que hace match... para que me
 // pregunta tantas cosas. pense que con solo darle match ya el sistema aprendia"): the separate
 // "teach a word" form used to sit open next to the picker for every undecided row, asking the
@@ -2727,6 +2747,7 @@ function pickCandidate(i, productId){
   // ficha, and any "Cambiar"/teach panel this row had open no longer applies to a settled row.
   priceListRows[i]._forceOpen = false;
   priceListRows[i]._teachOpen = false;
+  priceListRows[i]._sendToPending = false;
   const product = allCatalogProducts.find(p => p.id === productId);
   const leftover = product ? findLeftoverWords(priceListRows[i].rawText, product) : [];
   priceListRows[i]._confirmWord = (leftover.length === 1)
@@ -2768,6 +2789,7 @@ function confirmLeftoverWord(i, accept, meaningVal){
 // the existing match unless the trader actually clicks something else.
 function reopenRow(i){
   priceListRows[i]._forceOpen = true;
+  priceListRows[i]._sendToPending = false;
   renderPriceListReview();
 }
 function closeRow(i){
@@ -2775,30 +2797,19 @@ function closeRow(i){
   renderPriceListReview();
 }
 
-// Real ask 2026-09-11 ("cuando no quiero escoger un producto de la lista lo mando a pending"):
-// a Load Prices row only exists in priceListRows (in-memory) until Apply All runs — closing the
-// paste without deciding loses it for good. This writes it into plant_pending_matches instead —
-// the exact same persistent queue plant-price-emails-poll writes to for a line it can't
-// confidently match — via plant-pending-matches-create (the existing, shared write path, never
-// duplicated here), so it survives to be resolved later from the Pending Matches tab. Idempotent
-// on plant_id + the normalized raw text, so re-sending the same paste twice never double-queues
-// the same line.
-async function sendRowToPendingMatches(i){
-  const row = priceListRows[i];
-  const msgEl = document.getElementById(`plrSendMsg_${i}`);
-  try {
-    await callApi('plant-pending-matches-create', {
-      actor: currentActor(), plant_id: currentPlantId, raw_text: row.rawText,
-      detected_price: row.price != null ? row.price : null,
-      idempotency_key: `manual|${currentPlantId}|${normalizeForMatch(row.rawText)}`,
-    });
-  } catch (e) {
-    if (msgEl) msgEl.textContent = `Couldn't send to Pending Matches: ${e.message}`;
-    return;
-  }
-  priceListRows.splice(i, 1);
+// Real ask 2026-09-11 ("cuando no quiero escoger un producto de la lista lo mando a pending"),
+// corrected 2026-09-12 ("el boton manda automaticamente solo quiero que me los marque como
+// pending... y que ejecute... cuando yo le de apply abajo no automatico"): this used to call the
+// API the instant the chip was clicked — the only action on this whole screen that saved anything
+// before "Apply All", breaking the one-confirm-point rule every other row here already follows.
+// Now it only marks the row's own local intent (same pattern as matchedProductId) — the row
+// collapses to a closed, staged ficha, and the real plant-pending-matches-create call only
+// happens inside applyPriceList, in the same batch as every matched row's real price save.
+function markRowForPending(i){
+  priceListRows[i]._sendToPending = true;
+  priceListRows[i]._forceOpen = false;
+  priceListRows[i]._teachOpen = false;
   renderPriceListReview();
-  document.getElementById('priceListMsg').textContent = 'Sent to Pending Matches — pick a product for it later from that tab.';
 }
 
 // Open BY DEFAULT for any row needing a decision — real correction 2026-08-30: "para aprender
@@ -3233,15 +3244,31 @@ function renderPriceListReview(){
   // Summary first — the whole point of "fichas cerradas" is that the trader's attention should
   // never have to scan a long list to figure out how much work is actually left.
   const resolvedCount = priceListRows.filter(r => r.matchedProductId).length;
-  const ambiguousCount = priceListRows.filter(r => !r.matchedProductId && r.candidateIds && r.candidateIds.length).length;
-  const noMatchCount = priceListRows.length - resolvedCount - ambiguousCount;
+  const pendingStagedCount = priceListRows.filter(r => r._sendToPending).length;
+  const ambiguousCount = priceListRows.filter(r => !r.matchedProductId && !r._sendToPending && r.candidateIds && r.candidateIds.length).length;
+  const noMatchCount = priceListRows.length - resolvedCount - pendingStagedCount - ambiguousCount;
   document.getElementById('priceListSummary').innerHTML = `
     <span class="plr-summary-ok">✓ ${resolvedCount} matched on ${resolvedCount === 1 ? 'its' : 'their'} own</span>
     ${ambiguousCount ? `<span class="plr-summary-warn">${ambiguousCount} need${ambiguousCount === 1 ? 's' : ''} your pick</span>` : ''}
+    ${pendingStagedCount ? `<span class="plr-summary-warn">${pendingStagedCount} → Pending Matches on Apply</span>` : ''}
     ${noMatchCount ? `<span class="plr-summary-none">${noMatchCount} no product yet</span>` : ''}`;
 
   list.innerHTML = priceListRows.map((row, i) => {
     const priceLabel = row.price != null ? `$${row.price.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}` : '—';
+
+    // Staged for Pending Matches, not sent yet — real correction 2026-09-12: this used to call
+    // plant-pending-matches-create the instant the chip was clicked, the only row action on this
+    // whole screen that saved anything before "Apply All". Now it's just a closed, staged ficha,
+    // same shape as a resolved match — the real save happens inside applyPriceList, in the same
+    // batch as every matched row's price.
+    if (row._sendToPending && !row._forceOpen){
+      return `<tr id="plrRow_${i}">
+        <td title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</td>
+        <td class="num">${priceLabel}</td>
+        <td><span class="hint" style="margin:0;">→ Will be sent to Pending Matches on Apply</span></td>
+        <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Change</button></td>
+      </tr>`;
+    }
 
     // Resolved and not manually reopened — one compact confirmed line, nothing to click.
     if (row.matchedProductId && !row._forceOpen){
@@ -3305,9 +3332,8 @@ function renderPriceListReview(){
     }).join('');
 
     const categoryName = priceListCategoryFilter || (currentId && (() => { const p = allCatalogProducts.find(x => x.id === currentId); return p && p.category; })()) || '';
-    const browseCandidates = allCatalogProducts
-      .filter(p => (!categoryName || p.category === categoryName) && !shownIds.has(p.id))
-      .sort((a, b) => (a.name_en || a.name).localeCompare(b.name_en || b.name));
+    const browseCandidates = sortCandidatesBySimilarity(row.rawText, allCatalogProducts
+      .filter(p => (!categoryName || p.category === categoryName) && !shownIds.has(p.id)));
     const showBrowse = row._browseAll || !tightIds.length;
     // Same search-filters-chips pattern as Pending Matches (filterBrowseChips) — one system, one
     // fix, both places. See that call site for why this filters the DOM directly instead of
@@ -3327,7 +3353,7 @@ function renderPriceListReview(){
     // loses it for good. Sends it into the same persistent queue the email pipeline writes to
     // (plant_pending_matches, via plant-pending-matches-create) so it survives to be resolved later
     // from the Pending Matches tab, instead of being either forced to a decision now or discarded.
-    const sendToPendingChip = `<button type="button" class="plr-chip plr-chip-new" onclick="sendRowToPendingMatches(${i})">Add to Pending Matches</button>`;
+    const sendToPendingChip = `<button type="button" class="plr-chip plr-chip-new" onclick="markRowForPending(${i})">Add to Pending Matches</button>`;
 
     // Closed by default — real correction 2026-09-12 ("para que me pregunta tantas cosas... pense
     // que con solo darle match ya el sistema aprendia"): this used to force itself open on every
@@ -3393,9 +3419,13 @@ async function applyPriceList(){
   // actually for. Real risk this closes: one plant's price landing on another plant's product row.
   const applyPlantId = currentPlantId;
   const today = new Date().toISOString().slice(0, 10);
-  const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null);
-  const pending = priceListRows.filter(r => !(r.matchedProductId && r.price != null));
-  if (!toApply.length){ document.getElementById('priceListMsg').textContent = 'No row has a product and price selected.'; return; }
+  const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null && !r._sendToPending);
+  // Real correction 2026-09-12 ("solo quiero que me los marque como pending... y que ejecute...
+  // cuando yo le de apply abajo no automatico"): rows staged via "Add to Pending Matches" only get
+  // sent here, in the same batch as every matched row's real price — never on their own click.
+  const toSendPending = priceListRows.filter(r => r._sendToPending);
+  const pending = priceListRows.filter(r => !(r.matchedProductId && r.price != null) && !r._sendToPending);
+  if (!toApply.length && !toSendPending.length){ document.getElementById('priceListMsg').textContent = 'No row has a product and price selected, or is marked for Pending Matches.'; return; }
 
   // Two rows in the SAME paste pointing at the same catalog product is never legitimate — a real
   // price list states each SKU once. It almost always means a Fresh-section line got mapped to a
@@ -3430,7 +3460,7 @@ async function applyPriceList(){
     return;
   }
 
-  document.getElementById('priceListMsg').textContent = `Saving ${toApply.length} price(s)…`;
+  document.getElementById('priceListMsg').textContent = `Saving ${toApply.length} price(s)${toSendPending.length ? ` and sending ${toSendPending.length} to Pending Matches` : ''}…`;
   // Rows are independent writes to independent product rows — nothing here depends on another
   // row's result — so they save in parallel instead of one at a time. With ~1-1.5s per Edge
   // Function call (this project's established per-invocation overhead), a real 37-row list was
@@ -3448,6 +3478,21 @@ async function applyPriceList(){
   outcomes.forEach((outcome, i) => {
     if (outcome.status === 'fulfilled') applied.push(toApply[i]);
     else errors++;
+  });
+
+  // Staged "Add to Pending Matches" rows finally execute here, in the same batch — never on their
+  // own click (see markRowForPending). Idempotent on plant_id + the normalized raw text, so
+  // re-applying the same paste twice never double-queues the same line.
+  const pendingOutcomes = await Promise.allSettled(toSendPending.map(row => callApi('plant-pending-matches-create', {
+    actor: currentActor(), plant_id: applyPlantId, raw_text: row.rawText,
+    detected_price: row.price != null ? row.price : null,
+    idempotency_key: `manual|${applyPlantId}|${normalizeForMatch(row.rawText)}`,
+  })));
+  const sentToPending = [];
+  let pendingErrors = 0;
+  pendingOutcomes.forEach((outcome, i) => {
+    if (outcome.status === 'fulfilled') sentToPending.push(toSendPending[i]);
+    else pendingErrors++;
   });
 
   // Save the plant-level docs default once per apply, not once per row — it's the same fact for
@@ -3471,7 +3516,8 @@ async function applyPriceList(){
   // Left showing only what's still pending — rows that had no product/price picked, or that
   // failed to save — instead of closing the whole panel and losing track of where things stood.
   const failed = toApply.filter(r => !applied.includes(r));
-  priceListRows = [...pending, ...failed];
+  const failedPending = toSendPending.filter(r => !sentToPending.includes(r));
+  priceListRows = [...pending, ...failed, ...failedPending];
   if (priceListRows.length){
     renderPriceListReview();
     document.getElementById('priceListMsg').textContent = '';
@@ -3485,7 +3531,7 @@ async function applyPriceList(){
     .map(r => allCatalogProducts && allCatalogProducts.find(p => p.id === r.matchedProductId))
     .filter(p => p && (!p.full_name_en || !p.full_name_es));
   const uniqueMissing = [...new Map(missingFullName.map(p => [p.id, p])).values()];
-  plShowNotice(`${applied.length} price(s) updated.${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}`);
+  plShowNotice(`${applied.length} price(s) updated.${sentToPending.length ? ` ${sentToPending.length} sent to Pending Matches.` : ''}${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}${pendingErrors ? ` ${pendingErrors} failed to send to Pending Matches, still pending above.` : ''}`);
   // Real ask 2026-09-11 ("loads y correo deben sacar confirmacion"): a pickup location this apply
   // just mentioned but that isn't on this plant's own Locations list yet was queued as a suggestion
   // (see applyPlantProductMatch.ts), never created silently — ask right now, not on the next visit.
