@@ -153,8 +153,15 @@
   @keyframes plr-nudge{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,0);}25%,75%{box-shadow:0 0 0 3px rgba(255,200,118,.55);}}
   .plr-candidates-nudge{animation:plr-nudge .5s ease-in-out 2;border-radius:8px;}
   .plr-teach{margin-top:6px;padding:9px 11px;background:rgba(255,200,118,.08);border:1px solid rgba(255,200,118,.4);border-radius:8px;font-size:11.5px;color:#FFC876;}
-  .plr-teach-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;}
-  .plr-teach select,.plr-teach input{padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:11.5px;font-family:inherit;}
+  /* Real ask 2026-09-10 ("mismo diseno y formato de pending matches... pero debe aprender"): the
+     teach-a-word capability is unchanged, just no longer its own bordered amber block — .hint
+     carries the same amber "why I'm asking" color inline, one line, matching how the rest of this
+     column (chips, search) already reads. */
+  .hint{font-size:10.5px;color:#FFC876;margin:4px 0 2px;}
+  .plr-teach-row{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center;}
+  .plr-teach-row select,.plr-teach-row input{padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:11.5px;font-family:inherit;background:var(--card);color:var(--ink);}
+  .plr-teach-save{padding:5px 10px;border-radius:6px;border:1px solid var(--blue);background:none;color:var(--blue-bright);font-size:11.5px;font-weight:600;cursor:pointer;}
+  .plr-teach-save:hover{background:rgba(90,170,255,.12);}
   /* "Fichas" price-list review — the whole point is that this is a clicking game, never a typing
      one: a resolved line collapses to one compact confirmed row, and a line needing a decision
      always offers clickable option-cards (tight matches first, the rest of the category one click
@@ -464,7 +471,16 @@ auth.onAuthStateChanged(user => {
         <div id="priceListLocationsNote" style="display:none;margin-top:10px;font-size:12.5px;"></div>
         <div id="priceListReviewWrap" style="display:none;margin-top:16px;">
           <div id="priceListSummary" class="plr-summary"></div>
-          <div id="priceListReviewRows" class="plr-list"></div>
+          <!-- Real ask 2026-09-10 ("mismo diseno y formato de pending matches"): same table shape
+               as that screen (renderPlantPendingMatches) — same columns, same row language. The
+               teach/learn feature is unchanged underneath, just laid out inline in the third
+               column instead of its own separate bordered block. -->
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>From the plant's email</th><th>Price</th><th>Match to product</th><th></th></tr></thead>
+              <tbody id="priceListReviewRows"></tbody>
+            </table>
+          </div>
           <div style="display:flex;gap:10px;margin-top:12px;">
             <button class="btn" onclick="applyPriceList()">Apply All</button>
             <button class="btn secondary" onclick="closePriceListPanel()">Cancel</button>
@@ -1945,7 +1961,7 @@ function renderPlantPendingMatches(){
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !m._browseAll)
-      ? `<button type="button" class="plr-browse-toggle" onclick="togglePendingMatchBrowseAll('${m.id}')">Ver el resto del catálogo (${browseCandidates.length})</button>`
+      ? `<button type="button" class="plr-browse-toggle" onclick="togglePendingMatchBrowseAll('${m.id}')">View rest of catalog (${browseCandidates.length})</button>`
       : '';
     // Real addition, explicit ask: a signal_type of 'declined' is the email-ingestion pipeline
     // reading "we don't produce this" in a plant's reply (see plant-price-emails-poll) — never
@@ -2964,9 +2980,9 @@ function renderPriceListReview(){
   const ambiguousCount = priceListRows.filter(r => !r.matchedProductId && r.candidateIds && r.candidateIds.length).length;
   const noMatchCount = priceListRows.length - resolvedCount - ambiguousCount;
   document.getElementById('priceListSummary').innerHTML = `
-    <span class="plr-summary-ok">✓ ${resolvedCount} reconocida${resolvedCount === 1 ? '' : 's'} sola${resolvedCount === 1 ? '' : 's'}</span>
-    ${ambiguousCount ? `<span class="plr-summary-warn">${ambiguousCount} necesita${ambiguousCount === 1 ? '' : 'n'} tu decisión</span>` : ''}
-    ${noMatchCount ? `<span class="plr-summary-none">${noMatchCount} sin producto</span>` : ''}`;
+    <span class="plr-summary-ok">✓ ${resolvedCount} matched on ${resolvedCount === 1 ? 'its' : 'their'} own</span>
+    ${ambiguousCount ? `<span class="plr-summary-warn">${ambiguousCount} need${ambiguousCount === 1 ? 's' : ''} your pick</span>` : ''}
+    ${noMatchCount ? `<span class="plr-summary-none">${noMatchCount} no product yet</span>` : ''}`;
 
   list.innerHTML = priceListRows.map((row, i) => {
     const priceLabel = row.price != null ? `$${row.price.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}` : '—';
@@ -2980,16 +2996,16 @@ function renderPriceListReview(){
       // Fresh, Combo" read as the system inventing its own name, not pointing at a real existing
       // row — "debe traer siempre el full name del catalogo."
       const label = p ? (p.full_name_en || p.name_en || p.name) : '(product not found)';
-      return `<div class="plr-row plr-row-resolved" id="plrRow_${i}">
-        <span class="plr-check">✓</span>
-        <span class="plr-rawtext" title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</span>
-        <span class="plr-arrow">→</span>
-        <span class="plr-matched">${escapeHtml(label)}</span>
-        ${row.locationName ? `<span class="plr-price" style="color:var(--ink-soft);font-weight:400;">📍 ${escapeHtml(row.locationName)}</span>` : ''}
-        ${row.freightIncluded ? `<span class="plr-price" style="color:var(--ink-soft);font-weight:400;">🚚 Delivered — freight included</span>` : ''}
-        <span class="plr-price">${priceLabel}</span>
-        <button type="button" class="plr-change-btn" onclick="reopenRow(${i})">Cambiar</button>
-      </div>`;
+      const tags = [
+        row.locationName ? `📍 ${escapeHtml(row.locationName)}` : '',
+        row.freightIncluded ? '🚚 Delivered — freight included' : '',
+      ].filter(Boolean).join(' &nbsp; ');
+      return `<tr id="plrRow_${i}">
+        <td title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</td>
+        <td class="num">${priceLabel}${tags ? `<div class="muted" style="font-size:11px;margin-top:2px;">${tags}</div>` : ''}</td>
+        <td style="display:flex;align-items:center;gap:8px;"><span class="plr-check">✓</span> ${escapeHtml(label)}</td>
+        <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Change</button></td>
+      </tr>`;
     }
 
     // Needs a click — tight candidates (if any) plus the current pick (if reopening an already-
@@ -3023,10 +3039,10 @@ function renderPriceListReview(){
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml((p.full_name_en || p.name_en || p.name).toLowerCase())}" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !row._browseAll)
-      ? `<button type="button" class="plr-browse-toggle" onclick="toggleBrowseAll(${i})">Ver el resto del catálogo (${browseCandidates.length})</button>`
+      ? `<button type="button" class="plr-browse-toggle" onclick="toggleBrowseAll(${i})">View rest of catalog (${browseCandidates.length})</button>`
       : '';
 
-    const newChip = `<button type="button" class="plr-chip plr-chip-new" onclick="startCreateProductForRow(${i})">+ Crear producto nuevo</button>`;
+    const newChip = `<button type="button" class="plr-chip plr-chip-new" onclick="startCreateProductForRow(${i})">+ Create new product</button>`;
 
     // Open by default (undefined counts as open — only an explicit "Ocultar" click sets it false)
     // — real correction 2026-08-30: "para aprender debe preguntar no seguir de largo." Two
@@ -3035,39 +3051,44 @@ function renderPriceListReview(){
     // the first thing shown on the row, not one extra click away.
     const teachOpen = row._teachOpen !== false;
     const teachHint = tightIds.length > 1
-      ? `No reconozco una palabra que esta planta usa — por eso no puedo elegir solo entre estos ${tightIds.length} productos.`
+      ? `Doesn't recognize a word this plant uses — that's why it can't pick just one of these ${tightIds.length} products.`
       : tightIds.length === 1
-      ? `Algo en esta línea no coincide con el único producto que tengo con ese nombre — podría ser una palabra que no reconozco.`
-      : `No reconozco este corte todavía — podría ser la forma en que esta planta abrevia algo que ya está en el catálogo.`;
+      ? `Doesn't fully match the one product on file with that name — could be a word it doesn't recognize.`
+      : `Doesn't recognize this cut yet — could be how this plant abbreviates something already in the catalog.`;
+    // Real ask 2026-09-10 ("mismo diseno y formato de pending matches... pero debe aprender de
+    // todas las formas"): same learning mechanism as always (teachTermAlias, plant_term_aliases)
+    // — nothing removed — just laid out as one compact inline row instead of its own bordered
+    // amber block, matching how the rest of this column (chips, search) already reads.
     const teachPanel = teachOpen ? `
-      <div class="plr-teach">
-        <strong>${teachHint}</strong>
-        <div class="plr-teach-row">
-          <input type="text" id="termInput_${i}" placeholder="palabra exacta, ej. XF" autocomplete="off">
-          <select id="termMeaning_${i}">
-            <option value="">Esta palabra significa…</option>
-            <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
-            <optgroup label="Variation">${variations.map(v => `<option value="variation:${v.id}">${escapeHtml(v.name_en)}</option>`).join('')}</optgroup>
-            <optgroup label="Temperature">${temperatures.map(t => `<option value="temperature:${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}</optgroup>
-            <optgroup label="Packaging">${packagings.map(p => `<option value="packaging:${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}</optgroup>
-          </select>
-          <button type="button" class="btn secondary" style="padding:4px 10px;font-size:11.5px;" onclick="teachTermAlias(${i})">Guardar y reconocer</button>
-        </div>
-        <div id="termMsg_${i}" style="font-size:11px;color:var(--red);margin-top:4px;font-weight:600;"></div>
-      </div>` : '';
-
-    return `<div class="plr-row" id="plrRow_${i}">
-      <div class="plr-open-rawtext"><strong>${escapeHtml(row.rawText)}</strong> — ${priceLabel}</div>
-      ${teachPanel}
-      ${tightChips ? `<div class="plr-candidates">${tightChips}</div>` : ''}
-      ${browseChips}
-      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-        ${browseToggle}
-        ${newChip}
-        ${row._forceOpen ? `<button type="button" class="plr-browse-toggle" onclick="closeRow(${i})">Cerrar</button>` : ''}
-        <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Ocultar' : '¿Es una abreviatura?'}</button>
+      <div class="hint">${teachHint}</div>
+      <div class="plr-teach-row">
+        <input type="text" id="termInput_${i}" placeholder="exact word, e.g. XF" autocomplete="off">
+        <select id="termMeaning_${i}">
+          <option value="">Unknown word means…</option>
+          <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
+          <optgroup label="Variation">${variations.map(v => `<option value="variation:${v.id}">${escapeHtml(v.name_en)}</option>`).join('')}</optgroup>
+          <optgroup label="Temperature">${temperatures.map(t => `<option value="temperature:${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('')}</optgroup>
+          <optgroup label="Packaging">${packagings.map(p => `<option value="packaging:${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('')}</optgroup>
+        </select>
+        <button type="button" class="plr-teach-save" onclick="teachTermAlias(${i})">Save &amp; recognize</button>
       </div>
-    </div>`;
+      <div id="termMsg_${i}" style="font-size:11px;color:var(--red);margin-top:4px;font-weight:600;"></div>` : '';
+
+    return `<tr id="plrRow_${i}">
+      <td>${escapeHtml(row.rawText)}</td>
+      <td class="num">${priceLabel}</td>
+      <td>
+        ${tightChips ? `<div class="plr-candidates">${tightChips}</div>` : ''}
+        ${browseChips}
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+          ${browseToggle}
+          ${newChip}
+          <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Hide' : 'Is this an abbreviation?'}</button>
+        </div>
+        ${teachPanel}
+      </td>
+      <td>${row._forceOpen ? `<button type="button" class="btn secondary small" onclick="closeRow(${i})">Close</button>` : ''}</td>
+    </tr>`;
   }).join('');
 }
 
