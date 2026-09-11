@@ -2905,11 +2905,38 @@ function detectDocsNote(text){
   return null;
 }
 
-// "FOB City, State" (or "FOB City, Country") is the plant stating where it actually ships from —
+// Real 2-letter USPS codes only — mirrors US_STATE_CODES in supabase/functions/_shared/matching.ts
+// (parseCityState). Without this, ANY capitalized 2-letter word ending an "FOB ..." clause read as
+// a real state. Caught live 2026-09-12: a Smithfield line "FOB Midwest, LH Sept ship" — "LH" is
+// this plant's own shorthand, not a state — parsed as city="Midwest", state="LH" and the shared
+// matchOrCreateLocationId() actually inserted that into the real locations catalog (confirmed via
+// a live query: a "Midwest LH" row existed with real plant_products rows pointing at it). Keep
+// this list and the backend's in sync — the backend enforces it as the last line of defense, but
+// catching it here too means the Load Prices review screen never shows the garbage in the first
+// place.
+const US_STATE_CODES = new Set([
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA',
+  'ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK',
+  'OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
+]);
+
+// A plant's own region words ("Midwest", "East Coast") come from plant_locations.region — real
+// vocabulary this plant has already been taught (see the 2026-09-12 Smithfield ask), never a fixed
+// enum guessed here (feedback_always_ask_never_guess_terminology). Returns the distinct, non-empty
+// region values currently on file for the plant, longest-first so "East Coast" is tried before a
+// hypothetical single-word region sharing a prefix.
+function knownPlantRegions(){
+  const set = new Set();
+  for (const loc of plantLocations) if (loc.region && loc.region.trim()) set.add(loc.region.trim());
+  return [...set].sort((a, b) => b.length - a.length);
+}
+
+// "FOB City, State" (or "FOB Region") is the plant stating where it actually ships from —
 // confirmed against a real Smithfield list (FOB Sioux Falls, SD / Monmouth, IL / Denison, IA /
-// Milan, MO all appearing across different lines of the same paste). Only reads what's literally
-// there — never invents a location — and de-duplicates so "FOB Monmouth, IL" repeated across five
-// lines becomes one entry, not five.
+// Milan, MO all appearing across different lines of the same paste, and later "FOB Midwest" /
+// "FOB East Coast" naming a broad area instead of one city). Only reads what's literally there —
+// never invents a location — and de-duplicates so "FOB Monmouth, IL" repeated across five lines
+// becomes one entry, not five.
 // Same "FOB City, State" phrase detectPickupLocations looks for across the whole paste — but
 // scoped to ONE line here, so a specific price row can remember exactly which city IT ships from,
 // not just "this plant ships from somewhere in this list." Confirmed real shape: Smithfield states
@@ -2922,16 +2949,31 @@ function detectDocsNote(text){
 // greedy capture here would swallow the product name too. Caught live before shipping: the naive
 // port of detectPickupLocations' regex turned "FOB Denison, IA Backribs $2.48" into locationName
 // "Denison, IA Backribs" and line "$2.48" — losing the product entirely. Requiring a trailing
-// [A-Z]{2} (the state) is also the correct restriction here, not just a fix: this only ever feeds
-// the US locations catalog (city + 2-letter state), so a country name ("FOB Mexico") correctly
-// stays unmatched instead of being captured as something unusable downstream.
+// [A-Z]{2} that's a REAL state (not just two capital letters — see US_STATE_CODES above) is also
+// the correct restriction here, not just a fix: this only ever feeds the US locations catalog
+// (city + 2-letter state), so a country name ("FOB Mexico") correctly stays unmatched instead of
+// being captured as something unusable downstream.
 const LINE_FOB_RE = /\b[Ff][Oo][Bb][ \t]+([A-Z][A-Za-z.]*(?:[ \t]+[A-Z][A-Za-z.]*)*?,?[ \t]+[A-Z]{2})\b/;
 function extractLineFobLocation(line){
+  // Region check first — "FOB Midwest Backribs $2.48" would otherwise never match LINE_FOB_RE at
+  // all (no trailing state), so region clauses need their own explicit strip step. Matched against
+  // THIS plant's own known regions only, immediately after "FOB", case-insensitively; longest
+  // region name tried first so a two-word region isn't cut short by a one-word one.
+  for (const region of knownPlantRegions()){
+    const re = new RegExp('\\b[Ff][Oo][Bb][ \\t]+(' + region.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')\\b', 'i');
+    const rm = line.match(re);
+    if (rm){
+      const stripped = (line.slice(0, rm.index) + line.slice(rm.index + rm[0].length)).replace(/\s+/g, ' ').trim();
+      return { line: stripped, locationName: null, region };
+    }
+  }
   const m = line.match(LINE_FOB_RE);
-  if (!m) return { line, locationName: null };
-  const locationName = m[1].trim().replace(/[.\s,]+$/, '');
+  if (!m) return { line, locationName: null, region: null };
+  const candidate = m[1].trim().replace(/[.\s,]+$/, '');
+  const state = candidate.slice(-2).toUpperCase();
+  if (!US_STATE_CODES.has(state)) return { line, locationName: null, region: null };
   const stripped = (line.slice(0, m.index) + line.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim();
-  return { line: stripped, locationName };
+  return { line: stripped, locationName: candidate, region: null };
 }
 
 function detectPickupLocations(text){
@@ -2945,12 +2987,22 @@ function detectPickupLocations(text){
   // "FOB" in the same clause, nothing to do with a location) got captured as one. "fob" itself
   // spelled out case-insensitively instead so the flag can come off entirely — the captured text
   // now has to be genuinely capitalized, a real place name, never a lowercase word that follows it.
-  const re = /\b[Ff][Oo][Bb][ \t]+([A-Z][A-Za-z.]*(?:,?[ \t]+[A-Z][A-Za-z.]*)*)/g;
+  // ALSO requires the capture to end in a real, validated 2-letter state (see US_STATE_CODES) —
+  // this function only ever feeds "+ Add as new location" chips, and a chip has to be a real
+  // addable city, never a region word or plant-specific shorthand it swallowed along the way. Real
+  // bug caught live against the actual Smithfield text this rule fixes: the old open-ended capture
+  // ("keep matching capitalized words until a lowercase one breaks the chain") swallowed ship-month
+  // words sitting right after a region name — "Midwest October", "Midwest, LH Sep", "Midwest, LH
+  // Sept" — because "October"/"LH"/"Sept" are all capitalized too. Requiring a real trailing state
+  // makes those combinations simply never match, instead of matching too much.
+  const re = /\b[Ff][Oo][Bb][ \t]+([A-Z][A-Za-z.]*(?:,?[ \t]+[A-Z][A-Za-z.]*)*?,?[ \t]+[A-Z]{2})\b/g;
   let m;
   while ((m = re.exec(text))){
-    const name = m[1].trim().replace(/[.\s,]+$/, '');
-    const key = normalizeForMatch(name);
-    if (!found.has(key)) found.set(key, name);
+    const candidate = m[1].trim().replace(/[.\s,]+$/, '');
+    const state = candidate.slice(-2).toUpperCase();
+    if (!US_STATE_CODES.has(state)) continue;
+    const key = normalizeForMatch(candidate);
+    if (!found.has(key)) found.set(key, candidate);
   }
   return [...found.values()];
 }
@@ -3091,7 +3143,7 @@ async function processPriceListText(){
         currentSection = line.replace(/:\s*$/, '').trim();
         continue; // the header itself never becomes a row
       }
-      const { line: lineNoFob, locationName } = extractLineFobLocation(line);
+      const { line: lineNoFob, locationName, region } = extractLineFobLocation(line);
       const { rawText: baseText, price } = parsePriceListLine(lineNoFob);
       // No price found on this line at all — it's a greeting, disclaimer, signature, or a real
       // "N/A" item, none of which can ever be applied (applyPriceList requires both a product and
@@ -3105,7 +3157,7 @@ async function processPriceListText(){
       // rawText used for both languages here since single-line format never tells us which part
       // of the line is English vs Spanish — matchCatalogProduct falls back to checking it against
       // both catalog fields in that case.
-      singleLineJobs.push((async () => ({ rawText, price, locationName, ...(await matchCatalogProduct(rawText)) }))());
+      singleLineJobs.push((async () => ({ rawText, price, locationName, region, ...(await matchCatalogProduct(rawText)) }))());
     }
     priceListRows = await Promise.all(singleLineJobs);
     // Safety nets for a plant that's neither shape cleanly — never worse than the single-line
@@ -3314,6 +3366,10 @@ function renderPriceListReview(){
       const label = p ? (p.full_name_en || p.name_en || p.name) : '(product not found)';
       const tags = [
         row.locationName ? `📍 ${escapeHtml(row.locationName)}` : '',
+        // A region ("FOB Midwest") is a broad area, not one addable city — shown distinctly from a
+        // 📍 pin so it never reads as a resolved pickup address. Not yet saved anywhere (no
+        // plant_products column for it yet); this is a display-only signal for now.
+        (!row.locationName && row.region) ? `🌎 FOB ${escapeHtml(row.region)} (region — not a specific city)` : '',
         row.freightIncluded ? '🚚 Delivered — freight included' : '',
       ].filter(Boolean).join(' &nbsp; ');
       // Real correction 2026-09-12: the one thing worth asking after a pick, not a separate form

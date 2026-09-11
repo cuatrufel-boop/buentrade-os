@@ -64,6 +64,18 @@ export function jsonResponse(payload: Record<string, unknown>, status = 200) {
 // Every write, in every function, goes through this — one hash-chained audit_log row per write,
 // in the SAME transaction as the write itself, so a row that exists with no audit trail (or the
 // reverse) is impossible by construction.
+// Real 2-letter USPS codes only (50 states + DC) — a price-list's FOB clause can end in any
+// capitalized 2-letter word ("LH", a plant's own shorthand; "no docs" run together with the wrong
+// regex flag elsewhere), and without validating against real codes, parseCityState below silently
+// accepted any of them as a state. Caught live 2026-09-12: a Smithfield line reading "FOB Midwest,
+// LH Sept ship" got parsed as city="Midwest", state="LH" and matchOrCreateLocationId actually
+// INSERTED that into the real locations catalog — a bogus master-data row, not just a display bug.
+export const US_STATE_CODES = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA",
+  "ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK",
+  "OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
+]);
+
 // "City, ST" / "City ST" only — a plant's pickup-location text is a mechanical fact (unlike a
 // product cut name, there's no real linguistic ambiguity in a city+state pair), so this is the one
 // place in the catalog-matching system that's allowed to auto-create rather than stop and ask.
@@ -71,12 +83,15 @@ export function jsonResponse(payload: Record<string, unknown>, status = 200) {
 // manual add stays available (providers.html's "+ Add New City to Catalog"), this is just the
 // automatic path so a plant's own location never sits disconnected from the same catalog every
 // carrier rate already resolves to. Anything that doesn't parse as a clean city+state (a warehouse
-// name, a country, freeform notes) is left unlinked rather than guessed.
+// name, a country, a region name like "Midwest", freeform notes) is left unlinked rather than
+// guessed — the trailing token must be a REAL state code, not just two capital letters.
 export function parseCityState(text: string | null | undefined): { city: string; state: string } | null {
   if (!text) return null;
   const m = text.trim().match(/^(.+?),?\s+([A-Za-z]{2})$/);
   if (!m) return null;
-  return { city: m[1].trim(), state: m[2].toUpperCase() };
+  const state = m[2].toUpperCase();
+  if (!US_STATE_CODES.has(state)) return null;
+  return { city: m[1].trim(), state };
 }
 
 export async function matchOrCreateLocationId(tx: any, locationName: string | null | undefined): Promise<string | null> {
