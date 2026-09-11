@@ -1957,8 +1957,8 @@ function renderPlantPendingMatches(){
     // drop focus/cursor position after every character typed, real catalog now 77 products and
     // growing, plain visual scanning stops scaling well past this size.
     const browseChips = showBrowse ? `
-      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
-      <div class="plr-candidates plr-browse" id="ppmBrowse_${m.id}" style="display:flex;">
+      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" onfocus="filterBrowseChips(this)" oninput="filterBrowseChips(this)" data-for="ppmBrowse_${m.id}">
+      <div class="plr-candidates plr-browse" id="ppmBrowse_${m.id}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml([p.full_name_en, p.name_en, p.full_name_es, p.name].filter(Boolean).join(' ').toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !m._browseAll)
@@ -1978,7 +1978,6 @@ function renderPlantPendingMatches(){
       <td><div class="plr-candidates" id="ppmCandidates_${m.id}">${tightChips}</div>${browseToggle}${browseChips}</td>
       <td class="row-actions">
         <button class="btn${isDeclined ? ' danger' : ''}" onclick="resolvePlantPendingMatch('${m.id}')">${isDeclined ? 'Mark Off-Spec' : 'Match'}</button>
-        ${isDeclined ? '' : `<button class="btn secondary small" onclick="ignorePendingMatch('${m.id}')">Don't Add</button>`}
         <div id="ppmMsg_${m.id}" style="font-size:11px;color:#FFC876;margin-top:5px;max-width:140px;"></div>
       </td>
     </tr>`;
@@ -2001,12 +2000,11 @@ function filterBrowseChips(inputEl){
   const container = document.getElementById(inputEl.dataset.for);
   if (!container) return;
   const query = inputEl.value.trim().toLowerCase();
-  // Real bug found live 2026-09-11 ("debe sacar la lista... si el sistema no reconoce un producto
-  // que si existe y no lo saca no se puede escoger"): this container is rendered ONLY when the
-  // system has no confident match (or the trader asked to browse), which is exactly the moment a
-  // human needs to see real options — hiding it until a search is typed meant there was no way to
-  // even discover what to search for. The container itself always stays visible now (set inline in
-  // renderPlantPendingMatches/renderPriceListReview); typing here only narrows which chips show.
+  // Real correction 2026-09-11: the first view of a row shows only what the system thinks is
+  // similar (the tight chips) — the full catalog stays closed until the trader actually clicks
+  // into this search box, not open by default. This handler runs on focus (a bare click, no
+  // typing needed yet) as well as on input, so clicking the box is what reveals the list.
+  container.style.display = 'flex';
   let emptyMsg = container.nextElementSibling;
   if (!emptyMsg || !emptyMsg.classList.contains('plr-browse-empty')){
     emptyMsg = document.createElement('div');
@@ -2041,6 +2039,9 @@ function togglePendingMatchBrowseAll(matchId){
   if (!m) return;
   m._browseAll = !m._browseAll;
   renderPlantPendingMatches();
+  // The click itself is what asked to see the catalog — actually reveal it (see
+  // filterBrowseChips), not just render a still-closed panel behind the click.
+  if (m._browseAll) document.querySelector(`input[data-for="ppmBrowse_${matchId}"]`)?.focus();
 }
 
 async function resolvePlantPendingMatch(id){
@@ -2089,26 +2090,6 @@ async function resolvePlantPendingMatch(id){
   plantPendingMatches = plantPendingMatches.filter(m => m.id !== id);
   plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
   await loadPlantProducts();
-  renderPlantPendingMatches();
-}
-
-// Real ask 2026-09-11 ("si uno no quiere ponerlo uno puede poner no anadir o ignorar"): once the
-// trader has actually looked at the real catalog candidates (now shown by default, see
-// filterBrowseChips) and none of them is this line item, there was no way to close the row out —
-// it just sat in the queue forever. This resolves it with no product (resolved_product_id stays
-// null), so it stops appearing here without inventing a fake match. Never used for a 'declined'
-// row — that one already has its own real meaning (the plant said it doesn't make this) and its
-// own action (Mark Off-Spec).
-async function ignorePendingMatch(id){
-  try {
-    await callApi('plant-pending-matches-update', { actor: currentActor(), id, ignore: true });
-  } catch (e) {
-    const msgEl = document.getElementById(`ppmMsg_${id}`);
-    if (msgEl) msgEl.textContent = e.message || "Couldn't ignore this line.";
-    return;
-  }
-  plantPendingMatches = plantPendingMatches.filter(m => m.id !== id);
-  plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
   renderPlantPendingMatches();
 }
 
@@ -2589,6 +2570,32 @@ function closeRow(i){
   renderPriceListReview();
 }
 
+// Real ask 2026-09-11 ("cuando no quiero escoger un producto de la lista lo mando a pending"):
+// a Load Prices row only exists in priceListRows (in-memory) until Apply All runs — closing the
+// paste without deciding loses it for good. This writes it into plant_pending_matches instead —
+// the exact same persistent queue plant-price-emails-poll writes to for a line it can't
+// confidently match — via plant-pending-matches-create (the existing, shared write path, never
+// duplicated here), so it survives to be resolved later from the Pending Matches tab. Idempotent
+// on plant_id + the normalized raw text, so re-sending the same paste twice never double-queues
+// the same line.
+async function sendRowToPendingMatches(i){
+  const row = priceListRows[i];
+  const msgEl = document.getElementById(`plrSendMsg_${i}`);
+  try {
+    await callApi('plant-pending-matches-create', {
+      actor: currentActor(), plant_id: currentPlantId, raw_text: row.rawText,
+      detected_price: row.price != null ? row.price : null,
+      idempotency_key: `manual|${currentPlantId}|${normalizeForMatch(row.rawText)}`,
+    });
+  } catch (e) {
+    if (msgEl) msgEl.textContent = `Couldn't send to Pending Matches: ${e.message}`;
+    return;
+  }
+  priceListRows.splice(i, 1);
+  renderPriceListReview();
+  document.getElementById('priceListMsg').textContent = 'Sent to Pending Matches — pick a product for it later from that tab.';
+}
+
 // Open BY DEFAULT for any row needing a decision — real correction 2026-08-30: "para aprender
 // debe preguntar no seguir de largo" (to learn, it must ask — never just proceed). An unrecognized
 // word ("Bnls", "SIN Hueso") showing two clickable candidates and nothing else read as the system
@@ -2608,6 +2615,9 @@ function toggleTeachPanel(i){
 function toggleBrowseAll(i){
   priceListRows[i]._browseAll = !priceListRows[i]._browseAll;
   renderPriceListReview();
+  // The click itself is what asked to see the catalog — actually reveal it (see
+  // filterBrowseChips), not just render a still-closed panel behind the click.
+  if (priceListRows[i]._browseAll) document.querySelector(`input[data-for="plrBrowse_${i}"]`)?.focus();
 }
 
 // Called from the review table when the trader tells us what a specific word in this plant's own
@@ -3075,8 +3085,8 @@ function renderPriceListReview(){
     // fix, both places. See that call site for why this filters the DOM directly instead of
     // re-rendering (would drop the input's own focus on every keystroke).
     const browseChips = showBrowse ? `
-      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
-      <div class="plr-candidates plr-browse" id="plrBrowse_${i}" style="display:flex;">
+      <input type="text" class="plr-browse-search" placeholder="Search ${browseCandidates.length} products…" autocomplete="off" onfocus="filterBrowseChips(this)" oninput="filterBrowseChips(this)" data-for="plrBrowse_${i}">
+      <div class="plr-candidates plr-browse" id="plrBrowse_${i}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml([p.full_name_en, p.name_en, p.full_name_es, p.name].filter(Boolean).join(' ').toLowerCase())}" onclick="pickCandidate(${i}, '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
     const browseToggle = (tightIds.length && !row._browseAll)
@@ -3084,6 +3094,12 @@ function renderPriceListReview(){
       : '';
 
     const newChip = `<button type="button" class="plr-chip plr-chip-new" onclick="startCreateProductForRow(${i})">+ Create new product</button>`;
+    // Real ask 2026-09-11 ("cuando no quiero escoger un producto de la lista lo mando a pending"):
+    // this row only exists in memory until Apply All runs — closing the paste without deciding
+    // loses it for good. Sends it into the same persistent queue the email pipeline writes to
+    // (plant_pending_matches, via plant-pending-matches-create) so it survives to be resolved later
+    // from the Pending Matches tab, instead of being either forced to a decision now or discarded.
+    const sendToPendingChip = `<button type="button" class="plr-chip plr-chip-new" onclick="sendRowToPendingMatches(${i})">Add to Pending Matches</button>`;
 
     // Open by default (undefined counts as open — only an explicit "Ocultar" click sets it false)
     // — real correction 2026-08-30: "para aprender debe preguntar no seguir de largo." Two
@@ -3124,9 +3140,11 @@ function renderPriceListReview(){
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:4px;">
           ${browseToggle}
           ${newChip}
+          ${sendToPendingChip}
           <button type="button" class="plr-teach-toggle" onclick="toggleTeachPanel(${i})">${teachOpen ? 'Hide' : 'Is this an abbreviation?'}</button>
         </div>
         ${teachPanel}
+        <div id="plrSendMsg_${i}" style="font-size:11px;color:var(--ink-soft);margin-top:4px;"></div>
       </td>
       <td>${row._forceOpen ? `<button type="button" class="btn secondary small" onclick="closeRow(${i})">Close</button>` : ''}</td>
     </tr>`;
