@@ -449,6 +449,7 @@ auth.onAuthStateChanged(user => {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
         <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openPriceListPanel()">📋 Load Prices</button>
         <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openProductForm()">+ Add New Product</button>
+        <button class="btn secondary" style="padding:6px 12px;font-size:12px;" onclick="openManageTermAliases()">Recognized Words</button>
       </div>
 
       <div class="tt-overlay" id="priceListCard">
@@ -985,6 +986,20 @@ auth.onAuthStateChanged(user => {
     <div id="manageVariationsList"></div>
     <div class="email-modal-actions">
       <button onclick="document.getElementById('manageVariationsModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Real ask 2026-09-12 ("debe poderse abrir y editar los que ya reconocio"): every word already
+     taught for this plant (plant_term_aliases), one place to review and fix — a word taught wrong
+     is otherwise invisible until it silently misfires on some future line. -->
+<div id="manageTermAliasesModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:460px;max-height:70vh;overflow-y:auto;">
+    <h3>Recognized words — <span id="manageTermAliasesPlantName"></span></h3>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">What this plant's own abbreviations mean, learned from past price lists.</div>
+    <div id="manageTermAliasesList"></div>
+    <div class="email-modal-actions">
+      <button onclick="document.getElementById('manageTermAliasesModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
     </div>
   </div>
 </div>
@@ -2602,14 +2617,153 @@ async function fetchPlantTermAliases(){
   });
 }
 
-// One row picked its product directly from the candidate chips — no ambiguity left to teach a
-// word about, so this is a plain assignment, not a re-match.
+function termMeaningCatalog(meaningType){
+  return { temperature: temperatures, packaging: packagings, variation: variations, cut_name: cutNames }[meaningType] || [];
+}
+function termMeaningTypeLabel(meaningType){
+  return { temperature: 'Temperature', packaging: 'Packaging', variation: 'Variation', cut_name: 'Cut Name' }[meaningType] || meaningType;
+}
+
+// Real ask 2026-09-12 ("debe poderse abrir y editar los que ya reconocio"): every word already
+// taught for this plant, in one place — a word taught wrong is otherwise invisible until it
+// silently misfires on some future price list. Fetched fresh every time the modal opens, same
+// reasoning as every other "manage" list in this file (cut names, variations).
+let manageTermAliasesRows = [];
+async function openManageTermAliases(){
+  const plant = plants.find(p => p.id === currentPlantId);
+  document.getElementById('manageTermAliasesPlantName').textContent = plant ? plant.name : '';
+  let res;
+  try { res = await callApi('plant-term-aliases-search', { plant_id: currentPlantId }); }
+  catch (e) { res = { results: [] }; }
+  manageTermAliasesRows = res.results || [];
+  renderManageTermAliasesList();
+  document.getElementById('manageTermAliasesModalOverlay').style.display = 'flex';
+}
+function renderManageTermAliasesList(){
+  const wrap = document.getElementById('manageTermAliasesList');
+  if (!manageTermAliasesRows.length){ wrap.innerHTML = '<div style="font-size:13px;color:var(--ink-soft);padding:8px 0;">No words taught yet.</div>'; return; }
+  wrap.innerHTML = manageTermAliasesRows.map(a => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--line);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="font-size:13.5px;font-weight:600;">"${escapeHtml(a.term)}"</span>
+        <button type="button" onclick="deleteTermAlias('${a.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:#fff;color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+        <span style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">${termMeaningTypeLabel(a.meaning_type)}:</span>
+        <select onchange="changeTermAliasMeaning('${a.id}', this.value)" style="flex:1;padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;background:var(--card);color:var(--ink);">
+          ${termMeaningCatalog(a.meaning_type).map(opt => `<option value="${opt.id}" ${opt.id === a.meaning_id ? 'selected' : ''}>${escapeHtml(opt.name_en || opt.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  `).join('');
+}
+async function changeTermAliasMeaning(id, newMeaningId){
+  const row = manageTermAliasesRows.find(a => a.id === id);
+  if (!row || !newMeaningId) return;
+  await callApi('plant-term-aliases-set', { actor: currentActor(), plant_id: currentPlantId, aliases: [{ term: row.term, meaning_type: row.meaning_type, meaning_id: newMeaningId }] });
+  row.meaning_id = newMeaningId;
+  const entry = plantTermAliasMap.get(row.term) || {};
+  entry[row.meaning_type] = newMeaningId;
+  plantTermAliasMap.set(row.term, entry);
+}
+async function deleteTermAlias(id){
+  const row = manageTermAliasesRows.find(a => a.id === id);
+  if (!row) return;
+  if (!confirm(`Remove "${row.term}" from this plant's recognized words?\n\nFuture price lists will ask what it means again.`)) return;
+  await callApi('plant-term-aliases-delete', { actor: currentActor(), id });
+  manageTermAliasesRows = manageTermAliasesRows.filter(a => a.id !== id);
+  const entry = plantTermAliasMap.get(row.term);
+  if (entry) delete entry[row.meaning_type];
+  renderManageTermAliasesList();
+}
+
+function normalizeWordToken(w){
+  return (w || '').toLowerCase().replace(/[^a-z0-9%]/g, '');
+}
+
+// Real correction 2026-09-12 ("si yo ya le estoy diciendo al sistema que hace match... para que me
+// pregunta tantas cosas. pense que con solo darle match ya el sistema aprendia"): the separate
+// "teach a word" form used to sit open next to the picker for every undecided row, asking the
+// trader to fill it in as if it were unrelated to the pick they were about to make. This compares
+// the raw line against the picked product's REAL spec right after the pick — the product's own
+// name, its real temperature/packaging, every registered Variation/Cut Name, and every word
+// already taught for this plant are all "known"; a word in the line that isn't any of those is
+// worth asking about. Never more than what's genuinely left unexplained.
+function findLeftoverWords(rawText, product){
+  const known = new Set();
+  const addPhrase = (phrase) => { if (!phrase) return; String(phrase).split(/\s+/).forEach(w => { const n = normalizeWordToken(w); if (n) known.add(n); }); };
+  addPhrase(product.name_en); addPhrase(product.name);
+  addPhrase(product.full_name_en); addPhrase(product.full_name_es);
+  addPhrase(product.subcategory_en); addPhrase(product.subcategory);
+  temperatures.forEach(t => { addPhrase(t.name_en); addPhrase(t.name); });
+  packagings.forEach(p => { addPhrase(p.name_en); addPhrase(p.name); });
+  variations.forEach(v => { addPhrase(v.name_en); addPhrase(v.name); });
+  cutNames.forEach(c => { addPhrase(c.name_en); addPhrase(c.name); });
+  for (const term of plantTermAliasMap.keys()) known.add(normalizeWordToken(term));
+  const STOPWORDS = new Set(['the', 'of', 'and', 'a', 'an', 'for', 'with', 'lb', 'lbs', 'box', 'boxes', 'combo', 'combos', 'bag', 'bags', 'case', 'cases', 'no', 'docs']);
+  const words = rawText.split(/\s+/).map(normalizeWordToken).filter(Boolean);
+  const leftover = words.filter(w => w.length > 1 && !/^\d+%?$/.test(w) && !known.has(w) && !STOPWORDS.has(w));
+  return [...new Set(leftover)];
+}
+
+// Narrows what the one leftover word could plausibly mean, using the picked product's own real
+// spec. Temperature and Packaging are real columns on the product — if the line is missing that
+// exact word, the leftover word is almost certainly that plant's own abbreviation for it, so this
+// is confident enough to ask a plain Yes/No about. Variation and Cut Name have no such direct
+// column to check against, so instead of guessing one, this narrows the choice to just those two
+// categories (out of the full four) rather than the whole ~30-option list.
+function guessWordMeaning(rawText, product){
+  const lineLoose = normalizeForMatchLoose(rawText);
+  const wordAlreadyInLine = (obj) => obj && [obj.name_en, obj.name].filter(Boolean).some(n => lineLoose.includes(normalizeForMatchLoose(n)));
+  const temp = temperatures.find(t => t.id === product.temperature_id);
+  if (temp && !wordAlreadyInLine(temp)) return { guess: { type: 'temperature', id: temp.id, label: temp.name_en || temp.name } };
+  const pack = packagings.find(p => p.id === product.packaging_id);
+  if (pack && !wordAlreadyInLine(pack)) return { guess: { type: 'packaging', id: pack.id, label: pack.name_en || pack.name } };
+  return { guess: null };
+}
+
+// One row picked its product directly from the candidate chips (or the browse search) — checks
+// for exactly one leftover, unexplained word right after the pick (see findLeftoverWords above)
+// instead of leaving the separate teach form open alongside the picker the whole time.
 function pickCandidate(i, productId){
   priceListRows[i].matchedProductId = productId;
   // Picking a card is the whole confirm — the row collapses straight back to its closed, resolved
   // ficha, and any "Cambiar"/teach panel this row had open no longer applies to a settled row.
   priceListRows[i]._forceOpen = false;
   priceListRows[i]._teachOpen = false;
+  const product = allCatalogProducts.find(p => p.id === productId);
+  const leftover = product ? findLeftoverWords(priceListRows[i].rawText, product) : [];
+  priceListRows[i]._confirmWord = (leftover.length === 1)
+    ? { word: leftover[0], ...guessWordMeaning(priceListRows[i].rawText, product) }
+    : null;
+  renderPriceListReview();
+}
+
+// The trader's answer to the one post-pick question above. Yes/confident-guess and the narrowed
+// Variation/Cut Name choice both funnel into the exact same plant_term_aliases write path
+// teachTermAlias already uses (pendingTermAliases, saved together on "Apply All") — this only
+// decides WHICH meaning to save, never a separate save mechanism.
+function confirmLeftoverWord(i, accept, meaningVal){
+  const row = priceListRows[i];
+  const cw = row._confirmWord;
+  if (!cw) return;
+  row._confirmWord = null;
+  if (!accept){ renderPriceListReview(); return; }
+  let meaningType, meaningId;
+  if (cw.guess){
+    meaningType = cw.guess.type; meaningId = cw.guess.id;
+  } else if (meaningVal){
+    [meaningType, meaningId] = meaningVal.split(':');
+  } else {
+    renderPriceListReview();
+    return;
+  }
+  const term = normalizeForMatch(cw.word);
+  pendingTermAliases = pendingTermAliases.filter(a => !(a.term === term && a.meaning_type === meaningType));
+  pendingTermAliases.push({ plant_id: currentPlantId, term, meaning_type: meaningType, meaning_id: meaningId });
+  const entry = plantTermAliasMap.get(term) || {};
+  entry[meaningType] = meaningId;
+  plantTermAliasMap.set(term, entry);
   renderPriceListReview();
 }
 
@@ -3106,10 +3260,33 @@ function renderPriceListReview(){
         row.locationName ? `📍 ${escapeHtml(row.locationName)}` : '',
         row.freightIncluded ? '🚚 Delivered — freight included' : '',
       ].filter(Boolean).join(' &nbsp; ');
+      // Real correction 2026-09-12: the one thing worth asking after a pick, not a separate form
+      // sitting open the whole time. cw.guess is a confident single answer (the picked product's own
+      // real Temperature/Packaging) — plain Yes/No. No guess means Variation/Cut Name — narrowed to
+      // just those two categories instead of the full list, and saving is picking the option itself.
+      const cw = row._confirmWord;
+      const confirmHtml = cw ? (cw.guess ? `
+        <div class="plr-teach-row">
+          <span class="hint" style="margin:0;">"${escapeHtml(cw.word)}" → <b>${escapeHtml(cw.guess.label)}</b>. Always mean this for this plant?</span>
+          <button type="button" class="plr-teach-save" onclick="confirmLeftoverWord(${i}, true)">Yes, remember it</button>
+          <button type="button" class="plr-teach-toggle" onclick="confirmLeftoverWord(${i}, false)">No</button>
+        </div>` : `
+        <div class="plr-teach-row">
+          <span class="hint" style="margin:0;">"${escapeHtml(cw.word)}" means…</span>
+          <select onchange="confirmLeftoverWord(${i}, true, this.value)">
+            <option value="">Choose…</option>
+            <optgroup label="Variation">${variations.map(v => `<option value="variation:${v.id}">${escapeHtml(v.name_en)}</option>`).join('')}</optgroup>
+            <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
+          </select>
+          <button type="button" class="plr-teach-toggle" onclick="confirmLeftoverWord(${i}, false)">Skip</button>
+        </div>`) : '';
       return `<tr id="plrRow_${i}">
         <td title="${escapeHtml(row.rawText)}">${escapeHtml(row.rawText)}</td>
         <td class="num">${priceLabel}${tags ? `<div class="muted" style="font-size:11px;margin-top:2px;">${tags}</div>` : ''}</td>
-        <td style="display:flex;align-items:center;gap:8px;"><span class="plr-check">✓</span> ${escapeHtml(label)}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;"><span class="plr-check">✓</span> ${escapeHtml(label)}</div>
+          ${confirmHtml}
+        </td>
         <td><button type="button" class="btn secondary small" onclick="reopenRow(${i})">Change</button></td>
       </tr>`;
     }
@@ -3156,12 +3333,14 @@ function renderPriceListReview(){
     // from the Pending Matches tab, instead of being either forced to a decision now or discarded.
     const sendToPendingChip = `<button type="button" class="plr-chip plr-chip-new" onclick="sendRowToPendingMatches(${i})">Add to Pending Matches</button>`;
 
-    // Open by default (undefined counts as open — only an explicit "Ocultar" click sets it false)
-    // — real correction 2026-08-30: "para aprender debe preguntar no seguir de largo." Two
-    // clickable candidates with nothing else read as the system quietly presenting its own two
-    // guesses, not as it explicitly asking what an unrecognized word means — that reason is now
-    // the first thing shown on the row, not one extra click away.
-    const teachOpen = row._teachOpen !== false;
+    // Closed by default — real correction 2026-09-12 ("para que me pregunta tantas cosas... pense
+    // que con solo darle match ya el sistema aprendia"): this used to force itself open on every
+    // undecided row, alongside the candidates and the search box, asking the trader to fill in a
+    // whole separate form before they'd even picked anything. Picking a candidate now asks its own
+    // single, targeted question when something is genuinely left unexplained (see pickCandidate /
+    // confirmLeftoverWord) — this manual form stays one click away ("Is this an abbreviation?"),
+    // never removed, for the rarer case of teaching a word before picking anything at all.
+    const teachOpen = row._teachOpen === true;
     const teachHint = tightIds.length > 1
       ? `Doesn't recognize a word this plant uses — that's why it can't pick just one of these ${tightIds.length} products.`
       : tightIds.length === 1
