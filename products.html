@@ -48,6 +48,7 @@
   }
   .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
@@ -85,8 +86,42 @@
      inside that popup. color-scheme:dark tells Chrome/Safari/Firefox to draw that native popup in
      dark mode instead, which fixes exactly the jarring white dropdown here — the trigger itself
      gets the same glass-pill treatment as the search input beside it. */
-  .pd-cat-select{height:40px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;cursor:pointer;color-scheme:dark;}
+  /* Real rebuild 2026-09-11 ("me dijiste que global y sigo encontrando dropdowns asi"):
+     color-scheme:dark (tried first, matching what plants.html originally had) doesn't make Chrome
+     draw the native <select> popup dark in practice. Real custom dropdown now, same family as
+     plants.html's .pl-cat-dropdown. */
+  .pd-cat-dropdown{position:relative;display:inline-block;}
+  .pd-cat-select{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;height:40px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;cursor:pointer;}
   .pd-cat-select:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.25);}
+
+  /* Real ask 2026-09-11 ("hazlo... desde el principio con el diseno buentrade para no tener que
+     repetir trabajo"): a GENERIC dropdown, built once (same as plants.html), that turns ANY
+     existing <select> into this same look — used by btEnhanceSelect() below. */
+  .bt-select-wrap{position:relative;display:block;width:100%;}
+  .bt-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;height:38px;padding:0 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;font-family:'Inter',sans-serif;cursor:pointer;text-align:left;}
+  .bt-select-trigger:hover{border-color:rgba(255,255,255,.4);}
+  .bt-select-wrap.open .bt-select-trigger{border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.2);}
+  .bt-select-trigger:disabled{opacity:.5;cursor:default;}
+  .bt-select-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+  .bt-select-chevron{width:14px;height:14px;flex-shrink:0;color:var(--ink-soft);transition:transform .15s ease;}
+  .bt-select-wrap.open .bt-select-chevron{transform:rotate(180deg);}
+  .bt-select-panel{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;width:max-content;max-width:320px;background:rgba(20,40,74,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);padding:6px;z-index:80;max-height:280px;overflow-y:auto;}
+  .bt-select-search{width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font-size:12.5px;font-family:inherit;}
+  .bt-select-search::placeholder{color:var(--ink-soft);}
+  .bt-select-option{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:8px 10px;border:none;background:none;color:#fff;font-size:13px;font-family:'Inter',sans-serif;font-weight:500;text-align:left;border-radius:8px;cursor:pointer;white-space:nowrap;}
+  .bt-select-option:hover{background:rgba(232,181,76,.1);}
+  .bt-select-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
+  .bt-select-option .bt-select-check{width:13px;flex-shrink:0;visibility:hidden;}
+  .bt-select-option.selected .bt-select-check{visibility:visible;}
+  .bt-select-empty{padding:10px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
+  .pd-cat-chevron{width:15px;height:15px;flex-shrink:0;color:rgba(255,255,255,.6);transition:transform .15s ease;}
+  .pd-cat-dropdown.open .pd-cat-chevron{transform:rotate(180deg);}
+  .pd-cat-panel{position:absolute;top:calc(100% + 8px);left:0;min-width:200px;background:rgba(255,255,255,.08);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);padding:6px;z-index:60;max-height:320px;overflow-y:auto;}
+  .pd-cat-option{display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;border:none;background:none;color:#fff;font-size:13px;font-family:'Inter',sans-serif;font-weight:500;text-align:left;border-radius:8px;cursor:pointer;white-space:nowrap;}
+  .pd-cat-option:hover{background:rgba(232,181,76,.1);}
+  .pd-cat-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
+  .pd-cat-option .pd-cat-check{width:14px;flex-shrink:0;visibility:hidden;}
+  .pd-cat-option.selected .pd-cat-check{visibility:visible;}
 
   /* Same colored stat-card component as quotes.html (ported verbatim) — one real BuenTrade token
      per card: hero=blue-bright (neutral total), ok=green (has a real plant price), danger=red
@@ -117,7 +152,7 @@
      quotes.html's own note: "hace cuanto ya no hacemos esos botones azules llenos"). Same
      transparent-bg + colored-border + colored-text formula as .btn.secondary right below it and
      quotes.html's Done button, just the primary action's own weight (bolder text, brighter hover). */
-  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;transition:background .18s,border-color .18s;}
+  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s;}
   .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   /* A visible "+" next to a closed dropdown, instead of burying "add new" as the last option
@@ -128,13 +163,13 @@
   /* Real fix 2026-09-02, explicit ask ("unifica no pueden ser distintos colores... revisa todos
      los tabs") — same flat green as every other WhatsApp button across the OS, now the one real
      gradient+shadow language quotes.html already unified to. */
-  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;fill:currentColor;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:center;color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1.5px solid var(--line);}
-  td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:center;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
   tr:last-child td{border-bottom:none;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
@@ -353,7 +388,14 @@ auth.onAuthStateChanged(user => {
     <div class="grid5">
       <div class="field"><label>Category *</label><select id="category" required onchange="onCategoryChanged()"><option value="">—</option></select></div>
       <div class="field"><label>Temperature *</label><select id="temperature_id" required onchange="renderPackagingOptions();updateProfileDisplays()"><option value="">—</option></select></div>
-      <div class="field"><label>Packaging *</label><select id="packaging_id" required onchange="updateProfileDisplays()"><option value="">—</option></select></div>
+      <div class="field">
+        <label>Packaging *</label>
+        <div style="display:flex;gap:6px;">
+          <select id="packaging_id" required onchange="updateProfileDisplays()" style="flex:1;min-width:0;"><option value="">—</option></select>
+          <button type="button" class="btn-add-inline" onclick="addNewPackaging()" title="Add a new packaging type">+</button>
+          <button type="button" class="btn-add-inline" onclick="managePackaging()" title="Remove a packaging type" style="font-size:15px;">🗑</button>
+        </div>
+      </div>
       <div class="field">
         <label>Cut Name *</label>
         <div style="display:flex;gap:6px;">
@@ -437,9 +479,17 @@ auth.onAuthStateChanged(user => {
       <input id="searchBox" type="text" placeholder="Search" oninput="renderProducts()" class="pd-search-input">
     </div>
     <button class="btn" onclick="openForm()">+ Add Product</button>
-    <select id="categoryFilter" onchange="renderProducts()" class="pd-cat-select">
-      <option value="">All categories</option>
-    </select>
+    <!-- Real rebuild 2026-09-11 ("me dijiste que global y sigo encontrando dropdowns asi"):
+         color-scheme:dark doesn't make Chrome draw the native <select> popup dark — same real
+         custom dropdown as plants.html's .pl-cat-dropdown, not the CSS hack. -->
+    <div class="pd-cat-dropdown" id="productCatDropdown">
+      <button type="button" class="pd-cat-select" onclick="toggleProductCategoryFilter()">
+        <span id="productCatFilterLabel">All categories</span>
+        <svg class="pd-cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="pd-cat-panel" id="productCatFilterPanel" style="display:none;"></div>
+      <input type="hidden" id="categoryFilter" value="">
+    </div>
   </div>
   <div class="card" id="productListCard">
     <!-- Real ask 2026-09-09 ("depende de planta no de producto... dejalo como estaba antes, una
@@ -504,6 +554,17 @@ auth.onAuthStateChanged(user => {
     <div id="manageVariationsList"></div>
     <div class="email-modal-actions">
       <button onclick="document.getElementById('manageVariationsModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="managePackagingModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:420px;max-height:70vh;overflow-y:auto;">
+    <h3>Remove packaging</h3>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">Blocked if any product still uses it — never silently affects existing products.</div>
+    <div id="managePackagingList"></div>
+    <div class="email-modal-actions">
+      <button onclick="document.getElementById('managePackagingModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
     </div>
   </div>
 </div>
@@ -606,6 +667,67 @@ function renderPackagingOptions(){
   const valid = packagings.filter(p => !p.valid_temperature_ids || !tempId || p.valid_temperature_ids.includes(tempId));
   pSel.innerHTML = '<option value="">—</option>' + valid.map(p => `<option value="${p.id}">${escapeHtml(p.name_en || p.name)}</option>`).join('');
   if (valid.some(p => p.id === currentValue)) pSel.value = currentValue;
+}
+
+async function loadPackagings(){
+  const res = await callApi('lookups-search', {});
+  packagings = res.packagings || [];
+  renderPackagingOptions();
+}
+
+async function addNewPackaging(){
+  const sel = document.getElementById('packaging_id');
+  const entered = await showAddCatalogModal({ title: 'Add new packaging', labelEn: 'English (e.g. "IWP")', labelEs: 'Spanish (e.g. "Caja Encerada")' });
+  if (!entered) return;
+  const { en: name_en, es: name } = entered;
+  const idempotencyKey = `packaging-create|${name_en}|${name}|${new Date().toISOString().slice(0, 16)}`;
+  let result;
+  try {
+    result = await callApi('packaging-create', { actor: currentActor(), name, name_en, idempotency_key: idempotencyKey });
+  } catch (e) {
+    if (e.data && e.data.error === 'possible_duplicate'){
+      const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
+      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name}` : ''}\n\nCreate "${name_en} / ${name}" as a new packaging type anyway?`);
+      if (!proceed) return;
+      result = await callApi('packaging-create', { actor: currentActor(), name, name_en, override_duplicate_check: true, idempotency_key: idempotencyKey });
+    } else {
+      alert('Error creating packaging: ' + e.message);
+      return;
+    }
+  }
+  await loadPackagings();
+  sel.value = result.packaging.id;
+  updateProfileDisplays();
+}
+
+// Removes a catalog entry — unlike Cut Name/Variation, packaging IS a real foreign key on
+// products, so packaging-delete blocks (and reports how many products) if it's still in use.
+function managePackaging(){
+  renderManagePackagingList();
+  document.getElementById('managePackagingModalOverlay').style.display = 'flex';
+}
+function renderManagePackagingList(){
+  const wrap = document.getElementById('managePackagingList');
+  if (!packagings.length){ wrap.innerHTML = '<div style="font-size:13px;color:var(--ink-soft);padding:8px 0;">No packaging types yet.</div>'; return; }
+  wrap.innerHTML = packagings.map(p => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);">
+      <span style="font-size:13.5px;">${escapeHtml(p.name_en || p.name)} / ${escapeHtml(p.name)}</span>
+      <button type="button" onclick="deletePackagingFromCatalog('${p.id}')" title="Remove" style="flex-shrink:0;width:26px;height:26px;border:1.5px solid var(--red);border-radius:6px;background:var(--card);color:var(--red);font-size:14px;line-height:1;cursor:pointer;">×</button>
+    </div>
+  `).join('');
+}
+async function deletePackagingFromCatalog(id){
+  const p = packagings.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Remove "${p.name_en} / ${p.name}" from the Packaging catalog?`)) return;
+  try {
+    await callApi('packaging-delete', { actor: currentActor(), id });
+  } catch (e) {
+    alert(e.data && e.data.message ? e.data.message : 'Error removing packaging: ' + e.message);
+    return;
+  }
+  await loadPackagings();
+  renderManagePackagingList();
 }
 
 function categoryEnById(id){ const c = categories.find(x => x.id === id); return c ? c.name_en : null; }
@@ -843,8 +965,8 @@ async function loadProducts(){
     const res = await callApi('products-search', {});
     products = res.results || [];
     const cats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
-    const catSel = document.getElementById('categoryFilter');
-    cats.forEach(c => catSel.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(categoryEnByName(c))}</option>`);
+    productCatFilterOptions = [{ id: '', name_en: 'All categories' }, ...cats.map(c => ({ id: c, name_en: categoryEnByName(c) }))];
+    renderProductCatFilterPanel();
     renderProducts();
     renderProductStats();
   } catch (e) {
@@ -852,6 +974,124 @@ async function loadProducts(){
     document.getElementById('emptyState').textContent = 'Error loading products: ' + e.message;
   }
 }
+
+// Real rebuild 2026-09-11 ("me dijiste que global y sigo encontrando dropdowns asi") — same
+// pattern as plants.html's .pl-cat-dropdown. Hidden #categoryFilter input keeps the selected
+// value so renderProducts() below needed no changes.
+let productCatFilterOptions = [];
+function renderProductCatFilterPanel(){
+  const panel = document.getElementById('productCatFilterPanel');
+  const current = document.getElementById('categoryFilter').value;
+  panel.innerHTML = productCatFilterOptions.map(c => `
+    <button type="button" class="pd-cat-option${c.id === current ? ' selected' : ''}" onclick="pickProductCategoryFilter('${c.id}')">
+      <svg class="pd-cat-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      ${escapeHtml(c.name_en)}
+    </button>`).join('');
+}
+function toggleProductCategoryFilter(){
+  const wrap = document.getElementById('productCatDropdown');
+  const panel = document.getElementById('productCatFilterPanel');
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  wrap.classList.toggle('open', !open);
+}
+function pickProductCategoryFilter(id){
+  document.getElementById('categoryFilter').value = id;
+  const chosen = productCatFilterOptions.find(c => c.id === id);
+  document.getElementById('productCatFilterLabel').textContent = chosen ? chosen.name_en : 'All categories';
+  document.getElementById('productCatFilterPanel').style.display = 'none';
+  document.getElementById('productCatDropdown').classList.remove('open');
+  renderProductCatFilterPanel();
+  renderProducts();
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('productCatDropdown');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('productCatFilterPanel').style.display = 'none';
+    wrap.classList.remove('open');
+  }
+});
+
+// ============ Real ask 2026-09-11 ("hazlo... desde el principio con el diseno buentrade para no
+// tener que repetir trabajo") — same generic replacement as plants.html for every remaining
+// native <select> (Category/Temperature/Packaging/Cut Name in the Add Product form). See
+// plants.html for the full explanation of how this works (the <select> stays the real source of
+// truth, just hidden; a MutationObserver keeps the visible panel in sync). ============
+function btEnhanceSelect(selectEl){
+  if (!selectEl || selectEl.dataset.btEnhanced) return;
+  selectEl.dataset.btEnhanced = '1';
+  const savedStyle = selectEl.getAttribute('style') || '';
+  selectEl.removeAttribute('style');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'bt-select-wrap';
+  if (savedStyle) wrap.setAttribute('style', savedStyle);
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+  selectEl.style.display = 'none';
+
+  wrap.insertAdjacentHTML('afterbegin', `
+    <button type="button" class="bt-select-trigger">
+      <span class="bt-select-label"></span>
+      <svg class="bt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="bt-select-panel" style="display:none;"></div>`);
+  const trigger = wrap.querySelector('.bt-select-trigger');
+  const label = wrap.querySelector('.bt-select-label');
+  const panel = wrap.querySelector('.bt-select-panel');
+  if (selectEl.disabled) trigger.disabled = true;
+
+  const escBt = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let searchTerm = '';
+
+  function renderPanel(){
+    const opts = [...selectEl.options];
+    const showSearch = opts.length > 8;
+    const q = searchTerm.trim().toLowerCase();
+    const filtered = q ? opts.filter(o => o.textContent.toLowerCase().includes(q)) : opts;
+    panel.innerHTML = (showSearch ? `<input type="text" class="bt-select-search" placeholder="Search…" value="${escBt(searchTerm)}">` : '')
+      + (filtered.length ? filtered.map(o => `
+          <button type="button" class="bt-select-option${o.value === selectEl.value ? ' selected' : ''}" data-value="${escBt(o.value)}">
+            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escBt(o.textContent)}
+          </button>`).join('')
+        : `<div class="bt-select-empty">No matches</div>`);
+    panel.querySelectorAll('.bt-select-option').forEach(btn => {
+      btn.onclick = () => {
+        selectEl.value = btn.dataset.value;
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        searchTerm = '';
+        close();
+        sync();
+      };
+    });
+    const search = panel.querySelector('.bt-select-search');
+    if (search){
+      search.addEventListener('click', e => e.stopPropagation());
+      search.addEventListener('input', () => {
+        searchTerm = search.value;
+        const pos = search.selectionStart;
+        renderPanel();
+        const ns = panel.querySelector('.bt-select-search');
+        if (ns){ ns.focus(); ns.setSelectionRange(pos, pos); }
+      });
+    }
+  }
+  function sync(){
+    const opt = selectEl.options[selectEl.selectedIndex];
+    label.textContent = opt ? opt.textContent : '';
+  }
+  function open(){ searchTerm = ''; renderPanel(); panel.style.display = 'block'; wrap.classList.add('open'); const s = panel.querySelector('.bt-select-search'); if (s) s.focus(); }
+  function close(){ panel.style.display = 'none'; wrap.classList.remove('open'); }
+  trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
+  document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
+  new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  sync();
+}
+function btEnhanceAllSelects(root){
+  (root || document).querySelectorAll('select:not([data-bt-enhanced])').forEach(btEnhanceSelect);
+}
+document.addEventListener('DOMContentLoaded', () => btEnhanceAllSelects());
+if (document.readyState !== 'loading') btEnhanceAllSelects();
 
 // Real ask 2026-09-09 ("aplica este mismo diseno... b"): same stat-card component as Quotes,
 // option B from the mockup — price coverage, not just a bare product count. Cross-references
