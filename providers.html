@@ -18,7 +18,7 @@
        (select popups, checkboxes, scrollbars) should render in their dark variant. */
     color-scheme:dark;
     --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF; --blue-light:rgba(90,170,255,.14);
-    --bg:#0A2547; --card:rgba(255,255,255,.08); --line:rgba(255,255,255,.18); --ink:#FFFFFF; --ink-soft:rgba(255,255,255,.55); --red:#C4432E; --green:#1E9E6B;
+    --bg:#0A2547; --card:rgba(255,255,255,.08); --line:rgba(255,255,255,.18); --ink:#FFFFFF; --ink-soft:rgba(255,255,255,.55); --red:#C4432E; --green:#0F8A5F; --radius:8px;
   }
   *{box-sizing:border-box;}
   input,select,textarea{background:var(--card);color:var(--ink);}
@@ -38,6 +38,7 @@
   }
   .wrap{max-width:1140px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
@@ -85,7 +86,7 @@
   .pv-search-input{width:100%;height:100%;padding:0 14px 0 38px;border:none;background:transparent;color:#fff;font-size:13px;font-family:inherit;}
   .pv-search-input::placeholder{color:rgba(255,255,255,.5);}
   .pv-search-input:focus{outline:none;}
-  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;transition:background .18s,border-color .18s;}
+  .btn{background:rgba(255,255,255,.05);color:var(--blue-bright);border:1.5px solid rgba(90,170,255,.4);border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s;}
   .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:var(--card);color:#FF9C8A;border:1.5px solid rgba(196,67,46,.4);padding:5px 10px;font-size:12px;}
@@ -143,6 +144,27 @@
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
+
+  /* Real ask 2026-09-11 ("hazlo... desde el principio con el diseno buentrade para no tener que
+     repetir trabajo"): a GENERIC dropdown, built once (same as plants/products/customers.html),
+     that turns ANY existing <select> into this same look — used by btEnhanceSelect() below. */
+  .bt-select-wrap{position:relative;display:block;width:100%;}
+  .bt-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;height:38px;padding:0 12px;border-radius:7px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:13.5px;font-family:'Inter',sans-serif;cursor:pointer;text-align:left;}
+  .bt-select-trigger:hover{border-color:rgba(255,255,255,.4);}
+  .bt-select-wrap.open .bt-select-trigger{border-color:var(--blue);}
+  .bt-select-trigger:disabled{opacity:.5;cursor:default;}
+  .bt-select-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+  .bt-select-chevron{width:14px;height:14px;flex-shrink:0;color:var(--ink-soft);transition:transform .15s ease;}
+  .bt-select-wrap.open .bt-select-chevron{transform:rotate(180deg);}
+  .bt-select-panel{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;width:max-content;max-width:320px;background:rgba(20,40,74,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);padding:6px;z-index:80;max-height:280px;overflow-y:auto;}
+  .bt-select-search{width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font-size:12.5px;font-family:inherit;}
+  .bt-select-search::placeholder{color:var(--ink-soft);}
+  .bt-select-option{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:8px 10px;border:none;background:none;color:#fff;font-size:13px;font-family:'Inter',sans-serif;font-weight:500;text-align:left;border-radius:8px;cursor:pointer;white-space:nowrap;}
+  .bt-select-option:hover{background:rgba(232,181,76,.1);}
+  .bt-select-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
+  .bt-select-option .bt-select-check{width:13px;flex-shrink:0;visibility:hidden;}
+  .bt-select-option.selected .bt-select-check{visibility:visible;}
+  .bt-select-empty{padding:10px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;}
   .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:0 14px;}
@@ -160,7 +182,7 @@
   /* Same full-screen overlay pattern as the Trading Tool panel and plants.html's Load Price List —
      "Cargar precios" used to unhide a card in place, pushing the rest of the page down; the request
      was explicit: never a partial-page card, always a real full-screen panel like the TT. */
-  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
+  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:850;display:none;flex-direction:column;}
   .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
@@ -172,7 +194,7 @@
   #searchBox{width:100%;max-width:420px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
-  .role-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;background:var(--blue-light);color:var(--blue);margin-right:4px;white-space:nowrap;}
+  .role-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;background:transparent;border:1px solid rgba(90,170,255,.4);color:var(--blue-bright);margin-right:4px;white-space:nowrap;}
   /* Same card-row language as Quotes/Pending/Offers/Meat Packers — bordered rounded row with an
      avatar instead of a plain table row. */
   .pkg-table-wrap{display:flex;flex-direction:column;gap:8px;}
@@ -186,6 +208,16 @@
      squeezed into a square the way plants' logos did. White card stays — light page, correct. */
   .pkg-plant-avatar-logo{width:auto;max-width:70px;background:none;border:none;padding:2px;}
   .pkg-plant-avatar-logo img{width:auto;max-width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);}
+  /* Real ask 2026-09-11 ("te parece bien hecho esto?"): same fix as plants.html/customers.html —
+     a wide logo now fills nearly the whole 220x140 box, so a fixed-corner edit pencil sat on top
+     of the artwork. Hidden until hover/focus instead. */
+  .pkg-logo-edit-btn{opacity:0;transition:opacity .15s ease;}
+  .pkg-logo-wrap:hover .pkg-logo-edit-btn,.pkg-logo-edit-btn:focus-visible{opacity:1;}
+  /* Real ask 2026-09-11 ("pon otro fondo... que quede bien"): same fix as plants.html/
+     customers.html — a dark-ink logo has no readable contrast on navy no matter the outline. Real
+     white card behind it, scoped to .pkg-logo-wrap only; small list-row avatars stay transparent. */
+  .pkg-logo-wrap .pkg-plant-avatar-logo{background:#fff;border:1px solid var(--line);}
+  .pkg-logo-wrap .pkg-plant-avatar-logo img{filter:none;}
   .pkg-plant-name{font-weight:600;color:var(--ink);font-size:13.5px;}
   .pkg-plant-sub{font-size:11.5px;color:var(--ink-soft);}
   .pkg-plant-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:140px;}
@@ -203,7 +235,7 @@
   .save-dot.saving{background:var(--blue-bright);}
   /* Real fix 2026-09-02, explicit ask ("unifica... revisa todos los tabs") — same gradient+shadow
      every WhatsApp button across the OS now uses, not this page's own flat green. */
-  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn.outline{background:var(--card);color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
@@ -425,10 +457,10 @@ auth.onAuthStateChanged(user => {
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
         <!-- Same wide-box logo treatment as Meat Packers (2026-08-30 fix) — most real logos are
              landscape-shaped, and a forced square just shrinks them to a thin sliver. -->
-        <div style="position:relative;width:220px;height:140px;flex-shrink:0;">
+        <div class="pkg-logo-wrap" style="position:relative;width:220px;height:140px;flex-shrink:0;">
           <div id="pv_provider_logo_placeholder" class="pkg-plant-avatar" style="width:220px;height:140px;border-radius:18px;font-size:52px;"></div>
-          <img id="pv_provider_logo" class="pkg-plant-avatar pkg-plant-avatar-logo" style="width:220px;height:140px;border-radius:18px;object-fit:contain;padding:14px;display:none;position:absolute;top:0;left:0;" alt="">
-          <button type="button" onclick="document.getElementById('providerLogoFileInput').click()" title="Change logo" style="position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:var(--blue);border:2px solid #fff;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✎</button>
+          <img id="pv_provider_logo" class="pkg-plant-avatar pkg-plant-avatar-logo" style="width:220px;max-width:220px;height:140px;border-radius:18px;object-fit:contain;padding:14px;display:none;position:absolute;top:0;left:0;" alt="">
+          <button type="button" class="pkg-logo-edit-btn" onclick="document.getElementById('providerLogoFileInput').click()" title="Change logo" style="position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:var(--blue);border:2px solid #fff;color:#fff;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✎</button>
           <input type="file" id="providerLogoFileInput" accept="image/*" style="display:none;" onchange="uploadProviderLogo()">
         </div>
         <div>
@@ -1531,6 +1563,7 @@ function renderRateListReview(){
       <button class="btn secondary" style="padding:5px 10px;font-size:12px;flex-shrink:0;" onclick="rateListEditingIndex=${i};renderRateListReview();">Edit</button>
     </div>`;
   }).join('');
+  btEnhanceAllSelects(list);
 }
 
 function saveRateListEdit(i){
@@ -1638,6 +1671,7 @@ function renderRateTable(){
     tbody.innerHTML = '';
     rows.forEach(r => tbody.appendChild(buildCustomsRow(r)));
     if (!rows.length) tbody.innerHTML = '<tr><td colspan="5" class="empty">No costs yet.</td></tr>';
+    btEnhanceAllSelects(tbody);
     return;
   }
 
@@ -1936,6 +1970,87 @@ async function deleteRate(rateId){
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
+
+// ============ Real ask 2026-09-11 ("hazlo... desde el principio con el diseno buentrade para no
+// tener que repetir trabajo") — same generic replacement as plants/products/customers.html for
+// every remaining native <select> (Country, phone/WhatsApp code in the edit/new provider forms,
+// plus the rate-type selects in the rates table, which are built dynamically — see the
+// btEnhanceAllSelects(...) calls added at their render sites below). ============
+function btEnhanceSelect(selectEl){
+  if (!selectEl || selectEl.dataset.btEnhanced) return;
+  selectEl.dataset.btEnhanced = '1';
+  const savedStyle = selectEl.getAttribute('style') || '';
+  selectEl.removeAttribute('style');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'bt-select-wrap';
+  if (savedStyle) wrap.setAttribute('style', savedStyle);
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+  selectEl.style.display = 'none';
+
+  wrap.insertAdjacentHTML('afterbegin', `
+    <button type="button" class="bt-select-trigger">
+      <span class="bt-select-label"></span>
+      <svg class="bt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="bt-select-panel" style="display:none;"></div>`);
+  const trigger = wrap.querySelector('.bt-select-trigger');
+  const label = wrap.querySelector('.bt-select-label');
+  const panel = wrap.querySelector('.bt-select-panel');
+  if (selectEl.disabled) trigger.disabled = true;
+
+  const escBt = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let searchTerm = '';
+
+  function renderPanel(){
+    const opts = [...selectEl.options];
+    const showSearch = opts.length > 8;
+    const q = searchTerm.trim().toLowerCase();
+    const filtered = q ? opts.filter(o => o.textContent.toLowerCase().includes(q)) : opts;
+    panel.innerHTML = (showSearch ? `<input type="text" class="bt-select-search" placeholder="Search…" value="${escBt(searchTerm)}">` : '')
+      + (filtered.length ? filtered.map(o => `
+          <button type="button" class="bt-select-option${o.value === selectEl.value ? ' selected' : ''}" data-value="${escBt(o.value)}">
+            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escBt(o.textContent)}
+          </button>`).join('')
+        : `<div class="bt-select-empty">No matches</div>`);
+    panel.querySelectorAll('.bt-select-option').forEach(btn => {
+      btn.onclick = () => {
+        selectEl.value = btn.dataset.value;
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        searchTerm = '';
+        close();
+        sync();
+      };
+    });
+    const search = panel.querySelector('.bt-select-search');
+    if (search){
+      search.addEventListener('click', e => e.stopPropagation());
+      search.addEventListener('input', () => {
+        searchTerm = search.value;
+        const pos = search.selectionStart;
+        renderPanel();
+        const ns = panel.querySelector('.bt-select-search');
+        if (ns){ ns.focus(); ns.setSelectionRange(pos, pos); }
+      });
+    }
+  }
+  function sync(){
+    const opt = selectEl.options[selectEl.selectedIndex];
+    label.textContent = opt ? opt.textContent : '';
+  }
+  function open(){ searchTerm = ''; renderPanel(); panel.style.display = 'block'; wrap.classList.add('open'); const s = panel.querySelector('.bt-select-search'); if (s) s.focus(); }
+  function close(){ panel.style.display = 'none'; wrap.classList.remove('open'); }
+  trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
+  document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
+  new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  sync();
+}
+function btEnhanceAllSelects(root){
+  (root || document).querySelectorAll('select:not([data-bt-enhanced])').forEach(btEnhanceSelect);
+}
+document.addEventListener('DOMContentLoaded', () => btEnhanceAllSelects());
+if (document.readyState !== 'loading') btEnhanceAllSelects();
 </script>
 </body>
 </html>

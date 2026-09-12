@@ -113,6 +113,17 @@
   .bt-select-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
   .bt-select-option .bt-select-check{width:13px;flex-shrink:0;visibility:hidden;}
   .bt-select-option.selected .bt-select-check{visibility:visible;}
+  /* Real ask 2026-09-12 ("no quiero checkbox quiero igual que el otro"): same fix as plants.html
+     — the Variation multi-select restyled to read like the single-select dropdowns (checkmark on
+     pick, not a checkbox square). Real <input type=checkbox> kept, just visually hidden, so
+     checkedVariations() keeps working unchanged. */
+  .variation-check-row{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--ink);}
+  .variation-check-row:hover{background:rgba(232,181,76,.1);}
+  .variation-check-row:has(input:checked){background:rgba(232,181,76,.16);}
+  .variation-check-row input[type=checkbox]{position:absolute;opacity:0;width:0;height:0;pointer-events:none;}
+  .variation-check-row .var-check-icon{width:14px;flex-shrink:0;visibility:hidden;color:#E8B54C;}
+  .variation-check-row input[type=checkbox]:checked ~ .var-check-icon{visibility:visible;}
+  .variation-check-row input[type=checkbox]:checked ~ .var-check-label{color:#E8B54C;font-weight:700;}
   .bt-select-empty{padding:10px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
   .pd-cat-chevron{width:15px;height:15px;flex-shrink:0;color:rgba(255,255,255,.6);transition:transform .15s ease;}
   .pd-cat-dropdown.open .pd-cat-chevron{transform:rotate(180deg);}
@@ -418,7 +429,7 @@ auth.onAuthStateChanged(user => {
           <button type="button" class="btn-add-inline" onclick="addNewVariation()" title="Add a new variation">+</button>
           <button type="button" class="btn-add-inline" onclick="manageVariations()" title="Remove a variation" style="font-size:15px;">🗑</button>
         </div>
-        <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:var(--navy-2);border:1.5px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(4,12,26,.45);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;">
+        <div id="variationDropdownPanel" style="display:none;position:absolute;z-index:20;left:0;min-width:240px;background:rgba(20,40,74,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);padding:10px 12px;margin-top:4px;max-height:220px;overflow-y:auto;">
           <div id="variationCheckboxes" style="display:flex;flex-direction:column;gap:8px;"></div>
         </div>
       </div>
@@ -866,9 +877,10 @@ function renderVariationCheckboxes(){
   const wrap = document.getElementById('variationCheckboxes');
   const checkedIds = new Set(checkedVariations().map(v => v.id));
   wrap.innerHTML = variations.map(v => `
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;cursor:pointer;">
-      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays()" style="width:auto;">
-      ${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}
+    <label class="variation-check-row">
+      <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays()">
+      <svg class="var-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span class="var-check-label">${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}</span>
     </label>
   `).join('');
   updateVariationDropdownLabel();

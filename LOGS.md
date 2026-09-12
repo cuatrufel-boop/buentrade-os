@@ -1,5 +1,51 @@
 # Session Logs
 
+## 2026-09-12 — Credit USD Limit connected to Collections cupo (hard block at the plant bid)
+
+**Files changed:** `supabase/functions/_shared/matching.ts`, `supabase/functions/sent-offers-create/index.ts`,
+`supabase/functions/sent-offers-log-event/index.ts`, `supabase/functions/sent-offers-mark-won/index.ts`,
+`trading-tool.html`, `quotes.html`.
+
+### What was wrong
+- `customers.credit_limit` existed as a field but wasn't actually connected to any real gate before
+  a trader kept selling to an over-limit customer — the only existing check ran at `markWon` (order
+  creation) and could be skipped with one click ("Create Anyway"), which the user clarified was
+  never meant as a credit override in the first place (it was assumed to be for stale plant
+  pricing — traced live in the code and confirmed it has always been the credit-limit override,
+  since the 2026-09-08 `creditLimitOverlay` comment).
+- The exposure formula existed in two different places computing two different numbers:
+  `collections-search` (AR aging, invoiced-only shipments) vs. `sent-offers-mark-won` (all unpaid
+  shipments, invoiced or not) — never unified.
+
+### What's live now (verified live against staging, not just code review)
+1. **New shared helper** `computeCustomerExposure()` in `_shared/matching.ts` — one formula
+   (outstanding = sum of unpaid shipments' `sale_amount`, invoiced or not, + credit_limit), reused
+   by every caller instead of being computed three different ways.
+2. **Hard block, no override, at the first contact with the plant** — explicit ask: "el boton de
+   bloqueo verdadero cuando voy a pasarle un bid a la planta." `sent-offers-log-event` now rejects
+   (`409 credit_limit_exceeded`) a `to: "plant"` event outright when the customer's outstanding
+   balance plus this offer would exceed their credit limit — no override field accepted at all.
+   `trading-tool.html`'s `negoSendToPlant` was reordered so this check runs **before** the
+   email/WhatsApp to the plant goes out (it used to send first, log after — the block would have
+   been meaningless with the old order). Verified live: called against a real "sent" offer
+   ($49,200) for a test customer with `credit_limit=$30` → real `409`, no message sent; the same
+   offer's customer-side log event (`to: "customer"`) still returns `200` — quoting the customer is
+   never blocked.
+3. **Non-blocking advisory when quoting/offering the customer** — `sent-offers-create` now returns
+   a `credit_warning` (Spanish copy, since it's shown alongside a customer-facing offer — the one
+   explicit exception to the "internal UI stays English" rule) whenever the customer is already
+   over their limit; never blocks the send. Wired into `quotes.html`'s `sendOfferWhatsAppTo` /
+   `sendOfferWhatsAppToAll` — shown via `rqShowNotice` right after the WhatsApp offer opens.
+4. `sent-offers-mark-won`'s existing softer check (with its `override_credit_check` /
+   "Create Anyway" escape hatch) was left as-is, just refactored onto the same shared helper — by
+   the time an offer reaches "Won" the exposure was already gated much earlier, at the plant-bid
+   step above.
+
+### Known gaps, deferred until asked
+- `collections-search`'s own "Owes/Credit Used" column still uses the older, narrower
+  invoiced-only formula (a real AR-aging discrepancy vs. the new canonical exposure) — flagged to
+  the user, left untouched since changing Collections' own display wasn't asked for.
+
 ## 2026-09-12 — Quotes: system-wide tables, product search, "Possible" plants
 
 **File changed:** `quotes.html` only. No Supabase schema/migration/edge-function changes.

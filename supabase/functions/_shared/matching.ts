@@ -108,6 +108,27 @@ export async function matchOrCreateLocationId(tx: any, locationName: string | nu
   return raced ? raced.id : null;
 }
 
+// Credit-limit exposure (2026-09-12) — "si le he vendido al cliente 95 y tiene 100 de limite no le
+// puedo vender mas hasta cobrar." One shared formula, used by every caller that gates on it
+// (sent-offers-mark-won's softer check, sent-offers-log-event's hard block on the first plant
+// contact, sent-offers-create's non-blocking customer warning) so it's never computed two
+// different ways in parallel. Outstanding = every won-but-unpaid shipment's sale_amount, invoiced
+// or not — a shipment row exists the moment an offer is won, so this counts real, already-sold
+// exposure, not just what's been invoiced (a narrower AR-aging number collections-search shows,
+// a different purpose).
+export async function computeCustomerExposure(
+  sql: any,
+  customerId: string,
+): Promise<{ creditLimit: number; outstanding: number } | null> {
+  const [customer] = await sql`select credit_limit from customers where id = ${customerId}`;
+  if (customer?.credit_limit == null) return null;
+  const [{ outstanding }] = await sql`
+    select coalesce(sum(sale_amount), 0) as outstanding from shipments
+    where customer_id = ${customerId} and paid_at is null
+  `;
+  return { creditLimit: Number(customer.credit_limit), outstanding: Number(outstanding) };
+}
+
 // Collections module (2026-09-08). The one real moment a shipment becomes fully settled — used by
 // both shipments-mark-paid (dashboard.html's simple "mark this one paid" button) and
 // shipments-apply-payment (Collections' $-amount waterfall across a customer's open shipments), so

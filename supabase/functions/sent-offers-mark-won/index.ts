@@ -10,7 +10,7 @@
 // re-running the cascade — that 409 is this endpoint's idempotency guard, not a separate key.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { computeCustomerExposure, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -66,20 +66,16 @@ Deno.serve(async (req) => {
     // instead of refusing outright — override_credit_check proceeds anyway, same shape as every
     // other duplicate/limit check in this API. Uses the FINAL (possibly overridden) sale amount.
     if (offer.customer_id && finalTotalSale != null && !override_credit_check) {
-      const [customer] = await sql`select credit_limit from customers where id = ${offer.customer_id}`;
-      if (customer?.credit_limit != null) {
-        const [{ outstanding }] = await sql`
-          select coalesce(sum(sale_amount), 0) as outstanding from shipments
-          where customer_id = ${offer.customer_id} and paid_at is null
-        `;
-        const projected = Number(outstanding) + Number(finalTotalSale);
-        if (projected > Number(customer.credit_limit)) {
+      const exposure = await computeCustomerExposure(sql, offer.customer_id);
+      if (exposure) {
+        const projected = exposure.outstanding + Number(finalTotalSale);
+        if (projected > exposure.creditLimit) {
           return jsonResponse({
             error: "credit_limit_exceeded",
-            message: `This customer's outstanding balance ($${Number(outstanding).toLocaleString()}) plus this order ($${Number(finalTotalSale).toLocaleString()}) would exceed their credit limit ($${Number(customer.credit_limit).toLocaleString()}). Confirm to proceed anyway or wait for payment to free up credit.`,
-            outstanding_balance: outstanding,
+            message: `This customer's outstanding balance ($${exposure.outstanding.toLocaleString()}) plus this order ($${Number(finalTotalSale).toLocaleString()}) would exceed their credit limit ($${exposure.creditLimit.toLocaleString()}). Confirm to proceed anyway or wait for payment to free up credit.`,
+            outstanding_balance: exposure.outstanding,
             order_amount: finalTotalSale,
-            credit_limit: customer.credit_limit,
+            credit_limit: exposure.creditLimit,
             projected_total: projected,
           }, 409);
         }

@@ -5,7 +5,7 @@
 // never silently rewrites what a customer was actually shown historically).
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { computeCustomerExposure, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -82,7 +82,29 @@ Deno.serve(async (req) => {
       return offer;
     });
 
-    return jsonResponse({ created: true, offer }, 201);
+    // Real ask 2026-09-12: quoting/offering the customer must never be blocked ("no dejar de
+    // ofertar") — the hard block belongs later, at the first contact with the plant (see
+    // sent-offers-log-event). This is only an advisory: the trader still sees the customer's
+    // over-limit status right on the send, in Spanish since it's shown alongside a customer-facing
+    // offer (see feedback_app_ui_always_english's exception for this one case).
+    let creditWarning = null;
+    if (total_sale != null) {
+      const exposure = await computeCustomerExposure(sql, customer_id);
+      if (exposure) {
+        const projected = exposure.outstanding + Number(total_sale);
+        if (projected > exposure.creditLimit) {
+          creditWarning = {
+            message: `⚠ ${customer.trade_name} tiene $${exposure.outstanding.toLocaleString()} USD pendientes de pago (límite de crédito: $${exposure.creditLimit.toLocaleString()} USD). Para liberar cupo debemos ponernos al día con el pago de las facturas vencidas.`,
+            outstanding_balance: exposure.outstanding,
+            offer_amount: total_sale,
+            credit_limit: exposure.creditLimit,
+            projected_total: projected,
+          };
+        }
+      }
+    }
+
+    return jsonResponse({ created: true, offer, credit_warning: creditWarning }, 201);
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }
