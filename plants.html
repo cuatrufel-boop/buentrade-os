@@ -3600,6 +3600,19 @@ async function applyPriceList(){
     return;
   }
 
+  // Real ask 2026-09-12 ("el sistema me deja subir los mismos precios cada vez... debe saber que
+  // estoy repitiendo la misma info y decir estos mismos precios ya estan publicados"): compared
+  // against plantProducts (this plant's own current on-file prices) BEFORE any of this batch's
+  // writes happen — checking afterward would compare a price against itself, since Apply All just
+  // wrote it. Still saved below (price_date still moves to today — the price really was reconfirmed
+  // today, that's a real fact worth keeping), just called out separately in the summary instead of
+  // being indistinguishable from a genuine change.
+  const priceUnchanged = row => {
+    const onFile = plantProducts.find(p => p.id === row.matchedProductId);
+    return !!(onFile && onFile.current_price != null && Number(onFile.current_price).toFixed(4) === Number(row.price).toFixed(4));
+  };
+  const alreadyPublished = toApply.filter(priceUnchanged);
+
   document.getElementById('priceListMsg').textContent = `Saving ${toApply.length} price(s)${toSendPending.length ? ` and sending ${toSendPending.length} to Pending Matches` : ''}…`;
   // Rows are independent writes to independent product rows — nothing here depends on another
   // row's result — so they save in parallel instead of one at a time. With ~1-1.5s per Edge
@@ -3671,7 +3684,9 @@ async function applyPriceList(){
     .map(r => allCatalogProducts && allCatalogProducts.find(p => p.id === r.matchedProductId))
     .filter(p => p && (!p.full_name_en || !p.full_name_es));
   const uniqueMissing = [...new Map(missingFullName.map(p => [p.id, p])).values()];
-  plShowNotice(`${applied.length} price(s) updated.${sentToPending.length ? ` ${sentToPending.length} sent to Pending Matches.` : ''}${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}${pendingErrors ? ` ${pendingErrors} failed to send to Pending Matches, still pending above.` : ''}`);
+  const alreadyPublishedApplied = applied.filter(r => alreadyPublished.includes(r));
+  const genuinelyChanged = applied.length - alreadyPublishedApplied.length;
+  plShowNotice(`${genuinelyChanged} price(s) updated.${alreadyPublishedApplied.length ? ` ${alreadyPublishedApplied.length} unchanged — these same prices were already published, just reconfirmed today.` : ''}${sentToPending.length ? ` ${sentToPending.length} sent to Pending Matches.` : ''}${pending.length ? ` ${pending.length} row(s) with no product/price, still pending above.` : ''}${errors ? ` ${errors} failed to save, still pending above.` : ''}${pendingErrors ? ` ${pendingErrors} failed to send to Pending Matches, still pending above.` : ''}`);
   // Real ask 2026-09-11 ("loads y correo deben sacar confirmacion"): a pickup location this apply
   // just mentioned but that isn't on this plant's own Locations list yet was queued as a suggestion
   // (see applyPlantProductMatch.ts), never created silently — ask right now, not on the next visit.
