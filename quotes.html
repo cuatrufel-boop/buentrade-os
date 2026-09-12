@@ -121,7 +121,7 @@
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
-  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;font-family:inherit;cursor:pointer;}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:var(--card);color:var(--red);border:1.5px solid var(--red);padding:5px 10px;font-size:12px;}
   /* Same white-button issue as .pkg-trigger-btn — .btn.secondary/.btn.danger are also used inside
@@ -134,7 +134,7 @@
      be its own flat solid green, a visibly different shade/finish from rq-customer-bulk-btn's own
      WhatsApp gradient sitting right next to it in the same modal. Same gradient, same shadow, same
      family now — just its own smaller size for this denser per-customer card layout. */
-  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;fill:currentColor;}
@@ -491,10 +491,9 @@
   .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
   .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
 
-  /* Real ask 2026-09-09 ("deja por default SOLO los updating no saques los otros"): Ready/Expired
-     are click-to-reveal now (rqToggleReadySection/rqToggleExpiredSection) — this is their
-     "currently shown" state, a brighter ring on top of whichever color (danger/ok) the card
-     already has, so it's obvious which of the two is expanded right now. */
+  /* Real ask 2026-09-12 ("cada boton una pestana"): Updating/Expired/Ready double as a tab strip
+     (rqSetSweepTab) — this is the "currently open tab" state, a brighter ring on top of whichever
+     color (warn/danger/ok) the card already has. */
   .stat-card.active{box-shadow:0 0 0 2px rgba(255,255,255,.4), 0 3px 14px -2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);}
   .rq-hero-banner{position:relative;background:transparent;padding:64px 42px 46px;overflow:hidden;}
   /* Real ask 2026-09-09 ("el search no va ahi"): this used to be a full decorative hero (headline,
@@ -646,7 +645,7 @@
      the one deliberate "bold" move here, everything else stays quiet around it. ---- */
   /* Real redesign 2026-09-08, explicit ask ("todo facil en la misma pantalla"): one continuous
      page, Building's tray always visible up top and the Ready/Expired/Updating sweep always
-     visible below it (always, in fixed Ready/Expired/Updating order — see rqApplyStatFilterVisibility) — no 2-column grid, no
+     visible below it (always, in fixed Ready/Expired/Updating order — see rqRenderSweepTables) — no 2-column grid, no
      tabs to click through. */
   .rq-board{padding-top:18px;position:relative;z-index:2;}
   /* Explicit ask 2026-09-04 ("todo el dashboard dale ese color azul"): same tinted panel the
@@ -695,7 +694,7 @@
   .rq-tray-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#B8791A 0%,#E8B54C 100%);}
   .tt-card{border-radius:16px;overflow:hidden;margin-top:8px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
   /* Same full-screen Trading Tool viewer as Offers — one shared overlay, not one per plant row. */
-  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
+  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:850;display:none;flex-direction:column;}
   .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:10px;}
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
@@ -1038,86 +1037,90 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 
-  <!-- Real redesign 2026-09-08, explicit ask ("todo facil en la misma pantalla que cambia segun
-       le filtras con el boton de arriba... building sigue funcionando... pero no sobre esa tabla
-       sino sobre el sistema nuevo de pantallas transparentes"): no second tab row — the stat
-       cards ABOVE (rq_stats_row: Updating/Expired/Ready) are plain counters, and the 3 sweep
-       tables stay visible, stacked, always (see rqApplyStatFilterVisibility).
-       Real ask 2026-09-09, final and explicit ("NO LA QUIERO MAS... sigues con esa tabla de
-       building"): the Building tray itself is no longer shown at all — searching (rqAddVariantToQuote)
-       now feeds straight into the same 3 sweep tables below (loadPendingPrices runs right after
-       an add), which already carry their own real actions (View Quote/send, Ask for Update).
-       #rq_card stays in the DOM, just hidden — rq_customers_wrap and the delivery-date pieces
-       inside it are still real, shared nodes other code (qOpenPendingPlantInline, rqFindCustomers,
-       rqOpenCalendarModal) relies on finding by id; removing the elements outright would break
-       those, not just hide a view. -->
-  <div class="rq-board" id="rq_board">
-    <div class="rq-tray-card" id="rq_card" style="display:none;">
-      <div id="rq_summary_strip" style="display:none;border-bottom:1px solid rgba(255,255,255,.15);padding:0 0 12px;margin-bottom:14px;">
-        <div class="pending-group-head" style="margin-bottom:0;">
-          <div id="rq_spec_line" class="pending-group-title"></div>
-          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
-            <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
-              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-                <div id="rq_date_chips" style="display:contents;"></div>
-                <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
-              </div>
+  <!-- Real revert 2026-09-12, explicit ("empecemos poco a poco... no quiero que el sistema grave
+       nada de las busquedas"): stepping back from the "work this product" modal — that flow hangs
+       off the search box's own rqAddVariantToQuote, which does real writes (stamps
+       last_requested_at, sends auto-ask emails). Parking it; #rq_card goes back to hidden-in-DOM,
+       same as it's been since 2026-09-09 ("NO LA QUIERO MAS") — untouched, nothing here reads or
+       writes anything on its own.
+       First step only: the 3 sweep tables below are real tabs now (rqSetSweepTab) — one visible at
+       a time, each the FULL unfiltered system list for that status, no search tied to them at all. -->
+  <div class="rq-tray-card" id="rq_card" style="display:none;">
+    <div id="rq_summary_strip" style="display:none;border-bottom:1px solid rgba(255,255,255,.15);padding:0 0 12px;margin-bottom:14px;">
+      <div class="pending-group-head" style="margin-bottom:0;">
+        <div id="rq_spec_line" class="pending-group-title"></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+          <div id="rq_dates_wrap" class="field" style="display:none;margin-bottom:0;">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <div id="rq_date_chips" style="display:contents;"></div>
+              <button type="button" id="rq_add_date_btn" class="rq-date-add-btn" onclick="rqOpenCalendarModal()" title="Add delivery date">+</button>
             </div>
-            <span id="rq_spec_count" class="pending-group-count" style="display:none;"></span>
           </div>
+          <span id="rq_spec_count" class="pending-group-count" style="display:none;"></span>
         </div>
-      </div>
-
-      <!-- Real ask 2026-09-08 ("no quiero la tabla building quiero la de collection"): one flat
-           table, same shape as collections.html's own (one <thead>, one <tbody>, no repeated
-           per-variant header/table like this used to have) — a Product column identifies which
-           variant each row belongs to, exactly like the Ready/Expired/Updating tables below
-           already do, instead of a separate mini-table per variant. -->
-      <div class="table-scroll" style="margin-top:10px;">
-        <table>
-          <thead><tr><th>Product</th><th>Plant</th><th>Price</th><th>Sale</th><th></th></tr></thead>
-          <tbody id="rq_plant_rows"></tbody>
-        </table>
-      </div>
-      <!-- Explicit ask 2026-09-04 ("algo bonito... no asi como si fuera un error"): the resting
-           state of a brand-new quote is normal, not a failure — a plain grey sentence read like a
-           warning banner. Same wordmark treatment as the header logo, on its own tinted panel,
-           reads as "start here" instead of "something's wrong." -->
-      <div id="rq_empty" class="rq-tray-empty" style="display:none;">
-        <div class="rq-tray-empty-mark">Buen<span>Trade</span></div>
-        <div class="rq-tray-empty-text">Nothing added yet</div>
-        <div class="rq-tray-empty-sub">Search a cut above and click <b>+ Add</b> on the variant(s) you want.</div>
-      </div>
-
-      <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
-          <div style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
-        </div>
-        <div id="rq_customers_list"></div>
       </div>
     </div>
+    <div class="table-scroll" style="margin-top:10px;">
+      <table>
+        <thead><tr><th>Product</th><th>Plant</th><th>Price</th><th>Sale</th><th></th></tr></thead>
+        <tbody id="rq_plant_rows"></tbody>
+      </table>
+    </div>
+    <div id="rq_empty" class="rq-tray-empty" style="display:none;">
+      <div class="rq-tray-empty-mark">Buen<span>Trade</span></div>
+      <div class="rq-tray-empty-text">Nothing added yet</div>
+      <div class="rq-tray-empty-sub">Search a cut above and click <b>+ Add</b> on the variant(s) you want.</div>
+    </div>
+    <div id="rq_customers_wrap" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap;">
+        <div style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.04em;">Customers who buy this</div>
+      </div>
+      <div id="rq_customers_list"></div>
+    </div>
+  </div>
 
-    <!-- Real ask 2026-09-09 ("deja por default SOLO los updating no saques los otros"): Ready
-         and Expired stay fully built (never deleted — just click their stat card above to reveal
-         them, see rqToggleReadySection/rqToggleExpiredSection), hidden by default so they don't
-         sit there as unrelated-looking clutter while the trader is heads-down on new searches.
-         Updating is the one section that's always visible — it's the actionable "needs a reply"
-         list, not a to-do the trader has to remember to check for. -->
-    <!-- Real ask 2026-09-09 ("debe quedr como invoices... no tiene tabla no tiene el formato"):
-         same .card + <h2> treatment as collections.html's Invoiced Orders — a real bordered,
-         filled card around each table instead of bare text floating on the page background. -->
+  <div class="rq-board" id="rq_board">
+    <!-- Real redesign 2026-09-12 ("cada boton una pestana mostrando TODOS los productos del
+         sistema... busco un producto y me saca las 3 versiones... pon a funcionar este boton"):
+         the 3 stat cards above (rq_stats_row) are the tab strip for the default, unfiltered,
+         system-wide view — clicking Updating/Expired/Ready shows that one table, the other two
+         hide, and drops any active search. "Products In Progress" is its own 4th tab now (tab:
+         'quote') — the one place searching a product (rq_search_trigger, or clicking any product
+         name in a row) is meant to live: it sets rqActiveProductFilterId, which shows all 3
+         sections at once, each sliced to just that product. This chip is the one way back to an
+         empty search on that same tab. See rqRenderSweepTables/rqFilterToProduct/
+         rqClearProductFilter/rqSetSweepTab. -->
+    <div id="rq_filter_chip_wrap" style="display:none;align-items:center;gap:10px;margin:0 0 16px;">
+      <span class="pkg-tag" style="cursor:default;">Showing: <b id="rq_filter_chip_label"></b></span>
+      <button type="button" class="qbucket-waiting-row-decline" onclick="rqClearProductFilter()">✕ Clear</button>
+    </div>
+    <div id="rq_quote_empty" class="rq-tray-empty" style="display:none;padding:48px 20px;">
+      <div class="rq-tray-empty-mark">Buen<span>Trade</span></div>
+      <div class="rq-tray-empty-text">Search a product above</div>
+      <div class="rq-tray-empty-sub">Type a cut name (e.g. "boneless picnic VAC") to see it across Ready, Expired, and Updating.</div>
+    </div>
     <div class="rq-results-col" style="padding-top:12px;">
-      <div class="card qbucket qbucket-ready" id="rq_ready_section" style="display:none;">
+      <div class="card qbucket qbucket-ready" id="rq_ready_section">
         <h2>Ready to Send</h2>
         <div id="rq_ready_results"></div>
       </div>
-      <div class="card qbucket qbucket-expired" id="rq_expired_section" style="display:none;">
+      <div class="card qbucket qbucket-expired" id="rq_expired_section">
         <h2>Expired <span class="muted" style="font-weight:400;font-size:13px;">— your call</span></h2>
         <div id="rq_expired_results"></div>
       </div>
-      <div class="card qbucket qbucket-waiting">
+      <div class="card qbucket qbucket-waiting" id="rq_updating_section">
         <h2>Updating</h2>
         <div id="rq_updating_results"></div>
+      </div>
+      <!-- Real ask 2026-09-12 ("todas casi las plantas ofrecen este producto por que no muestra
+           las posibles plantas que lo tienen"): only ever shown while filtered to one product
+           (see rqRenderSweepTables) — every plant that shares this product's category but has NO
+           plant_products row for it at all yet (never asked, never declined). "Ask for Price"
+           creates that real link + sends a real ask, through the same preview-before-send modal
+           every other ask in this app uses — never fired automatically just from viewing this. -->
+      <div class="card qbucket qbucket-waiting" id="rq_possible_section" style="display:none;">
+        <h2>Possible <span class="muted" style="font-weight:400;font-size:13px;">— never asked</span></h2>
+        <div id="rq_possible_results"></div>
       </div>
     </div>
   </div>
@@ -1382,13 +1385,21 @@ async function loadQuotesPage(){
   renderRqPlants();
   rqRenderGroupedResults(); // same reasoning — paints the results column's own resting hint immediately
 
+  // Real bug fixed 2026-09-12, confirmed live with a screenshot ("quedo todo en cero"): the 3
+  // sweep tables' very first population used to happen only indirectly, through
+  // rqRenderGroupedResults' own empty-search-box branch calling loadPendingPrices() as a side
+  // effect. That branch was made a cheap, non-fetching re-render today (rqClearProductFilter,
+  // see rqRenderGroupedResults) for real performance reasons — which silently removed the only
+  // thing that ever triggered the first real fetch, leaving every stat card at 0 until the 45s
+  // poll below eventually caught up. Calling it directly here is the actual, explicit trigger now.
+  loadPendingPrices();
+
   // Explicit ask 2026-09-03: "y refresh" — the Dashboard only ever updated on a manual reload or
   // re-entering Quotes, so a price the API had already filled in from a plant's reply sat unseen
   // until the trader happened to trigger one of those. Skips entirely while a plant's inline
   // session is open (rqPendingInlineOpenId) — a background rebuild mid-edit is exactly the "duplicated
   // ficha" class of bug qOpenPendingPlantInline's own teardown was built to prevent, not something
-  // to reintroduce here. Safe to call while a search is typed too — loadPendingPrices only touches
-  // the DOM when the box is empty, and either way keeps the pending-count badge honest.
+  // to reintroduce here.
   setInterval(() => { if (!rqPendingInlineOpenId) loadPendingPrices(); }, 45000);
 }
 
@@ -1431,11 +1442,12 @@ async function rqRenderHero(){
     + picks.map(s => `<button type="button" class="rq-quickpick-chip" onclick="rqQuickPick('${escapeHtml(s.matchName).replace(/'/g, "\\'")}',${s.productId ? `'${s.productId}'` : 'null'})">${escapeHtml(s.matchName)}</button>`).join('');
 }
 
-// A quick pick is a real variant — clicking it adds it straight to the quote (same as clicking
-// "+ Add" on that exact result), not just filling the search box.
+// A quick pick is a real variant — clicking it views it straight away (same as clicking the
+// arrow on that exact search result), not just filling the search box. Real fix 2026-09-12: used
+// to call rqAddVariantToQuote (a real write) — now a pure filter, see rqFilterToProduct.
 function rqQuickPick(name, productId){
   document.getElementById('rq_product_name').value = name;
-  if (productId) rqAddVariantToQuote(productId);
+  if (productId) rqFilterToProduct(productId);
   rqCloseSearchPalette();
 }
 
@@ -1463,7 +1475,7 @@ function rqReturnCustomersWrapHome(){
 
 // Real redesign, explicit ask ("siento que solo necesitamos una pestaña"): Quotes and Pending
 // Quotes are one screen — Building's tray and the Ready/Expired/Updating sweep are both always
-// visible on it now (see rqApplyStatFilterVisibility, loadPendingPrices), no sub-tab to switch between them.
+// visible on it now (see rqRenderSweepTables, loadPendingPrices), no sub-tab to switch between them.
 // Only two real top-level destinations left: this merged Quotes screen, and Product Coverage (a
 // genuinely separate lookup tool, not a to-do list). Everything the old 3-way switch used to
 // protect against — stale duplicate element ids, an orphaned calculator overlay, a lost
@@ -1501,18 +1513,23 @@ const RQ_EMPTY_MSG = {
   expired: 'Nothing expired.',
   updating: 'Nothing waiting on a price.',
 };
-function rqApplyStatFilterVisibility(){
-  const apply = (id, kind) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.display = '';
-    if (rqBucketCounts[kind] === 0) el.innerHTML = `<div class="empty">${RQ_EMPTY_MSG[kind]}</div>`;
-  };
-  document.getElementById('rq_ready_section').style.display = rqShowReady ? '' : 'none';
-  document.getElementById('rq_expired_section').style.display = rqShowExpired ? '' : 'none';
-  apply('rq_ready_results', 'ready');
-  apply('rq_expired_results', 'expired');
-  apply('rq_updating_results', 'updating');
+// Real ask 2026-09-12 ("cada boton una pestana mostrando TODOS los productos del sistema"): the 3
+// stat cards double as a tab strip now — one section visible at a time, always the FULL
+// unfiltered system list for that status, never anything scoped to a search. rqSetSweepTab is the
+// one place that changes which tab is open.
+let rqActiveSweepTab = 'updating';
+// Real ask 2026-09-12: clicking a tab is "go back to browsing everything" — always clears any
+// active product filter (rqFilterToProduct) rather than leaving a stale filter applied underneath
+// a tab that no longer shows it as a chip. rqRenderSweepTables (defined above loadPendingPrices,
+// alongside the filter state) does the actual render — content + visibility together, in one place.
+function rqSetSweepTab(tab){
+  rqActiveSweepTab = tab;
+  // Real ask 2026-09-12 ("pon a funcionar este boton"): Ready/Expired/Updating are "go browse
+  // everything" clicks — always drop any active product filter. Quote is the one tab the filter
+  // belongs on, so clicking it (or already being on it while typing a search) never clears it.
+  if (tab !== 'quote') rqActiveProductFilterId = null;
+  rqRenderSweepTables();
+  renderRqStats();
 }
 
 // Answers "did this actually get recorded for every plant, or just one?" without opening
@@ -1615,15 +1632,11 @@ if (rqSearchKbdEl) rqSearchKbdEl.textContent = rqIsMac ? '⌘K' : 'Ctrl K';
 //
 let rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
 
-// Real ask 2026-09-09 ("deja por default SOLO los updating no saques los otros se esta quedando
-// ahi gravados en las nuevas busquedas"): Ready/Expired hidden by default now — sitting there
-// permanently made them read as stuck/unrelated clutter while searching for something else.
-// Clicking their own stat card reveals them (a real toggle, not gone) — Updating has no toggle,
-// it's always on since that's the one section the trader actually needs to see unprompted.
-let rqShowReady = false, rqShowExpired = false;
-function rqToggleReadySection(){ rqShowReady = !rqShowReady; rqApplyStatFilterVisibility(); renderRqStats(); }
-function rqToggleExpiredSection(){ rqShowExpired = !rqShowExpired; rqApplyStatFilterVisibility(); renderRqStats(); }
-
+// Real revert 2026-09-12, explicit ("quiero cada boton con todo sin filtrar"): Ready/Expired used
+// to hide by default behind a stat-card click — with the product-specific work window below now
+// covering the "just this one product" case, hiding whole buckets here only made the default view
+// (see everything, unfiltered) harder to get to. All 3 sweep tables show unfiltered, always, same
+// as Updating already did — stat cards are pure counters again, not a filter control.
 function renderRqStats(){
   const wrap = document.getElementById('rq_stats_row');
   if (!wrap) return;
@@ -1634,17 +1647,22 @@ function renderRqStats(){
   // decision now), ok=green (good to go), same meaning those 4 colors already carry everywhere
   // else in the app (Collections' aging report, payment badges).
   const stats = [
-    { value: String(productsInProgress), label: 'Products In Progress', cls: 'hero' },
-    { value: String(rqBucketCounts.updating), label: 'Updating', cls: 'warn',
+    // Real ask 2026-09-12 ("pon a funcionar este boton para buscar producto"): the one real tab
+    // for "search a specific product and see it across Ready/Expired/Updating at once" — see
+    // rqRenderSweepTables' 'quote' branch and rqFilterToProduct. Clicking it does NOT clear an
+    // already-active product filter (rqSetSweepTab only clears the filter for the other 3 tabs,
+    // which are "go browse everything" clicks) — this is the one tab the filter belongs on.
+    { value: String(productsInProgress), label: 'Products In Progress', cls: 'hero', tab: 'quote' },
+    { value: String(rqBucketCounts.updating), label: 'Updating', cls: 'warn', tab: 'updating',
       icon: '<path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>' },
-    { value: String(rqBucketCounts.expired), label: 'Expired', cls: 'danger', active: rqShowExpired,
-      onclick: 'rqToggleExpiredSection()', icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-    { value: String(rqBucketCounts.ready), label: 'Ready', cls: 'ok', active: rqShowReady,
-      onclick: 'rqToggleReadySection()', icon: '<path d="M20 6 9 17l-5-5"/>' },
+    { value: String(rqBucketCounts.expired), label: 'Expired', cls: 'danger', tab: 'expired',
+      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+    { value: String(rqBucketCounts.ready), label: 'Ready', cls: 'ok', tab: 'ready',
+      icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];
   stats[0].icon = '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>';
   wrap.innerHTML = stats.map(s => `
-    <div class="stat-card ${s.cls}${s.active ? ' active' : ''}"${s.onclick ? ` onclick="${s.onclick}" style="cursor:pointer;" title="Click to ${s.active ? 'hide' : 'show'} this list"` : ''}>
+    <div class="stat-card ${s.cls}${s.tab && s.tab === rqActiveSweepTab ? ' active' : ''}"${s.tab ? ` onclick="rqSetSweepTab('${s.tab}')" style="cursor:pointer;" title="${s.tab === 'quote' ? 'Search a product' : 'Show ' + escapeHtml(s.label)}"` : ''}>
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
       <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
     </div>`).join('');
@@ -1660,13 +1678,203 @@ function renderRqStats(){
 // already quoted with 1 price is hot, chasing 4 more gives the customer more options and a
 // better shot at the bid," not four disconnected plant rows that happen to share a name.
 // Real redesign 2026-09-08: renders into its own 3 dedicated containers
-// (rq_ready_results/rq_expired_results/rq_updating_results — see rqApplyStatFilterVisibility),
+// (rq_ready_results/rq_expired_results/rq_updating_results — see rqRenderSweepTables),
 // all always live on the same page, stacked, regardless of what's typed in the search box. Always
 // re-fetches and keeps qPendingRows/the stat-card counts current, so the Quotes tab's own badge
 // and the 3 stat cards stay true.
+
+// Real ask 2026-09-12 ("ese producto me va a sacar las 3 versiones... solo de ese producto"):
+// the full, already-fetched Ready/Expired/Updating arrays (set once per real loadPendingPrices
+// fetch) plus which single product, if any, the trader is currently filtered to. rqRenderSweepTables
+// re-slices these in memory — no API call, nothing written — every time the tab or filter changes.
+let rqAllReadyRows = [], rqAllExpiredRows = [], rqAllWaitingRows = [];
+let rqActiveProductFilterId = null;
+// Every plant_id+product_id pair that has a plant_products row, mapped to its real
+// {current_price, last_requested_at, declined_at} (see loadPendingPrices). Real fix 2026-09-12,
+// confirmed live ("casi todas las plantas ofrecen este producto por que no muestra las posibles"):
+// a plant can already have a row (created during an unrelated price-list import, say) yet still be
+// genuinely "never asked" — current_price null AND last_requested_at null. Possible originally
+// checked row EXISTENCE only, which wrongly treated that plant as already-covered and hid it
+// everywhere: no price/not stale enough for Ready/Expired, no last_requested_at for Updating, and
+// "has a row" for Possible. A Map (not a Set) is what lets rqRenderSweepTables tell that case apart
+// from a plant that's actually already been asked (last_requested_at set — real Updating territory)
+// or declined (closed, not a candidate at all).
+let rqAllPlantProductPairs = new Map();
+
+// Hoisted 2026-09-12 (was 4 local closures inside loadPendingPrices) so rqRenderSweepTables can
+// reuse the exact same row markup when re-slicing for a product filter, without a second copy that
+// could drift. None of these ever depended on loadPendingPrices' own locals — only on their own
+// params and already-global state (products, rqPendingCalcCache) — so hoisting changes nothing
+// about what they render.
+const rqProductName = (productId) => {
+  const prod = products.find(p => p.id === productId);
+  return prod ? (prod.full_name_en || prod.name_en || prod.name) : '(removed from catalog)';
+};
+// Real fix 2026-09-12: this used to open the now-permanently-hidden Building tray
+// (qOpenProductInRequest → rqAddVariantToQuote) — a dead click that still silently wrote real data
+// (stamped last_requested_at, sometimes fired a real auto-ask email) with nothing visible to show
+// for it. Points at the new read-only product filter instead — the one thing this whole redesign
+// is for: click any product's name, anywhere in these 3 tables, to see it across all 3 at once.
+const rqProductCellHtml = (productId) => `<span class="pending-group-title-link" style="font-size:13px;" onclick="rqFilterToProduct('${productId}')" title="View this product across Ready/Expired/Updating">${escapeHtml(rqProductName(productId))}</span>`;
+// Same q-pending-inline-slot mechanism as before (qOpenPendingPlantInline/rqCloseCalculator),
+// completely untouched — only its wrapper changed from a plain div to a table row, so a real,
+// already-hardened piece of DOM (multiple past "duplicated ficha" bugs fixed here) keeps working
+// exactly as-is. The <tr> itself never toggles; the inner div's own display:none/block (set
+// elsewhere, unchanged) is what shows or hides it, same as always.
+const rqInlineSlotRowHtml = (plantId, productId, colspan) =>
+  `<tr><td colspan="${colspan}" style="padding:0;border-top:none;">
+    <div class="q-pending-inline-slot" id="q_pending_inline_${plantId}_${productId}" style="display:none;padding:0 0 12px;"></div>
+  </td></tr>`;
+
+// Explicit ask 2026-09-04: "solo miro los blinking con precio y los mando" — Ready rows blink
+// for as long as they're sitting here unsent (same rule as before, unchanged).
+const rqReadyRowHtml = (r, g) => {
+  const cachedCalc = rqPendingCalcCache[r.plant_id + '|' + g.productId];
+  const priceHtml = cachedCalc
+    ? `<span class="pkg-tag price pkg-tag-blink">$${Number(r.current_price).toFixed(4)}/lb</span>`
+    : `<span class="pkg-tag price pkg-tag-blink" style="cursor:pointer;" title="View Quote" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">$${Number(r.current_price).toFixed(4)}/lb</span>`;
+  const saleHtml = cachedCalc
+    ? `<span class="num">$${cachedCalc.salePerLb.toFixed(4)}/lb</span><span class="muted" style="display:block;font-size:11px;">Total $${cachedCalc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</span>`
+    : '<span class="muted">—</span>';
+  // Real redesign 2026-09-04 ("el boton va a aparecer solo cuando... purchase y sales price
+  // CONFIRMADO"): only a row with both prices confirmed gets a real send trigger.
+  const actionsHtml = cachedCalc ? `
+    <button type="button" class="rq-customer-bulk-btn email" style="padding:7px 10px;" title="Email this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','email')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
+    <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>`
+    : '<span class="muted">—</span>';
+  return `<tr>
+      <td>${rqProductCellHtml(g.productId)}</td>
+      <td class="muted">${escapeHtml(r.plant.name)}</td>
+      <td class="num">${priceHtml}</td>
+      <td>${saleHtml}</td>
+      <td><div style="display:flex;gap:8px;">${actionsHtml}</div></td>
+    </tr>
+    ${rqInlineSlotRowHtml(r.plant_id, g.productId, 5)}`;
+};
+
+// Real ask 2026-09-09, explicit: "las expired puedo o mandar con ese precio y/o pedir update y
+// pasan a updating tabla de abajo" — Expired gets 2 real actions of its own now, no detour
+// through Building needed: the price tag itself opens the same inline calculator Ready's own
+// price tag uses (qOpenPendingPlantInline — it already reads the real current_price on file,
+// stale or not, so confirming here IS "send with that price anyway"), and a dedicated
+// "Ask for Update →" button sends a real price-request (same preview-before-send modal as
+// everywhere else) and refreshes this sweep — reaskedStale then reclassifies the row into
+// Updating below on its own, no separate code path needed for that move.
+const rqExpiredRowHtml = (r, g) => `<tr>
+    <td>${rqProductCellHtml(g.productId)}</td>
+    <td class="muted">${escapeHtml(r.plant.name)}</td>
+    <td class="num"><span class="pkg-tag stale" style="cursor:pointer;" title="Send with this price anyway" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">Expired · ${rqFmtDate(r.price_date)}</span></td>
+    <td><button type="button" class="pkg-trigger-btn" onclick="qAskUpdateForSweepRow('${r.plant_id}','${g.productId}')">Ask for Update →</button></td>
+  </tr>
+  ${rqInlineSlotRowHtml(r.plant_id, g.productId, 4)}`;
+
+// Real ask 2026-09-04 ("quitar dropdown de plantas waiting... no quiero mas fondos blancos"):
+// flat rows, same .pkg-tag treatment as Ready/Expired — unchanged, just a table row now.
+const rqWaitingRowHtml = (r, g) => `<tr>
+    <td>${rqProductCellHtml(g.productId)}</td>
+    <td class="muted">${escapeHtml(r.plant.name)}</td>
+    <td class="num">${rqFmtDate(r.last_requested_at)}</td>
+    <td><button type="button" class="qbucket-waiting-row-decline" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Off-Spec</button></td>
+  </tr>`;
+
+// Real ask 2026-09-04 ("el expired ya le pedimos update desde building, no deberia estar ahi"):
+// a stale price already re-asked for (Update Price sent, last_requested_at past price_date) is
+// the same "waiting on a reply" state as a plant that never had a price — unchanged rule.
+const reaskedStale = r => r.stale && r.last_requested_at && (!r.price_date || new Date(r.last_requested_at) > new Date(r.price_date));
+
+// Section titles are static HTML now (see qPanel_request) — this only ever builds the table
+// itself, same as collections.html's own <div class="table-scroll"><table>...</table></div>.
+const rqTableSection = (rowsHtml, headCells) => `
+  <div class="table-scroll"><table>
+    <thead><tr>${headCells.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>`;
+
+// Real ask 2026-09-12 ("cada boton una pestana... busco un producto y me saca las 3 versiones"):
+// the one place that decides what's actually on screen — pure re-render from the already-fetched
+// rqAll*Rows, no fetch, nothing written. Two modes: no product filter → tab mode, exactly one of
+// the 3 sections shown, full system-wide list (rqActiveSweepTab). A product filter active → all 3
+// sections shown at once, each sliced down to just that one product's rows, so a search for e.g.
+// "Boneless Picnic VAC" shows its Ready row, its Expired row, and its Updating row together.
+function rqRenderSweepTables(){
+  const readyList = document.getElementById('rq_ready_results');
+  const expiredList = document.getElementById('rq_expired_results');
+  const updatingList = document.getElementById('rq_updating_results');
+  if (!readyList || !expiredList || !updatingList) return;
+  const filterId = rqActiveProductFilterId;
+  const ready = filterId ? rqAllReadyRows.filter(x => x.g.productId === filterId) : rqAllReadyRows;
+  const expired = filterId ? rqAllExpiredRows.filter(x => x.g.productId === filterId) : rqAllExpiredRows;
+  const waiting = filterId ? rqAllWaitingRows.filter(x => x.g.productId === filterId) : rqAllWaitingRows;
+  readyList.innerHTML = ready.length
+    ? rqTableSection(ready.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', ''])
+    : `<div class="empty">${filterId ? 'Not ready for this product.' : RQ_EMPTY_MSG.ready}</div>`;
+  expiredList.innerHTML = expired.length
+    ? rqTableSection(expired.map(x => rqExpiredRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', ''])
+    : `<div class="empty">${filterId ? 'Nothing expired for this product.' : RQ_EMPTY_MSG.expired}</div>`;
+  updatingList.innerHTML = waiting.length
+    ? rqTableSection(waiting.map(x => rqWaitingRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Requested', ''])
+    : `<div class="empty">${filterId ? 'Nothing waiting for this product.' : RQ_EMPTY_MSG.updating}</div>`;
+  document.getElementById('rq_ready_section').style.display = (filterId || rqActiveSweepTab === 'ready') ? '' : 'none';
+  document.getElementById('rq_expired_section').style.display = (filterId || rqActiveSweepTab === 'expired') ? '' : 'none';
+  document.getElementById('rq_updating_section').style.display = (filterId || rqActiveSweepTab === 'updating') ? '' : 'none';
+  // Real fix 2026-09-12, confirmed live ("todas casi las plantas ofrecen este producto por que no
+  // muestra las posibles plantas que lo tienen"): only makes sense while filtered to one product —
+  // every plant sharing that product's category that's genuinely untouched for it: either no
+  // plant_products row at all, OR a row exists (e.g. created by an unrelated price-list import)
+  // but nobody has ever priced it or asked for it (current_price and last_requested_at both null).
+  // A row with last_requested_at set is real Updating territory, not Possible — already correctly
+  // shown there. A declined row is closed, never a candidate again.
+  const possibleSection = document.getElementById('rq_possible_section');
+  const possibleList = document.getElementById('rq_possible_results');
+  if (possibleSection && possibleList){
+    const product = filterId ? products.find(p => p.id === filterId) : null;
+    const possible = (product && product.category_id)
+      ? rqAllPlants.filter(pl => {
+          if (pl.category_id !== product.category_id) return false;
+          const info = rqAllPlantProductPairs.get(pl.id + '|' + filterId);
+          if (!info) return true;
+          if (info.declined_at) return false;
+          return info.current_price == null && !info.last_requested_at;
+        })
+      : [];
+    possibleSection.style.display = filterId ? '' : 'none';
+    possibleList.innerHTML = possible.length
+      ? rqTableSection(possible.map(pl => `<tr>
+          <td>${escapeHtml(pl.name)}</td>
+          <td><button type="button" class="pkg-trigger-btn" onclick="rqAskPossiblePlant('${pl.id}','${filterId}')">Ask for Price →</button></td>
+        </tr>`).join(''), ['Plant', ''])
+      : `<div class="empty">${filterId ? 'No other plants in this category to ask.' : ''}</div>`;
+  }
+  const chipWrap = document.getElementById('rq_filter_chip_wrap');
+  if (chipWrap){
+    chipWrap.style.display = filterId ? 'flex' : 'none';
+    if (filterId) document.getElementById('rq_filter_chip_label').textContent = rqProductName(filterId);
+  }
+  // Real ask 2026-09-12 ("pon a funcionar este boton para buscar producto"): Quote is a search-only
+  // tab — on it with nothing searched yet, all 3 sections above are hidden (see the display logic
+  // above: filterId is false and rqActiveSweepTab isn't 'ready'/'expired'/'updating'), so this
+  // prompt is the only thing on screen until a real search picks a product.
+  const quoteEmpty = document.getElementById('rq_quote_empty');
+  if (quoteEmpty) quoteEmpty.style.display = (rqActiveSweepTab === 'quote' && !filterId) ? 'block' : 'none';
+}
+
+// Real ask 2026-09-12 ("busco un producto en particular y ese producto me va a sacar las 3
+// versiones"): pure, read-only — sets which product to slice the 3 already-fetched arrays down
+// to and re-renders. No API call, nothing written, no auto-ask email, no last_requested_at stamp.
+function rqFilterToProduct(productId){
+  rqActiveProductFilterId = productId;
+  rqRenderSweepTables();
+  renderRqStats();
+}
+function rqClearProductFilter(){
+  rqActiveProductFilterId = null;
+  rqRenderSweepTables();
+  renderRqStats();
+}
+
 async function loadPendingPrices(){
   // Real redesign 2026-09-08, explicit ask: Ready to Send/Expired/Updating are always live on
-  // the same page now (see rqApplyStatFilterVisibility), regardless of what's typed in the search box — the
+  // the same page now (see rqRenderSweepTables), regardless of what's typed in the search box — the
   // old searchEmpty gate (this list only rebuilt while the search box was empty, because it used
   // to share ONE container with the live search-results view) no longer applies now that each has
   // its own dedicated container.
@@ -1713,6 +1921,11 @@ async function loadPendingPrices(){
   try { sentRows = (await callApi('sent-offers-search', { status: 'sent', limit: 1000 })).results || []; }
   catch (e) { /* worst case a just-sent plant lingers here one extra reload — never worse than that */ }
   const sentKeys = new Set(sentRows.map(r => r.plant_id + '|' + r.product_id));
+  // Real ask 2026-09-12 ("todas casi las plantas ofrecen este producto por que no muestra las
+  // posibles plantas que lo tienen"): see rqAllPlantProductPairs' own comment — keyed by pair,
+  // valued by the real fields Possible needs to tell "never touched" apart from "already asked" or
+  // "declined," without a second fetch.
+  rqAllPlantProductPairs = new Map(raw.map(r => [r.plant_id + '|' + r.product_id, { current_price: r.current_price, last_requested_at: r.last_requested_at, declined_at: r.declined_at }]));
   qPendingRows = raw.map(r => {
     const plant = rqAllPlants.find(p => p.id === r.plant_id);
     const prod = products.find(p => p.id === r.product_id);
@@ -1738,45 +1951,75 @@ async function loadPendingPrices(){
     return { ...r, plant, prod, missing, stale, priced };
   }).filter(Boolean);
 
+  // Real fix 2026-09-12, confirmed live with real numbers ("cero expired 6 ready cuando hay muchos
+  // precios nuevos y expired tambien"): the 2026-09-04 "solo hasta que alguien lo busque" rule
+  // above scopes qPendingRows (and so Updating, which stays a to-do list of things actually asked)
+  // to only what's been individually searched — but Ready/Expired are supposed to be "todos los
+  // productos del sistema," the full catalog's real priced inventory, not just the subset someone
+  // happened to search for. Confirmed with real staging data: 98 plant_products carry an actual
+  // price system-wide (61 fresh, 37 expired) vs only 43 ever asked — most of a plant's price-list
+  // upload was invisible here for good reason before (2026-09-04's own rule), just not the rule
+  // Ready/Expired need. Same real exclusions as qPendingRows (plant/product must resolve, not
+  // declined, not already graduated to Offers) minus the last_requested_at gate, and restricted to
+  // rows that actually have a price — a missing price is Updating's own territory, unchanged.
+  const qAllPricedRows = raw.map(r => {
+    const plant = rqAllPlants.find(p => p.id === r.plant_id);
+    const prod = products.find(p => p.id === r.product_id);
+    if (!plant || !prod) return null;
+    if (r.declined_at) return null;
+    if (r.current_price == null) return null;
+    const stale = (rqPriceAgeDays(r.price_date) || 0) > RQ_PRICE_STALE_DAYS;
+    const priced = !stale;
+    if (priced && sentKeys.has(r.plant_id + '|' + r.product_id)) return null; // actually sent — graduated to Offers history
+    return { ...r, plant, prod, missing: false, stale, priced };
+  }).filter(Boolean);
+
   const countBadge = document.getElementById('qPendingCount');
   if (qPendingRows.length){ countBadge.textContent = String(qPendingRows.length); countBadge.style.display = 'inline-flex'; }
   else countBadge.style.display = 'none';
-  if (!qPendingRows.length){
+  // Real fix 2026-09-12: this used to gate on qPendingRows alone — with Ready/Expired now reading
+  // from qAllPricedRows (system-wide) instead, a fresh install with plenty of real prices on file
+  // but nothing ever individually asked would wrongly show all 3 sweep tables empty.
+  if (!qPendingRows.length && !qAllPricedRows.length){
+    rqAllReadyRows = []; rqAllExpiredRows = []; rqAllWaitingRows = [];
     rqBucketCounts = { ready: 0, expired: 0, updating: 0 };
     renderRqStats();
-    // Real ask 2026-09-08 ("de resto no lo quiero ver"): none of the 3 show by default at all
-    // any more, empty or not — rqApplyStatFilterVisibility below already leaves every bucket
-    // blank unless the trader clicked its own stat card, so there's no separate "nothing tracked
-    // anywhere" message to special-case here either.
-    readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = '';
-    rqApplyStatFilterVisibility();
+    rqRenderSweepTables();
     return;
   }
 
   // Just the plants still missing a price for each product — no customer/offer context mixed in,
   // this list is only ever "which TT still needs a number typed into it."
-  const groups = {};
-  qPendingRows.forEach(r => (groups[r.product_id] = groups[r.product_id] || []).push(r));
-  const groupList = Object.entries(groups).map(([productId, rows]) => ({
-    productId, rows,
-    // Real fix 2026-09-01, explicit ask: "pending quotes debe ir siempre la mas reciente arriba."
-    // Real bug this replaces: recency used to key off last_requested_at alone, day-rounded — a
-    // plant that had never been individually asked got null age, which Math.min coerces to
-    // Infinity (filtered out on purpose so it didn't wrongly look "touched today"), sinking it to
-    // the very bottom even if it was the newest thing in the whole list, created minutes ago. And
-    // day-rounding meant every row touched today tied at the same age, leaving them in whatever
-    // arbitrary order Object.entries happened to return, not actually newest-first. This is the
-    // real last-touched moment for the group instead — created_at as a floor so a brand-new,
-    // never-asked link still sorts by how new it actually is, full timestamp precision so same-day
-    // activity still orders correctly, and last_requested_at still wins when it's the newer event
-    // (asking again bumps a group back to the top, same as before).
-    recency: Math.max(...rows.map(r => {
-      const requested = r.last_requested_at ? new Date(r.last_requested_at).getTime() : 0;
-      const created = r.created_at ? new Date(r.created_at).getTime() : 0;
-      return Math.max(requested, created);
-    })),
-  }));
-  groupList.sort((a, b) => b.recency - a.recency);
+  // Real fix 2026-09-01, explicit ask: "pending quotes debe ir siempre la mas reciente arriba."
+  // Real bug this replaces: recency used to key off last_requested_at alone, day-rounded — a
+  // plant that had never been individually asked got null age, which Math.min coerces to
+  // Infinity (filtered out on purpose so it didn't wrongly look "touched today"), sinking it to
+  // the very bottom even if it was the newest thing in the whole list, created minutes ago. And
+  // day-rounding meant every row touched today tied at the same age, leaving them in whatever
+  // arbitrary order Object.entries happened to return, not actually newest-first. This is the
+  // real last-touched moment for the group instead — created_at as a floor so a brand-new,
+  // never-asked link still sorts by how new it actually is, full timestamp precision so same-day
+  // activity still orders correctly, and last_requested_at still wins when it's the newer event
+  // (asking again bumps a group back to the top, same as before).
+  // Extracted 2026-09-12 so the new system-wide Ready/Expired grouping (groupListAll, from
+  // qAllPricedRows) and the to-do Updating grouping (groupList, from qPendingRows) share the exact
+  // same real grouping/recency logic instead of two copies that could drift.
+  const rqGroupByProduct = rows => {
+    const groups = {};
+    rows.forEach(r => (groups[r.product_id] = groups[r.product_id] || []).push(r));
+    const list = Object.entries(groups).map(([productId, groupRows]) => ({
+      productId, rows: groupRows,
+      recency: Math.max(...groupRows.map(r => {
+        const requested = r.last_requested_at ? new Date(r.last_requested_at).getTime() : 0;
+        const created = r.created_at ? new Date(r.created_at).getTime() : 0;
+        return Math.max(requested, created);
+      })),
+    }));
+    list.sort((a, b) => b.recency - a.recency);
+    return list;
+  };
+  const groupList = rqGroupByProduct(qPendingRows);
+  const groupListAll = rqGroupByProduct(qAllPricedRows);
 
   // A row already asked today isn't a dead end — the cooldown is a default, not a lock. The
   // Ask Price button stays live either way (a real trader decision: nudge again or not), with
@@ -1792,113 +2035,37 @@ async function loadPendingPrices(){
   // (rq_ready_results/rq_expired_results/rq_updating_results, stacked in fixed order — see
   // qPanel_request's own static HTML), not a shared sidebar column, so there's no width
   // constraint to work around here.
-  const rqProductName = (productId) => {
-    const prod = products.find(p => p.id === productId);
-    return prod ? (prod.full_name_en || prod.name_en || prod.name) : '(removed from catalog)';
-  };
-  const rqProductCellHtml = (productId) => `<span class="pending-group-title-link" style="font-size:13px;" onclick="qOpenProductInRequest('${productId}')" title="Open this product in Quotes">${escapeHtml(rqProductName(productId))}</span>`;
-  // Same q-pending-inline-slot mechanism as before (qOpenPendingPlantInline/rqCloseCalculator),
-  // completely untouched — only its wrapper changed from a plain div to a table row, so a real,
-  // already-hardened piece of DOM (multiple past "duplicated ficha" bugs fixed here) keeps working
-  // exactly as-is. The <tr> itself never toggles; the inner div's own display:none/block (set
-  // elsewhere, unchanged) is what shows or hides it, same as always.
-  const rqInlineSlotRowHtml = (plantId, productId, colspan) =>
-    `<tr><td colspan="${colspan}" style="padding:0;border-top:none;">
-      <div class="q-pending-inline-slot" id="q_pending_inline_${plantId}_${productId}" style="display:none;padding:0 0 12px;"></div>
-    </td></tr>`;
-
-  // Explicit ask 2026-09-04: "solo miro los blinking con precio y los mando" — Ready rows blink
-  // for as long as they're sitting here unsent (same rule as before, unchanged).
-  const rqReadyRowHtml = (r, g) => {
-    const cachedCalc = rqPendingCalcCache[r.plant_id + '|' + g.productId];
-    const priceHtml = cachedCalc
-      ? `<span class="pkg-tag price pkg-tag-blink">$${Number(r.current_price).toFixed(4)}/lb</span>`
-      : `<span class="pkg-tag price pkg-tag-blink" style="cursor:pointer;" title="View Quote" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">$${Number(r.current_price).toFixed(4)}/lb</span>`;
-    const saleHtml = cachedCalc
-      ? `<span class="num">$${cachedCalc.salePerLb.toFixed(4)}/lb</span><span class="muted" style="display:block;font-size:11px;">Total $${cachedCalc.totalSale.toLocaleString('en-US',{maximumFractionDigits:0})}</span>`
-      : '<span class="muted">—</span>';
-    // Real redesign 2026-09-04 ("el boton va a aparecer solo cuando... purchase y sales price
-    // CONFIRMADO"): only a row with both prices confirmed gets a real send trigger.
-    const actionsHtml = cachedCalc ? `
-      <button type="button" class="rq-customer-bulk-btn email" style="padding:7px 10px;" title="Email this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','email')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
-      <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer" onclick="qSendConfirmedPlantOffer('${g.productId}','${r.plant_id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>`
-      : '<span class="muted">—</span>';
-    return `<tr>
-        <td>${rqProductCellHtml(g.productId)}</td>
-        <td class="muted">${escapeHtml(r.plant.name)}</td>
-        <td class="num">${priceHtml}</td>
-        <td>${saleHtml}</td>
-        <td><div style="display:flex;gap:8px;">${actionsHtml}</div></td>
-      </tr>
-      ${rqInlineSlotRowHtml(r.plant_id, g.productId, 5)}`;
-  };
-
-  // Real ask 2026-09-09, explicit: "las expired puedo o mandar con ese precio y/o pedir update y
-  // pasan a updating tabla de abajo" — Expired gets 2 real actions of its own now, no detour
-  // through Building needed: the price tag itself opens the same inline calculator Ready's own
-  // price tag uses (qOpenPendingPlantInline — it already reads the real current_price on file,
-  // stale or not, so confirming here IS "send with that price anyway"), and a dedicated
-  // "Ask for Update →" button sends a real price-request (same preview-before-send modal as
-  // everywhere else) and refreshes this sweep — reaskedStale then reclassifies the row into
-  // Updating below on its own, no separate code path needed for that move.
-  const rqExpiredRowHtml = (r, g) => `<tr>
-      <td>${rqProductCellHtml(g.productId)}</td>
-      <td class="muted">${escapeHtml(r.plant.name)}</td>
-      <td class="num"><span class="pkg-tag stale" style="cursor:pointer;" title="Send with this price anyway" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">Expired · ${rqFmtDate(r.price_date)}</span></td>
-      <td><button type="button" class="pkg-trigger-btn" onclick="qAskUpdateForSweepRow('${r.plant_id}','${g.productId}')">Ask for Update →</button></td>
-    </tr>
-    ${rqInlineSlotRowHtml(r.plant_id, g.productId, 4)}`;
-
-  // Real ask 2026-09-04 ("quitar dropdown de plantas waiting... no quiero mas fondos blancos"):
-  // flat rows, same .pkg-tag treatment as Ready/Expired — unchanged, just a table row now.
-  const rqWaitingRowHtml = (r, g) => `<tr>
-      <td>${rqProductCellHtml(g.productId)}</td>
-      <td class="muted">${escapeHtml(r.plant.name)}</td>
-      <td class="num">${rqFmtDate(r.last_requested_at)}</td>
-      <td><button type="button" class="qbucket-waiting-row-decline" onclick="rqDeclinePlantProduct('${r.id}','${escapeHtml(r.plant.name)}')">✕ Off-Spec</button></td>
-    </tr>`;
-
-  // Real ask 2026-09-04 ("el expired ya le pedimos update desde building, no deberia estar ahi"):
-  // a stale price already re-asked for (Update Price sent, last_requested_at past price_date) is
-  // the same "waiting on a reply" state as a plant that never had a price — unchanged rule.
-  const reaskedStale = r => r.stale && r.last_requested_at && (!r.price_date || new Date(r.last_requested_at) > new Date(r.price_date));
+  // rqProductName/rqProductCellHtml/rqInlineSlotRowHtml/rqReadyRowHtml/rqExpiredRowHtml/
+  // rqWaitingRowHtml/reaskedStale are all hoisted to module scope now (2026-09-12, see above
+  // loadPendingPrices) so rqRenderSweepTables can reuse them for a product-filtered re-render
+  // without a fetch -- nothing left to declare locally here.
+  // Real fix 2026-09-12: Ready/Expired come from groupListAll (system-wide, every real priced
+  // plant_product) now, not groupList (only what has been individually asked) -- see qAllPricedRows
+  // above. Updating stays exactly as it was: groupList's own to-do list of things actually asked,
+  // still waiting on a reply.
   const allReady = [], allExpired = [], allWaiting = [];
-  groupList.forEach(g => {
-    // Explicit ask 2026-09-03: highest price first within Ready — same real bid-sheet order,
+  groupListAll.forEach(g => {
+    // Explicit ask 2026-09-03: highest price first within Ready -- same real bid-sheet order,
     // scoped per product group before flattening so the global table still reads bid-sheet-first
     // within each product's own run of rows.
     g.rows.filter(r => r.priced).sort((a, b) => Number(b.current_price) - Number(a.current_price))
       .forEach(r => allReady.push({ r, g }));
     g.rows.filter(r => r.stale && !reaskedStale(r)).forEach(r => allExpired.push({ r, g }));
+  });
+  groupList.forEach(g => {
     g.rows.filter(r => r.missing || reaskedStale(r)).forEach(r => allWaiting.push({ r, g }));
   });
 
-  // Section titles are static HTML now (see qPanel_request) — this only ever builds the table
-  // itself, same as collections.html's own <div class="table-scroll"><table>...</table></div>.
-  const tableSection = (rowsHtml, headCells) => `
-    <div class="table-scroll"><table>
-      <thead><tr>${headCells.map(h => `<th>${h}</th>`).join('')}</tr></thead>
-      <tbody>${rowsHtml}</tbody>
-    </table></div>`;
-
-  // These 3 counts are the exact same rows the tables below render — see renderRqStats for why
-  // that match matters.
+  // These 3 counts are the exact same rows the tables below render -- see renderRqStats for why
+  // that match matters. Always the true system-wide totals (Ready/Expired) / to-do total
+  // (Updating), never scoped to whatever product filter is active -- rqRenderSweepTables applies
+  // that slice separately, purely at render time.
+  rqAllReadyRows = allReady;
+  rqAllExpiredRows = allExpired;
+  rqAllWaitingRows = allWaiting;
   rqBucketCounts = { ready: allReady.length, expired: allExpired.length, updating: allWaiting.length };
   renderRqStats();
-  // Raw content first, unconditionally — an empty bucket just gets '' here. Whether that empty
-  // bucket then shows a "Nothing X" message or stays truly blank is rqApplyStatFilterVisibility's
-  // call below, which has to run AFTER this (not before) so it's overlaying the real, current
-  // counts instead of being immediately overwritten by them.
-  readyList.innerHTML = allReady.length
-    ? tableSection(allReady.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', ''])
-    : '';
-  expiredList.innerHTML = allExpired.length
-    ? tableSection(allExpired.map(x => rqExpiredRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', ''])
-    : '';
-  updatingList.innerHTML = allWaiting.length
-    ? tableSection(allWaiting.map(x => rqWaitingRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Requested', ''])
-    : '';
-  rqApplyStatFilterVisibility();
+  rqRenderSweepTables();
   } catch (e) {
     const errHtml = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Something went wrong loading this list: ${escapeHtml(e.message)}</div><button type="button" class="pkg-trigger-btn" style="margin:12px auto 0;" onclick="loadPendingPrices()">↻ Retry</button></div>`;
     readyList.innerHTML = expiredList.innerHTML = updatingList.innerHTML = errHtml;
@@ -2187,8 +2354,6 @@ function rqGroupedSearchMatches(term){
   return Object.values(groups).sort((a, b) => a.cutName.localeCompare(b.cutName));
 }
 
-const RQ_PLUS_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
-const RQ_CHECK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
 const RQ_SNOWFLAKE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M4.5 6l15 12M19.5 6l-15 12"/></svg>`;
 const RQ_SUN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`;
 // Real, not decorative — reads the product's actual temperature_id off the lookups table (same
@@ -2198,14 +2363,18 @@ function rqTempIsFrozen(product){
   return /frozen|congelad/i.test((t && (t.name_en || t.name)) || '');
 }
 
-// Renders the grouped, addable results panel — pure preview of the catalog, no side effects on
-// the quote itself. Adding/removing only ever happens through an explicit icon-button click
-// (rqToggleVariantInQuote), never just by typing or matching text, so browsing a search never
-// silently changes what's already in the quote. Real redesign, explicit ask ("me iba a hacer uno
-// vanguardista"): styled after the real 2026 command-palette/instant-search patterns this was
-// researched from (Linear/Raycast-style icon-square + label + circular action, hover-highlighted
-// rows) instead of the plain flat text-row dropdown this replaced.
+// Renders the grouped, viewable results panel — pure preview of the catalog, read-only. Real
+// redesign, explicit ask ("me iba a hacer uno vanguardista"): styled after the real 2026
+// command-palette/instant-search patterns this was researched from (Linear/Raycast-style
+// icon-square + label + circular action, hover-highlighted rows) instead of the plain flat
+// text-row dropdown this replaced.
+// Real redesign 2026-09-12, explicit ("no quiero que el sistema grave nada de las busquedas"):
+// this search box used to double as "add to quote" (rqToggleVariantInQuote → rqAddVariantToQuote),
+// which writes real data — stamps last_requested_at, sometimes fires a real auto-ask email — the
+// instant a result got clicked. Now it only ever filters the 3 already-fetched sweep tables down
+// to one product (rqFilterToProduct) — a pure, in-memory re-slice, never a fetch or a write.
 const RQ_SEARCH_ICO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`;
+const RQ_VIEW_ARROW_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
 async function rqRenderGroupedResults(){
   // Real bug fixed 2026-09-05 (reported live: "le pongo combo y no los puedo ver ni escoger") —
   // this used to always target a container behind the palette overlay's opaque/blurred backdrop.
@@ -2214,18 +2383,14 @@ async function rqRenderGroupedResults(){
   // box itself, always.
   const box = document.getElementById('rq_palette_results');
   const term = document.getElementById('rq_product_name').value.trim();
-  // Real redesign 2026-09-08: Ready/Expired/Updating are always live on the page now (see
-  // rqApplyStatFilterVisibility), not something an empty search box swaps into view — clearing the box just
-  // refreshes them (a cheap, real re-fetch) so they're current after whatever the trader was just
-  // doing, same as the 45s poll already does.
+  // Real fix 2026-09-12: this used to re-fetch everything (loadPendingPrices, a real API round
+  // trip) every time the box went empty — a plain, cheap re-render off what's already in memory
+  // does the exact same job (clear the filter, show tab mode again) with nothing sent over the
+  // wire.
   if (!term){
-    // A pending row's inline calculator lives inside one of those tables' own rows — if one was
-    // open and the trader starts typing, close it properly (through the one real teardown path)
-    // instead of silently orphaning its full-screen overlay when that container's content gets
-    // replaced.
     if (rqPendingInlineOpenId) await rqCloseCalculator(rqPendingInlineOpenId);
     if (box) box.innerHTML = '';
-    await loadPendingPrices();
+    rqClearProductFilter();
     rqSyncQuickpicksVisibility();
     return;
   }
@@ -2246,12 +2411,12 @@ async function rqRenderGroupedResults(){
       + `<div class="rq-result-grid">
           ${groups.flatMap(g => g.variants).map(v => {
             const spec = v.full_name_en || v.name_en || v.name;
-            const added = rqQuoteProductIds.includes(v.id);
+            const active = rqActiveProductFilterId === v.id;
             const frozen = rqTempIsFrozen(v);
-            return `<div class="rq-result-variant${added ? ' picked' : ''}">
+            return `<div class="rq-result-variant${active ? ' picked' : ''}">
               <div class="rq-result-icon ${frozen ? 'frozen' : 'fresh'}">${frozen ? RQ_SNOWFLAKE_SVG : RQ_SUN_SVG}</div>
               <span class="rq-result-spec">${escapeHtml(spec)}</span>
-              <button type="button" class="rq-result-add-btn${added ? ' added' : ''}" title="${added ? 'Remove from quote' : 'Add to quote'}" onclick="rqToggleVariantInQuote('${v.id}', this)">${added ? RQ_CHECK_SVG : RQ_PLUS_SVG}</button>
+              <button type="button" class="rq-result-add-btn${active ? ' added' : ''}" title="View this product across Ready/Expired/Updating" onclick="rqFilterToProduct('${v.id}'); rqCloseSearchPalette();">${RQ_VIEW_ARROW_SVG}</button>
             </div>`;
           }).join('')}
         </div>`;
@@ -2259,36 +2424,14 @@ async function rqRenderGroupedResults(){
   rqSyncQuickpicksVisibility();
 }
 
-// The one click handler every "+ Add"/"✓ Added" button in the search results uses — adds or
-// removes that one variant from the quote without closing the results panel, so several variants
-// (of this cut or the next search) can be picked in one sitting. onmousedown+preventDefault (see
-// rqRenderGroupedResults) keeps the input focused so the panel doesn't close itself mid-click —
-// same trick the old single-select suggestions used, just moved from onmousedown-races-blur to an
-// outright prevented blur.
-async function rqToggleVariantInQuote(productId, btn){
-  const card = btn ? btn.closest('.rq-result-variant') : null;
-  if (rqQuoteProductIds.includes(productId)){
-    if (btn){ btn.disabled = true; }
-    await rqRemoveVariantFromQuote(productId);
-    if (btn){ btn.disabled = false; btn.classList.remove('added'); btn.innerHTML = RQ_PLUS_SVG; btn.title = 'Add to quote'; }
-    if (card) card.classList.remove('picked');
-  } else {
-    if (btn){ btn.disabled = true; }
-    await rqAddVariantToQuote(productId);
-    if (btn){ btn.disabled = false; btn.classList.add('added'); btn.innerHTML = RQ_CHECK_SVG; btn.title = 'Remove from quote'; }
-    if (card) card.classList.add('picked');
-  }
-  rqUpdatePaletteDoneCount();
-}
-
 // The list already filters live as you type (oninput below) — this button/Enter isn't a second
 // search path, it's just a visible, clickable "go" for anyone who expects a search box to have
-// one. If there's exactly one variant left standing across every group, Enter adds it directly.
+// one. If there's exactly one variant left standing across every group, Enter views it directly.
 function rqSearchGo(){
   const input = document.getElementById('rq_product_name');
   if (!input.value.trim()){ input.focus(); rqRenderGroupedResults(); return; }
   const allVariants = rqGroupedSearchMatches(input.value).flatMap(g => g.variants);
-  if (allVariants.length === 1) rqAddVariantToQuote(allVariants[0].id);
+  if (allVariants.length === 1) rqFilterToProduct(allVariants[0].id);
   // Enter commits the search — same "go see it" moment as picking a quick pick, so the palette
   // closes and the (already live-rendered) results in the board underneath become visible.
   rqCloseSearchPalette();
@@ -4057,6 +4200,31 @@ function qAskUpdateForSweepRow(plantId, productId){
   });
 }
 
+// Real ask 2026-09-12 ("todas casi las plantas ofrecen este producto por que no muestra las
+// posibles plantas que lo tienen"): same real send as qAskUpdateForSweepRow — the same
+// preview-before-send modal, nothing fired until the trader actually confirms Send in it — but
+// for a plant with NO plant_products row for this product at all yet. plant-products-request-price
+// requires an existing row (404s otherwise), so this creates the real link first, THEN stamps the
+// ask, and only after a real send actually went out (onSent) — never automatically just from
+// viewing the Possible list.
+async function rqAskPossiblePlant(plantId, productId){
+  const plant = rqAllPlants.find(x => x.id === plantId);
+  const prod = products.find(x => x.id === productId);
+  if (!plant || !prod) return;
+  const p = {
+    id: plantId, rqProductId: productId, name: plant.name,
+    email: plant.email, whatsapp: plant.whatsapp, phone: plant.phone, contact_name: plant.contact_name,
+    rqPrice: null, rqPriceDate: null,
+  };
+  rqSendPriceRequestFor(p, async () => {
+    try {
+      await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: productId });
+      await callApi('plant-products-request-price', { actor: currentActor(), plant_id: plantId, product_id: productId });
+    } catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${plant.name}: ${e.message}`); }
+    loadPendingPrices();
+  });
+}
+
 function rqPriceRequestBody(p){
   const contact = rqFirstName(p.contact_name || p.name);
   const missing = p.rqPrice == null;
@@ -4237,14 +4405,24 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
       });
     });
   });
-  if (!rows.length) return;
+  if (!rows.length) return [];
   // sent_offers.create is single-row — no batch variant exists, so a multi-plant × multi-customer
   // send logs one call per row. Kept sequential (not Promise.all) so one failure is attributable
   // to a specific plant/customer pair in the console instead of an unordered Promise.all rejection.
+  // Real ask 2026-09-12: a customer over their credit limit is never blocked from being quoted —
+  // sent-offers-create just returns an advisory (credit_warning) alongside the normal 201, which
+  // callers surface to the trader instead of silently dropping.
+  const warnings = [];
   for (const row of rows) {
-    try { await callApi('sent-offers-create', row); }
+    try {
+      const result = await callApi('sent-offers-create', row);
+      if (result.credit_warning && !warnings.some(w => w.message === result.credit_warning.message)) {
+        warnings.push(result.credit_warning);
+      }
+    }
     catch (e) { console.error('Failed to log sent offer:', e.message, row); }
   }
+  return warnings;
 }
 
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
@@ -4551,7 +4729,10 @@ async function sendOfferWhatsAppTo(customerId){
   const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
     id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name), full), downloadFiles,
-    onOpened: () => rqLogSentOffersRows(full, [c], 'whatsapp'),
+    onOpened: async () => {
+      const warnings = await rqLogSentOffersRows(full, [c], 'whatsapp');
+      warnings.forEach(w => rqShowNotice(w.message));
+    },
   }], true);
 }
 
@@ -4644,7 +4825,10 @@ async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds){
     items.push({
       id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
       body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name), full), downloadFiles,
-      onOpened: () => rqLogSentOffersRows(full, [c], 'whatsapp'),
+      onOpened: async () => {
+        const warnings = await rqLogSentOffersRows(full, [c], 'whatsapp');
+        warnings.forEach(w => rqShowNotice(w.message));
+      },
     });
   });
   if (!items.length){
