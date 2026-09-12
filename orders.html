@@ -44,6 +44,7 @@
   }
   .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
@@ -82,13 +83,25 @@
      volver a grabarlo" — Mark Delivered opens the same Real Costs panel here instead of a plain
      prompt() for the real weight. z-index above everything else in this file since it's the most
      active screen whenever it's open. */
-  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:7000;display:none;flex-direction:column;}
+  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:7000;display:none;flex-direction:column;}
   .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
   .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
   .tt-overlay-body{flex:1;min-height:0;position:relative;}
   .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
+  /* Real preview screen for PO/SO/FO — same tt-overlay shell the Trading Tool iframe already uses
+     (full-screen dark header + body), not a new container. Ported from offers.html's doc preview,
+     which showed this never had an orders.html copy at all — every send here skipped straight to
+     the plain email-edit modal with no look at the actual PDF first. */
+  .doc-preview-loading{color:var(--ink-soft);font-size:13px;display:flex;align-items:center;gap:10px;}
+  .doc-preview-loading::before{content:'';width:16px;height:16px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--blue);animation:docSpin .7s linear infinite;}
+  @keyframes docSpin{to{transform:rotate(360deg);}}
+  /* Real bug found live 2026-09-11: .tt-overlay's own z-index (7000) sits ABOVE .email-modal-overlay
+     (6500) — the Email button inside this preview opens that same modal, which needs to render ON
+     TOP of the preview, not hidden behind it. ID selector here wins over the .tt-overlay class rule
+     without touching tt-overlay's own (correct, unrelated) stacking elsewhere in this file. */
+  #docPreviewOverlay{z-index:6200;}
   .email-modal-box{background:rgba(255,255,255,.06);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
   .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
   .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
@@ -167,7 +180,7 @@
   .doc-row-status{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
   .doc-row-status.sent{color:#5FE097;}
   .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:6px 0;}
-  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn svg{width:12px;height:12px;flex-shrink:0;fill:currentColor;}
@@ -227,26 +240,52 @@
   .u-line-curve .u-walker-ride{top:-46px;}
   .u-line-curve .u-truck-ride{top:-40px;}
   .utimeline::-webkit-scrollbar{display:none;}
-  /* Real ask 2026-09-12: "la B con el numero del consecutivo bien hecho y con el flujo pendiente
-     blinking" — the single 13-stop row split into 3 labeled phases (Paperwork & Money / Physical
-     Load / Closing). Each lane is still its own .utimeline underneath (same row markup, same blink/
-     traveler/curve logic, unchanged) — this only stacks them with a title above each. */
-  .utimeline-lanes{display:flex;flex-direction:column;gap:4px;}
-  /* Real bug found live 2026-09-12: connectors keep .u-line's flex:1 1 auto (built for ONE row of
-     13 items filling the whole card width) — split into 3 shorter lanes, that same rule stretched
-     a 5-6-item lane's lines across the full card, way more spread out than the picked mockup's
-     compact, closely-grouped nodes. Fixed width instead of elastic growth, lanes only, so a short
-     lane (Closing, 2 nodes) doesn't try to fill the same width a 6-node lane naturally fills. */
-  .utimeline-lane .u-line,.utimeline-lane .u-line-curve{flex:0 1 56px;}
-  .utimeline-lane .utimeline{justify-content:flex-start;}
-  /* A short lead-in stub before a lane's first node, only when the walker/truck's real position is
-     "everything in the PREVIOUS lane is done, on the way here" — same traveler icon/animation as a
-     normal connector, just a fixed short width instead of flex-1 (there's no node to connect FROM
-     within this lane). */
-  .u-line-lead{position:relative;flex:0 0 22px;height:2px;margin-top:19px;overflow:visible;}
-  .utimeline-lane-title{font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft);margin:14px 0 2px;}
-  .utimeline-lane:first-child .utimeline-lane-title{margin-top:6px;}
-  .utimeline-lane .utimeline{margin-bottom:0;}
+  /* Real ask 2026-09-12: "eso no se parece nada con la C" — rebuilt to actually match the picked
+     mockup (Milestone Map): one card, a progress ring + "X of Y done" summary, then every real
+     entry as ONE continuous flat route (no separate phase cards, no raised/curved connectors) with
+     only the last stop (always Signature) enlarged into a glowing "destination" pin. See
+     renderUnifiedTimeline()'s renderMapRow() — same entries/blinkIdx/travelerLineIdx, only the
+     grouping/connectors changed. */
+  .utimeline-lanes{display:flex;flex-direction:column;gap:10px;}
+  .utimeline-lane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px 10px;}
+  .utimeline-lane .utimeline{justify-content:flex-start;margin-bottom:0;}
+  .uring-wrap{display:flex;align-items:center;gap:16px;padding:2px 4px 4px;}
+  .uring{width:60px;height:60px;flex-shrink:0;position:relative;}
+  .uring svg{width:100%;height:100%;}
+  .uring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12.5px;color:var(--ink);}
+  .uring-h{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--ink);}
+  .uring-sub{font-family:'Inter',sans-serif;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .lane-map-row{padding-top:18px;}
+  .lane-map-row .u-main,.lane-map-row .u-mini{width:56px;}
+  .lane-map-row .u-main-icon,.lane-map-row .u-mini-btn{width:32px;height:32px;font-size:13px;}
+  .lane-map-row .u-main-label,.lane-map-row .u-mini-label{font-size:10px;min-height:24px;margin-top:6px;}
+  .lane-map-row .u-main-date,.lane-map-row .u-mini-date{font-size:9px;}
+  .lane-map-row .u-line{margin-top:15px;flex:1 1 28px;min-width:20px;}
+  /* Flat route, not the raised/curved treatment used elsewhere — matches the picked mockup's single
+     straight dashed line. */
+  .lane-map-row .u-mini.raised,.lane-map-row .u-main.raised{transform:none;}
+  .lane-map-row .u-walker-ride{top:-20px;width:14px;height:19px;}
+  .lane-map-row .u-truck-ride{top:-15px;width:15px;height:15px;}
+  /* The destination pin (always Signature, the last stop) — enlarged and gold-glowing while it's the
+     actionable step, small and green once signed, same done/now/wait state classes every other stop
+     already uses, just bigger. */
+  .lane-map-row .u-destination.u-mini{width:110px;}
+  .lane-map-row .u-destination .u-mini-btn{width:60px;height:60px;font-size:25px;border-width:2.5px;}
+  .lane-map-row .u-destination .u-mini-label{font-size:14px;font-weight:700;margin-top:10px;}
+  .lane-map-row .u-destination.done .u-mini-btn{background:rgba(63,220,151,.16);border-color:var(--green-bright);color:var(--green-bright);}
+  .lane-map-row .u-destination.done .u-mini-label{color:#5FE097;}
+  .lane-map-row .u-destination.now .u-mini-btn{background:radial-gradient(circle at 35% 30%, rgba(232,181,76,.5), rgba(232,181,76,.14));border-color:#E8B54C;color:#E8B54C;box-shadow:0 0 0 8px rgba(232,181,76,.14), 0 0 0 16px rgba(232,181,76,.06);}
+  .lane-map-row .u-destination.now .u-mini-label{color:#E8B54C;}
+  /* Pick Up waypoint — physical custody changes hands here, so it gets real visual weight too,
+     one size down from the Signature destination pin. Colors still come from the existing
+     done/current/actionable/urgent state classes already on this element — only size/glow added. */
+  .lane-map-row .u-waypoint.u-main{width:78px;}
+  .lane-map-row .u-waypoint .u-main-icon{width:46px;height:46px;font-size:19px;border-width:2.5px;}
+  .lane-map-row .u-waypoint .u-main-label{font-size:12.5px;font-weight:700;margin-top:8px;}
+  .lane-map-row .u-waypoint.done .u-main-icon{box-shadow:0 0 0 5px rgba(15,138,95,.14);}
+  .lane-map-row .u-waypoint.current .u-main-icon,.lane-map-row .u-waypoint.actionable .u-main-icon{box-shadow:0 0 0 7px var(--blue-light);}
+  .lane-map-row .u-waypoint.actionable.urgent .u-main-icon{box-shadow:0 0 0 7px rgba(196,67,46,.18);}
+  .utimeline-lane-title{font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft);margin:0 0 2px;}
   .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:6px;}
   .u-line.done{background:var(--green-bright);}
   /* Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
@@ -291,7 +330,7 @@
      Exactly ONE thing blinks per card now — see .blink-now below, applied to the single leftmost
      actionable item (mini "now" or main "isNext"), computed once in renderUnifiedTimeline. */
   .u-main.current .u-main-icon{background:var(--blue-light);border-color:var(--blue);color:var(--blue-bright);}
-  .u-main-label{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;color:var(--ink-soft);margin-top:8px;text-align:center;line-height:1.3;}
+  .u-main-label{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;color:var(--ink-soft);margin-top:8px;text-align:center;line-height:1.3;min-height:31px;}
   .u-main-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
   .u-main.done .u-main-label,.u-main.current .u-main-label{color:var(--ink);}
   .u-fob-confirm{margin-top:5px;background:rgba(255,200,118,.14);border:1px solid var(--amber);color:var(--amber);border-radius:12px;padding:2px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;font-family:inherit;}
@@ -305,7 +344,7 @@
   .u-line-curve svg{position:absolute;top:-18px;left:0;width:100%;height:20px;overflow:visible;}
   .u-mini-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--navy-2);color:var(--navy-2);flex-shrink:0;cursor:default;padding:0;font-size:15px;transition:all .2s;}
   .u-mini-btn svg{width:18px;height:18px;}
-  .u-mini-label{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;color:var(--ink-soft);margin-top:7px;text-align:center;line-height:1.3;}
+  .u-mini-label{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;color:var(--ink-soft);margin-top:7px;text-align:center;line-height:1.3;min-height:29px;}
   .u-mini-date{font-size:10px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
   .u-mini.done .u-mini-btn{background:rgba(15,138,95,.14);border-color:var(--green-bright);color:var(--green-bright);cursor:pointer;}
   .u-mini.done .u-mini-label{color:var(--ink);}
@@ -389,6 +428,10 @@ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 // PDFs) — storageClient below, pointed at staging's bucket, same pattern as offers.html.
 const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
 const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+// Same fixed origin trading-tool.html's createAndShareInvoice uses for its sign-invoice.html link —
+// must NOT be window.location.origin, which would bake in "http://localhost:8901" (or whatever
+// address the trader happens to be running this page from) into a link a real customer clicks.
+const APP_ORIGIN = 'https://wonderful-longma-8b07c7.netlify.app';
 
 async function callApi(fn, body){
   const res = await fetch(API_ROOT + fn, {
@@ -582,6 +625,23 @@ auth.onAuthStateChanged(user => {
   <div class="tt-overlay-body" id="ttOverlayBody"></div>
 </div>
 
+<div id="docPreviewOverlay" class="tt-overlay">
+  <div class="tt-overlay-head">
+    <div>
+      <div class="tt-overlay-title" id="docPreviewTitle"></div>
+      <div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;" id="docPreviewSub"></div>
+    </div>
+    <button class="tt-overlay-close" onclick="closeDocPreview()" title="Close">✕</button>
+  </div>
+  <div class="tt-overlay-body" style="display:flex;flex-direction:column;">
+    <div style="flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;">
+      <div class="doc-preview-loading" id="docPreviewLoading">Building document…</div>
+      <iframe id="docPreviewFrame" style="width:100%;height:100%;border:none;display:none;position:absolute;inset:0;"></iframe>
+    </div>
+    <div id="docPreviewActions" style="display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.12);flex-shrink:0;background:var(--navy);"></div>
+  </div>
+</div>
+
 <!-- Real ask 2026-09-05: "una pantalla como de datáfono para que firme" (Proof of Delivery) — the
      customer signs on this screen at the moment a load is marked Delivered, and that real
      signature gets embedded into the generated Factura (buildInvoiceDoc) as proof of receipt.
@@ -648,6 +708,8 @@ const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
 // Milestone-timeline icon set — same stroke-based style as STEP_ICONS/PLANT_ICON, just new subjects.
 const DOC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+const PREVIEW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const MONEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
 const CLIP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 const CUSTOMS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
@@ -789,10 +851,10 @@ function requestCustomsDocsClick(orderNumber){
 // English/no-emoji style as PO/FO. {orderNumber} is the shared order_number (e.g. "2026-1001") —
 // the same value every PO/SO/FO/INV prefix composes onto, per the frozen numbering format.
 function confirmLoadEmailSubject(orderNumber, locationName){
-  return `Pick-up appointment — Order PO-${orderNumber} — ${locationName}`;
+  return `Pick-up appointment — Order PO-BT-${orderNumber} — ${locationName}`;
 }
 function confirmLoadEmailBody(orderNumber, productName, locationName){
-  return `Hi,\n\nWe'd like to schedule pick-up for Order PO-${orderNumber} (${productName || ''}) at ${locationName}. Please confirm the earliest available appointment.\n\nPO Number: PO-${orderNumber}\nOrder Number: ${orderNumber}\n\nThank you,\nBuenTrade Team`;
+  return `Hi,\n\nWe'd like to schedule pick-up for Order PO-BT-${orderNumber} (${productName || ''}) at ${locationName}. Please confirm the earliest available appointment.\n\nPO Number: PO-BT-${orderNumber}\nOrder Number: ${orderNumber}\n\nThank you,\nBuenTrade Team`;
 }
 
 // Real ask 2026-09-07: "antes de esa fecha [FOB] un boton confirmar con carrier o con planta de
@@ -894,10 +956,10 @@ function renderMilestoneTimeline(o){
   // { icon, label, done, date, onClick } — onClick only set when the milestone is actually
   // clickable right now (state 'now'); done/wait render as plain status, not fake buttons.
   const stops = [
-    { icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')` },
-    { icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `shareSO('${o.order_number}')` },
+    { icon: DOC_ICON, label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `openDocPreview('PO','${o.order_number}')` },
+    { icon: DOC_ICON, label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, onClick: `openDocPreview('SO','${o.order_number}')` },
   ];
-  if (o.has_freight_order) stops.push({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `shareFO('${o.order_number}')` });
+  if (o.has_freight_order) stops.push({ icon: STEP_ICONS.picked_up, label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, onClick: `openDocPreview('FO','${o.order_number}')` });
   stops.push({ icon: MONEY_ICON, label: 'Pago Planta', done: !!o.plant_paid_at, date: o.plant_paid_at, onClick: `confirmPlantPaymentSent('${o.order_number}')` });
   stops.push({ icon: CLIP_ICON, label: 'Docs Recogida', done: hasAnyPickupDoc, date: null, wait: stageIdx < pickedUpIdx, onClick: `requestPickupDocsClick('${o.order_number}')` });
   stops.push({ icon: CUSTOMS_ICON, label: 'Aduana', done: !!o.customs_sent_at, date: o.customs_sent_at, wait: !pendingCustoms && !o.customs_sent_at, onClick: `shareCustoms('${o.order_number}')` });
@@ -1047,10 +1109,10 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // pueda pasar de una a la otra empezando desde la primera" — this is one real sequence, not two
   // independent tracks. Every document/step now requires the one right before it to be done first.
   const entries = [
-    miniEntry({ icon: '✓', label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `sharePO('${o.order_number}')`, raised: true }),
-    miniEntry({ icon: '✓', label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, wait: !o.po_sent_at, waitReason: 'Send the PO first.', onClick: `shareSO('${o.order_number}')` }),
+    miniEntry({ icon: '✓', label: 'PO', done: !!o.po_sent_at, date: o.po_sent_at, onClick: `openDocPreview('PO','${o.order_number}')`, raised: true }),
+    miniEntry({ icon: '✓', label: 'SO', done: !!o.so_sent_at, date: o.so_sent_at, wait: !o.po_sent_at, waitReason: 'Send the PO first.', onClick: `openDocPreview('SO','${o.order_number}')` }),
   ];
-  if (o.has_freight_order) entries.push(miniEntry({ icon: '✓', label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, wait: !o.so_sent_at, waitReason: 'Send the SO first.', onClick: `shareFO('${o.order_number}')`, raised: true }));
+  if (o.has_freight_order) entries.push(miniEntry({ icon: '✓', label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, wait: !o.so_sent_at, waitReason: 'Send the SO first.', onClick: `openDocPreview('FO','${o.order_number}')`, raised: true }));
   const docBeforePaymentDone = o.has_freight_order ? !!o.fo_sent_at : !!o.so_sent_at;
   const docBeforePaymentReason = o.has_freight_order ? 'Send the FO first.' : 'Send the SO first.';
   entries.push(miniEntry({ icon: '$', label: 'Pay Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, wait: !docBeforePaymentDone, waitReason: docBeforePaymentReason, onClick: `confirmPlantPaymentSent('${o.order_number}')` }));
@@ -1127,71 +1189,57 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // single leftmost real action across the whole card, left to right — "el flujo es el munequito
   // yendo de izquierda a derecha."
   const blinkIdx = entries.findIndex(e => e.actionableNow);
-  // Real ask 2026-09-08: "una sola para po so fo curva... el resto como esta" — only the two
-  // connectors touching the raised entry (FO) curve; every other line stays the plain flat dashed
-  // line exactly as before. When FO doesn't exist, no entry is ever raised, so this never fires.
-  function curveSvg(dir, done){
-    const stroke = done ? 'var(--green)' : 'var(--line)';
-    const dash = done ? '' : 'stroke-dasharray="4 4"';
-    const d = dir === 'up' ? 'M0,18 Q50,0 100,0' : 'M0,0 Q50,0 100,18';
-    return `<svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${stroke}" stroke-width="2" ${dash}/></svg>`;
-  }
-  // Real ask 2026-09-12: "la B con el numero del consecutivo bien hecho y con el flujo pendiente
-  // blinking" — split the one long row into 3 labeled phases (same real grouping the code already
-  // reasoned about via confirmIdx/deliveredIdxInEntries, just made visible): Paperwork & Money,
-  // Physical Load, Closing. Renders each phase as its own row so a 13-stop card isn't one crowded
-  // line, but reuses every entry's already-built html/line/curve/traveler/blink logic completely
-  // unchanged — a lane boundary just means "no connecting line past the last entry in this lane"
-  // (same as the old code already did at the very end of the row), never a second blinking rule.
-  // blinkIdx/travelerLineIdx stay computed against the FULL flat sequence above, so "exactly one
-  // thing blinks across the whole card" and the walker/truck's real position are untouched by this
-  // split — a lane is only a visual grouping, not a second state machine.
-  function renderLane(laneEntries, globalOffset, leadTravelerHtml){
-    const lead = leadTravelerHtml ? `<div class="u-line-lead">${leadTravelerHtml}</div>` : '';
-    return lead + laneEntries.map((e, j) => {
-      const i = globalOffset + j;
+  // Real ask 2026-09-12: "eso no se parece nada con la C" — the previous pass (3 stacked cards,
+  // resized icons) was still structurally the OLD card layout, not the picked mockup. Rebuilt to
+  // actually match "la C" (Milestone Map): a progress ring + "X of Y done" summary, then every real
+  // entry as ONE continuous flat route (no separate phase cards, no raised/curved connectors — a
+  // flat dashed line throughout, like the mockup), with only the very last entry (always Signature —
+  // entries is built in fixed order ending on it) enlarged into the glowing "destination" pin. Same
+  // entries/blinkIdx/travelerLineIdx/travelerType computed above, completely untouched — this only
+  // changes how they're grouped and connected visually. confirmIdx/deliveredIdxInEntries stay exactly
+  // as before too (still feed travelerLineIdx's walker/truck switch above); they're just no longer
+  // used to split the render into separate lane cards.
+  const totalSteps = entries.length;
+  const doneSteps = entries.filter(e => e.lineDone).length;
+  const pct = totalSteps ? Math.round((doneSteps / totalSteps) * 100) : 0;
+  const RING_R = 34, RING_C = 2 * Math.PI * RING_R;
+  const ringOffset = RING_C * (1 - pct / 100);
+  const nextLabel = blinkIdx >= 0 ? entries[blinkIdx].label : '';
+  function renderMapRow(){
+    return entries.map((e, i) => {
       const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-      let line = '';
-      if (j < laneEntries.length - 1){
-        const nextRaised = !!laneEntries[j + 1].raised;
-        if (e.raised) line = `<div class="u-line-curve">${curveSvg('down', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
-        else if (nextRaised) line = `<div class="u-line-curve">${curveSvg('up', e.lineDone)}${e.lineExtra || ''}${travelerHtml}</div>`;
-        else line = `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>`;
-      }
-      const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
+      const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
+      let entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
+      // The last stop is always Signature (entries.push order above never changes) — marked as the
+      // route's destination pin, not just another stop.
+      if (i === entries.length - 1) entryHtml = entryHtml.replace(/class="(u-mini|u-main) /, 'class="$1 u-destination ');
+      // Real ask 2026-09-12: "darle mas significado al pickup" — Pick Up (mainEntry('picked_up'),
+      // always pushed right after pending_pickup, i.e. at confirmIdx+1 — same index marker the
+      // walker/truck switch above already relies on) gets a bigger, glowing waypoint treatment: the
+      // moment physical custody of the load actually changes hands, same idea as the destination pin
+      // but one size down since it's a real milestone, not the finish line.
+      if (i === confirmIdx + 1) entryHtml = entryHtml.replace(/class="(u-mini|u-main) /, 'class="$1 u-waypoint ');
       return entryHtml + line;
     }).join('');
   }
-  // Extra top padding is only ever needed on the ONE lane that actually has the traveler icon
-  // riding a curved connector right now (same trigger as the original single-row version) — a
-  // raised entry elsewhere with no traveler on it needs no extra clearance.
-  const travelerOnCurve = travelerLineIdx >= 0 && (entries[travelerLineIdx].raised || (entries[travelerLineIdx + 1] && entries[travelerLineIdx + 1].raised));
-  const lane1 = entries.slice(0, confirmIdx);
-  const lane2 = entries.slice(confirmIdx, deliveredIdxInEntries + 1);
-  const lane3 = entries.slice(deliveredIdxInEntries + 1);
-  const lanesHtml = [
-    { title: 'Paperwork & Money', entries: lane1, offset: 0 },
-    { title: 'Physical Load', entries: lane2, offset: confirmIdx },
-    { title: 'Closing', entries: lane3, offset: deliveredIdxInEntries + 1 },
-  ].filter(l => l.entries.length).map(l => {
-    const laneHasTravelerOnCurve = travelerOnCurve && travelerLineIdx >= l.offset && travelerLineIdx < l.offset + l.entries.length;
-    // The traveler's own connector can land on the LAST entry of a lane (e.g. every paperwork step
-    // done, walking toward Confirm PU) — that connector used to just be "the next one over" in the
-    // old single row, but a lane boundary means there's no entry after it to draw a line TO here.
-    // Rather than silently dropping the walker/truck at exactly the moment it's most informative
-    // (everything in this lane is done, on the way to the next phase), it leads into the NEXT
-    // lane instead, as a short stub before that lane's first node.
-    // Not a curve — the lead stub uses the same flat, non-raised traveler positioning every normal
-    // (non-curved) connector already uses elsewhere in this row, so it needs no extra clearance.
-    const travelerLeadsIntoThisLane = travelerLineIdx >= 0 && travelerLineIdx === l.offset - 1;
-    const leadTravelerHtml = travelerLeadsIntoThisLane ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-    return `
-    <div class="utimeline-lane">
-      <div class="utimeline-lane-title">${escapeHtml(l.title)}</div>
-      <div class="utimeline${laneHasTravelerOnCurve ? ' needs-curve-clearance' : ''}">${renderLane(l.entries, l.offset, leadTravelerHtml)}</div>
+  const lanesHtml = `
+    <div class="utimeline-lane lane-map">
+      <div class="uring-wrap">
+        <div class="uring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="${RING_R}" fill="none" stroke="var(--line)" stroke-width="7"/>
+            <circle cx="40" cy="40" r="${RING_R}" fill="none" stroke="var(--blue-bright)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${RING_C.toFixed(1)}" stroke-dashoffset="${ringOffset.toFixed(1)}" transform="rotate(-90 40 40)"/>
+          </svg>
+          <div class="uring-pct">${pct}%</div>
+        </div>
+        <div class="uring-text">
+          <div class="uring-h">${doneSteps} of ${totalSteps} milestones done</div>
+          <div class="uring-sub">${nextLabel ? `Next: ${escapeHtml(nextLabel)}` : 'All caught up'}</div>
+        </div>
+      </div>
+      <div class="utimeline lane-map-row">${renderMapRow()}</div>
     </div>
   `;
-  }).join('');
 
   // Real ask 2026-09-08: "en next action ponlo como esta en collections no solo una accion...
   // 3 steps una blinking la que esta pendiente" — same mini node-timeline as collections.html's
@@ -1469,7 +1517,7 @@ async function toggleOrderDocs(orderNumber){
     // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
     // the start of the filename). One list() call per real filename prefix instead.
     try {
-      const prefixes = ['PO-', 'SO-', 'FO-', 'INV-'].map(p => `${p}${orderNumber}`);
+      const prefixes = ['PO-BT-', 'SO-BT-', 'FO-BT-', 'INV-BT-'].map(p => `${p}${orderNumber}`);
       const results = await Promise.all(prefixes.map(prefix =>
         storageClient.storage.from('order-documents').list('', { search: prefix })
       ));
@@ -1525,15 +1573,25 @@ function renderOrderDocsPanel(o){
     // icon fill) instead of the text-labeled pair guessed at before.
     const emailBtn = onclick => `<button class="wa-btn outline" style="padding:6px 10px;" onclick="${onclick}" title="Email"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></button>`;
     const waBtn = onclick => `<button class="wa-btn" style="padding:6px 10px;" onclick="${onclick}" title="WhatsApp"><svg viewBox="0 0 24 24" fill="#fff">${WA_ICON.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg></button>`;
-    const poFiles = findFiles(`PO-${o.order_number}`);
-    const soFiles = findFiles(`SO-${o.order_number}`);
-    const foFiles = findFiles(`FO-${o.order_number}`);
-    const invoiceFiles = findFiles(`INV-${o.order_number}`);
-    const poActions = emailBtn(`sharePO('${o.order_number}')`) + waBtn(`waCardPO('${o.order_number}')`);
-    const soActions = emailBtn(`shareSO('${o.order_number}')`) + waBtn(`waCardSO('${o.order_number}')`);
-    const foActions = emailBtn(`shareFO('${o.order_number}')`) + waBtn(`waCardFO('${o.order_number}')`);
+    const poFiles = findFiles(`PO-BT-${o.order_number}`);
+    const soFiles = findFiles(`SO-BT-${o.order_number}`);
+    const foFiles = findFiles(`FO-BT-${o.order_number}`);
+    const invoiceFiles = findFiles(`INV-BT-${o.order_number}`);
+    // Real ask 2026-09-12: "el preview... compartir y seguir" everywhere PO/SO/FO can be sent —
+    // this row used to jump straight to the plain email-edit modal (or bare WhatsApp) with no look
+    // at the real PDF first, same gap already fixed on the stepper icons above. One button opens
+    // the real preview (Download/Email/WhatsApp all live inside it, see openDocPreview) instead of
+    // two separate icon buttons that each skipped it.
+    const previewBtn = (kind, orderNumber) => `<button class="wa-btn outline" style="padding:6px 10px;" onclick="openDocPreview('${kind}','${orderNumber}')" title="Preview & send">${PREVIEW_ICON}</button>`;
+    const poActions = previewBtn('PO', o.order_number);
+    const soActions = previewBtn('SO', o.order_number);
+    const foActions = previewBtn('FO', o.order_number);
+    // Invoice can't go through openDocPreview (that always rebuilds a fresh, unsigned PDF from
+    // scratch — see the comment on resendInvoiceEmail below for why that's wrong once a real
+    // signature/customs weight exists). openInvoicePreview instead previews the actual uploaded
+    // file's URL directly, real Download/Email/WhatsApp still live inside the same overlay.
     const invoiceActions = invoiceFiles.length
-      ? emailBtn(`resendInvoiceEmail('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`) + waBtn(`waResendInvoice('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')`)
+      ? `<button class="wa-btn outline" style="padding:6px 10px;" onclick="openInvoicePreview('${o.order_number}','${invoiceFiles[0].url}','${invoiceFiles[0].name}')" title="Preview & send">${PREVIEW_ICON}</button>`
       : '';
     // Real gap found live 2026-09-07: this panel is the one place meant to show "todo lo que está
     // hecho o no" for one specific load, but Pago a Planta — a real, required step in the same
@@ -1712,10 +1770,14 @@ function findStatusOrder(orderNumber){
 // three approved texts fit "already picked up," so that case is untouched apart from dropping the
 // old border-arrival-overdue framing (same "date already passed" pattern, same instruction).
 function statusCheckMessage(o){
+  // Real bug found live 2026-09-12: these had picked up an emoji prefix each somewhere along the
+  // way — the approved copy table is explicit that PO/SO/FO/Payment/Customs/status text never
+  // gets an emoji added "for consistency or any other invented reason." Stripped both; wording
+  // otherwise unchanged (pending_pickup already matched approved variant 1 verbatim).
   if (o.load_status === 'pending_pickup'){
-    return `📦 Hi, just following up on the status of the order. Could you please confirm if everything is on track for pickup? Thank you!`;
+    return `Hi, just following up on the status of the order. Could you please confirm if everything is on track for pickup? Thank you!`;
   }
-  return `🚚 Hi, could you please confirm the current status of this load? Thank you!`;
+  return `Hi, could you please confirm the current status of this load? Thank you!`;
 }
 function askFleteroWhatsApp(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -1779,7 +1841,11 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
       alert('Status updated, but this customer has no email on file — no notification sent.');
     } else {
       try {
-        await sendEmailApi('logistics', emails, subjFn(o), bodyFn(o, contact), [], { phone, message: waFn(o, contact) });
+        // Real bug found live 2026-09-12: this went out as "Logistics BuenTrade" — the carrier/
+        // broker alias — for a message TO THE CUSTOMER. SO and the Invoice already send customer-
+        // facing mail from 'offers' (see FROM_ADDRESSES: "customers deal with Offers"); this one
+        // had drifted to the wrong department.
+        await sendEmailApi('offers', emails, subjFn(o), bodyFn(o, contact), [], { phone, message: waFn(o, contact) });
         showToast('Cliente notificado', emails.join(', '));
       } catch (e){
         if (!e.cancelled) alert('No se pudo enviar la notificación: ' + e.message);
@@ -2243,7 +2309,7 @@ async function buildInvoiceDoc(orderNumber, signatureDataUrl, signedByName){
   const finalTotal = finalWeight * pricePerLb;
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Factura', orderNumber, CONTACT_EMAIL_SO);
+  pdfHeader(doc, 'Factura', 'INV-BT-' + orderNumber, CONTACT_EMAIL_SO);
 
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
   pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
@@ -2264,7 +2330,7 @@ async function buildInvoiceDoc(orderNumber, signatureDataUrl, signedByName){
     ['FECHA', todayStr()],
     ['FECHA DE ENTREGA', todayStr()],
     ['INCOTERMS', composed.incoterms],
-    ['ORDEN DEL CLIENTE', orderNumber],
+    ['ORDEN DEL CLIENTE', 'INV-BT-' + orderNumber],
     ['CONDICIONES DE PAGO', composed.condiciones_pago],
     ['FECHA DE VENCIMIENTO', dueDateStr],
   ]);
@@ -2516,7 +2582,7 @@ async function buildPODoc(orderNumber){
   const isFob = composed.incoterms.startsWith('FCA');
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Purchase Order', orderNumber, CONTACT_EMAIL_PO);
+  pdfHeader(doc, 'Purchase Order', 'PO-BT-' + orderNumber, CONTACT_EMAIL_PO);
 
   const vendorLines = composed.vendor.split('\n');
   pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
@@ -2527,7 +2593,7 @@ async function buildPODoc(orderNumber){
     [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
     ['SHIP VIA', 'Refrigerated Trucking'],
     ['PAYMENT TERMS', composed.payment_terms],
-    ['ORDER #', orderNumber],
+    ['ORDER #', 'PO-BT-' + orderNumber],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
@@ -2565,17 +2631,134 @@ async function buildPODoc(orderNumber){
   return { doc, po, plant };
 }
 
+async function exportPO(orderNumber){
+  let built;
+  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  built.doc.save(`PO-BT-${orderNumber}.pdf`);
+}
+
+// ============ DOCUMENT PREVIEW (real gap found live 2026-09-11: this page never had one — every
+// PO/SO/FO click went straight from the stepper icon to building+uploading+opening the plain
+// email-edit modal, with no look at the actual PDF first. Ported from offers.html's own
+// openDocPreview/DOC_TYPES, same tt-overlay shell this file already uses for the Trading Tool
+// iframe — not a new component, not a new visual language.) ============
+const DOC_TYPES = [
+  { key: 'PO', title: 'Purchase Order', exportFn: 'exportPO', shareFn: 'sharePO', waFn: 'waCardPO' },
+  { key: 'SO', title: 'Sales Order', exportFn: 'exportSO', shareFn: 'shareSO', waFn: 'waCardSO' },
+  { key: 'FO', title: 'Freight Confirmation', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO' },
+];
+
+async function openDocPreview(kind, orderNumber, sequence){
+  const cfg = DOC_TYPES.find(d => d.key === kind);
+  document.getElementById('docPreviewTitle').textContent = cfg.title;
+  document.getElementById('docPreviewSub').textContent = `Order ${orderNumber}` + (sequence ? ` — document ${sequence.stepIndex} of ${sequence.stepCount}` : '');
+  document.getElementById('docPreviewActions').innerHTML = '';
+  const frame = document.getElementById('docPreviewFrame');
+  const loading = document.getElementById('docPreviewLoading');
+  frame.style.display = 'none';
+  frame.src = 'about:blank';
+  loading.style.display = 'flex';
+  loading.textContent = 'Building document…';
+  document.getElementById('docPreviewOverlay').style.display = 'flex';
+
+  try {
+    let doc;
+    if (kind === 'PO'){ doc = (await buildPODoc(orderNumber)).doc; }
+    else if (kind === 'SO'){ doc = (await buildSODoc(orderNumber)).doc; }
+    else if (kind === 'FO'){
+      const legs = await buildFODocs(orderNumber);
+      if (!legs.length) throw new Error('No freight leg on this order.');
+      // Multiple legs (more than one truck) all still go out correctly through Email/WhatsApp
+      // below (those cover every leg) — only the preview itself shows the first.
+      doc = legs[0].doc;
+    }
+    frame.src = doc.output('bloburl');
+    frame.onload = () => { loading.style.display = 'none'; frame.style.display = 'block'; };
+    document.getElementById('docPreviewActions').innerHTML = `
+      <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.exportFn}('${orderNumber}')">${DOWNLOAD_ICON}Download</button>
+      <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="previewDocSend('${cfg.shareFn}','${orderNumber}')">${EMAIL_ICON}Email</button>
+      <button class="wa-btn" style="display:inline-flex;align-items:center;gap:7px;" onclick="previewDocSend('${cfg.waFn}','${orderNumber}')">${WA_ICON}WhatsApp</button>`;
+  } catch(e){
+    loading.textContent = 'Could not build this document: ' + e.message;
+  }
+}
+
+function closeDocPreview(){
+  document.getElementById('docPreviewOverlay').style.display = 'none';
+  document.getElementById('docPreviewFrame').src = 'about:blank';
+}
+
+// Real ask 2026-09-12: same preview-before-send screen as PO/SO/FO, for the Invoice row's resend
+// button. Can't reuse openDocPreview as-is — that always calls buildInvoiceDoc-equivalent logic
+// fresh, which would produce an unsigned, quoted-weight PDF; the real signed/customs-adjusted
+// invoice only exists as the file already sitting in Storage (see resendInvoiceEmail's own comment
+// on why it fetches that exact file back instead of rebuilding). So this loads the real uploaded
+// file's URL straight into the same overlay/iframe instead of building anything.
+function openInvoicePreview(orderNumber, fileUrl, filename){
+  document.getElementById('docPreviewTitle').textContent = 'Invoice';
+  document.getElementById('docPreviewSub').textContent = `Order ${orderNumber}`;
+  const frame = document.getElementById('docPreviewFrame');
+  const loading = document.getElementById('docPreviewLoading');
+  frame.style.display = 'none';
+  loading.style.display = 'flex';
+  loading.textContent = 'Loading document…';
+  frame.src = fileUrl;
+  frame.onload = () => { loading.style.display = 'none'; frame.style.display = 'block'; };
+  document.getElementById('docPreviewActions').innerHTML = `
+    <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="window.open('${fileUrl}', '_blank')">${DOWNLOAD_ICON}Download</button>
+    <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="resendInvoiceEmail('${orderNumber}','${fileUrl}','${filename}')">${EMAIL_ICON}Email</button>
+    <button class="wa-btn" style="display:inline-flex;align-items:center;gap:7px;" onclick="waResendInvoice('${orderNumber}','${fileUrl}','${filename}')">${WA_ICON}WhatsApp</button>`;
+  document.getElementById('docPreviewOverlay').style.display = 'flex';
+}
+
+// ============ DOCUMENT SEND SEQUENCE (preview -> send -> next, no extra clicks) — same engine as
+// offers.html's runDocSendSequence, used both for a single stepper-icon click (queue of one) and
+// for runPendingWonDocConfirm's PO -> SO -> FO chain right after a deal is won. ============
+let docSeq = null; // { orderNumber, queue: [kinds left], resolve, total }
+
+function docSeqAdvance(){
+  if (!docSeq) return;
+  if (!docSeq.queue.length){
+    closeDocPreview();
+    const resolve = docSeq.resolve;
+    docSeq = null;
+    resolve();
+    return;
+  }
+  const kind = docSeq.queue.shift();
+  openDocPreview(kind, docSeq.orderNumber, { stepIndex: docSeq.total - docSeq.queue.length, stepCount: docSeq.total });
+}
+
+// Email/WhatsApp buttons inside the preview call this instead of the share/wa function directly —
+// same function, same behavior, it just also advances the sequence afterward (Download never
+// advances: it's just saving a copy, not "sending").
+async function previewDocSend(fnName, orderNumber){
+  await window[fnName](orderNumber);
+  docSeqAdvance();
+}
+
+function runDocSendSequence(orderNumber, kinds){
+  return new Promise(resolve => {
+    docSeq = { orderNumber, queue: kinds.slice(1), resolve, total: kinds.length };
+    openDocPreview(kinds[0], orderNumber, { stepIndex: 1, stepCount: kinds.length });
+  });
+}
+
 async function sharePO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.plant);
   if (!emails.length){ alert('This plant has no email on file.'); return; }
-  const filename = `PO-${orderNumber}.pdf`;
+  const filename = `PO-BT-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  // Real bug found live 2026-09-11: this cache is only ever populated once per order (see
+  // toggleOrderDocs) — without invalidating it here, the Documents panel keeps showing "Not
+  // generated" forever in this session even though the file above just landed in Storage.
+  orderDocsFileCache.delete(orderNumber);
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
-  const subject = `PO ${orderNumber} — BuenTrade — ${poProductName}`;
+  const subject = `PO-BT-${orderNumber} — BuenTrade — ${poProductName}`;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -2583,7 +2766,7 @@ async function sharePO(orderNumber){
     + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
   const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
-  const waMessagePo = `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
+  const waMessagePo = `PO-BT-${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
   try {
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: waMessagePo });
     showToast('PO sent', emails.join(', '));
@@ -2604,7 +2787,7 @@ async function buildSODoc(orderNumber){
   const { document: composed, so, customer } = result;
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Confirmación de Venta', orderNumber, CONTACT_EMAIL_SO);
+  pdfHeader(doc, 'Confirmación de Venta', 'SO-BT-' + orderNumber, CONTACT_EMAIL_SO);
 
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
   pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
@@ -2612,7 +2795,7 @@ async function buildSODoc(orderNumber){
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()],
     ['CONDICIONES DE PAGO', composed.condiciones_pago],
-    ['ORDEN #', orderNumber],
+    ['ORDEN #', 'SO-BT-' + orderNumber],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
@@ -2655,17 +2838,24 @@ async function buildSODoc(orderNumber){
   return { doc, so, customer };
 }
 
+async function exportSO(orderNumber){
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  built.doc.save(`SO-BT-${orderNumber}.pdf`);
+}
+
 async function shareSO(orderNumber){
   let built;
   try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.customer);
   if (!emails.length){ alert('This customer has no email on file.'); return; }
-  const filename = `SO-${orderNumber}.pdf`;
+  const filename = `SO-BT-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  orderDocsFileCache.delete(orderNumber);
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
-  const subject = `${orderNumber} — Orden de Venta — ${soProductName}`;
+  const subject = `SO-BT-${orderNumber} — Orden de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -2699,7 +2889,7 @@ async function buildFODocs(orderNumber){
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + orderNumber, CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
@@ -2720,7 +2910,7 @@ async function buildFODocs(orderNumber){
     const yRight = pdfKeyValueRows(doc, 320, 240, [
       ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
       ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
-      ['CLIENT ORDER #', orderNumber],
+      ['CLIENT ORDER #', 'FO-BT-' + orderNumber],
       ['APPT. / CHECK-IN #', '____________________'],
       ['RELEASE #', '____________________'],
     ]);
@@ -2747,9 +2937,15 @@ async function buildFODocs(orderNumber){
     const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-BT-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
+}
+
+async function exportFO(orderNumber){
+  let built;
+  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  built.forEach(b => b.doc.save(b.filename));
 }
 
 async function shareFO(orderNumber){
@@ -2760,13 +2956,14 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `FO ${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
+    orderDocsFileCache.delete(orderNumber);
+    const subject = `FO-BT-${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     const waPhoneFo = b.carrier && b.carrier.phone;
-    const waMessageFo = `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
+    const waMessageFo = `FO-BT-${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: waMessageFo });
       showToast('FO sent', emails.join(', '));
@@ -2794,9 +2991,9 @@ async function runPendingWonDocConfirm(){
   try { pending = JSON.parse(raw); } catch (e) { return; }
   const { order_number, freight_order, mexican_freight_order } = pending;
   if (!order_number) return;
-  await sharePO(order_number);
-  await shareSO(order_number);
-  if (freight_order || mexican_freight_order) await shareFO(order_number);
+  const kinds = ['PO', 'SO'];
+  if (freight_order || mexican_freight_order) kinds.push('FO');
+  await runDocSendSequence(order_number, kinds);
 }
 
 // ============ WHATSAPP SEND (real PDF, never a summary image) — same engine as offers.html.
@@ -2819,7 +3016,7 @@ async function waCardPO(orderNumber){
   try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const plant = built.plant;
   const phone = plant && (plant.whatsapp || plant.phone);
-  shareDocAndOpenWhatsApp(built.doc, `PO-${orderNumber}.pdf`, phone, `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
+  shareDocAndOpenWhatsApp(built.doc, `PO-BT-${orderNumber}.pdf`, phone, `PO-BT-${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 async function waCardSO(orderNumber){
@@ -2827,7 +3024,7 @@ async function waCardSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const customer = built.customer;
   const phone = customer && (customer.whatsapp || customer.phone);
-  shareDocAndOpenWhatsApp(built.doc, `SO-${orderNumber}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
+  shareDocAndOpenWhatsApp(built.doc, `SO-BT-${orderNumber}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
 }
 
 async function waCardFO(orderNumber){
@@ -2836,7 +3033,7 @@ async function waCardFO(orderNumber){
   const b = built[0];
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
   const phone = b.carrier && b.carrier.phone;
-  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
+  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO-BT-${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 // Invoice can't be rebuilt from scratch on a resend — it carries the real captured signature and
@@ -2868,11 +3065,29 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
     });
   } catch(e){ alert('Error al cargar el archivo: ' + e.message); return; }
   const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
-  const subject = `${orderNumber} — INVOICE`;
-  const body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+  const subject = `INV-BT-${orderNumber} — INVOICE`;
+  // Real gap found live 2026-09-12: a resend before the customer ever signed re-sent the exact
+  // same unsigned PDF with no way to reach the signature page — this used to just say "aquí está
+  // de nuevo," a dead end. Not yet signed: re-issue a fresh token (same call createAndShareInvoice
+  // uses — action "issue" always overwrites shipments.invoice_token, so any earlier unused link
+  // stops working, which is fine, nobody had used it) and reuse the exact approved item-10 copy,
+  // word for word. Already signed: no link needed, keep the plain "here's your invoice again" text.
+  const alreadySigned = !!(o && o.invoice_signed_at);
+  let body, waMessage;
+  if (!alreadySigned){
+    let issueRes;
+    try { issueRes = await callApi('orders-invoice-signature', { action: 'issue', actor: currentActor(), order_number: orderNumber }); }
+    catch (e) { alert('Error creando el link de firma: ' + e.message); return; }
+    const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
+    body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, firma aquí: ${signLink} para su confirmación.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar, firma aquí: ${signLink}. ¡Gracias!`;
+  } else {
+    body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!`;
+  }
   const waPhoneInv = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
   try {
-    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!` }, ccEmails);
+    await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], { phone: waPhoneInv, message: waMessage }, ccEmails);
     showToast('Factura enviada', emails.join(', '));
     markDocSent(orderNumber, 'invoice');
   } catch(e){

@@ -29,7 +29,7 @@
     --ink:#FFFFFF;
     --ink-soft:rgba(255,255,255,.55);
     --red:#C4432E;
-    --amber:#B8791A;
+    --amber:#FFC876;
     --field-h:38px;
     --radius:8px;
   }
@@ -58,6 +58,11 @@
     background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
     color:#fff; padding:20px 32px 20px; position:relative; overflow:hidden;
   }
+  /* Real ask 2026-09-11 ("scan de TODOS los modulos... homogeneo"): the same gold accent line
+     every other file's header has — no margin-bottom/overflow change here on purpose, the
+     quickbar is deliberately flush against this header with zero gap (see the embed-mode note
+     below), unlike every other page's header which has real content spacing after it. */
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;z-index:1;}
   .brand-mark{display:flex; align-items:center; gap:10px;}
   .brand-word{
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:24px; color:#fff; letter-spacing:-0.01em; line-height:1;
@@ -92,6 +97,10 @@
   .qb-group-label::before{content:'';width:4px;height:4px;border-radius:50%;background:#E8B54C;box-shadow:0 0 7px 1.5px rgba(232,181,76,.8);}
   .qb-group-row{display:flex; gap:8px; align-items:flex-start;}
   .qb-divider{width:1px; align-self:center; height:30px; margin:0; background:linear-gradient(180deg, transparent, rgba(232,181,76,.35), transparent);}
+  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:0 14px;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
+  .wa-btn:active{background:rgba(29,168,81,.28);}
+  .wa-btn svg{fill:currentColor;}
   .quickbar .qb-item{display:flex; flex-direction:column; gap:4px; align-items:stretch; width:104px; flex-shrink:0;}
   .quickbar label{font-size:8px; color:rgba(255,255,255,.6); font-family:'Inter',sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.03em; text-align:center; white-space:nowrap;}
   .quickbar .inputwrap{
@@ -166,7 +175,7 @@
   @media (max-width:920px){ .grid{grid-template-columns:1fr;} }
 
   .card{
-    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
     overflow:hidden; display:flex; flex-direction:column;
   }
   .card.collapsed{align-self:start;}
@@ -655,25 +664,21 @@ if (FIREBASE_READY) {
          Plant/Customer sit as tall side columns, vertically centered against the whole bar;
          Create Order sits under the data fields instead of above them. Contacting the plant again
          on an offer already out to a customer IS the bid, no separate "log a bid" step, that
-         contact itself is what flags this negotiation hot in Offers. -->
-<div id="negoQbLeft" style="display:none;align-items:center;gap:10px;">
+         contact itself is what flags this negotiation hot in Offers. Grid, not flex-wrap: with three
+     flex children, wrapping re-centers whichever group drops to its own line instead of keeping it
+     pinned to its edge — a 3-column grid keeps Plant/Customer pinned left/right and Create Order's
+     group centered regardless of width. -->
+<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;width:100%;gap:12px;">
+<div id="negoQbLeft" style="display:none;align-items:center;gap:10px;justify-self:start;">
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Plant</span>
-        <!-- Real ask 2026-09-07: "el historial de negociacion" must survive end to end — the "in"
-             half (plant_reply/customer_bid) already had metadata/rendering in NEGO_STEP_META but no
-             way to actually log one: only outgoing Email/WhatsApp sends were ever recorded. This is
-             that missing "log what they told you" step (a call, a WhatsApp reply, anything not
-             itself sent from this app) — same negoLogEvent/sent-offers-log-event plumbing outgoing
-             events already use. -->
-        <button onclick="negoLogPlantReply()" title="Log the price the plant told you (call, reply, etc.)" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;width:36px;height:36px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-        </button>
         <button onclick="negoSendToPlant('email')" title="Email Plant" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:0 15px;height:36px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
           Email
         </button>
-        <button onclick="negoSendToPlant('whatsapp')" title="WhatsApp Plant" style="background:#25D366;border:none;color:#fff;border-radius:9px;width:36px;height:36px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(37,211,102,.45);"><svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
+        <button class="wa-btn" onclick="negoSendToPlant('whatsapp')" title="WhatsApp Plant" style="height:36px;display:inline-flex;align-items:center;gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp</button>
       </div>
 
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
     <div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:center;">
     <div class="qb-group">
       <div class="qb-group-label">Terms</div>
@@ -688,10 +693,6 @@ if (FIREBASE_READY) {
         </div>
       </div>
     </div>
-
-    <div class="qb-divider"></div>
-
-    <button id="negoCreateOrderBtn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="display:none;background:linear-gradient(135deg,#12A56E,#0F8A5F);color:#fff;border:none;border-radius:8px;padding:0 16px;height:32px;font-weight:800;font-size:11.5px;cursor:pointer;white-space:nowrap;box-shadow:0 3px 8px rgba(15,138,95,.4);align-items:center;gap:6px;margin:0 6px;">✓ Create Order</button>
 
     <div class="qb-divider"></div>
 
@@ -725,17 +726,18 @@ if (FIREBASE_READY) {
     </div>
       </div>
 
-<div id="negoQbRight" style="display:none;align-items:center;gap:10px;">
-        <button onclick="negoSendToCustomer('whatsapp')" title="WhatsApp Customer" style="background:#25D366;border:none;color:#fff;border-radius:9px;width:36px;height:36px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(37,211,102,.45);"><svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
+    <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="display:none;height:36px;padding:0 18px;font-size:12.5px;align-items:center;gap:6px;">✓ Create Order</button>
+    </div>
+
+<div id="negoQbRight" style="display:none;align-items:center;gap:10px;justify-self:end;">
+        <button class="wa-btn" onclick="negoSendToCustomer('whatsapp')" title="WhatsApp Customer" style="height:36px;display:inline-flex;align-items:center;gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp</button>
         <button onclick="negoSendToCustomer('email')" title="Email Customer" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:0 15px;height:36px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
           Email
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
         </button>
-        <button onclick="negoLogCustomerBid()" title="Log the price the customer bid (call, reply, etc.)" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;width:36px;height:36px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-        </button>
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Customer</span>
       </div>
+  </div>
   </div>
 
   <div class="grid">
@@ -1905,6 +1907,9 @@ const BUENTRADE_WIRE = { bankName: 'Grove Bank & Trust', bankAddress: '2701 Sout
 const INVOICE_TERMS = "This Invoice is issued by BuenTrade LLC. By signing in acknowledgment, the Customer confirms receipt of the merchandise described under the terms stated herein and accepts the outstanding balance and payment due date. The product is delivered as described, subject to standard industry tolerances in weight and count. Any discrepancy must be reported to BuenTrade LLC in writing within 24 hours of signing this invoice.";
 
 function todayStr(){ return new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }); }
+const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+const EMAIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>';
+const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
 function pdfDoc(){ const { jsPDF } = window.jspdf; return new jsPDF({ unit: 'pt', format: 'letter' }); }
 function pdfHeader(doc, docTitle, orderNumber, contactEmail){
   doc.setFillColor(10, 37, 71); doc.rect(0, 0, 612, 88, 'F');
@@ -1986,7 +1991,7 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
   const finalTotal = finalWeight * pricePerLb;
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Factura', orderNumber, CONTACT_EMAIL_SO);
+  pdfHeader(doc, 'Factura', 'INV-BT-' + orderNumber, CONTACT_EMAIL_SO);
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
   pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
 
@@ -1999,7 +2004,7 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
   }
   const y = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()], ['FECHA DE ENTREGA', todayStr()], ['INCOTERMS', composed.incoterms],
-    ['ORDEN DEL CLIENTE', orderNumber], ['CONDICIONES DE PAGO', composed.condiciones_pago], ['FECHA DE VENCIMIENTO', dueDateStr],
+    ['ORDEN DEL CLIENTE', 'INV-BT-' + orderNumber], ['CONDICIONES DE PAGO', composed.condiciones_pago], ['FECHA DE VENCIMIENTO', dueDateStr],
   ]);
 
   const nameEs = composed.linea.descripcion_es || '';
@@ -2079,29 +2084,69 @@ async function createAndShareInvoice(){
   const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
 
   const { doc, finalTotal } = buildInvoicePdfUnsigned(composed, so, customer, orderNumber);
-  const filename = `INV-${orderNumber}.pdf`;
+  const filename = `INV-BT-${orderNumber}.pdf`;
   let invoiceUrl;
   try { invoiceUrl = await uploadOrderPdf(doc, filename); }
   catch (e) { msgEl.textContent = 'Error subiendo el PDF: ' + e.message; return; }
 
   const contact = customer && customer.contact_name ? negoFirstName(customer.contact_name) : '';
-  const subject = `${orderNumber} — INVOICE`;
+  const subject = `INV-BT-${orderNumber} — INVOICE`;
   const body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, firma aquí: ${signLink} para su confirmación.\n\n`
     + `Gracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   const waPhone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
   const waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar, firma aquí: ${signLink}. ¡Gracias!`;
 
+  msgEl.textContent = '';
+  // Real ask 2026-09-12: same preview-before-send screen PO/SO/FO already have — this used to
+  // send straight through with no look at the real PDF first.
+  openInvoiceDocPreview({ orderNumber, doc, filename, emails, ccEmails, subject, body, waPhone, waMessage });
+}
+
+let invoicePreviewCtx = null;
+function closeDocPreview(){
+  document.getElementById('docPreviewOverlay').style.display = 'none';
+  document.getElementById('docPreviewFrame').src = 'about:blank';
+}
+async function sendInvoicePreviewEmail(){
+  const ctx = invoicePreviewCtx;
+  if (!ctx) return;
+  const msgEl = document.getElementById('invoiceMsg');
   try {
-    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(doc, filename)], { phone: waPhone, message: waMessage }, ccEmails);
-    await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: orderNumber, doc_type: 'invoice' });
+    await sendEmailApi('offers', ctx.emails, ctx.subject, ctx.body, [pdfAttachment(ctx.doc, ctx.filename)], { phone: ctx.waPhone, message: ctx.waMessage }, ctx.ccEmails);
+    await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
+    closeDocPreview();
     // Collections module (2026-09-08): "el flujo debe llevarme a collections" — the order now has
     // an invoice, so it just became a real Collections item; give the trader the direct link
     // instead of leaving them to remember to go look for it.
     msgEl.innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
   } catch (e) {
-    if (e.cancelled){ msgEl.textContent = ''; return; }
-    msgEl.textContent = 'Could not send: ' + e.message;
+    if (!e.cancelled) alert('Could not send: ' + e.message);
   }
+}
+function sendInvoicePreviewWhatsApp(){
+  const ctx = invoicePreviewCtx;
+  if (!ctx || !ctx.waPhone) return;
+  ctx.doc.save(ctx.filename);
+  window.open('https://wa.me/' + ctx.waPhone.replace(/\D/g, '') + '?text=' + encodeURIComponent(ctx.waMessage), '_blank');
+}
+function openInvoiceDocPreview(ctx){
+  invoicePreviewCtx = ctx;
+  document.getElementById('docPreviewTitle').textContent = 'Factura';
+  document.getElementById('docPreviewSub').textContent = `Order ${ctx.orderNumber}`;
+  const frame = document.getElementById('docPreviewFrame');
+  const loading = document.getElementById('docPreviewLoading');
+  frame.style.display = 'none';
+  frame.src = 'about:blank';
+  loading.style.display = 'flex';
+  loading.textContent = 'Building document…';
+  frame.src = ctx.doc.output('bloburl');
+  frame.onload = () => { loading.style.display = 'none'; frame.style.display = 'block'; };
+  const secondaryBtnStyle = 'display:inline-flex;align-items:center;gap:7px;background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;';
+  document.getElementById('docPreviewActions').innerHTML = `
+    <button style="${secondaryBtnStyle}" onclick="invoicePreviewCtx.doc.save(invoicePreviewCtx.filename)">${DOWNLOAD_ICON}Download</button>
+    <button style="${secondaryBtnStyle}" onclick="sendInvoicePreviewEmail()">${EMAIL_ICON}Email</button>
+    ${ctx.waPhone ? `<button class="wa-btn" style="display:inline-flex;align-items:center;gap:7px;padding:9px 16px;" onclick="sendInvoicePreviewWhatsApp()">${WA_ICON}WhatsApp</button>` : ''}`;
+  document.getElementById('docPreviewOverlay').style.display = 'flex';
 }
 
 // Full timeline = the two synthetic opening entries (what Quotes actually first sent, read
@@ -2316,9 +2361,28 @@ async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo, c
 // Message to the plant is English — plants are US-based (same rule as the PO/FO documents).
 async function negoSendToPlant(channel){
   if (!negoPlant){ document.getElementById('negoMsg').textContent = 'No plant on file for this offer.'; return; }
+  if (!negoOffer) return;
   const price = negoCurrentCost();
   const contact = negoFirstName(negoPlant.contact_name || negoPlant.name);
   const body = `Hi ${contact},\n\nCan you confirm ${price.toFixed(4)} USD/lb for this load?`;
+
+  // Real ask 2026-09-12: "el boton de bloqueo verdadero cuando voy a pasarle un bid a la planta" —
+  // this contact IS the bid (see negoQbLeft's own note above), so the credit check has to run and
+  // block BEFORE any message goes out, not after like the old fire-and-forget negoLogEvent call.
+  // Hard block, no override — sent-offers-log-event rejects this outright when it fires.
+  negoSetSaveStatus('saving');
+  let logResult;
+  try {
+    logResult = await callApi('sent-offers-log-event', { actor: currentActor(), sent_offer_id: negoOffer.id, to: 'plant', price });
+  } catch (e) {
+    document.getElementById('negoSaveStatus').textContent = '';
+    document.getElementById('negoMsg').textContent = (e.data && e.data.error === 'credit_limit_exceeded') ? e.data.message : ('Error: ' + e.message);
+    return;
+  }
+  negoOffer.negotiation_log = logResult.offer.negotiation_log;
+  negoRenderLog();
+  negoSetSaveStatus('saved');
+
   if (channel === 'email'){
     if (!negoPlant.email){ document.getElementById('negoMsg').textContent = 'This plant has no email on file.'; return; }
     try {
@@ -2332,7 +2396,6 @@ async function negoSendToPlant(channel){
     if (!phone){ document.getElementById('negoMsg').textContent = 'This plant has no phone/WhatsApp on file.'; return; }
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
   }
-  negoLogEvent('plant', price);
 }
 
 // Message to the customer stays Spanish — same rule as the SO document, Latin American buyers.
@@ -2355,26 +2418,6 @@ async function negoSendToCustomer(channel){
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
   }
   negoLogEvent('customer', price);
-}
-
-// Real ask 2026-09-07: "el historial de negociacion... NO QUIERO REPETIR" — plant_reply/
-// customer_bid already existed in NEGO_STEP_META (rendering the "in" arrow, green dot) but nothing
-// ever created one: only outgoing Email/WhatsApp sends were logged, so a real negotiation with
-// back-and-forth counters — most of it a phone call or a WhatsApp reply, never itself sent from
-// this app — left the history empty or one-sided. These record the other half.
-function negoLogPlantReply(){
-  const raw = prompt('Price the plant quoted you (USD/lb):');
-  if (raw === null) return;
-  const price = Number(raw);
-  if (!price || price <= 0){ alert('Enter a valid price.'); return; }
-  negoLogEvent('plant_reply', price);
-}
-function negoLogCustomerBid(){
-  const raw = prompt('Price the customer bid (USD/lb):');
-  if (raw === null) return;
-  const price = Number(raw);
-  if (!price || price <= 0){ alert('Enter a valid price.'); return; }
-  negoLogEvent('customer_bid', price);
 }
 
 // Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
@@ -2463,6 +2506,21 @@ async function negoSaveDefinitive(overrideCreditCheck){
 }
 </script>
 </div><!-- /appContent -->
+
+<div id="docPreviewOverlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);z-index:1000;flex-direction:column;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);">
+    <div>
+      <div style="color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;" id="docPreviewTitle"></div>
+      <div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;" id="docPreviewSub"></div>
+    </div>
+    <button onclick="closeDocPreview()" title="Close" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>
+  </div>
+  <div style="flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;">
+    <div id="docPreviewLoading" style="color:var(--ink-soft);font-size:13px;display:flex;align-items:center;gap:10px;">Building document…</div>
+    <iframe id="docPreviewFrame" style="width:100%;height:100%;border:none;display:none;position:absolute;inset:0;"></iframe>
+  </div>
+  <div id="docPreviewActions" style="display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.12);flex-shrink:0;background:var(--navy);"></div>
+</div>
 
 <div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
   <div class="email-modal-box">

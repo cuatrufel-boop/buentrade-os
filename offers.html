@@ -43,6 +43,7 @@
   }
   .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
   header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
   .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
   .brand-word span{color:var(--blue-bright);}
   .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
@@ -51,7 +52,7 @@
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
-  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;font-family:inherit;cursor:pointer;}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .confirm-box .btn.secondary{background:#fff;}
   .btn.danger{background:var(--card);color:#FF9C8A;border:1.5px solid rgba(196,67,46,.4);padding:5px 10px;font-size:12px;}
@@ -300,7 +301,7 @@
   }
   .icon-btn.lose:hover{background:#C4432E;border-color:#C4432E;color:#fff;transform:translateY(-1px);}
   .icon-btn.lose svg{width:13px;height:13px;}
-  .tt-overlay{position:fixed;inset:0;background:var(--bg);z-index:850;display:none;flex-direction:column;}
+  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:850;display:none;flex-direction:column;}
   .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
@@ -354,7 +355,7 @@
   .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
   /* Real fix 2026-09-02, explicit ask ("unifica... revisa todos los tabs") — same gradient+shadow
      every WhatsApp button across the OS now uses, not this page's own flat green. */
-  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn svg{fill:currentColor;}
@@ -1157,10 +1158,10 @@ async function markWon(id, overrideCreditCheck){
 // the moment an offer becomes an order.
 async function sendWonDocs(result){
   const orderNumber = result.order_number;
-  await sharePO(orderNumber);
-  await shareSO(orderNumber);
-  if (result.freight_order || result.mexican_freight_order) await shareFO(orderNumber);
-  alert(`Orden ${orderNumber} creada.`);
+  const kinds = ['PO', 'SO'];
+  if (result.freight_order || result.mexican_freight_order) kinds.push('FO');
+  await runDocSendSequence(orderNumber, kinds);
+  showToast(`Orden ${orderNumber} creada`, '');
 }
 
 function escapeHtml(str){
@@ -1244,10 +1245,15 @@ function closeFloatingMenus(){
 // Clicking a document type now opens this instead — the actual generated PDF rendered inline
 // (jsPDF's own blob-URL output, no separate render step) so the trader sees exactly what's about
 // to go out before picking Download/Email/WhatsApp, all three right below the preview.
-async function openDocPreview(kind, orderNumber){
+// `sequence` (optional) is the ordered list of remaining doc kinds still to go after this one —
+// only set when this preview is one step of a guided send (see runDocSendSequence below). When
+// set, clicking Email or WhatsApp (the two real "I sent this" actions — Download is just saving a
+// copy, not sending) automatically closes this preview and opens the next one, so the trader never
+// has to reopen the row menu for PO -> SO -> FO by hand.
+async function openDocPreview(kind, orderNumber, sequence){
   const cfg = DOC_TYPES.find(d => d.key === kind);
   document.getElementById('docPreviewTitle').textContent = cfg.title;
-  document.getElementById('docPreviewSub').textContent = `Order ${orderNumber}`;
+  document.getElementById('docPreviewSub').textContent = `Order ${orderNumber}` + (sequence ? ` — document ${sequence.stepIndex} of ${sequence.stepCount}` : '');
   document.getElementById('docPreviewActions').innerHTML = '';
   const frame = document.getElementById('docPreviewFrame');
   const loading = document.getElementById('docPreviewLoading');
@@ -1271,10 +1277,11 @@ async function openDocPreview(kind, orderNumber){
     }
     frame.src = doc.output('bloburl');
     frame.onload = () => { loading.style.display = 'none'; frame.style.display = 'block'; };
+    const nextLabel = sequence ? `, continue to next document&rsaquo;` : '';
     document.getElementById('docPreviewActions').innerHTML = `
       <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.exportFn}('${orderNumber}')">${DOWNLOAD_ICON}Download</button>
-      <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.shareFn}('${orderNumber}')">${EMAIL_ICON}Email</button>
-      <button class="wa-btn" style="display:inline-flex;align-items:center;gap:7px;" onclick="${cfg.waFn}('${orderNumber}', this)">${WA_ICON}WhatsApp</button>`;
+      <button class="btn secondary" style="display:inline-flex;align-items:center;gap:7px;" onclick="previewDocSend('${cfg.shareFn}','${orderNumber}')" title="Send${nextLabel}">${EMAIL_ICON}Email</button>
+      <button class="wa-btn" style="display:inline-flex;align-items:center;gap:7px;" onclick="previewDocSend('${cfg.waFn}','${orderNumber}')" title="Send${nextLabel}">${WA_ICON}WhatsApp</button>`;
   } catch(e){
     loading.textContent = 'Could not build this document: ' + e.message;
   }
@@ -1283,6 +1290,43 @@ async function openDocPreview(kind, orderNumber){
 function closeDocPreview(){
   document.getElementById('docPreviewOverlay').style.display = 'none';
   document.getElementById('docPreviewFrame').src = 'about:blank';
+}
+
+// ============ DOCUMENT SEND SEQUENCE (preview -> send -> next, no extra clicks) ============
+// Real gap fixed 2026-09-11: "Create Order" used to fire PO/SO/FO straight through sharePO/
+// shareSO/shareFO with no preview at all — the trader never saw the real PDF before it went out.
+// This reuses the exact same preview screen the row-menu already shows for a single document
+// (openDocPreview above) — no new UI — and just drives which document it shows next.
+let docSeq = null; // { orderNumber, queue: [kinds left], resolve }
+
+function docSeqAdvance(){
+  if (!docSeq) return;
+  if (!docSeq.queue.length){
+    closeDocPreview();
+    const resolve = docSeq.resolve;
+    docSeq = null;
+    resolve();
+    return;
+  }
+  const kind = docSeq.queue.shift();
+  openDocPreview(kind, docSeq.orderNumber, { stepIndex: docSeq.total - docSeq.queue.length, stepCount: docSeq.total });
+}
+
+// Email/WhatsApp buttons inside the preview call this instead of the share/wa function directly
+// whenever a sequence is running — same function, same behavior, it just also advances afterward.
+async function previewDocSend(fnName, orderNumber){
+  await window[fnName](orderNumber);
+  if (docSeq) docSeqAdvance();
+}
+
+// Shows PO, then SO, then FO (if there's a freight leg) one at a time — resolves once the trader
+// has gone through all of them. Each Email/WhatsApp click sends that one and moves to the next;
+// Download never advances (it's just saving a copy, not "sending").
+function runDocSendSequence(orderNumber, kinds){
+  return new Promise(resolve => {
+    docSeq = { orderNumber, queue: kinds.slice(1), resolve, total: kinds.length };
+    openDocPreview(kinds[0], orderNumber, { stepIndex: 1, stepCount: kinds.length });
+  });
 }
 
 // Replaces the plain browser confirm() that used to gate markWon — same centered-modal look as
@@ -1546,7 +1590,7 @@ async function buildPODoc(orderNumber){
   const isFob = composed.incoterms.startsWith('FCA');
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Purchase Order', orderNumber, CONTACT_EMAIL_PO);
+  pdfHeader(doc, 'Purchase Order', 'PO-BT-' + orderNumber, CONTACT_EMAIL_PO);
 
   const vendorLines = composed.vendor.split('\n');
   pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
@@ -1565,7 +1609,7 @@ async function buildPODoc(orderNumber){
     [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
     ['SHIP VIA', 'Refrigerated Trucking'],
     ['PAYMENT TERMS', composed.payment_terms],
-    ['ORDER #', orderNumber],
+    ['ORDER #', 'PO-BT-' + orderNumber],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
@@ -1612,7 +1656,7 @@ async function buildPODoc(orderNumber){
 async function exportPO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
-  built.doc.save(`PO-${orderNumber}.pdf`);
+  built.doc.save(`PO-BT-${orderNumber}.pdf`);
 }
 
 // Mirrors netlify/functions/send-email.js's FROM_ADDRESSES/SIGNATURE_TEXT exactly — the preview
@@ -1758,7 +1802,7 @@ async function waCardPO(orderNumber){
   try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const plant = built.plant;
   const phone = plant && (plant.whatsapp || plant.phone);
-  shareDocAndOpenWhatsApp(built.doc, `PO-${orderNumber}.pdf`, phone, `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
+  shareDocAndOpenWhatsApp(built.doc, `PO-BT-${orderNumber}.pdf`, phone, `PO-BT-${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 async function waCardSO(orderNumber){
@@ -1766,7 +1810,7 @@ async function waCardSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const customer = built.customer;
   const phone = customer && (customer.whatsapp || customer.phone);
-  shareDocAndOpenWhatsApp(built.doc, `SO-${orderNumber}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
+  shareDocAndOpenWhatsApp(built.doc, `SO-BT-${orderNumber}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
 }
 
 async function waCardFO(orderNumber){
@@ -1775,7 +1819,7 @@ async function waCardFO(orderNumber){
   const b = built[0];
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
   const phone = b.carrier && b.carrier.phone;
-  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
+  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO-BT-${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
@@ -1803,12 +1847,12 @@ async function sharePO(orderNumber){
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.plant);
   if (!emails.length){ alert('This plant has no email on file.'); return; }
-  const filename = `PO-${orderNumber}.pdf`;
+  const filename = `PO-BT-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
-  const subject = `📄 PO ${orderNumber} — BuenTrade — ${poProductName}`;
+  const subject = `PO-BT-${orderNumber} — BuenTrade — ${poProductName}`;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -1816,7 +1860,7 @@ async function sharePO(orderNumber){
     + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
   const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
-  const waMessagePo = `PO ${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
+  const waMessagePo = `PO-BT-${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
   try {
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: waMessagePo });
     showToast('PO sent', emails.join(', '));
@@ -1848,7 +1892,7 @@ async function buildSODoc(orderNumber){
   const { document: composed, so, customer } = result;
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Confirmación de Venta', orderNumber, CONTACT_EMAIL_SO);
+  pdfHeader(doc, 'Confirmación de Venta', 'SO-BT-' + orderNumber, CONTACT_EMAIL_SO);
 
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
   pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
@@ -1856,7 +1900,7 @@ async function buildSODoc(orderNumber){
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()],
     ['CONDICIONES DE PAGO', composed.condiciones_pago],
-    ['ORDEN #', orderNumber],
+    ['ORDEN #', 'SO-BT-' + orderNumber],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
@@ -1907,7 +1951,7 @@ async function buildSODoc(orderNumber){
 async function exportSO(orderNumber){
   let built;
   try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
-  built.doc.save(`SO-${orderNumber}.pdf`);
+  built.doc.save(`SO-BT-${orderNumber}.pdf`);
 }
 
 async function shareSO(orderNumber){
@@ -1915,12 +1959,12 @@ async function shareSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.customer);
   if (!emails.length){ alert('This customer has no email on file.'); return; }
-  const filename = `SO-${orderNumber}.pdf`;
+  const filename = `SO-BT-${orderNumber}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
-  const subject = `${orderNumber} — Orden de Venta — ${soProductName}`;
+  const subject = `SO-BT-${orderNumber} — Orden de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
@@ -1950,7 +1994,7 @@ async function buildFODocs(orderNumber){
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', orderNumber, CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + orderNumber, CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
@@ -1976,7 +2020,7 @@ async function buildFODocs(orderNumber){
     const yRight = pdfKeyValueRows(doc, 320, 240, [
       ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
       ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
-      ['CLIENT ORDER #', orderNumber],
+      ['CLIENT ORDER #', 'FO-BT-' + orderNumber],
       ['APPT. / CHECK-IN #', '____________________'],
       ['RELEASE #', '____________________'],
     ]);
@@ -2008,7 +2052,7 @@ async function buildFODocs(orderNumber){
     // performance) and the MBG reference examples didn't include one either.
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-BT-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
 }
@@ -2027,13 +2071,13 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `🚛 FO ${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
+    const subject = `FO-BT-${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     const waPhoneFo = b.carrier && (b.carrier.whatsapp || b.carrier.phone);
-    const waMessageFo = `FO ${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
+    const waMessageFo = `FO-BT-${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: waMessageFo });
       showToast('FO sent', emails.join(', '));
@@ -2085,7 +2129,7 @@ async function shareCustoms(orderNumber){
   if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
 
   const customerName = shipment && shipment.customer_name || '';
-  const subject = `📎 ${customerName} — BT-${orderNumber} — BuenTrade`;
+  const subject = `${customerName} — BT-${orderNumber} — BuenTrade`;
   const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${orderNumber}.\n\n`
     + `Please confirm receipt of the documents and that you have everything needed on your end for the shipment. We will proceed accordingly.\n\nThank you,`;
   const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);

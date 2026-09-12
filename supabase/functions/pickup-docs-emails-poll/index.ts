@@ -107,12 +107,17 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // A real order number stated by the sender ("BT-0042" anywhere in subject or body) is the
-      // only thing this ever matches on — never guessed from which plant/carrier sent it, since a
-      // plant/carrier can easily have more than one open shipment at once.
+      // A real order number stated by the sender is the only thing this ever matches on — never
+      // guessed from which plant/carrier sent it, since a plant/carrier can easily have more than
+      // one open shipment at once. Real change 2026-09-12: order_number dropped the old "BT-0042"
+      // scheme for a single per-order consecutive ("2026-1001") shared by its PO/SO/FO/Invoice —
+      // each document reads "PO-BT-2026-1001" (doc type, then BT-, then the consecutive) — a
+      // plant/carrier realistically quotes back whichever document we sent them, so this matches
+      // any of the four prefixes and strips them before comparing against shipments.order_number,
+      // which stores the bare consecutive only.
       const bodyText = extractPlainText(msgData.payload);
-      const orderMatch = (subject + " " + bodyText).match(/BT-\d+/i);
-      const orderNumber = orderMatch ? orderMatch[0].toUpperCase() : null;
+      const orderMatch = (subject + " " + bodyText).match(/(?:PO|SO|FO|INV)-BT-(\d{4}-\d+)/i);
+      const orderNumber = orderMatch ? orderMatch[1] : null;
 
       let shipmentId: string | null = null;
       if (orderNumber) {
