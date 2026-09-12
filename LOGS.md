@@ -1,5 +1,68 @@
 # Session Logs
 
+## 2026-09-12 — Nav restructure (Orders/Collections added), customer Credit Limit field, Quoting Tool moved into Quotes, negotiation bar redesign
+
+**Files changed:** `customers.html`, `orders.html` (new), `collections.html` (new), `quotes.html`,
+`trading-tool.html`, plus the shared nav row in `products.html`, `providers.html`, `plants.html`,
+`dashboard.html`, `offers.html`. No Edge Functions or DB schema touched by this window — everything
+below is frontend-only, built on API fields/actions that already existed.
+
+### Context: why these four pieces belong together
+Walked through the trader's actual daily workflow (Quotes → Offers → Orders → collecting payment)
+against how it's structured today and confirmed with the user that Orders and Collections deserved
+to be real, separate destinations — not more tabs bolted onto Offers — and that a customer's credit
+exposure needed to be visible on their own profile, not just enforced as a rejection at order time.
+The nav/Quoting Tool/negotiation-bar changes below are the scaffolding that decision needed.
+
+### What's live now
+1. **Customer profile: Credit Limit field** — `customers.html`'s edit form and read-only profile
+   card now show/set `credit_limit` directly (a plain number input next to Credit Days, and a
+   `$X,XXX` formatted view row). The column and the `customers-create`/`customers-update` API
+   support for it already existed (used by the credit check at order-won time) — it simply had no
+   UI, so it could only ever be set by hand via SQL. No API changes needed.
+2. **Global nav renamed + Orders/Collections added as real destinations**: Customers → Clients,
+   Freight & Logistics → Logistics, Meat Packers → Plants (all 8 pages). Added `orders.html` and
+   `collections.html` as new pages with the full shared shell (same auth gate, header, nav) so the
+   new tabs aren't dead links — shipped at the time as placeholders, since built out into real
+   pages by later work this same day (see the other entries in this file).
+3. **"Quoting Tool" moved out of the global nav, into a tab inside Quotes**: explicit ask — the nav
+   was getting crowded once Orders/Collections were added. Removed the standalone nav pill (was
+   pointing at `trading-tool.html`) from all 8 pages and added a third tab in `quotes.html`'s
+   existing tab-row (next to Quotes / Product Coverage) that lazily loads
+   `trading-tool.html?embed=1` in an iframe on first click — reusing the `embed=1` mode
+   `trading-tool.html` already supported (hides its own header) for the per-plant calculator
+   overlay elsewhere, so the frozen calculator itself was never touched.
+4. **Negotiation bar redesign** (`trading-tool.html`, the Plant/Terms/Create Order/Customer row
+   shown when the calculator is opened from an existing offer): three rounds of user-reported
+   issues, fixed in place —
+   - Removed two buttons ("log the plant's reply" / "log the customer's bid", opening a bare
+     `prompt()`) that the user said were never asked for, plus their now-orphaned
+     `negoLogPlantReply`/`negoLogCustomerBid` functions. Left the underlying history-rendering
+     support for those event types untouched, so any already-logged entries still display.
+   - Both WhatsApp buttons (Plant side and Customer side) were a solid `#25D366`-filled square —
+     replaced with the same `.wa-btn` outline pill (translucent background, green border/text)
+     used everywhere else in the app; added that shared class to `trading-tool.html`, which didn't
+     have it yet.
+   - Plant/Customer were flex children that wrapped unpredictably at narrower widths and
+     re-centered independently instead of staying pinned to their edge. Restructured as a 3-column
+     CSS grid (`1fr auto 1fr`) so Plant stays left and Customer stays right regardless of width.
+   - Create Order's solid-fill color (an invented two-tone gradient) and its position (inline
+     between Terms and Finance Cost, which looked off-center whenever Finance Cost wrapped to its
+     own line) were both wrong per the user. Moved it out of that row entirely into its own
+     centered row **below** the data fields — matching a design comment already in the file
+     ("Create Order sits under the data fields instead of above them") that the inline placement
+     had drifted away from — and restyled it with the same `.wa-btn` class rather than a bespoke
+     color, consistent with how that class is already reused for non-WhatsApp confirm actions
+     elsewhere (e.g. Orders' "✓ Done", "Confirm Payment Sent").
+   Verified live at 1000px/1300px/1600px viewport widths via forced-display screenshots (no
+   real offer needed): edges stay pinned, Create Order sits centered below the fields, no
+   console errors.
+
+### Known gaps / deferred
+- `orders.html`/`collections.html` were placeholders when created in this window ("Coming soon");
+  confirmed already built out into real pages by other work landed the same day — nothing left to
+  do here, noted only so this entry doesn't read as if they're still empty.
+
 ## 2026-09-12 — Credit USD Limit connected to Collections cupo (hard block at the plant bid)
 
 **Files changed:** `supabase/functions/_shared/matching.ts`, `supabase/functions/sent-offers-create/index.ts`,
