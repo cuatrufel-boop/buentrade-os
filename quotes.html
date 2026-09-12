@@ -539,10 +539,17 @@
      outer trigger it opens from (rq-search-trigger, itself already redesigned as a glass pill) —
      the input used to be a plain rounded rectangle, a visibly different shape from the button
      the trader just clicked, breaking the "one continuous piece of UI" this was meant to be. */
-  .rq-hero-searchbar input{width:100%;height:46px;padding:0 68px 0 48px;border-radius:999px;border:1.5px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;font-size:14.5px;font-family:inherit;box-shadow:0 8px 22px rgba(4,12,26,.3),inset 0 1px 0 rgba(255,255,255,.1);transition:background .15s ease,border-color .15s ease,box-shadow .2s ease;}
+  .rq-hero-searchbar input{width:100%;height:46px;padding:0 132px 0 48px;border-radius:999px;border:1.5px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;font-size:14.5px;font-family:inherit;box-shadow:0 8px 22px rgba(4,12,26,.3),inset 0 1px 0 rgba(255,255,255,.1);transition:background .15s ease,border-color .15s ease,box-shadow .2s ease;}
   .rq-hero-searchbar input::placeholder{color:rgba(255,255,255,.45);}
   .rq-hero-searchbar input:focus{outline:none;border-color:var(--blue-bright);background:rgba(255,255,255,.15);box-shadow:0 10px 26px rgba(4,12,26,.35),inset 0 1px 0 rgba(255,255,255,.12),0 0 0 4px rgba(90,170,255,.18);}
-  .rq-search-kbd{position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:rgba(255,255,255,.55);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:4px 7px;pointer-events:none;white-space:nowrap;}
+  .rq-search-kbd{display:flex;align-items:center;gap:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:rgba(255,255,255,.55);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:4px 7px;pointer-events:none;white-space:nowrap;}
+  /* ESC used to be the only thing absolutely-positioned inside the bar; a live match-count pill
+     sits next to it now, so both share one flex wrapper instead of ESC alone owning that slot. */
+  .rq-search-adornments{position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:7px;}
+  .rq-palette-match-count{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;color:var(--blue-bright);background:rgba(90,170,255,.14);border:1px solid rgba(90,170,255,.32);border-radius:20px;padding:3px 9px;white-space:nowrap;opacity:0;transform:translateY(2px) scale(.92);transition:opacity .15s ease,transform .15s ease;pointer-events:none;}
+  .rq-palette-match-count.show{opacity:1;transform:translateY(0) scale(1);}
+  .rq-palette-match-count.bump{animation:rqCountBump .22s ease;}
+  @keyframes rqCountBump{50%{transform:scale(1.15);}}
 
   /* The trigger sitting permanently in the page — a button, not an input, styled to look like
      the same search bar it opens so the transition into the palette reads as one continuous
@@ -571,19 +578,17 @@
   .rq-palette-overlay{position:fixed;inset:0;background:rgba(4,12,26,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:2200;display:flex;align-items:flex-start;justify-content:center;padding:12vh 20px 20px;}
   /* Real ask 2026-09-09 ("mejora esta tabla muy mal diseno"): this box's border was a leftover
      amber (rgba(232,181,76) — not even a real token, same stray color the stat cards had) while
-     its own Done button, quickpick hover, and the trigger that opens it are all blue-bright — one
-     modal disagreeing with its own trigger and its own footer button. Blue throughout now. */
-  .rq-palette-box{width:100%;max-width:640px;background:rgba(20,40,74,.75);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1.5px solid rgba(90,170,255,.35);border-radius:16px;padding:20px;box-shadow:0 32px 80px rgba(4,12,26,.55);animation:rqPaletteIn .16s ease-out;}
+     its own Done button and the trigger that opens it are all blue-bright — one modal disagreeing
+     with its own trigger and its own footer button. Blue throughout now.
+     Real ask 2026-09-13 ("dame algo mas moderno interactivo"): position:relative so the cursor-glow
+     child below can be positioned/clipped against this box specifically. */
+  .rq-palette-box{position:relative;width:100%;max-width:640px;background:rgba(20,40,74,.75);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1.5px solid rgba(90,170,255,.35);border-radius:16px;padding:20px;box-shadow:0 32px 80px rgba(4,12,26,.55);animation:rqPaletteIn .16s ease-out;}
   @keyframes rqPaletteIn{from{opacity:0;transform:translateY(-8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
-  .rq-palette-box .rq-quickpicks{margin-top:14px;}
-  .rq-palette-box .rq-quickpicks-label{color:rgba(255,255,255,.55);}
-  .rq-palette-box .rq-quickpicks-label svg{color:var(--blue-bright);}
-  /* Real ask 2026-09-09 ("un solo color?"): one accent throughout instead of blue everywhere
-     (border/icon/Done) except the chips at rest, which sat neutral white/grey and only turned
-     blue on hover — same transparent-bg + colored-border + colored-text pill language already
-     used app-wide (.pkg-tag etc.), just blue instead of grey by default now. */
-  .rq-palette-box .rq-quickpick-chip{background:rgba(90,170,255,.1);color:var(--blue-bright);border:1px solid rgba(90,170,255,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
-  .rq-palette-box .rq-quickpick-chip:hover{background:var(--blue-bright);color:var(--navy);border-color:var(--blue-bright);box-shadow:0 3px 10px rgba(90,170,255,.35);}
+  /* A soft glow that follows the mouse (--mx/--my set by a mousemove listener near
+     rqOpenSearchPalette) — cosmetic only, sits behind everything else in the box via z-index. */
+  .rq-palette-glow{position:absolute;inset:-40px;border-radius:32px;background:radial-gradient(300px circle at var(--mx,50%) var(--my,0%), rgba(90,170,255,.32), transparent 70%);filter:blur(10px);opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:0;}
+  .rq-palette-box:hover .rq-palette-glow,.rq-palette-box:focus-within .rq-palette-glow{opacity:1;}
+  .rq-palette-box > *:not(.rq-palette-glow){position:relative;z-index:1;}
   /* Real bug fixed 2026-09-05, reported live: typing in the palette computed real matches into
      #rq_search_results same as before, but that container lives in .rq-board, BEHIND this overlay's
      opaque/blurred backdrop (z-index 2200 vs 2) — so a real match ("Combo") was being found and
@@ -600,7 +605,10 @@
   .rq-palette-results::-webkit-scrollbar-track{background:transparent;}
   .rq-palette-results::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:4px;}
   .rq-palette-results::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3);}
-  .rq-palette-footer{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.14);display:flex;justify-content:flex-end;}
+  .rq-palette-footer{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .rq-palette-hints{display:flex;align-items:center;gap:14px;font-size:10.5px;color:rgba(255,255,255,.4);font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  .rq-palette-hints kbd{display:inline-block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:1px 5px;margin-right:4px;font-size:10px;color:rgba(255,255,255,.62);}
+  @media (max-width:560px){.rq-palette-hints{display:none;}}
   /* Corrected 2026-09-05 ("hace cuanto ya no hacemos esos botones azules llenos"): solid-fill .btn
      is the OLD button, already retired everywhere this OS has actually been rebuilt dark/glass —
      the real current pattern for a confirm-style action there is translucent bg + colored border +
@@ -626,16 +634,6 @@
   .rq-hero-stat-value{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1.1;font-variant-numeric:tabular-nums;}
   .rq-hero-stat-label{font-size:10.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;white-space:nowrap;}
   .rq-search-wrap{position:relative;}
-  .rq-quickpicks{display:flex;align-items:center;justify-content:center;gap:9px 10px;flex-wrap:wrap;margin-top:14px;}
-  /* Real ask 2026-09-09 ("mejora esta tabla muy mal diseno"): the label used to sit inline with
-     the chips in the same wrapping flex row — with "Most Requested" plus the first chip eating
-     the whole first line, the remaining 2 chips wrapped alone below, unbalanced (1 chip on top,
-     2 underneath, confirmed live with a screenshot). flex-basis:100% forces the label onto its
-     own line regardless of chip lengths, so every chip wraps together as one clean group below it. */
-  .rq-quickpicks-label{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;flex-basis:100%;margin-bottom:2px;}
-  .rq-quickpicks-label svg{width:13px;height:13px;color:var(--blue);}
-  .rq-quickpick-chip{font-size:12.5px;font-weight:600;color:var(--navy-2);background:var(--blue-light);border:1px solid rgba(30,106,219,.15);border-radius:20px;padding:7px 15px;cursor:pointer;white-space:nowrap;transition:background .12s ease,transform .12s ease,box-shadow .12s ease;}
-  .rq-quickpick-chip:hover{background:var(--blue);color:#fff;border-color:var(--blue);transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,106,219,.3);}
   /* ---- Real redesign, explicit ask ("quiero algo moderno... visualmente impresionante"): the
      search results and the building quote are no longer a plain dropdown over a plain list — a
      two-column dashboard board instead, researched from real 2026 SaaS reference points (Linear's
@@ -666,9 +664,13 @@
      row to a compact square tile, so 3-4 fit per line instead of 2 and far more rows are visible
      before scrolling. Full spec text is never truncated (see rule 12 — full profile, temp+packaging
      always visible), just wrapped smaller instead of on one wide line. */
-  .rq-result-variant{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:12px 8px 10px;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.18);border-radius:13px;transition:border-color .15s,box-shadow .15s,transform .12s,background .15s;}
+  .rq-result-variant{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:12px 8px 10px;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.18);border-radius:13px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .12s,background .15s;}
   .rq-result-variant:hover{border-color:rgba(255,255,255,.4);transform:translateY(-1px);}
   .rq-result-variant.picked{border-color:var(--blue-bright);background:rgba(90,170,255,.14);}
+  /* Arrow-key navigation highlight (rqPaletteHandleKey) — distinct from .picked, which means
+     "already the active filter," not "the keyboard cursor is here." */
+  .rq-result-variant.kbd-active{border-color:var(--blue-bright);box-shadow:0 0 0 2px rgba(90,170,255,.4);}
+  mark.rq-match{background:rgba(90,170,255,.35);color:#fff;border-radius:3px;padding:0 1px;box-shadow:0 0 0 1px rgba(90,170,255,.22);}
   .rq-result-icon{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .rq-result-icon svg{width:15px;height:15px;}
   .rq-result-icon.fresh{background:linear-gradient(145deg,#FFF1DF,#FFE2BE);color:#D97B2B;}
@@ -1014,16 +1016,24 @@ auth.onAuthStateChanged(user => {
        command-palette overlay (⌘K/Ctrl+K or click the trigger above) instead of a search box
        permanently sitting on the page — same pattern Linear/Raycast/Notion use for theirs. The
        actual #rq_product_name input and its handlers are unchanged (still onRqProductInput /
-       rqSearchGo / rqQuickPick, still render live into #rq_palette_results inside this overlay
-       itself) — only WHERE the input lives changed, from a fixed slot to this overlay. -->
+       rqSearchGo, still render live into #rq_palette_results inside this overlay itself) — only
+       WHERE the input lives changed, from a fixed slot to this overlay.
+       Real redesign 2026-09-13 ("dame algo mas moderno interactivo"): the "Most requested"
+       quickpicks are gone (explicit ask, "no me gusta esa ventana de search con most requested") —
+       #rq_quickpicks and rqRenderHero/rqQuickPick/rqSyncQuickpicksVisibility were removed with it.
+       Added: a cursor-tracked glow (#rq_palette_glow), a live match-count pill, and arrow-key
+       navigation (rqPaletteHandleKey) over the same exact click action results already had. -->
   <div class="rq-palette-overlay" id="rq_palette_overlay" style="display:none;" onclick="if(event.target===this) rqCloseSearchPalette();">
     <div class="rq-palette-box">
+      <div class="rq-palette-glow" id="rq_palette_glow"></div>
       <div class="rq-hero-searchbar">
         <svg class="rq-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="rq_product_name" placeholder="Search products…" autocomplete="off" oninput="onRqProductInput()" onkeydown="if(event.key==='Enter') rqSearchGo();">
-        <kbd class="rq-search-kbd rq-search-kbd-esc">ESC</kbd>
+        <input id="rq_product_name" placeholder="Search products…" autocomplete="off" oninput="onRqProductInput()" onkeydown="rqPaletteHandleKey(event)">
+        <div class="rq-search-adornments">
+          <span id="rq_palette_match_count" class="rq-palette-match-count"></span>
+          <kbd class="rq-search-kbd rq-search-kbd-esc">ESC</kbd>
+        </div>
       </div>
-      <div id="rq_quickpicks" class="rq-quickpicks"></div>
       <div id="rq_palette_results" class="rq-palette-results"></div>
       <!-- Explicit ask 2026-09-05 ("un boton que... le doy al boton done y me lleva al building con
            esos productos"): always visible (not tied to search state), outside the scrollable
@@ -1032,6 +1042,11 @@ auth.onAuthStateChanged(user => {
            clicked), Ready/Expired/Waiting included exactly as before; this button adds no new logic,
            only a visible way out besides ESC/click-outside. -->
       <div class="rq-palette-footer">
+        <div class="rq-palette-hints">
+          <span><kbd>&uarr;</kbd><kbd>&darr;</kbd>Navigate</span>
+          <span><kbd>&crarr;</kbd>Select</span>
+          <span><kbd>ESC</kbd>Close</span>
+        </div>
         <button type="button" class="rq-palette-done-btn" onclick="rqCloseSearchPalette()">Done<span id="rq_palette_done_count"></span></button>
       </div>
     </div>
@@ -1237,6 +1252,9 @@ let temperatures = [];
 let packagings = [];
 let rqAllPlants = [];
 let rqProductSuggestions = []; // [{ label (name + full spec), matchName, productId }]
+// Declared early (well before rqRenderGroupedResults ever runs) so the arrow-key palette
+// navigation below always has it defined — see rqPaletteHandleKey et al. near rqOpenSearchPalette.
+let rqPaletteNavIndex = -1;
 let rqSelectedPlants = [];
 // The building-quote list — every product id the trader has explicitly added (search result "+
 // Add", or a quick pick, or "Open this product in Quotes" from Pending). Replaces the old single
@@ -1374,7 +1392,6 @@ async function loadQuotesPage(){
   rqProductSuggestions.sort((a, b) => a.label.localeCompare(b.label));
 
   rqFetchExchangeRate(); // kicked off early, not awaited — usually ready well before Imported Load gets toggled
-  rqRenderHero();
   // Real bug fixed, confirmed live with a screenshot: setQuoteTab('request') (the only other thing
   // that ever calls renderRqPlants) never runs on a fresh page load — only from clicking the tab or
   // navigating in from Pending — so the floating Building Quote panel sat structurally present but
@@ -1401,54 +1418,6 @@ async function loadQuotesPage(){
   // ficha" class of bug qOpenPendingPlantInline's own teardown was built to prevent, not something
   // to reintroduce here.
   setInterval(() => { if (!rqPendingInlineOpenId) loadPendingPrices(); }, 45000);
-}
-
-// How many times each product has actually gone out in a sent offer — real usage, not a guess —
-// so "Most requested" means what it says. Counts by full spec (product_spec — the Full Name at
-// send time), not the bare product_name, so it lines up with the Full-Name-only suggestions below
-// and two different variants of the same cut are never counted as the same product.
-async function rqMostRequestedProducts(limit){
-  let data;
-  try { data = (await callApi('sent-offers-search', { limit: 500 })).results || []; }
-  catch (e) { return []; }
-  data.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
-  const counts = {};
-  data.forEach(r => {
-    const n = (r.product_spec || r.product_name || '').trim();
-    if (n) counts[n] = (counts[n] || 0) + 1;
-  });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name]) => name);
-}
-
-// The pre-search screen was just a bare search box — nothing to look at, nothing to click before
-// you already knew a product name. Quick picks are real products so a click here does exactly
-// what typing the name and picking the suggestion would do (rqSelectSuggestionIdx).
-async function rqRenderHero(){
-  const picksBox = document.getElementById('rq_quickpicks');
-  if (!picksBox || !rqProductSuggestions.length) return;
-  const seen = new Set();
-  const unique = rqProductSuggestions.filter(s => (seen.has(s.matchName) ? false : (seen.add(s.matchName), true)));
-  // Only label it "Most requested" once there's enough real history to back that claim — with
-  // fewer than 3 offers ever sent, it'd mostly be padding out random products under a false label.
-  const topNames = await rqMostRequestedProducts(6);
-  const ranked = topNames.map(n => unique.find(s => s.matchName.toLowerCase() === n.toLowerCase())).filter(Boolean);
-  const isRanked = ranked.length >= 3;
-  const label = isRanked ? 'Most requested' : 'Quick pick';
-  const labelIcon = isRanked
-    ? '<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>'
-    : '<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>';
-  const picks = isRanked ? ranked : unique.slice().sort(() => Math.random() - 0.5).slice(0, 6);
-  picksBox.innerHTML = `<span class="rq-quickpicks-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${labelIcon}</svg>${label}</span>`
-    + picks.map(s => `<button type="button" class="rq-quickpick-chip" onclick="rqQuickPick('${escapeHtml(s.matchName).replace(/'/g, "\\'")}',${s.productId ? `'${s.productId}'` : 'null'})">${escapeHtml(s.matchName)}</button>`).join('');
-}
-
-// A quick pick is a real variant — clicking it views it straight away (same as clicking the
-// arrow on that exact search result), not just filling the search box. Real fix 2026-09-12: used
-// to call rqAddVariantToQuote (a real write) — now a pure filter, see rqFilterToProduct.
-function rqQuickPick(name, productId){
-  document.getElementById('rq_product_name').value = name;
-  if (productId) rqFilterToProduct(productId);
-  rqCloseSearchPalette();
 }
 
 // The "Customers who buy this" section (rq_customers_wrap) is ONE shared DOM node — Pending
@@ -1583,7 +1552,7 @@ let qPendingRows = [];
 // command-palette overlay — ⌘K/Ctrl+K, or click the trigger — same pattern Linear/Raycast/Notion
 // use for theirs, instead of a search box permanently sitting on the page. Opening/closing is
 // the only thing this adds; #rq_product_name keeps its exact same handlers (onRqProductInput,
-// rqSearchGo, rqQuickPick) and still renders live into #rq_palette_results inside the overlay.
+// rqSearchGo) and still renders live into #rq_palette_results inside the overlay.
 const rqIsMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
 // Live count on the Done button — "si escogí dos productos" should read back to the trader before
@@ -1599,6 +1568,7 @@ function rqOpenSearchPalette(){
   const overlay = document.getElementById('rq_palette_overlay');
   overlay.style.display = 'flex';
   rqUpdatePaletteDoneCount();
+  rqPaletteNavIndex = -1;
   const input = document.getElementById('rq_product_name');
   input.focus();
   input.select();
@@ -1617,6 +1587,46 @@ document.addEventListener('keydown', e => {
 });
 const rqSearchKbdEl = document.getElementById('rq_search_kbd');
 if (rqSearchKbdEl) rqSearchKbdEl.textContent = rqIsMac ? '⌘K' : 'Ctrl K';
+
+// Real ask 2026-09-13 ("dame algo mas moderno interactivo"): arrow-key navigation through the
+// result tiles, same as Raycast/Linear's own command palettes — Enter on a highlighted tile just
+// clicks it, so it runs the exact same rqFilterToProduct + close as a mouse click, nothing new.
+function rqPaletteVisibleItems(){
+  const results = document.getElementById('rq_palette_results');
+  return results ? Array.from(results.querySelectorAll('.rq-result-variant')) : [];
+}
+function rqPaletteSetNavIndex(i){
+  const items = rqPaletteVisibleItems();
+  items.forEach(el => el.classList.remove('kbd-active'));
+  if (!items.length){ rqPaletteNavIndex = -1; return; }
+  rqPaletteNavIndex = Math.max(0, Math.min(i, items.length - 1));
+  const active = items[rqPaletteNavIndex];
+  active.classList.add('kbd-active');
+  active.scrollIntoView({ block: 'nearest' });
+}
+function rqPaletteActivateCurrent(){
+  const items = rqPaletteVisibleItems();
+  const el = items[rqPaletteNavIndex];
+  if (!el) return false;
+  el.click();
+  return true;
+}
+function rqPaletteHandleKey(e){
+  if (e.key === 'ArrowDown'){ e.preventDefault(); rqPaletteSetNavIndex(rqPaletteNavIndex + 1); }
+  else if (e.key === 'ArrowUp'){ e.preventDefault(); rqPaletteSetNavIndex(rqPaletteNavIndex - 1); }
+  else if (e.key === 'Enter'){ e.preventDefault(); if (!rqPaletteActivateCurrent()) rqSearchGo(); }
+}
+
+// Real ask 2026-09-13: a soft glow that tracks the cursor across the search box — cosmetic only,
+// pure CSS custom properties, no data or layout logic involved.
+const rqPaletteBoxEl = document.querySelector('.rq-palette-box');
+if (rqPaletteBoxEl){
+  rqPaletteBoxEl.addEventListener('mousemove', e => {
+    const r = rqPaletteBoxEl.getBoundingClientRect();
+    rqPaletteBoxEl.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    rqPaletteBoxEl.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  });
+}
 
 // Same stat-card component as Offers' Pipeline dashboard — fed straight from qPendingRows
 // (the same data already driving the Quotes tab's count badge), never invented numbers.
@@ -2310,17 +2320,6 @@ function rqTodayStr(){
   return tz.toISOString().slice(0, 10);
 }
 
-// Quick picks are clutter once there's either an active quote or real search results already
-// filling the page below — same progressive-disclosure idea as before, just checking the new
-// inline results container instead of a dropdown's own .show class (there's no dropdown to open/
-// close any more — results render in normal page flow, see rqRenderGroupedResults).
-function rqSyncQuickpicksVisibility(){
-  const picks = document.getElementById('rq_quickpicks');
-  const matched = document.getElementById('rq_dates_wrap').style.display !== 'none';
-  const hasResults = document.getElementById('rq_product_name').value.trim().length > 0;
-  picks.style.display = (matched || hasResults) ? 'none' : 'flex';
-}
-
 // Groups every catalog product whose name matches the typed text by CUT — name_en + subcategory_en,
 // ignoring temperature/packaging — so "Sirloin" comes back as one group ("Beef Sirloin") holding
 // every real variant (Fresh/Combo, Frozen/Box, ...) instead of one flat list of full spec strings.
@@ -2375,6 +2374,18 @@ function rqTempIsFrozen(product){
 // to one product (rqFilterToProduct) — a pure, in-memory re-slice, never a fetch or a write.
 const RQ_SEARCH_ICO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`;
 const RQ_VIEW_ARROW_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
+
+// Purely presentational — wraps whichever typed words (3+ letters, to skip noisy short ones like
+// "in"/"of") in <mark> inside the already-escaped spec text. Never touches rqGroupedSearchMatches
+// itself, so what counts as a match is completely unchanged; this only highlights it.
+function rqHighlightMatch(text, rawTerm){
+  const escaped = escapeHtml(text);
+  const words = (rawTerm || '').trim().split(/\s+/).filter(w => w.length >= 3);
+  if (!words.length) return escaped;
+  const pattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  return escaped.replace(new RegExp('(' + pattern + ')', 'ig'), '<mark class="rq-match">$1</mark>');
+}
+
 async function rqRenderGroupedResults(){
   // Real bug fixed 2026-09-05 (reported live: "le pongo combo y no los puedo ver ni escoger") —
   // this used to always target a container behind the palette overlay's opaque/blurred backdrop.
@@ -2383,23 +2394,44 @@ async function rqRenderGroupedResults(){
   // box itself, always.
   const box = document.getElementById('rq_palette_results');
   const term = document.getElementById('rq_product_name').value.trim();
+  const countEl = document.getElementById('rq_palette_match_count');
+  rqPaletteNavIndex = -1;
+
+  // Real ask 2026-09-13 ("dame algo mas moderno interactivo"): every re-render animates existing
+  // tiles into their new position/opacity via the Web Animations API instead of just replacing
+  // them silently — captured here, before innerHTML wipes the old ones out, keyed by product id
+  // (not text, so a renamed spec still tracks the same tile).
+  const beforeRects = new Map();
+  if (box) box.querySelectorAll('[data-key]').forEach(el => beforeRects.set(el.dataset.key, el.getBoundingClientRect()));
+
   // Real fix 2026-09-12: this used to re-fetch everything (loadPendingPrices, a real API round
   // trip) every time the box went empty — a plain, cheap re-render off what's already in memory
   // does the exact same job (clear the filter, show tab mode again) with nothing sent over the
   // wire.
   if (!term){
     if (rqPendingInlineOpenId) await rqCloseCalculator(rqPendingInlineOpenId);
-    if (box) box.innerHTML = '';
+    // Real redesign 2026-09-13: this used to sit blank behind the "Most requested" quickpicks,
+    // now retired ("no me gusta esa ventana de search con most requested") — an empty box with
+    // nothing in it at all read as broken, so it shows the same resting prompt "no matches" already
+    // used elsewhere, just with different copy.
+    if (box) box.innerHTML = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Start typing to search the catalog.</div></div>`;
+    if (countEl) countEl.classList.remove('show');
     rqClearProductFilter();
-    rqSyncQuickpicksVisibility();
     return;
   }
   if (rqPendingInlineOpenId) await rqCloseCalculator(rqPendingInlineOpenId);
   const groups = rqGroupedSearchMatches(term);
   if (!groups.length){
     box.innerHTML = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>No catalog product matches "${escapeHtml(term)}".</div></div>`;
+    if (countEl) countEl.classList.remove('show');
   } else {
     const totalVariants = groups.reduce((n, g) => n + g.variants.length, 0);
+    if (countEl){
+      const label = `${totalVariants} match${totalVariants === 1 ? '' : 'es'}`;
+      if (countEl.textContent !== label){ countEl.classList.remove('bump'); void countEl.offsetWidth; countEl.classList.add('bump'); }
+      countEl.textContent = label;
+      countEl.classList.add('show');
+    }
     // Real redesign 2026-09-05, explicit ask ("me refiero en todos los espacios no una arriba de
     // otra sino en todo el espacio"): a separate grid PER cut meant a cut with only 1 variant
     // (the common case) still broke onto its own row, wasting the rest of that row's width — with
@@ -2413,15 +2445,30 @@ async function rqRenderGroupedResults(){
             const spec = v.full_name_en || v.name_en || v.name;
             const active = rqActiveProductFilterId === v.id;
             const frozen = rqTempIsFrozen(v);
-            return `<div class="rq-result-variant${active ? ' picked' : ''}">
+            // Real ask 2026-09-13: the whole tile is the click target now, not just the small arrow
+            // button — same exact action either way (rqFilterToProduct + close), the button is only
+            // a visual affordance so tabindex="-1" keeps it out of the tab order (arrow-key nav
+            // below, rqPaletteHandleKey, is how keyboard users reach it).
+            return `<div class="rq-result-variant${active ? ' picked' : ''}" data-key="${v.id}" onclick="rqFilterToProduct('${v.id}'); rqCloseSearchPalette();">
               <div class="rq-result-icon ${frozen ? 'frozen' : 'fresh'}">${frozen ? RQ_SNOWFLAKE_SVG : RQ_SUN_SVG}</div>
-              <span class="rq-result-spec">${escapeHtml(spec)}</span>
-              <button type="button" class="rq-result-add-btn${active ? ' added' : ''}" title="View this product across Ready/Expired/Updating" onclick="rqFilterToProduct('${v.id}'); rqCloseSearchPalette();">${RQ_VIEW_ARROW_SVG}</button>
+              <span class="rq-result-spec">${rqHighlightMatch(spec, term)}</span>
+              <button type="button" class="rq-result-add-btn${active ? ' added' : ''}" title="View this product across Ready/Expired/Updating" tabindex="-1">${RQ_VIEW_ARROW_SVG}</button>
             </div>`;
           }).join('')}
         </div>`;
   }
-  rqSyncQuickpicksVisibility();
+
+  const tiles = box ? box.querySelectorAll('.rq-result-variant') : [];
+  tiles.forEach((el, i) => {
+    const prev = beforeRects.get(el.dataset.key);
+    if (prev){
+      const now = el.getBoundingClientRect();
+      const dx = prev.left - now.left, dy = prev.top - now.top;
+      if (dx || dy) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    } else {
+      el.animate([{ opacity: 0, transform: 'scale(.94) translateY(5px)' }, { opacity: 1, transform: 'none' }], { duration: 260, delay: Math.min(i, 10) * 25, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' });
+    }
+  });
 }
 
 // The list already filters live as you type (oninput below) — this button/Enter isn't a second
@@ -2977,7 +3024,6 @@ function renderRqPlants(){
     specCount.style.display = 'none';
   }
   rqUpdateActionButtons();
-  rqSyncQuickpicksVisibility();
   // The Trading Tool itself lives in the one shared full-screen overlay now (see
   // rqToggleCalculator), never inside a per-plant row — so rebuilding this whole list on every
   // render can no longer detach/reload a live iframe. A plain full rebuild is safe.
