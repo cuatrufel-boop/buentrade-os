@@ -251,3 +251,46 @@ implicit.
 - Region detected from a price line is currently display-only on the Load Prices review screen
   (no `plant_products` column stores it) — the deferred design question is exactly how a detected
   region should attach to a specific price row once that's asked for.
+
+## 2026-09-12 — Packaging catalog: add/remove from the UI, same as Cut Name/Variation (parallel window)
+
+**Files changed:** `products.html`, `supabase/functions/packaging-create/index.ts` (new),
+`supabase/functions/packaging-delete/index.ts` (new),
+`supabase/migrations/20260912020000_add_idempotency_key_to_packaging.sql` (new). Ran in a
+separate window/session alongside the entries above.
+
+### What was wrong
+The Packaging dropdown (Add/Edit Product form) was 100% read-only. Cut Name and Variation — the
+other two closed-catalog fields on the same form — already had `+`/🗑 UI to add or remove catalog
+entries; Packaging had no create/delete API at all, so a new packaging type could only ever be
+added by hand via direct SQL.
+
+### What's live now
+1. **`packaging-create`**: same near-duplicate discipline as `cut-names-create`/`variations-create`
+   (case/typo-insensitive check, `override_duplicate_check` escape hatch, idempotency key). Unlike
+   those two, packaging isn't scoped to a category (shared across every species), so the duplicate
+   check runs against the whole table, not a category slice.
+2. **`packaging-delete`**: unlike Cut Name/Variation (pure suggestion lists, no FK),
+   `products.packaging_id` IS a real foreign key with no `ON DELETE` clause — the function checks
+   `count(*) from products where packaging_id = id` up front and returns a clear "N products still
+   use this" 409 instead of a raw Postgres FK-violation error.
+3. `products.html`'s Packaging field now has the same `+`/🗑 buttons as Cut Name, wired to the two
+   new functions.
+4. Verified live end-to-end against staging before touching the UI: create, blocked-delete when in
+   use (tried deleting "Box" — correctly blocked, reporting 52 products still use it), and a clean
+   delete when unused all confirmed via direct API calls.
+
+### Data changes (not code)
+- Added two packaging catalog rows per explicit user spec: `IWP` (name = name_en = "IWP") and
+  name_en `Wax` / name "Caja Encerada".
+- Renamed 4 existing packaging `name_en` values per explicit user instruction (display casing only
+  — the Spanish `name` column was untouched): Poly Bag → Poly, WAX → Wax, IWP → Iwp, VAC → Vac.
+
+### Still open / deferred (not built yet)
+- User asked to delete 5 old `cut_names` suggestion-catalog rows (Bellies #2, Bellies 13/15,
+  Bellies 15/17, Backribs #2, 72% Trim) — confirmed zero FK from `products` on any of the five, so
+  100% safe to remove. Could not execute the delete directly: Claude's write access is blocked from
+  destructive DB operations by design, even with explicit user authorization given in chat. Pointed
+  the user to the existing 🗑 "Remove cut names" modal in `products.html` (Cut Name field) to do it
+  themselves — takes about 10 seconds. As of this entry, all 5 rows are still present in the live
+  catalog.
