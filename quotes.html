@@ -1795,19 +1795,34 @@ const rqReadyRowHtml = (r, g) => {
 
 // Real ask 2026-09-09, explicit: "las expired puedo o mandar con ese precio y/o pedir update y
 // pasan a updating tabla de abajo" — Expired gets 2 real actions of its own now, no detour
-// through Building needed: the price tag itself opens the same inline calculator Ready's own
-// price tag uses (qOpenPendingPlantInline — it already reads the real current_price on file,
-// stale or not, so confirming here IS "send with that price anyway"), and a dedicated
-// "Ask for Update →" button sends a real price-request (same preview-before-send modal as
-// everywhere else) and refreshes this sweep — reaskedStale then reclassifies the row into
-// Updating below on its own, no separate code path needed for that move.
-const rqExpiredRowHtml = (r, g) => `<tr>
+// through Building needed: the price tag opens the same inline calculator Ready's own price tag
+// uses (qOpenPendingPlantInline), and a dedicated "Ask for Update →" button sends a real
+// price-request (same preview-before-send modal as everywhere else) and refreshes this sweep —
+// reaskedStale then reclassifies the row into Updating below on its own.
+// Real fix 2026-09-13, explicit ("expired activalo... muchas veces quiero las dos cosas"): the
+// comment above always claimed confirming the calculator "IS send with that price anyway," but
+// nothing here ever actually checked rqPendingCalcCache or rendered a send button afterward — the
+// row just kept showing the same static stale tag forever, so there was truly no way to send an
+// expired price. Now mirrors rqReadyRowHtml's own cachedCalc check: once the trader has confirmed
+// a price via the calculator, real Email/WhatsApp send buttons appear (qSendExpiredPlantOfferAnyway,
+// below) — shown together with "Ask for Update", never one instead of the other, since both are
+// real, independent, simultaneously-available actions.
+const rqExpiredRowHtml = (r, g) => {
+  const cachedCalc = rqPendingCalcCache[r.plant_id + '|' + g.productId];
+  const priceHtml = cachedCalc
+    ? `<span class="pkg-tag stale" title="Confirmed — still an expired price, sending it is a deliberate choice">$${Number(r.current_price).toFixed(4)}/lb · Expired ${rqFmtDate(r.price_date)}</span>`
+    : `<span class="pkg-tag stale" style="cursor:pointer;" title="Open the calculator to confirm this price before sending it" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">Expired · ${rqFmtDate(r.price_date)}</span>`;
+  const sendBtnsHtml = cachedCalc ? `
+        <button type="button" class="rq-customer-bulk-btn email" style="padding:7px 10px;" title="Email this plant's offer with the expired price anyway" onclick="qSendExpiredPlantOfferAnyway('${g.productId}','${r.plant_id}','email')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
+        <button type="button" class="rq-customer-bulk-btn whatsapp" style="padding:7px 10px;" title="WhatsApp this plant's offer with the expired price anyway" onclick="qSendExpiredPlantOfferAnyway('${g.productId}','${r.plant_id}','whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>` : '';
+  return `<tr>
     <td>${rqProductCellHtml(g.productId)}</td>
     <td class="muted">${escapeHtml(r.plant.name)}</td>
-    <td class="num"><span class="pkg-tag stale" style="cursor:pointer;" title="Send with this price anyway" onclick="qOpenPendingPlantInline('${g.productId}','${r.plant_id}')">Expired · ${rqFmtDate(r.price_date)}</span></td>
-    <td><button type="button" class="pkg-trigger-btn" onclick="qAskUpdateForSweepRow('${r.plant_id}','${g.productId}')">Ask for Update →</button></td>
+    <td class="num">${priceHtml}</td>
+    <td><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${sendBtnsHtml}<button type="button" class="pkg-trigger-btn" onclick="qAskUpdateForSweepRow('${r.plant_id}','${g.productId}')">Ask for Update →</button></div></td>
   </tr>
   ${rqInlineSlotRowHtml(r.plant_id, g.productId, 4)}`;
+};
 
 // Real ask 2026-09-04 ("quitar dropdown de plantas waiting... no quiero mas fondos blancos"):
 // flat rows, same .pkg-tag treatment as Ready/Expired — unchanged, just a table row now.
@@ -2243,6 +2258,18 @@ async function qSendConfirmedPlantOffer(productId, plantId, channel){
   rqCustomerProductIds = pendingCustomerMatch.linksByCustomer;
   if (channel === 'email') await sendOfferEmailToAll([productId], plantFilter);
   else await sendOfferWhatsAppToAll([productId], plantFilter);
+}
+
+// Real ask 2026-09-13 ("expired activalo... muchas veces quiero las dos cosas"): an Expired row's
+// send button — the one real difference from qSendConfirmedPlantOffer above is opting this specific
+// plant into rqPricedPlantsSorted's staleness allowance (rqIncludeStale) first; everything after
+// that is the exact same real send path Ready uses (same confirm-and-batch prompt, same "also ask
+// for an update?" prompt already built into qSendConfirmedPlantOffer, same sent_offers logging) —
+// no duplicated send logic, just the one missing opt-in flag this row never had a way to set.
+async function qSendExpiredPlantOfferAnyway(productId, plantId, channel){
+  const plant = rqSelectedPlants.find(p => p.id === plantId);
+  if (plant) plant.rqIncludeStale = true;
+  await qSendConfirmedPlantOffer(productId, plantId, channel);
 }
 
 // The actual "enter the price and send it" work, without ever leaving Pending Quotes — same
