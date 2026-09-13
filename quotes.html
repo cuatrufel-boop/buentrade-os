@@ -559,18 +559,18 @@
      depth instead of one flat translucent fill, and a ::before highlight cap standing in for the
      reference's glossy top-edge reflection — same navy/glass material already used everywhere
      else in this app (rq-palette-box, rq-tray-card), just shaped and lit like the reference. */
-  .rq-search-trigger{display:flex;align-items:center;gap:8px;width:100%;height:40px;padding:0 15px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:rgba(255,255,255,.6);font-size:13px;font-family:inherit;cursor:pointer;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease;text-align:left;position:relative;overflow:hidden;}
+  .rq-search-trigger{display:flex;align-items:center;gap:8px;width:100%;height:40px;padding:0 15px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:rgba(255,255,255,.6);font-size:13px;font-family:inherit;box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;text-align:left;position:relative;overflow:hidden;}
   /* Real ask 2026-09-09 ("que llegue hasta el borde redondo que no se corte... en todos los
      modulos"): was left:6%/right:6% inset, stopping short of the pill's fully-rounded ends
      instead of following their curve. Edge-to-edge now. */
   .rq-search-trigger::before{content:'';position:absolute;top:1px;left:0;right:0;height:42%;background:linear-gradient(180deg, rgba(255,255,255,.4), rgba(255,255,255,0));border-radius:999px 999px 100% 100%/100% 100% 30% 30%;pointer-events:none;}
-  .rq-search-trigger:hover{background:linear-gradient(180deg, rgba(255,255,255,.24) 0%, rgba(255,255,255,.1) 45%, rgba(255,255,255,.04) 100%);border-color:rgba(255,255,255,.4);transform:translateY(-1px);box-shadow:0 14px 34px rgba(4,12,26,.5),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -12px 16px -12px rgba(0,0,0,.25);}
-  .rq-search-trigger:active{transform:translateY(0);}
+  /* Real redesign 2026-09-13: no longer a clickable button (a real <input> lives inside now), so
+     hover/active states key off :focus-within — the pill lights up while actually typing, not on
+     mouse hover over an inert wrapper. */
+  .rq-search-trigger:focus-within{background:linear-gradient(180deg, rgba(255,255,255,.24) 0%, rgba(255,255,255,.1) 45%, rgba(255,255,255,.04) 100%);border-color:rgba(255,255,255,.4);box-shadow:0 14px 34px rgba(4,12,26,.5),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -12px 16px -12px rgba(0,0,0,.25);}
   .rq-search-trigger svg.rq-search-ico{width:15px;height:15px;flex-shrink:0;color:rgba(255,255,255,.6);position:relative;z-index:1;}
-  /* Real ask 2026-09-09 ("quitar el command k del boton"): the ⌘K badge that used to sit at the
-     far right is gone — no more far-right bookend to center the label against, so it's flush
-     left after the icon again, same as any normal search input. */
-  .rq-search-trigger span{flex:1;min-width:0;position:relative;z-index:1;text-align:left;}
+  .rq-search-trigger input{all:unset;flex:1;min-width:0;position:relative;z-index:1;color:#fff;font-size:13px;font-family:inherit;}
+  .rq-search-trigger input::placeholder{color:rgba(255,255,255,.5);}
 
   /* The palette itself — a real overlay (⌘K, click the trigger, or Escape/click-outside to
      close), same family as .rq-modal-overlay/.rq-modal-box but positioned near the top like an
@@ -979,6 +979,7 @@ auth.onAuthStateChanged(user => {
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
     <a href="collections.html" class="nav-pill">Collections</a>
+      <a href="payments.html" class="nav-pill">Payments</a>
   </nav>
 </header>
 
@@ -1004,11 +1005,18 @@ auth.onAuthStateChanged(user => {
   <div class="rq-hero-banner rq-hero-banner-compact" id="rq_hero_banner">
     <div class="rq-hero-banner-inner">
       <!-- Real ask 2026-09-09 ("quitar el command k del boton"): rqSearchKbdEl lookup in the JS
-           below already null-checks, so dropping this <kbd> needs no script change. -->
-      <button type="button" class="rq-search-trigger" id="rq_search_trigger" onclick="rqOpenSearchPalette()">
+           below already null-checks, so dropping this <kbd> needs no script change.
+           Real redesign 2026-09-13, explicit ("estos con el boton de search solo muestren los
+           productos que estan en esa lista... uno simple que solo filtre lo que esta en su propia
+           pantalla"): this used to be a button that opened the full-catalog palette — now it's a
+           real input that filters whichever sweep tab (Ready/Expired/Updating) is currently on
+           screen, same plain oninput->render() pattern products.html/plants.html already use
+           elsewhere. The sophisticated catalog-wide palette (glow/highlight/FLIP) is reachable only
+           from "Find Product" now (rqOpenFindProduct, see the stats row) and ⌘K/Ctrl+K. -->
+      <div class="rq-search-trigger" id="rq_search_trigger">
         <svg class="rq-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <span id="rq_search_trigger_label">Search</span>
-      </button>
+        <input id="rq_sweep_search_input" placeholder="Search this list" autocomplete="off" oninput="rqFilterSweepByText()">
+      </div>
     </div>
   </div>
 
@@ -1099,8 +1107,8 @@ auth.onAuthStateChanged(user => {
          sistema... busco un producto y me saca las 3 versiones... pon a funcionar este boton"):
          the 3 stat cards above (rq_stats_row) are the tab strip for the default, unfiltered,
          system-wide view — clicking Updating/Expired/Ready shows that one table, the other two
-         hide, and drops any active search. "Products In Progress" is its own 4th tab now (tab:
-         'quote') — the one place searching a product (rq_search_trigger, or clicking any product
+         hide, and drops any active search. "Find Product" (label renamed 2026-09-13, same tab)
+         is its own 4th tab now (tab: 'quote') — the one place searching a product (rq_search_trigger, or clicking any product
          name in a row) is meant to live: it sets rqActiveProductFilterId, which shows all 3
          sections at once, each sliced to just that product. This chip is the one way back to an
          empty search on that same tab. See rqRenderSweepTables/rqFilterToProduct/
@@ -1487,6 +1495,12 @@ const RQ_EMPTY_MSG = {
 // unfiltered system list for that status, never anything scoped to a search. rqSetSweepTab is the
 // one place that changes which tab is open.
 let rqActiveSweepTab = 'updating';
+// Real ask 2026-09-13 ("uno simple que solo filtre lo que esta en su propia pantalla"): plain
+// substring filter over whichever tab's already-fetched rows are on screen — set by
+// rqFilterSweepByText, read by rqRenderSweepTables. Completely separate from
+// rqActiveProductFilterId (Find Product's cross-tab filter) — the two just compose (AND) if
+// somehow both are active at once.
+let rqSweepSearchTerm = '';
 // Real ask 2026-09-12: clicking a tab is "go back to browsing everything" — always clears any
 // active product filter (rqFilterToProduct) rather than leaving a stale filter applied underneath
 // a tab that no longer shows it as a chip. rqRenderSweepTables (defined above loadPendingPrices,
@@ -1497,6 +1511,11 @@ function rqSetSweepTab(tab){
   // everything" clicks — always drop any active product filter. Quote is the one tab the filter
   // belongs on, so clicking it (or already being on it while typing a search) never clears it.
   if (tab !== 'quote') rqActiveProductFilterId = null;
+  // Real ask 2026-09-13: a new tab is a fresh list — a text filter typed for a different tab
+  // silently carrying over here would look like the new tab is missing rows, not filtered.
+  rqSweepSearchTerm = '';
+  const sweepSearchInput = document.getElementById('rq_sweep_search_input');
+  if (sweepSearchInput) sweepSearchInput.value = '';
   rqRenderSweepTables();
   renderRqStats();
 }
@@ -1577,10 +1596,18 @@ function rqCloseSearchPalette(){
   document.getElementById('rq_palette_overlay').style.display = 'none';
 }
 
+// Real ask 2026-09-13 ("el search sofisticado... solo para find product"): the one place the
+// full-catalog palette opens from now — the "Find Product" stat card and ⌘K/Ctrl+K, nothing else.
+// rq_search_trigger (the hero pill) no longer calls this at all; see rqFilterSweepByText instead.
+function rqOpenFindProduct(){
+  rqSetSweepTab('quote');
+  rqOpenSearchPalette();
+}
+
 document.addEventListener('keydown', e => {
   if ((rqIsMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
-    rqOpenSearchPalette();
+    rqOpenFindProduct();
   } else if (e.key === 'Escape' && document.getElementById('rq_palette_overlay').style.display !== 'none') {
     rqCloseSearchPalette();
   }
@@ -1662,7 +1689,7 @@ function renderRqStats(){
     // rqRenderSweepTables' 'quote' branch and rqFilterToProduct. Clicking it does NOT clear an
     // already-active product filter (rqSetSweepTab only clears the filter for the other 3 tabs,
     // which are "go browse everything" clicks) — this is the one tab the filter belongs on.
-    { value: String(productsInProgress), label: 'Products In Progress', cls: 'hero', tab: 'quote' },
+    { value: String(productsInProgress), label: 'Find Product', cls: 'hero', tab: 'quote' },
     { value: String(rqBucketCounts.updating), label: 'Updating', cls: 'warn', tab: 'updating',
       icon: '<path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>' },
     { value: String(rqBucketCounts.expired), label: 'Expired', cls: 'danger', tab: 'expired',
@@ -1671,11 +1698,15 @@ function renderRqStats(){
       icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];
   stats[0].icon = '<path d="M20 7h-9m9 5h-9m9 5h-9M5 7h.01M5 12h.01M5 17h.01"/>';
-  wrap.innerHTML = stats.map(s => `
-    <div class="stat-card ${s.cls}${s.tab && s.tab === rqActiveSweepTab ? ' active' : ''}"${s.tab ? ` onclick="rqSetSweepTab('${s.tab}')" style="cursor:pointer;" title="${s.tab === 'quote' ? 'Search a product' : 'Show ' + escapeHtml(s.label)}"` : ''}>
+  wrap.innerHTML = stats.map(s => {
+    // Real ask 2026-09-13: Find Product is the one card that opens the catalog-wide palette
+    // (rqOpenFindProduct) — the other 3 still just switch tabs (rqSetSweepTab), same as before.
+    const onClick = s.tab === 'quote' ? 'rqOpenFindProduct()' : (s.tab ? `rqSetSweepTab('${s.tab}')` : '');
+    return `<div class="stat-card ${s.cls}${s.tab && s.tab === rqActiveSweepTab ? ' active' : ''}"${s.tab ? ` onclick="${onClick}" style="cursor:pointer;" title="${s.tab === 'quote' ? 'Search a product' : 'Show ' + escapeHtml(s.label)}"` : ''}>
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
       <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // NOT every stale/missing price in the whole catalog — that reads as a graveyard of things
@@ -1812,18 +1843,24 @@ function rqRenderSweepTables(){
   const updatingList = document.getElementById('rq_updating_results');
   if (!readyList || !expiredList || !updatingList) return;
   const filterId = rqActiveProductFilterId;
-  const ready = filterId ? rqAllReadyRows.filter(x => x.g.productId === filterId) : rqAllReadyRows;
-  const expired = filterId ? rqAllExpiredRows.filter(x => x.g.productId === filterId) : rqAllExpiredRows;
-  const waiting = filterId ? rqAllWaitingRows.filter(x => x.g.productId === filterId) : rqAllWaitingRows;
+  // Real ask 2026-09-13: the sweep search box only ever narrows rows already on screen —
+  // matched against the same product name rqProductCellHtml already displays for that row, never
+  // a catalog search (that's Find Product's job, a completely different data source).
+  const term = rqSweepSearchTerm;
+  const matchesTerm = x => !term || rqProductName(x.g.productId).toLowerCase().includes(term);
+  const ready = (filterId ? rqAllReadyRows.filter(x => x.g.productId === filterId) : rqAllReadyRows).filter(matchesTerm);
+  const expired = (filterId ? rqAllExpiredRows.filter(x => x.g.productId === filterId) : rqAllExpiredRows).filter(matchesTerm);
+  const waiting = (filterId ? rqAllWaitingRows.filter(x => x.g.productId === filterId) : rqAllWaitingRows).filter(matchesTerm);
+  const noMatchMsg = term ? `No product matches "${escapeHtml(term)}".` : null;
   readyList.innerHTML = ready.length
     ? rqTableSection(ready.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', ''])
-    : `<div class="empty">${filterId ? 'Not ready for this product.' : RQ_EMPTY_MSG.ready}</div>`;
+    : `<div class="empty">${noMatchMsg || (filterId ? 'Not ready for this product.' : RQ_EMPTY_MSG.ready)}</div>`;
   expiredList.innerHTML = expired.length
     ? rqTableSection(expired.map(x => rqExpiredRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', ''])
-    : `<div class="empty">${filterId ? 'Nothing expired for this product.' : RQ_EMPTY_MSG.expired}</div>`;
+    : `<div class="empty">${noMatchMsg || (filterId ? 'Nothing expired for this product.' : RQ_EMPTY_MSG.expired)}</div>`;
   updatingList.innerHTML = waiting.length
     ? rqTableSection(waiting.map(x => rqWaitingRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Requested', ''])
-    : `<div class="empty">${filterId ? 'Nothing waiting for this product.' : RQ_EMPTY_MSG.updating}</div>`;
+    : `<div class="empty">${noMatchMsg || (filterId ? 'Nothing waiting for this product.' : RQ_EMPTY_MSG.updating)}</div>`;
   document.getElementById('rq_ready_section').style.display = (filterId || rqActiveSweepTab === 'ready') ? '' : 'none';
   document.getElementById('rq_expired_section').style.display = (filterId || rqActiveSweepTab === 'expired') ? '' : 'none';
   document.getElementById('rq_updating_section').style.display = (filterId || rqActiveSweepTab === 'updating') ? '' : 'none';
@@ -1866,6 +1903,15 @@ function rqRenderSweepTables(){
   // prompt is the only thing on screen until a real search picks a product.
   const quoteEmpty = document.getElementById('rq_quote_empty');
   if (quoteEmpty) quoteEmpty.style.display = (rqActiveSweepTab === 'quote' && !filterId) ? 'block' : 'none';
+}
+
+// Real ask 2026-09-13 ("uno simple que solo filtre lo que esta en su propia pantalla"): the sweep
+// search box's own handler — same plain oninput->render() shape as products.html's renderProducts
+// or plants.html's renderPlants, just re-slicing already-fetched rows instead of re-fetching.
+function rqFilterSweepByText(){
+  const input = document.getElementById('rq_sweep_search_input');
+  rqSweepSearchTerm = (input ? input.value : '').trim().toLowerCase();
+  rqRenderSweepTables();
 }
 
 // Real ask 2026-09-12 ("busco un producto en particular y ese producto me va a sacar las 3
@@ -2582,7 +2628,13 @@ async function rqFetchPlantLinksForProduct(productId){
     // the trader isn't re-deciding it by memory on every single quote. A later price list from the
     // same plant can carry a different note next time, which simply updates this default the next
     // time it's loaded. Still a toggle they can flip if a specific deal differs.
-    return { ...plant, rqProductId: link.product_id, rqLinkId: link.id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true, rqProductLocationId: link.location_id || null, rqFreightIncluded: link.freight_included === true };
+    // photo_url/spec_url copied straight from the plant_products link row — real bug fixed
+    // 2026-09-13: this used to leave them off entirely, so rqFindProductFilesFor fell back to
+    // matching the legacy products.photo_url/spec_url columns by name+brand text, which stopped
+    // being where these files live on 2026-08-29 (see plants.html's own comment on the same move).
+    // That fallback never found anything real — every photo/spec uploaded from Plants since then
+    // was silently invisible here.
+    return { ...plant, rqProductId: link.product_id, rqLinkId: link.id, rqPrice: hasPrice ? link.current_price : undefined, rqPriceDate: hasPrice ? link.price_date : null, rqLastRequestedAt: link.last_requested_at || null, rqDocsOn: plant.docs_included === true, rqProductLocationId: link.location_id || null, rqFreightIncluded: link.freight_included === true, photo_url: link.photo_url || null, spec_url: link.spec_url || null };
   }).filter(Boolean);
   // Each price row's own ship-from city (set on Meat Packers' Products & Prices tab) picks the
   // cheapest carrier for that exact city automatically — same rule the user gave 2026-08-30
@@ -2743,6 +2795,7 @@ async function rqAutoAskCategoryPlants(plants, productId){
       rqPriceDate: link.price_date || null, rqLastRequestedAt: link.last_requested_at || null,
       rqDocsOn: plant.docs_included === true, rqProductLocationId: link.location_id || null,
       rqFreightIncluded: link.freight_included === true,
+      photo_url: link.photo_url || null, spec_url: link.spec_url || null,
     };
     if (link.current_price == null && plant.email){
       try {
@@ -3723,11 +3776,14 @@ function rqUpdateTtActionButton(id){
 // photo/spec, plus it read as empty whenever this ran from Pending Quotes' inline panel (a
 // different search box entirely), which used to mean every offer sent from there went out with no
 // photo/spec PDF attached at all.
+// Real bug fixed 2026-09-13: this used to re-derive the file by matching products.photo_url/
+// spec_url (a legacy, shared-catalog pair of columns) against this plant by name+brand text — but
+// photo/spec moved to plant_products (per-plant, since the same cut can look different at each
+// plant) back on 2026-08-29, so that match never found anything real. The plant row built in
+// autoPopulateRqPlants/rqAddVariantToQuote now carries photo_url/spec_url straight from its own
+// plant_products link row — read directly, no re-matching needed.
 function rqFindProductFilesFor(plant){
-  const matched = rqProductForPlant(plant);
-  const name = (matched && matched.name || '').toLowerCase();
-  const prod = products.find(pr => (pr.name || '').toLowerCase() === name && pr.brand === plant.name);
-  return { photo_url: (prod && prod.photo_url) || null, spec_url: (prod && prod.spec_url) || null };
+  return { photo_url: plant.photo_url || null, spec_url: plant.spec_url || null };
 }
 function rqFindPhotoFor(plant){
   return rqFindProductFilesFor(plant).photo_url;

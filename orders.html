@@ -255,36 +255,34 @@
   .uring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12.5px;color:var(--ink);}
   .uring-h{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--ink);}
   .uring-sub{font-family:'Inter',sans-serif;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
-  .lane-map-row{padding-top:18px;}
-  .lane-map-row .u-main,.lane-map-row .u-mini{width:56px;}
+  /* Real ask 2026-09-12: "no quiero tener que hacer scroll hacia los lados" — replaces the
+     scrolling row (and the fade-edge affordance built for it) entirely. Every stop now shrinks to
+     fit the card's own width via flex, so the row never exceeds it and never needs to scroll no
+     matter how many milestones a given order has. min-width keeps stops legible at the worst case
+     (~14 stops); max-width stops them stretching too wide when an order has few. */
+  .lane-map-row{padding-top:18px;overflow-x:visible;}
+  .lane-map-row .u-main,.lane-map-row .u-mini{width:auto;flex:1 1 44px;min-width:40px;max-width:64px;}
   .lane-map-row .u-main-icon,.lane-map-row .u-mini-btn{width:32px;height:32px;font-size:13px;}
   .lane-map-row .u-main-label,.lane-map-row .u-mini-label{font-size:10px;min-height:24px;margin-top:6px;}
   .lane-map-row .u-main-date,.lane-map-row .u-mini-date{font-size:9px;}
-  .lane-map-row .u-line{margin-top:15px;flex:1 1 28px;min-width:20px;}
+  .lane-map-row .u-line{margin-top:15px;flex:1 1 14px;min-width:6px;}
   /* Flat route, not the raised/curved treatment used elsewhere — matches the picked mockup's single
      straight dashed line. */
   .lane-map-row .u-mini.raised,.lane-map-row .u-main.raised{transform:none;}
   .lane-map-row .u-walker-ride{top:-20px;width:14px;height:19px;}
   .lane-map-row .u-truck-ride{top:-15px;width:15px;height:15px;}
-  /* The destination pin (always Signature, the last stop) — enlarged and gold-glowing while it's the
-     actionable step, small and green once signed, same done/now/wait state classes every other stop
-     already uses, just bigger. */
-  .lane-map-row .u-destination.u-mini{width:110px;}
-  .lane-map-row .u-destination .u-mini-btn{width:60px;height:60px;font-size:25px;border-width:2.5px;}
-  .lane-map-row .u-destination .u-mini-label{font-size:14px;font-weight:700;margin-top:10px;}
-  .lane-map-row .u-destination.done .u-mini-btn{background:rgba(63,220,151,.16);border-color:var(--green-bright);color:var(--green-bright);}
-  .lane-map-row .u-destination.done .u-mini-label{color:#5FE097;}
-  .lane-map-row .u-destination.now .u-mini-btn{background:radial-gradient(circle at 35% 30%, rgba(232,181,76,.5), rgba(232,181,76,.14));border-color:#E8B54C;color:#E8B54C;box-shadow:0 0 0 8px rgba(232,181,76,.14), 0 0 0 16px rgba(232,181,76,.06);}
-  .lane-map-row .u-destination.now .u-mini-label{color:#E8B54C;}
-  /* Pick Up waypoint — physical custody changes hands here, so it gets real visual weight too,
-     one size down from the Signature destination pin. Colors still come from the existing
-     done/current/actionable/urgent state classes already on this element — only size/glow added. */
-  .lane-map-row .u-waypoint.u-main{width:78px;}
-  .lane-map-row .u-waypoint .u-main-icon{width:46px;height:46px;font-size:19px;border-width:2.5px;}
-  .lane-map-row .u-waypoint .u-main-label{font-size:12.5px;font-weight:700;margin-top:8px;}
-  .lane-map-row .u-waypoint.done .u-main-icon{box-shadow:0 0 0 5px rgba(15,138,95,.14);}
-  .lane-map-row .u-waypoint.current .u-main-icon,.lane-map-row .u-waypoint.actionable .u-main-icon{box-shadow:0 0 0 7px var(--blue-light);}
-  .lane-map-row .u-waypoint.actionable.urgent .u-main-icon{box-shadow:0 0 0 7px rgba(196,67,46,.18);}
+  /* Real ask 2026-09-12: "quiero que la unica que este grande y blinking sea la que va en el
+     proceso no solo signature" — Signature and Pick Up used to always render oversized regardless
+     of state (see git history); that's gone. The ONE entry actually in progress right now
+     (.blink-now — same single leftmost-actionable entry computed once in renderUnifiedTimeline,
+     already the only one that pulses via the existing .blink-now animation rules below) is now
+     also the only one sized up. Every other stop, Signature and Pick Up included, stays the plain
+     compact size above until it's their turn. */
+  .lane-map-row .blink-now{flex:1.6 1 64px;min-width:64px;max-width:104px;}
+  .lane-map-row .u-mini.blink-now .u-mini-btn{width:50px;height:50px;font-size:20px;border-width:2.5px;}
+  .lane-map-row .u-mini.blink-now .u-mini-label{font-size:12.5px;font-weight:700;margin-top:8px;}
+  .lane-map-row .u-main.blink-now .u-main-icon{width:46px;height:46px;font-size:19px;border-width:2.5px;}
+  .lane-map-row .u-main.blink-now .u-main-label{font-size:12.5px;font-weight:700;margin-top:8px;}
   .utimeline-lane-title{font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft);margin:0 0 2px;}
   .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:6px;}
   .u-line.done{background:var(--green-bright);}
@@ -539,6 +537,7 @@ auth.onAuthStateChanged(user => {
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill active">Orders</a>
     <a href="collections.html" class="nav-pill">Collections</a>
+      <a href="payments.html" class="nav-pill">Payments</a>
   </nav>
 </header>
 
@@ -1205,20 +1204,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   const RING_R = 34, RING_C = 2 * Math.PI * RING_R;
   const ringOffset = RING_C * (1 - pct / 100);
   const nextLabel = blinkIdx >= 0 ? entries[blinkIdx].label : '';
+  // Real ask 2026-09-12: "quiero que la unica que este grande y blinking sea la que va en el
+  // proceso no solo signature" — Signature and Pick Up no longer get a permanent enlarged
+  // treatment regardless of state; sizing now comes purely from .blink-now (the single
+  // leftmost-actionable entry, still computed above), styled bigger in the CSS for
+  // .lane-map-row .blink-now. No other class injected here.
   function renderMapRow(){
     return entries.map((e, i) => {
       const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
       const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
-      let entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
-      // The last stop is always Signature (entries.push order above never changes) — marked as the
-      // route's destination pin, not just another stop.
-      if (i === entries.length - 1) entryHtml = entryHtml.replace(/class="(u-mini|u-main) /, 'class="$1 u-destination ');
-      // Real ask 2026-09-12: "darle mas significado al pickup" — Pick Up (mainEntry('picked_up'),
-      // always pushed right after pending_pickup, i.e. at confirmIdx+1 — same index marker the
-      // walker/truck switch above already relies on) gets a bigger, glowing waypoint treatment: the
-      // moment physical custody of the load actually changes hands, same idea as the destination pin
-      // but one size down since it's a real milestone, not the finish line.
-      if (i === confirmIdx + 1) entryHtml = entryHtml.replace(/class="(u-mini|u-main) /, 'class="$1 u-waypoint ');
+      const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
       return entryHtml + line;
     }).join('');
   }

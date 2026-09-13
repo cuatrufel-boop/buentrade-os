@@ -487,6 +487,7 @@ auth.onAuthStateChanged(user => {
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
     <a href="collections.html" class="nav-pill">Collections</a>
+      <a href="payments.html" class="nav-pill">Payments</a>
   </nav>
 </header>
 
@@ -1415,15 +1416,27 @@ async function loadEverything(){
 
   // English throughout the OS, same rule as everywhere else in the app — falls back to the
   // Spanish catalog entry only if a temperature/packaging row has no English name on file.
+  // Real bug fixed 2026-09-13: this used to append (`innerHTML +=`) onto whatever was already in
+  // the select instead of rebuilding it — loadEverything() runs again after saving a plant
+  // profile or a price-list action, so every re-run kept duplicating every option, and each
+  // `innerHTML +=` re-parses the whole select from scratch, silently dropping any value an open
+  // Edit-product form had just set. Rebuilding from the placeholder and reapplying the select's
+  // own current value keeps a form that's mid-edit from losing its selection.
   const tSel = document.getElementById('temperature_id');
-  temperatures.forEach(t => tSel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`);
+  const tSelValue = tSel.value;
+  tSel.innerHTML = '<option value="">—</option>' + temperatures.map(t => `<option value="${t.id}">${escapeHtml(t.name_en || t.name)}</option>`).join('');
+  tSel.value = tSelValue;
   renderPackagingOptions();
   // Fixed catalog, never free text — value is the real category_id (a proper FK) now, not a
   // hand-typed Spanish string.
   const catSel = document.getElementById('category');
-  categories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
+  const catSelValue = catSel.value;
+  catSel.innerHTML = '<option value="">—</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+  catSel.value = catSelValue;
   const newPlantCatSel = document.getElementById('newPlantCategory');
-  categories.forEach(c => newPlantCatSel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`);
+  const newPlantCatSelValue = newPlantCatSel.value;
+  newPlantCatSel.innerHTML = '<option value="">—</option>' + categories.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
+  newPlantCatSel.value = newPlantCatSelValue;
   plantCatFilterOptions = [{ id: '', name_en: 'All categories' }, ...categories];
   renderPlantCatFilterPanel();
   const countryOptions = countries.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)}</option>`).join('');
@@ -4155,13 +4168,19 @@ function renderPlantProducts(){
     // Shaded, not hidden — a declined product is a known, closed fact worth keeping visible on
     // this plant's own list ("we asked, they don't make it"), just visually out of the way so it
     // doesn't compete with products that still need attention.
+    // Same download-then-attach pattern Quotes already uses to hand a plant's photo/spec to
+    // WhatsApp (rqCopyPhotoToClipboard) — copied here so a trader can grab either file straight
+    // from Plants, without first building a quote around this product.
+    const fileName = (p.full_name_en || p.name_en || p.name || 'product').replace(/[^a-z0-9]+/gi, '-');
+    const photoBtn = p.photo_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="downloadPlantProductFile('${p.photo_url}','Foto-${fileName}', this)">📋 Foto</button>` : '';
+    const specBtn = p.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="downloadPlantProductFile('${p.spec_url}','Ficha-tecnica-${fileName}.pdf', this)">📋 Ficha</button>` : '';
     return `<tr${p.declined_at ? ' style="opacity:.5;"' : ''}>
       <td>
         <a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a>
         <div class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}${specLink}</div>
       </td>
       <td class="num">${fmtPriceCell(p)}</td>
-      <td><button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${photoBtn}${specBtn}<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
     </tr>`;
   }).join('');
 }
@@ -4251,6 +4270,33 @@ async function useExistingProduct(productId){
 function editProduct(id){
   const p = plantProducts.find(x => x.id === id);
   if (p) openProductForm(p);
+}
+
+// Ported from quotes.html's rqCopyPhotoToClipboard as-is: a real clipboard write was tried there
+// first but needs the click's "user activation" to still be live once the fetch/decode finishes,
+// which it reliably isn't — downloading instead has no such timing requirement and always works,
+// with the trader dragging the file into WhatsApp themselves.
+async function downloadPlantProductFile(fileUrl, filename, btn){
+  const originalLabel = btn ? btn.textContent : null;
+  try {
+    if (btn){ btn.disabled = true; btn.textContent = '…'; }
+    const res = await fetch(fileUrl);
+    if (!res.ok) throw new Error('Could not fetch the file.');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    if (btn){ btn.textContent = '✓ Descargada'; setTimeout(() => { btn.disabled = false; btn.textContent = originalLabel; }, 1500); }
+  } catch(e){
+    if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+    alert('No se pudo descargar (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
+    window.open(fileUrl, '_blank');
+  }
 }
 
 async function openProductForm(product){

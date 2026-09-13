@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BuenTrade Trading OS — Payments</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+<link rel="shortcut icon" href="/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF; --blue-light:rgba(90,170,255,.14);
+    --bg:#0A2547; --card:rgba(255,255,255,.08); --line:rgba(255,255,255,.18);
+    --ink:#FFFFFF; --ink-soft:rgba(255,255,255,.55);
+    --red:#C4432E; --green:#0F8A5F; --amber:#FFC876; --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,
+      linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
+  .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
+  h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
+  th.num, td.num{text-align:right;}
+  td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,.03);}
+  .muted{color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto;}
+
+  .pay-form{display:grid;grid-template-columns:280px 1fr;gap:18px;}
+  @media (max-width:820px){ .pay-form{grid-template-columns:1fr;} }
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);margin-bottom:6px;}
+  .field select, .field input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:rgba(255,255,255,.06);color:#fff;}
+  .field select:focus, .field input:focus{outline:none;border-color:var(--blue-bright);}
+  .field input.mono, .field select.mono{font-family:'IBM Plex Mono',monospace;}
+
+  .alloc-table td, .alloc-table th{white-space:nowrap;}
+  .apply-input{width:110px;background:rgba(255,255,255,.09);border:1.5px solid rgba(90,170,255,.55);border-radius:6px;padding:7px 9px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#fff;text-align:right;}
+  .apply-input.manual{border-color:rgba(232,181,76,.65);}
+  .row-tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;}
+  .row-tag.auto{background:rgba(90,170,255,.16);color:#5AAAFF;}
+  .row-tag.exact{background:rgba(111,211,168,.16);color:#6FD3A8;}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;display:inline-block;border:1px solid transparent;}
+  .badge.overdue{color:#FF9C8A;border-color:rgba(255,156,138,.4);}
+  .badge.due{color:#5AAAFF;border-color:rgba(90,170,255,.4);}
+
+  .unapplied-strip{margin-top:14px;padding:10px 12px;border-radius:8px;background:rgba(232,181,76,.12);border:1px solid rgba(232,181,76,.4);}
+  .unapplied-strip .k{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:#E8B54C;font-weight:700;}
+  .unapplied-strip .v{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:700;color:#fff;margin-top:2px;}
+  .unapplied-strip.zero{background:rgba(111,211,168,.1);border-color:rgba(111,211,168,.35);}
+  .unapplied-strip.zero .k{color:#6FD3A8;}
+
+  .btn{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;border:1.5px solid var(--line);background:transparent;color:#fff;cursor:pointer;}
+  .btn.primary{background:var(--blue);border-color:var(--blue);}
+  .btn.small{padding:6px 12px;font-size:12px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-row{display:flex;gap:10px;margin-top:18px;justify-content:flex-end;}
+
+  .split-pill{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:20px;padding:2px 8px;margin:2px 3px 0 0;color:rgba(255,255,255,.75);}
+  .formMsg{font-size:12.5px;margin-top:12px;}
+
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);--ink:#0F1F33;--ink-soft:#64748B;}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-field input:focus{outline:none;border-color:#1B6FC9;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Trading OS</div>
+    </div>
+    <form id="formSignIn" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit">Sign In</button>
+    </form>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-note">Accounts are created from the Trading Tool. Same login works here.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+// STAGING Trading OS API — see providers.html/plants.html for the full note. Every read/write
+// goes through an Edge Function.
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+function showAuthMsg(text){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg err';
+}
+function doSignIn(e){
+  e.preventDefault();
+  const email = document.getElementById('siEmail').value;
+  const pass = document.getElementById('siPass').value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(!cred.user.emailVerified){
+        showAuthMsg('Please verify your email first.');
+        auth.signOut();
+      }
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+function logout(){ auth.signOut(); }
+
+auth.onAuthStateChanged(user => {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (user && user.emailVerified) {
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    document.getElementById('userBadge').textContent = user.email;
+    loadPayments();
+  } else {
+    gate.style.display = 'flex';
+    app.style.display = 'none';
+  }
+});
+</script>
+
+<div id="appContent" style="display:none;">
+<header>
+  <div class="top-row">
+    <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Go to Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
+    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="font-size:12px;color:rgba(255,255,255,.85);font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;text-align:center;"></span>
+    </div>
+  </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Clients</a>
+    <a href="providers.html" class="nav-pill">Logistics</a>
+    <a href="plants.html" class="nav-pill">Plants</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="offers.html" class="nav-pill">Offers</a>
+    <a href="orders.html" class="nav-pill">Orders</a>
+    <a href="collections.html" class="nav-pill">Collections</a>
+    <a href="payments.html" class="nav-pill active">Payments</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <h1>Payments</h1>
+
+  <div class="card">
+    <h2>Apply a payment</h2>
+    <div class="pay-form">
+      <div>
+        <div class="field"><label>Customer</label>
+          <select id="pmtCustomer" onchange="onCustomerChange()"><option value="">Select customer...</option></select>
+        </div>
+        <div class="field"><label>Amount received (USD)</label><input type="number" id="pmtAmount" class="mono" min="0" step="0.01" placeholder="0.00" oninput="renderAllocationTable()"></div>
+        <div class="field"><label>Date entered the bank</label><input type="date" id="pmtBankDate"></div>
+        <div class="field"><label>Collection account</label>
+          <select id="pmtAccount">
+            <option value="">Select account...</option>
+            <option value="Buentrade">Buentrade</option>
+            <option value="Summar">Summar</option>
+          </select>
+        </div>
+        <div class="field"><label>Method (optional)</label><input type="text" id="pmtMethod" placeholder="Wire, check..."></div>
+        <div class="field"><label>Reference (optional)</label><input type="text" id="pmtReference" placeholder="Reference number"></div>
+      </div>
+
+      <div>
+        <div id="allocEmpty" class="empty">Select a customer to see their open invoices.</div>
+        <div id="allocBlock" style="display:none;">
+          <div class="table-scroll">
+            <table class="alloc-table">
+              <thead><tr><th>Order</th><th>Due</th><th class="num">Balance</th><th class="num" style="width:130px;">Applying</th></tr></thead>
+              <tbody id="allocBody"></tbody>
+            </table>
+          </div>
+          <div id="unappliedStrip" class="unapplied-strip zero">
+            <div class="k">Unapplied balance</div>
+            <div class="v" id="unappliedValue">$0.00</div>
+          </div>
+          <div id="pmtMsg" class="formMsg"></div>
+          <div class="btn-row">
+            <button class="btn" onclick="resetPaymentForm()">Cancel</button>
+            <button class="btn primary" id="submitPmtBtn" onclick="submitPayment()">Apply Payment</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Payments ledger</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Bank Date</th><th>Applied</th><th>Customer</th><th class="num">Amount</th><th>Applied to</th><th>Account</th><th>Method / Ref</th></tr></thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="ledgerEmpty" style="display:none;">No payments recorded yet.</div>
+  </div>
+</div>
+</div>
+
+<script>
+let collData = null;
+let ledgerData = null;
+
+function fmtMoney(n){
+  const v = Number(n || 0);
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDateStr(d){
+  if (!d) return '—';
+  const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+}
+function escapeHtml(str){
+  return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+async function loadPayments(){
+  [collData, ledgerData] = await Promise.all([
+    callApi('collections-search', {}),
+    callApi('payments-search', {}),
+  ]);
+  renderCustomerOptions();
+  renderLedger();
+  preselectFromQuery();
+}
+
+function renderCustomerOptions(){
+  const sel = document.getElementById('pmtCustomer');
+  const rows = collData.customers.filter(c => c.outstanding > 0).sort((a, b) => (a.customer_name || '').localeCompare(b.customer_name || ''));
+  sel.innerHTML = '<option value="">Select customer...</option>' + rows.map(c =>
+    `<option value="${c.customer_id}">${escapeHtml(c.customer_name || '—')} — owes ${fmtMoney(c.outstanding)}</option>`
+  ).join('');
+}
+
+function preselectFromQuery(){
+  const params = new URLSearchParams(location.search);
+  const customerId = params.get('customer');
+  if (customerId) {
+    document.getElementById('pmtCustomer').value = customerId;
+    onCustomerChange();
+  }
+}
+
+function openShipmentsFor(customerId){
+  return collData.shipments.filter(s => s.customer_id === customerId && !s.paid_at)
+    .sort((a, b) => new Date(a.invoice_sent_at || a.delivered_at || 0) - new Date(b.invoice_sent_at || b.delivered_at || 0));
+}
+
+function onCustomerChange(){
+  renderAllocationTable();
+}
+
+// Real rule: "si el pago es exacto se aplica a esa factura si es parcial se aplica a la mas
+// vieja" — an amount matching one open invoice's balance exactly goes straight to that invoice
+// regardless of age; otherwise it waterfalls oldest-first. Every "Applying" cell stays editable —
+// overriding it just changes what's left as unapplied, never hidden.
+let manualOverrides = {};
+
+function computeAutoPlan(customerId, amount){
+  const open = openShipmentsFor(customerId);
+  const exact = open.find(s => Math.abs((Number(s.sale_amount) - Number(s.amount_paid)) - amount) < 0.01);
+  const ordered = exact ? [exact, ...open.filter(s => s.id !== exact.id)] : open;
+  let remaining = amount;
+  const plan = {};
+  for (const s of ordered) {
+    if (remaining <= 0) break;
+    const owed = Number(s.sale_amount) - Number(s.amount_paid);
+    const applyAmount = Math.min(owed, remaining);
+    if (applyAmount <= 0) continue;
+    plan[s.id] = { amount: applyAmount, auto: true, exact: s.id === (exact && exact.id) };
+    remaining -= applyAmount;
+  }
+  return plan;
+}
+
+function renderAllocationTable(){
+  const customerId = document.getElementById('pmtCustomer').value;
+  const amount = parseFloat(document.getElementById('pmtAmount').value) || 0;
+  document.getElementById('allocEmpty').style.display = customerId ? 'none' : 'block';
+  document.getElementById('allocBlock').style.display = customerId ? 'block' : 'none';
+  if (!customerId) return;
+
+  const open = openShipmentsFor(customerId);
+  const autoPlan = amount > 0 ? computeAutoPlan(customerId, amount) : {};
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const body = document.getElementById('allocBody');
+  body.innerHTML = open.map(s => {
+    const owed = Number(s.sale_amount) - Number(s.amount_paid);
+    const override = manualOverrides[s.id];
+    const planned = override != null ? override : (autoPlan[s.id] ? autoPlan[s.id].amount : 0);
+    const tag = override != null ? '<span class="row-tag" style="background:rgba(232,181,76,.18);color:#E8B54C;">manual</span>'
+      : (autoPlan[s.id] ? (autoPlan[s.id].exact ? '<span class="row-tag exact">auto · exact match</span>' : '<span class="row-tag auto">auto · oldest</span>') : '');
+    const dueDate = s.payment_due_date ? new Date(String(s.payment_due_date).slice(0, 10) + 'T00:00:00') : null;
+    const isOverdue = dueDate && dueDate < today;
+    const dueBadge = isOverdue ? `<span class="badge overdue">${s.days_overdue || 0}d overdue</span>` : `<span class="badge due">${fmtDateStr(s.payment_due_date)}</span>`;
+    return `<tr>
+      <td><span class="order-num">${escapeHtml(s.order_number)}</span>${tag}</td>
+      <td>${dueBadge}</td>
+      <td class="num mono">${fmtMoney(owed)}</td>
+      <td class="num"><input class="apply-input${override != null ? ' manual' : ''}" data-shipment="${s.id}" value="${planned.toFixed(2)}" onchange="onAllocationEdit('${s.id}', this.value)"></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="empty">No open invoices for this customer.</td></tr>';
+
+  const totalPlanned = open.reduce((sum, s) => {
+    const override = manualOverrides[s.id];
+    return sum + (override != null ? override : (autoPlan[s.id] ? autoPlan[s.id].amount : 0));
+  }, 0);
+  const unapplied = amount - totalPlanned;
+  const strip = document.getElementById('unappliedStrip');
+  strip.className = 'unapplied-strip' + (Math.abs(unapplied) < 0.01 && amount > 0 ? ' zero' : '');
+  document.getElementById('unappliedValue').textContent = amount > 0
+    ? (Math.abs(unapplied) < 0.01 ? `$0.00 — fully applied to ${Object.keys(autoPlan).length || Object.keys(manualOverrides).length} order(s)` : fmtMoney(unapplied))
+    : '$0.00';
+}
+
+function onAllocationEdit(shipmentId, value){
+  const n = parseFloat(value) || 0;
+  manualOverrides[shipmentId] = n;
+  renderAllocationTable();
+}
+
+function resetPaymentForm(){
+  document.getElementById('pmtCustomer').value = '';
+  document.getElementById('pmtAmount').value = '';
+  document.getElementById('pmtBankDate').value = '';
+  document.getElementById('pmtAccount').value = '';
+  document.getElementById('pmtMethod').value = '';
+  document.getElementById('pmtReference').value = '';
+  document.getElementById('pmtMsg').textContent = '';
+  manualOverrides = {};
+  renderAllocationTable();
+}
+
+async function submitPayment(){
+  const msgEl = document.getElementById('pmtMsg');
+  const customerId = document.getElementById('pmtCustomer').value;
+  const amount = parseFloat(document.getElementById('pmtAmount').value);
+  const bankDate = document.getElementById('pmtBankDate').value;
+  const account = document.getElementById('pmtAccount').value;
+  const method = document.getElementById('pmtMethod').value.trim() || null;
+  const reference = document.getElementById('pmtReference').value.trim() || null;
+
+  if (!customerId) { msgEl.textContent = 'Select a customer.'; msgEl.style.color = '#FF9C8A'; return; }
+  if (!amount || amount <= 0) { msgEl.textContent = 'Enter a valid amount.'; msgEl.style.color = '#FF9C8A'; return; }
+  if (!bankDate) { msgEl.textContent = 'Enter the date the payment entered the bank.'; msgEl.style.color = '#FF9C8A'; return; }
+  if (!account) { msgEl.textContent = 'Select the collection account.'; msgEl.style.color = '#FF9C8A'; return; }
+
+  const autoPlan = computeAutoPlan(customerId, amount);
+  const open = openShipmentsFor(customerId);
+  const allocations = open.map(s => {
+    const override = manualOverrides[s.id];
+    const planned = override != null ? override : (autoPlan[s.id] ? autoPlan[s.id].amount : 0);
+    return { shipment_id: s.id, amount: planned };
+  }).filter(a => a.amount > 0);
+
+  msgEl.textContent = 'Applying...'; msgEl.style.color = 'var(--ink-soft)';
+  document.getElementById('submitPmtBtn').disabled = true;
+  try {
+    const res = await callApi('shipments-apply-payment', {
+      idempotency_key: `${customerId}-${Date.now()}`,
+      actor: currentActor(), customer_id: customerId, amount,
+      bank_entry_date: bankDate, collection_account: account,
+      payment_method: method, payment_reference: reference,
+      allocations: allocations.length ? allocations : null,
+    });
+    const covered = res.applications.map(a => a.order_number).join(', ');
+    const leftover = res.unapplied_amount > 0 ? ` ${fmtMoney(res.unapplied_amount)} left unapplied (no more open invoices).` : '';
+    resetPaymentForm();
+    msgEl.textContent = `Applied — covered: ${covered || 'no open orders'}.${leftover}`;
+    msgEl.style.color = '#6FD3A8';
+    await loadPayments();
+  } catch (e) {
+    msgEl.textContent = 'Error: ' + e.message; msgEl.style.color = '#FF9C8A';
+  } finally {
+    document.getElementById('submitPmtBtn').disabled = false;
+  }
+}
+
+function renderLedger(){
+  const body = document.getElementById('ledgerBody');
+  const rows = ledgerData.payments;
+  document.getElementById('ledgerEmpty').style.display = rows.length ? 'none' : 'block';
+  body.innerHTML = rows.map(p => `
+    <tr>
+      <td class="mono">${fmtDateStr(p.bank_entry_date)}</td>
+      <td class="mono">${fmtDateStr(p.applied_at)}</td>
+      <td>${escapeHtml(p.customer_name || '—')}</td>
+      <td class="num mono">${fmtMoney(p.total_amount)}</td>
+      <td>${p.allocations.map(a => `<span class="split-pill">${escapeHtml(a.order_number)} ${fmtMoney(a.amount_applied)}</span>`).join('')}</td>
+      <td class="mono">${escapeHtml(p.collection_account || '—')}</td>
+      <td class="muted">${[p.payment_method, p.payment_reference].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</td>
+    </tr>`).join('');
+}
+</script>
+</body>
+</html>
