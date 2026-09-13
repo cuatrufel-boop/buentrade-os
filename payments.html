@@ -252,6 +252,19 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 
+  <div class="card" id="confirmSendCard" style="display:none;border-color:rgba(111,211,168,.4);">
+    <h2>Let <span id="confirmSendCustomer"></span> know the payment was received</h2>
+    <div class="muted" style="margin-bottom:12px;">Nothing is sent automatically — pick a channel below.</div>
+    <div class="table-scroll" style="margin-bottom:14px;">
+      <pre id="confirmSendPreview" style="white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink-soft);background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0;"></pre>
+    </div>
+    <div class="btn-row" style="justify-content:flex-start;">
+      <button class="btn" id="confirmSendEmailBtn" onclick="sendConfirmEmail()">✉ Send Email</button>
+      <button class="btn" id="confirmSendWaBtn" onclick="sendConfirmWhatsapp()">💬 Send WhatsApp</button>
+      <button class="btn" onclick="closeConfirmSend()" style="margin-left:auto;">Dismiss</button>
+    </div>
+  </div>
+
   <div class="card">
     <h2>Payments ledger</h2>
     <div class="table-scroll">
@@ -434,15 +447,76 @@ async function submitPayment(){
     });
     const covered = res.applications.map(a => a.order_number).join(', ');
     const leftover = res.unapplied_amount > 0 ? ` ${fmtMoney(res.unapplied_amount)} left unapplied (no more open invoices).` : '';
+    const appliedList = res.applications.map(a => ({ order_number: a.order_number, amount_applied: Number(a.amount_applied) }));
     resetPaymentForm();
     msgEl.textContent = `Applied — covered: ${covered || 'no open orders'}.${leftover}`;
     msgEl.style.color = '#6FD3A8';
     await loadPayments();
+    openConfirmSend(customerId, amount, appliedList);
   } catch (e) {
     msgEl.textContent = 'Error: ' + e.message; msgEl.style.color = '#FF9C8A';
   } finally {
     document.getElementById('submitPmtBtn').disabled = false;
   }
+}
+
+// ============ CUSTOMER-FACING PAYMENT CONFIRMATION — approved copy 2026-09-13. Never auto-sent:
+// always Email + WhatsApp side by side, same "one confirm-click, trader picks the channel" pattern
+// as PO/SO/FO elsewhere in this app. ============
+function gmailComposeUrl(emails, subject, body){
+  return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: emails.join(','), su: subject, body }).toString()}`;
+}
+
+function buildPaymentConfirmationCopy(contact, amount, appliedList, remainingOpen){
+  const name = contact.customer_contact_name || contact.customer_trade_name || '';
+  const appliedStr = appliedList.map(a => `${a.order_number} (${fmtMoney(a.amount_applied)})`).join(', ');
+  const balanceTotal = remainingOpen.reduce((sum, s) => sum + (Number(s.sale_amount) - Number(s.amount_paid)), 0);
+
+  let emailBalanceBlock, waBalanceBlock;
+  if (remainingOpen.length){
+    const lines = remainingOpen.map(s => `- ${s.order_number} — vence ${fmtDateStr(s.payment_due_date)} — ${fmtMoney(Number(s.sale_amount) - Number(s.amount_paid))}`).join('\n');
+    emailBalanceBlock = `Tu saldo pendiente actual es ${fmtMoney(balanceTotal)}, correspondiente a:\n${lines}`;
+    const waLines = remainingOpen.map(s => `${s.order_number}: ${fmtMoney(Number(s.sale_amount) - Number(s.amount_paid))}, vence ${fmtDateStr(s.payment_due_date)}`).join('; ');
+    waBalanceBlock = `Saldo pendiente: ${fmtMoney(balanceTotal)} — ${waLines}.`;
+  } else {
+    emailBalanceBlock = 'No tienes facturas pendientes en este momento.';
+    waBalanceBlock = 'No tienes saldo pendiente.';
+  }
+
+  const subject = 'Confirmación de pago recibido — BuenTrade';
+  const emailBody = `Hola ${name},\n\nConfirmamos la recepción de tu pago por ${fmtMoney(amount)}.\n\nAplicado a: ${appliedStr}\n\n${emailBalanceBlock}\n\nGracias por tu pago.\n\nSaludos,\nBuentrade Team`;
+  const waMessage = `Hola ${name}! Confirmamos tu pago de ${fmtMoney(amount)}, aplicado a: ${appliedStr}. ${waBalanceBlock} ¡Gracias!`;
+  return { subject, emailBody, waMessage };
+}
+
+let confirmSendState = null;
+function openConfirmSend(customerId, amount, appliedList){
+  const contactRow = collData.shipments.find(s => s.customer_id === customerId);
+  if (!contactRow) return;
+  const remainingOpen = openShipmentsFor(customerId);
+  const copy = buildPaymentConfirmationCopy(contactRow, amount, appliedList, remainingOpen);
+  confirmSendState = { contactRow, copy };
+
+  document.getElementById('confirmSendCustomer').textContent = contactRow.customer_trade_name || '—';
+  document.getElementById('confirmSendPreview').textContent = copy.emailBody;
+  const emailBtn = document.getElementById('confirmSendEmailBtn');
+  const waBtn = document.getElementById('confirmSendWaBtn');
+  emailBtn.disabled = !contactRow.customer_email;
+  waBtn.disabled = !contactRow.customer_whatsapp;
+  document.getElementById('confirmSendCard').style.display = 'block';
+  document.getElementById('confirmSendCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function sendConfirmEmail(){
+  const { contactRow, copy } = confirmSendState;
+  window.open(gmailComposeUrl([contactRow.customer_email], copy.subject, copy.emailBody), '_blank');
+}
+function sendConfirmWhatsapp(){
+  const { contactRow, copy } = confirmSendState;
+  window.open('https://wa.me/' + contactRow.customer_whatsapp.replace(/\D/g, '') + '?text=' + encodeURIComponent(copy.waMessage), '_blank');
+}
+function closeConfirmSend(){
+  document.getElementById('confirmSendCard').style.display = 'none';
+  confirmSendState = null;
 }
 
 function renderLedger(){
