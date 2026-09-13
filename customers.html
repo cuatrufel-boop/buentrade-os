@@ -262,6 +262,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="js/contact-validation.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -1284,8 +1285,33 @@ async function saveCustomer(forceOverride){
     document.getElementById('formMsg').textContent = 'Trade name is required.';
     return;
   }
+  // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
+  // errores"): nothing below here was checked before today — a bad email or phone saved silently
+  // and only surfaced later as a bounced send. bcIsValid* (js/contact-validation.js) is the one
+  // shared implementation Plants/Carriers use too, so a fix here can't drift out of sync with
+  // theirs the way the email signature already did.
+  if (document.getElementById('email').value && !bcIsValidEmail(document.getElementById('email').value)){
+    document.getElementById('formMsg').textContent = 'Email doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('email_cc').value && !bcIsValidEmailList(document.getElementById('email_cc').value)){
+    document.getElementById('formMsg').textContent = 'One of the CC emails doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('payments_contact_email').value && !bcIsValidEmail(document.getElementById('payments_contact_email').value)){
+    document.getElementById('formMsg').textContent = 'Payments contact email doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('whatsapp_number').value && !bcIsValidPhoneDigits(document.getElementById('whatsapp_number').value)){
+    document.getElementById('formMsg').textContent = 'WhatsApp number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
   if (payload.whatsapp && !payload.whatsapp.trim().startsWith('+')){
     document.getElementById('formMsg').textContent = 'WhatsApp must include the country code, e.g. +52 6621234567.';
+    return;
+  }
+  if (document.getElementById('payments_contact_whatsapp').value && !bcIsValidFullPhone(document.getElementById('payments_contact_whatsapp').value)){
+    document.getElementById('formMsg').textContent = 'Payments contact WhatsApp must include the country code, e.g. +52 6621234567.';
     return;
   }
   if (document.getElementById('payment_terms_type').value === 'credit' && !payload.payment_days){
@@ -1310,6 +1336,12 @@ async function saveCustomer(forceOverride){
             <button type="button" class="btn small" onclick="saveCustomer(true)">Save anyway — this is genuinely different</button>
           </div>
         </div>`;
+      return;
+    }
+    // Real backstop 2026-09-13: the form's own checks (bcIsValid*) already catch this in normal
+    // use — this only fires if something reaches the API without going through them.
+    if (e.data && e.data.error === 'invalid_contact_fields'){
+      document.getElementById('formMsg').textContent = e.data.problems.join(' ');
       return;
     }
     document.getElementById('formMsg').textContent = 'Error: ' + e.message;

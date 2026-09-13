@@ -6,6 +6,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { duplicateResponse, isNearDuplicate, jsonResponse, normalize, writeAuditLog } from "../_shared/matching.ts";
+import { validateContactFields } from "../_shared/validateContact.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -17,6 +18,12 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const missing = ["actor", "trade_name"].filter((k) => !body[k]);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
+
+    // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
+    // errores"): a real backstop, not just the frontend's own checks — this is what actually
+    // stops bad data from a direct API call bypassing the form entirely.
+    const contactProblems = validateContactFields(body);
+    if (contactProblems.length) return jsonResponse({ error: "invalid_contact_fields", problems: contactProblems }, 400);
 
     const {
       actor, trade_name, legal_name = null, country_id = null, city_id = null, state_id = null, state = null, address = null, postal_code = null,

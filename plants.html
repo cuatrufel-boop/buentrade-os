@@ -404,6 +404,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/contact-validation.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -2048,6 +2049,25 @@ async function saveNewPlant(forceOverride){
     document.getElementById('newPlantMsg').textContent = 'Select the species — every plant has one fixed species (rule: never guessed line-by-line later).';
     return;
   }
+  // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
+  // errores"): same shared checks as Customers/Carriers (js/contact-validation.js) — nothing here
+  // was checked before today.
+  if (document.getElementById('np_email').value && !bcIsValidEmail(document.getElementById('np_email').value)){
+    document.getElementById('newPlantMsg').textContent = 'Email doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('np_email_cc').value && !bcIsValidEmailList(document.getElementById('np_email_cc').value)){
+    document.getElementById('newPlantMsg').textContent = 'One of the CC emails doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('np_phone_number').value && !bcIsValidPhoneDigits(document.getElementById('np_phone_number').value)){
+    document.getElementById('newPlantMsg').textContent = 'Phone number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
+  if (document.getElementById('np_whatsapp_number').value && !bcIsValidPhoneDigits(document.getElementById('np_whatsapp_number').value)){
+    document.getElementById('newPlantMsg').textContent = 'WhatsApp number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
   const profilePayload = {};
   NEW_PLANT_PROFILE_FIELDS.forEach(f => { profilePayload[f] = document.getElementById('np_' + f).value || null; });
   profilePayload.state_id = document.getElementById('np_stateSelectField').style.display !== 'none' ? (document.getElementById('np_state_id').value || null) : null;
@@ -2112,6 +2132,12 @@ async function trySaveGeneric(fn, payload, msgElId, retryFn, forceOverride){
           <div style="margin-top:8px;"><button type="button" class="btn small" id="${msgElId}_retry">Save anyway — this is genuinely different</button></div>
         </div>`;
       document.getElementById(msgElId + '_retry').onclick = retryFn;
+      return null;
+    }
+    // Real backstop 2026-09-13: the form's own checks (bcIsValid*) already catch this in normal
+    // use — this only fires if something reaches the API without going through them.
+    if (e.data && e.data.error === 'invalid_contact_fields'){
+      document.getElementById(msgElId).textContent = e.data.problems.join(' ');
       return null;
     }
     document.getElementById(msgElId).textContent = 'Error: ' + e.message;
@@ -2602,6 +2628,32 @@ async function saveProfile(forceOverride){
   payload.phone = joinPhone(document.getElementById('pe_phone_code').value, document.getElementById('pe_phone_number').value);
   payload.whatsapp = joinPhone(document.getElementById('pe_whatsapp_code').value, document.getElementById('pe_whatsapp_number').value);
   payload.payments_whatsapp = joinPhone(document.getElementById('pe_payments_whatsapp_code').value, document.getElementById('pe_payments_whatsapp_number').value);
+  // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
+  // errores"): same shared checks as Customers/Carriers (js/contact-validation.js).
+  if (document.getElementById('pe_email').value && !bcIsValidEmail(document.getElementById('pe_email').value)){
+    document.getElementById('profileMsg').textContent = 'Email doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('pe_email_cc').value && !bcIsValidEmailList(document.getElementById('pe_email_cc').value)){
+    document.getElementById('profileMsg').textContent = 'One of the CC emails doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('pe_payments_email').value && !bcIsValidEmail(document.getElementById('pe_payments_email').value)){
+    document.getElementById('profileMsg').textContent = 'Payments contact email doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('pe_phone_number').value && !bcIsValidPhoneDigits(document.getElementById('pe_phone_number').value)){
+    document.getElementById('profileMsg').textContent = 'Phone number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
+  if (document.getElementById('pe_whatsapp_number').value && !bcIsValidPhoneDigits(document.getElementById('pe_whatsapp_number').value)){
+    document.getElementById('profileMsg').textContent = 'WhatsApp number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
+  if (document.getElementById('pe_payments_whatsapp_number').value && !bcIsValidPhoneDigits(document.getElementById('pe_payments_whatsapp_number').value)){
+    document.getElementById('profileMsg').textContent = 'Payments contact WhatsApp doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
   const termsType = document.getElementById('pe_payment_terms_type').value;
   if (termsType === 'credit' && !document.getElementById('pe_payment_terms_days').value){
     document.getElementById('profileMsg').textContent = 'Enter how many credit days.';
@@ -4116,8 +4168,15 @@ async function saveLocation(){
     document.getElementById('locationFormMsg').textContent = 'Location name is required.';
     return;
   }
-  if (payload.phone && !payload.phone.trim().startsWith('+')){
-    document.getElementById('locationFormMsg').textContent = 'Phone must include the country code, e.g. +52 6621234567.';
+  // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
+  // errores"): upgraded from a bare "+"-prefix check to the shared full-number validator
+  // (js/contact-validation.js) — same real digit-count check Customers/Carriers use.
+  if (payload.phone && !bcIsValidFullPhone(payload.phone)){
+    document.getElementById('locationFormMsg').textContent = 'Phone must include the country code and a real number, e.g. +52 6621234567.';
+    return;
+  }
+  if (payload.email && !bcIsValidEmail(payload.email)){
+    document.getElementById('locationFormMsg').textContent = 'Email doesn\'t look valid — check for a typo.';
     return;
   }
   try {
@@ -4127,6 +4186,12 @@ async function saveLocation(){
       await callApi('plant-locations-create', { actor: currentActor(), ...payload, idempotency_key: idempotencyKey });
     }
   } catch (e) {
+    // Real backstop 2026-09-13: the form's own checks (bcIsValid*) already catch this in normal
+    // use — this only fires if something reaches the API without going through them.
+    if (e.data && e.data.error === 'invalid_contact_fields'){
+      document.getElementById('locationFormMsg').textContent = e.data.problems.join(' ');
+      return;
+    }
     document.getElementById('locationFormMsg').textContent = 'Error: ' + e.message;
     return;
   }
@@ -4160,11 +4225,10 @@ function renderPlantProducts(){
   document.getElementById('plantEmpty').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('plantEmpty').textContent = plantProducts.length ? 'No products match your search.' : 'No products linked to this plant yet.';
   // Real ask 2026-09-09 ("ejecutalo en el modulo de plants"): transparent table row now — the
-  // photo drops (no table in the app shows a thumbnail), but the Spec sheet link stays exactly
-  // here, since this is the one screen where it's real (plant_products.spec_url is per-plant —
-  // see the products.html revert for why it can't live on the shared catalog row).
+  // photo drops (no table in the app shows a thumbnail). The old inline "Spec sheet" text link
+  // that used to sit here was dropped 2026-09-13 — redundant now that the row's own "📋 Spec"
+  // action button (below) does the same job.
   wrap.innerHTML = filtered.map(p => {
-    const specLink = p.spec_url ? ` · <a href="${escapeHtml(p.spec_url)}" target="_blank" rel="noopener">Spec sheet</a>` : '';
     // Shaded, not hidden — a declined product is a known, closed fact worth keeping visible on
     // this plant's own list ("we asked, they don't make it"), just visually out of the way so it
     // doesn't compete with products that still need attention.
@@ -4173,11 +4237,11 @@ function renderPlantProducts(){
     // from Plants, without first building a quote around this product.
     const fileName = (p.full_name_en || p.name_en || p.name || 'product').replace(/[^a-z0-9]+/gi, '-');
     const photoBtn = p.photo_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="downloadPlantProductFile('${p.photo_url}','Foto-${fileName}', this)">📋 Foto</button>` : '';
-    const specBtn = p.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="downloadPlantProductFile('${p.spec_url}','Ficha-tecnica-${fileName}.pdf', this)">📋 Ficha</button>` : '';
+    const specBtn = p.spec_url ? `<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="downloadPlantProductFile('${p.spec_url}','Ficha-tecnica-${fileName}.pdf', this)">📋 Spec</button>` : '';
     return `<tr${p.declined_at ? ' style="opacity:.5;"' : ''}>
       <td>
         <a class="name-link" onclick="editProduct('${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name || '')}</a>
-        <div class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}${specLink}</div>
+        <div class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}</div>
       </td>
       <td class="num">${fmtPriceCell(p)}</td>
       <td style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${photoBtn}${specBtn}<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
@@ -4299,7 +4363,15 @@ async function downloadPlantProductFile(fileUrl, filename, btn){
   }
 }
 
+// Real bug fixed 2026-09-13, confirmed live: opening Edit on one product, then opening Edit on a
+// DIFFERENT one before the first's loadCutNames() network call ever resolved, let the first call's
+// late response land after the second's own cut_name_id had already been set correctly — its
+// sel.innerHTML rebuild silently wiped that selection back to blank. openProductFormToken makes
+// each call check, right after its own await, that it's still the most recent one before touching
+// the DOM any further — an abandoned older call just stops instead of clobbering the newer one.
+let openProductFormToken = 0;
 async function openProductForm(product){
+  const myToken = ++openProductFormToken;
   document.getElementById('formCard').style.display = 'flex';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
   const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','temperature_id','packaging_id','full_name_en','full_name_es'];
@@ -4314,6 +4386,7 @@ async function openProductForm(product){
   const categoryId = (product && product.category_id) || (plant && plant.category_id) || null;
   if (categoryId) document.getElementById('category').value = categoryId;
   await Promise.all([loadCutNames(categoryId), loadVariations(categoryId)]);
+  if (myToken !== openProductFormToken) return; // a newer Edit click took over — don't clobber it
   pendingPhotoFile = null;
   pendingSpecFile = null;
   document.getElementById('photoFile').value = '';
@@ -4615,7 +4688,7 @@ function gmailComposeUrl(to, subject, body){
 // server-side on every successful Resend send — but the Gmail fallback below never goes near that
 // function, so without this it would go out with no sign-off at all. Kept byte-for-byte identical
 // to that file's SIGNATURE_TEXT so a plant sees the same one either way.
-const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 954-208-0209 · buentradegroup.com';
+const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 754-248-1016 · buentradegroup.com';
 
 // English — plant-facing, same rule as everything else sent to a US plant. Falls back to the
 // plant's own general contact when this specific location doesn't have one on file yet (e.g. one

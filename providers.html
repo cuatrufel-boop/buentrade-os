@@ -278,6 +278,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="js/contact-validation.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -1218,6 +1219,25 @@ async function saveProviderProfile(forceOverride){
     document.getElementById('formMsg').textContent = 'Name is required.';
     return;
   }
+  // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
+  // errores"): same shared checks as Customers/Plants (js/contact-validation.js) — this file had
+  // zero validation on email/phone before today, not even the weak "+"-prefix check Customers has.
+  if (document.getElementById('p_email').value && !bcIsValidEmail(document.getElementById('p_email').value)){
+    document.getElementById('formMsg').textContent = 'Email doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('p_email_cc').value && !bcIsValidEmailList(document.getElementById('p_email_cc').value)){
+    document.getElementById('formMsg').textContent = 'One of the CC emails doesn\'t look valid — check for a typo.';
+    return;
+  }
+  if (document.getElementById('p_phone_number').value && !bcIsValidPhoneDigits(document.getElementById('p_phone_number').value)){
+    document.getElementById('formMsg').textContent = 'Phone number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
+  if (document.getElementById('p_whatsapp_number').value && !bcIsValidPhoneDigits(document.getElementById('p_whatsapp_number').value)){
+    document.getElementById('formMsg').textContent = 'WhatsApp number doesn\'t look valid — digits only, no country code (that\'s the dropdown next to it).';
+    return;
+  }
   try {
     const idempotencyKey = `providers-update|${id}|${JSON.stringify(payload)}|${new Date().toISOString().slice(0, 16)}`;
     const updated = await callApi('providers-update', { actor: currentActor(), id, ...payload, override_duplicate_check: !!forceOverride, idempotency_key: idempotencyKey });
@@ -1237,6 +1257,12 @@ async function saveProviderProfile(forceOverride){
           ${escapeHtml(e.data.message)}${match ? `<br><strong>${escapeHtml(match.name)}</strong>` : ''}
           <div style="margin-top:8px;"><button type="button" class="btn small" onclick="saveProviderProfile(true)">Save anyway — this is genuinely different</button></div>
         </div>`;
+      return;
+    }
+    // Real backstop 2026-09-13: the form's own checks (bcIsValid*) already catch this in normal
+    // use — this only fires if something reaches the API without going through them.
+    if (e.data && e.data.error === 'invalid_contact_fields'){
+      document.getElementById('formMsg').textContent = e.data.problems.join(' ');
       return;
     }
     document.getElementById('formMsg').textContent = 'Error: ' + e.message;
