@@ -4279,7 +4279,29 @@ async function rqDeclinePlantProduct(linkId, plantName){
 // below) can send the exact same real, preview-before-send price request as Building's Update
 // Price button — same subject/body/modal, just a different onSent hook (the sweep row refreshes
 // itself instead of leaving the Building tray, since it was never in it).
-function rqSendPriceRequestFor(p, onSent){
+// Real fix 2026-09-13, explicit ("si son productos ready nuevos actualizados... voy a pedir a la
+// planta un precio de un producto que ya enviaron y eso no les gusta"): the on-screen Expired/
+// Updating/Possible rows this gets called from are all a snapshot from the last loadPendingPrices()
+// run — up to 45s stale (that poll's own interval), longer still while an inline calculator has it
+// paused. A fresh price list could land in that window; asking again off the stale snapshot would
+// nag a plant that already replied. One real, cheap re-check of the live row, right before
+// anything actually opens — every caller (Ready's Update Price, Expired's Ask for Update, Possible's
+// Ask for Price) goes through this one function, so the fix covers all three at once.
+async function rqSendPriceRequestFor(p, onSent){
+  if (p.rqProductId){
+    try {
+      const fresh = (await callApi('plant-products-search', { plant_id: p.id, product_id: p.rqProductId })).results || [];
+      const freshRow = fresh[0];
+      if (freshRow && freshRow.current_price != null){
+        const freshStale = (rqPriceAgeDays(freshRow.price_date) || 0) > RQ_PRICE_STALE_DAYS;
+        if (!freshStale){
+          alert(`${p.name} already sent an updated price for this product — refreshing instead of asking again.`);
+          loadPendingPrices();
+          return;
+        }
+      }
+    } catch (e) { /* couldn't confirm freshness — fall through and ask anyway, same as before this fix */ }
+  }
   const subject = `${rqSpecEnForPlant(p) || ''} — ${p.rqPrice == null ? 'price request' : 'updated price request'}`;
   const body = rqPriceRequestBody(p);
   const phone = (p.whatsapp || p.phone || '').replace(/\D/g, '');
