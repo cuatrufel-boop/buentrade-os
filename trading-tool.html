@@ -498,6 +498,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/email-modal.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -2268,15 +2269,12 @@ function negoCurrentSale(){
   return el ? Number(el.value) || 0 : 0;
 }
 
-// The plain confirm() this used to show was yes/no only — the trader could see the message but
-// never fix a typo or add a line without cancelling and starting over, which is exactly what
-// "no sé si mando o no" was pointing at. This opens a real modal with an editable subject/body
-// instead, and only sends what's actually in those fields when Send is clicked.
-let emailModalResolve = null;
-let emailModalWaInfo = null;
-// Real correction 2026-09-06: "siempre son las dos opciones email y whatsapp" — same fix already
-// applied in orders.html. Also added attachments support here (never existed in this file's copy
-// of the modal) since Create Invoice needs to attach the real PDF, not just a text message.
+// Real unification 2026-09-13 ("arreglalo globalmente en todo el sistema, unificalo"): the modal
+// (openEmailModal/emailModalCancel/emailModalConfirm/emailModalSendWhatsApp) now lives once in
+// js/email-modal.js (bcOpenEmailModal/bcSendEmailApi) instead of four separate copies — this also
+// gives this file a real EMAIL_SIGNATURE for the first time (it never had one) and fixes a real
+// bug where an edited To field was silently ignored on send. downloadBase64File stays local (used
+// by more than just the email modal in this file).
 function downloadBase64File(filename, base64content){
   const bytes = atob(base64content);
   const arr = new Uint8Array(bytes.length);
@@ -2288,82 +2286,12 @@ function downloadBase64File(filename, base64content){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
-// Real correction 2026-09-07, explicit: the WhatsApp text used to be a fixed string baked in by
-// the caller — never shown, never editable, sent as-is. Now it reads whatever is currently in
-// emailModalWaBody, same as the email side reads emailModalBody — both channels are real editable
-// fields the trader sees and can change before either one sends.
-function emailModalSendWhatsApp(){
-  if (!emailModalWaInfo) return;
-  const message = document.getElementById('emailModalWaBody').value;
-  const { phone, filename, content } = emailModalWaInfo;
-  if (content) downloadBase64File(filename, content);
-  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
-}
-function openEmailModal(toList, subject, text, attachments, waInfo, ccList){
-  document.getElementById('emailModalTo').value = toList;
-  document.getElementById('emailModalCc').value = ccList || '';
-  document.getElementById('emailModalSubject').value = subject;
-  document.getElementById('emailModalBody').value = text;
-  const attachWrap = document.getElementById('emailModalAttachWrap');
-  const attachEl = document.getElementById('emailModalAttachments');
-  if (attachments && attachments.length){
-    attachWrap.style.display = 'block';
-    attachEl.innerHTML = attachments.map(a => `<span class="email-modal-chip">📎 ${a.filename}</span>`).join('');
-  } else {
-    attachWrap.style.display = 'none';
-  }
-  emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
-  document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
-  const waWrap = document.getElementById('emailModalWaWrap');
-  if (emailModalWaInfo){
-    waWrap.style.display = 'block';
-    document.getElementById('emailModalWaPhone').textContent = emailModalWaInfo.phone;
-    document.getElementById('emailModalWaBody').value = emailModalWaInfo.message || '';
-  } else {
-    waWrap.style.display = 'none';
-  }
-  document.getElementById('emailModalOverlay').style.display = 'flex';
-  return new Promise(resolve => { emailModalResolve = resolve; });
-}
-function emailModalCancel(){
-  document.getElementById('emailModalOverlay').style.display = 'none';
-  if (emailModalResolve) emailModalResolve(null);
-  emailModalResolve = null;
-}
-function emailModalConfirm(){
-  const subject = document.getElementById('emailModalSubject').value;
-  const text = document.getElementById('emailModalBody').value;
-  const cc = document.getElementById('emailModalCc').value;
-  document.getElementById('emailModalOverlay').style.display = 'none';
-  if (emailModalResolve) emailModalResolve({ subject, text, cc });
-  emailModalResolve = null;
-}
+const EMAIL_SIGNATURE = BC_EMAIL_SIGNATURE;
 
-// Sends through the Netlify function (Resend) so the right BuenTrade alias goes out as the
-// sender automatically. Falls back to mailto: (old behavior) if the API call fails, so a send
-// is never fully blocked by an API/network hiccup.
+// This file's own signature is unchanged (7 args, cc last, no fromDisplay) — every real call
+// site stays as-is.
 async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo, cc){
-  const toList = Array.isArray(to) ? to.join(', ') : to;
-  const ccList = Array.isArray(cc) ? cc.join(', ') : (cc || '');
-  const waInfoWithFile = (waInfo && waInfo.phone && attachments && attachments[0])
-    ? { ...waInfo, filename: attachments[0].filename, content: attachments[0].content } : waInfo;
-  const edited = await openEmailModal(toList, subject, text, attachments, waInfoWithFile, ccList);
-  if (!edited){
-    const cancelErr = new Error('Cancelled by user');
-    cancelErr.cancelled = true;
-    throw cancelErr;
-  }
-  const finalCc = (edited.cc || '').split(',').map(s => s.trim()).filter(Boolean);
-  const res = await fetch('/.netlify/functions/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to, cc: finalCc.length ? finalCc : undefined, subject: edited.subject, text: edited.text, attachments }),
-  });
-  if (!res.ok){
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Send failed');
-  }
-  return res.json();
+  return bcSendEmailApi({ fromAlias, to, subject, text, attachments, waInfo, cc });
 }
 
 // Message to the plant is English — plants are US-based (same rule as the PO/FO documents).
@@ -2530,27 +2458,9 @@ async function negoSaveDefinitive(overrideCreditCheck){
   <div id="docPreviewActions" style="display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.12);flex-shrink:0;background:var(--navy);"></div>
 </div>
 
-<div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
-  <div class="email-modal-box">
-    <h3 id="emailModalTitle">Review before sending</h3>
-    <div class="email-modal-field"><label>To</label><input type="text" id="emailModalTo" readonly></div>
-    <div class="email-modal-field"><label>CC (optional — comma-separated)</label><input type="text" id="emailModalCc" placeholder="name@example.com"></div>
-    <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject"></div>
-    <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody"></textarea></div>
-    <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
-      <label>Attachments</label>
-      <div class="email-modal-attachments" id="emailModalAttachments"></div>
-    </div>
-    <div class="email-modal-field" id="emailModalWaWrap" style="display:none;">
-      <label>WhatsApp — <span id="emailModalWaPhone"></span></label>
-      <textarea id="emailModalWaBody"></textarea>
-    </div>
-    <div class="email-modal-actions">
-      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:var(--card);color:#1DA851;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
-      <button onclick="emailModalCancel()" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
-      <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
-    </div>
-  </div>
-</div>
+<!-- Real unification 2026-09-13 ("arreglalo globalmente en todo el sistema, unificalo"): the
+     #emailModalOverlay markup this page used to keep its own copy of (missing From, and with a
+     readonly To that silently dropped any edit — a real bug) is now injected once by
+     js/email-modal.js (bcEnsureEmailModal), same as offers.html/orders.html/plants.html. -->
 </body>
 </html>

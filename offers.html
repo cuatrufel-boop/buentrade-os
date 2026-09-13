@@ -405,6 +405,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/email-modal.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -500,7 +501,9 @@ auth.onAuthStateChanged(user => {
     document.getElementById('userBadge').textContent = user.email;
     loadOffers();
     initPushNotifications();
-    runUrgentQueueOnLogin();
+    // Disabled 2026-09-13 per user: auto-trigger removed from all modules (orders/offers/collections),
+    // function kept intact to re-enable later per-module if needed.
+    // runUrgentQueueOnLogin();
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
@@ -633,29 +636,11 @@ auth.onAuthStateChanged(user => {
 </div>
 <div id="toastStack" class="toast-stack"></div>
 
-<div id="emailModalOverlay" class="email-modal-overlay" style="display:none;">
-  <div class="email-modal-box">
-    <h3 id="emailModalTitle">Review before sending</h3>
-    <div class="email-modal-from" id="emailModalFrom"></div>
-    <div class="email-modal-field"><label>To</label><input type="text" id="emailModalTo" autocomplete="off" name="bt-email-to"></div>
-    <div class="email-modal-field"><label>CC (optional — add more recipients, comma-separated)</label><input type="text" id="emailModalCc" placeholder="name@example.com, name2@example.com" autocomplete="off" name="bt-email-cc"></div>
-    <div class="email-modal-field"><label>Subject</label><input type="text" id="emailModalSubject" autocomplete="off" name="bt-email-subject"></div>
-    <div class="email-modal-field"><label>Message</label><textarea id="emailModalBody" autocomplete="off"></textarea></div>
-    <div class="email-modal-field" id="emailModalAttachWrap" style="display:none;">
-      <label>Attachments</label>
-      <div class="email-modal-attachments" id="emailModalAttachments"></div>
-    </div>
-    <div class="email-modal-field" id="emailModalWaWrap" style="display:none;">
-      <label>WhatsApp — <span id="emailModalWaPhone"></span></label>
-      <textarea id="emailModalWaBody" autocomplete="off"></textarea>
-    </div>
-    <div class="email-modal-actions">
-      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:var(--card);color:#3DDC97;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
-      <button onclick="emailModalCancel()" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
-      <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
-    </div>
-  </div>
-</div>
+<!-- Real unification 2026-09-13 ("arreglalo globalmente en todo el sistema, unificalo"): the
+     #emailModalOverlay markup this page used to keep its own copy of is now injected once by
+     js/email-modal.js (bcEnsureEmailModal) — same CSS classes, same look, one real source of
+     truth instead of 4 files that could each drift (and had: plants.html never even had CC or
+     attachments). See sendEmailApi below for the send-side half of this. -->
 
 <script>
 let offers = [];
@@ -1670,90 +1655,13 @@ const FROM_DISPLAY = {
   info: 'BuenTrade <info@buentradegroup.com>',
 };
 
-// A plain confirm() only ever showed what was already decided — no way to fix a typo, add a CC,
-// or actually see the attachment before it goes out. This is a real modal: To/CC/Subject/Body
-// are all editable, and every attachment is listed so nothing ships as a surprise.
-let emailModalResolve = null;
-let emailModalWaInfo = null;
-// Real correction 2026-09-07, explicit: PO/SO/FO here had NO WhatsApp option at all — email only.
-// Same pattern as orders.html/trading-tool.html now: a real, visible, editable WhatsApp message
-// field alongside the email one, sent only when the trader clicks it, never auto-opened.
-function emailModalSendWhatsApp(){
-  if (!emailModalWaInfo) return;
-  const message = document.getElementById('emailModalWaBody').value;
-  const { phone, filename, content, contentType } = emailModalWaInfo;
-  if (content) downloadBase64File(filename, content, contentType);
-  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
-}
-function openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo){
-  document.getElementById('emailModalFrom').textContent = 'From: ' + (fromDisplay || '');
-  document.getElementById('emailModalTo').value = toList;
-  document.getElementById('emailModalCc').value = '';
-  document.getElementById('emailModalSubject').value = subject;
-  document.getElementById('emailModalBody').value = text;
-  const attachWrap = document.getElementById('emailModalAttachWrap');
-  const attachEl = document.getElementById('emailModalAttachments');
-  if (attachments && attachments.length){
-    attachWrap.style.display = 'block';
-    attachEl.innerHTML = attachments.map(a => `<span class="email-modal-chip">📎 ${escapeHtml(a.filename)}</span>`).join('');
-  } else {
-    attachWrap.style.display = 'none';
-  }
-  emailModalWaInfo = (waInfo && waInfo.phone) ? waInfo : null;
-  document.getElementById('emailModalWaBtn').style.display = emailModalWaInfo ? 'inline-block' : 'none';
-  const waWrap = document.getElementById('emailModalWaWrap');
-  if (emailModalWaInfo){
-    waWrap.style.display = 'block';
-    document.getElementById('emailModalWaPhone').textContent = emailModalWaInfo.phone;
-    document.getElementById('emailModalWaBody').value = emailModalWaInfo.message || '';
-  } else {
-    waWrap.style.display = 'none';
-  }
-  document.getElementById('emailModalOverlay').style.display = 'flex';
-  return new Promise(resolve => { emailModalResolve = resolve; });
-}
-function emailModalCancel(){
-  document.getElementById('emailModalOverlay').style.display = 'none';
-  if (emailModalResolve) emailModalResolve(null);
-  emailModalResolve = null;
-}
-function emailModalConfirm(){
-  const to = document.getElementById('emailModalTo').value;
-  const cc = document.getElementById('emailModalCc').value;
-  const subject = document.getElementById('emailModalSubject').value;
-  const text = document.getElementById('emailModalBody').value;
-  document.getElementById('emailModalOverlay').style.display = 'none';
-  if (emailModalResolve) emailModalResolve({ to, cc, subject, text });
-  emailModalResolve = null;
-}
-
-// Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
-// sender automatically — no trader having to pick "From" in Gmail. Shows exactly what will be
-// sent first and requires confirmation — nothing goes out silently. Falls back to opening a
-// mailto: (old behavior) if the API call fails for any reason, so a send is never fully blocked.
-// Cancelling the preview throws a flagged error so callers can skip their own fallback/alert —
-// "I said no" isn't the same as "the send failed".
+// Real unification 2026-09-13 ("arreglalo globalmente en todo el sistema, unificalo"): the modal
+// (openEmailModal/emailModalCancel/emailModalConfirm/emailModalSendWhatsApp) and the actual send
+// call now live once in js/email-modal.js (bcOpenEmailModal/bcSendEmailApi) instead of four
+// separate copies. This file's own sendEmailApi keeps its exact original signature and every one
+// of its real call sites is unchanged — it's now a thin wrapper onto the shared implementation.
 async function sendEmailApi(fromAlias, to, subject, text, attachments, waInfo){
-  const toList = Array.isArray(to) ? to.join(', ') : to;
-  const fromDisplay = FROM_DISPLAY[fromAlias] || fromAlias;
-  const edited = await openEmailModal(toList, subject, text, attachments, fromDisplay, waInfo);
-  if (!edited){
-    const cancelErr = new Error('Cancelled by user');
-    cancelErr.cancelled = true;
-    throw cancelErr;
-  }
-  const finalTo = edited.to.split(',').map(s => s.trim()).filter(Boolean);
-  const finalCc = edited.cc.split(',').map(s => s.trim()).filter(Boolean);
-  const res = await fetch('/.netlify/functions/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAlias, to: finalTo, cc: finalCc.length ? finalCc : undefined, subject: edited.subject, text: edited.text, attachments }),
-  });
-  if (!res.ok){
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Send failed');
-  }
-  return res.json();
+  return bcSendEmailApi({ fromAlias, to, subject, text, attachments, waInfo, fromDisplay: FROM_DISPLAY[fromAlias] || fromAlias });
 }
 
 // Opens Gmail's own compose screen instead of a mailto: link — same fix as quotes.html's
@@ -1765,9 +1673,10 @@ function gmailComposeUrl(emails, subject, body){
 }
 // Real gap fixed 2026-09-01: netlify/functions/send-email.js already appends this exact signature
 // server-side on every successful Resend send — but this fallback link never goes near that
-// function, so without this it would go out with no sign-off at all. Kept byte-for-byte identical
-// to that file's SIGNATURE_TEXT so a plant/customer/carrier sees the same one either way.
-const EMAIL_SIGNATURE = '\n\n--\nBuenTrade — GOOD TRADE. GOOD BUSINESS.\nBuenTrade LLC\n1525 N Park Dr, Suite 104, Weston, FL 33326\n+1 754-248-1016 · buentradegroup.com';
+// function, so without this it would go out with no sign-off at all.
+// Real unification 2026-09-13: the actual value now lives once in js/email-modal.js
+// (BC_EMAIL_SIGNATURE) — this is a plain alias so nothing else in this file has to change.
+const EMAIL_SIGNATURE = BC_EMAIL_SIGNATURE;
 // Real bug fixed 2026-09-01, confirmed live with a screenshot: a window.open() call here — even
 // one opened synchronously at the very top of the caller, before any await — can still be
 // silently killed by Chrome's own per-site pop-up permission for this page, with no error and no
