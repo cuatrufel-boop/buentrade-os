@@ -989,8 +989,8 @@ function creditLimitResolve(choice){
 }
 // Placeholder copy — texto real pendiente de aprobación ("ponle cualquier mensaje despues lo
 // ponemos bien", confirmed explicitly), same as the rest of Collections' new customer-facing copy.
-function requestFinancialStatements(customerEmail, customerName){
-  if (!customerEmail){ alert('This customer has no email on file.'); return; }
+async function requestFinancialStatements(customerEmail, customerName){
+  if (!customerEmail){ await btAlert('This customer has no email on file.'); return; }
   const subject = 'BuenTrade — Solicitud de estados financieros';
   const body = `Hola${customerName ? ' ' + customerName : ''},\n\nPara poder aumentar tu línea de crédito con BuenTrade, ¿nos podrías compartir tus estados financieros más recientes?\n\nGracias,\nBuenTrade Team`;
   window.open(`https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: customerEmail, su: subject, body }).toString()}`, '_blank');
@@ -2134,7 +2134,7 @@ const APP_ORIGIN = 'https://wonderful-longma-8b07c7.netlify.app';
 // attached, and the remote sign link in the SAME message (not a second, separate email/WhatsApp),
 // so the trader can follow up for a signature in that same WhatsApp thread.
 async function createAndShareInvoice(){
-  if (!negoOffer || !negoOffer.order_number){ alert('No order on this offer yet.'); return; }
+  if (!negoOffer || !negoOffer.order_number){ await btAlert('No order on this offer yet.'); return; }
   const orderNumber = negoOffer.order_number;
   const msgEl = document.getElementById('invoiceMsg');
   msgEl.textContent = 'Generando factura…';
@@ -2187,7 +2187,7 @@ function gmailComposeUrl(emails, subject, body){
 }
 // Real bug found live 2026-09-14: "ya cree un invoice y no me deja enviar signature a cliente" —
 // the automatic send failing (Netlify still paused, see [[project_netlify_suspended_until_sept15]])
-// just showed a bare alert() and left invoice_sent_at unset forever, with no way to confirm a
+// just showed a bare await btAlert() and left invoice_sent_at unset forever, with no way to confirm a
 // manual send — unlike orders.html's PO/SO/Payment sends, which all already have this exact
 // "Open in Gmail" fallback that marks the doc sent once the trader actually clicks through it.
 async function markInvoiceSentFallback(){
@@ -2497,7 +2497,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate){
       }
       return;
     }
-    alert('Error: ' + e.message);
+    await btAlert('Error: ' + e.message);
     return;
   }
   const orderNumber = result.order_number;

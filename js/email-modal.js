@@ -159,6 +159,39 @@ function bcConfirmWaSend(phone, message, filename){
   document.getElementById('bcWaAttachModalOverlay').style.display = 'flex';
 }
 
+// Real ask 2026-09-14: "que no quede con diseno nativo... ventanas blancas etc cambialo por
+// diseno buentrade" — the browser's own native alert() (a plain white OS dialog, "localhost says")
+// replaced everywhere with this same dark-glass modal every other popup in the app already uses.
+// One shared implementation instead of ~100 individual call sites styling their own. Resolves once
+// the trader clicks OK — every call site now does `await btAlert(...)` instead of `alert(...)`, so
+// the code-after-the-alert still waits for it exactly like the native one did.
+let btAlertResolveFn = null;
+function bcEnsureAlertModal(){
+  if (document.getElementById('btAlertOverlay')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+<div id="btAlertOverlay" class="email-modal-overlay" style="display:none;z-index:9000;">
+  <div class="email-modal-box" style="max-width:420px;">
+    <div id="btAlertMessage" style="font-size:13.5px;color:var(--ink);line-height:1.5;white-space:pre-wrap;"></div>
+    <div class="email-modal-actions" style="justify-content:flex-end;margin-top:18px;">
+      <button onclick="btAlertResolve()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-weight:700;font-size:13px;cursor:pointer;">OK</button>
+    </div>
+  </div>
+</div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+function btAlert(message){
+  bcEnsureAlertModal();
+  document.getElementById('btAlertMessage').textContent = message;
+  document.getElementById('btAlertOverlay').style.display = 'flex';
+  return new Promise(resolve => { btAlertResolveFn = resolve; });
+}
+function btAlertResolve(){
+  document.getElementById('btAlertOverlay').style.display = 'none';
+  if (btAlertResolveFn) btAlertResolveFn();
+  btAlertResolveFn = null;
+}
+
 // opts: { fromAlias, to, subject, text, attachments, waInfo, cc, fromDisplay, title }
 // The one real network call every calling file's own sendEmailApi now delegates to. Throws a
 // cancelled-flagged Error if the trader hits Cancel (same contract every caller already expects),

@@ -198,7 +198,7 @@
   .plr-chip-new:hover{background:rgba(255,200,118,.14);}
   /* Real bug found 2026-09-09: "Match" silently did nothing when the matcher flagged its one
      suggested chip as conflicted (never auto-picked, by design — see resolvePlantPendingMatch) —
-     a plain browser alert() gave no visual pointer to WHICH chip to click, and an unpicked chip
+     a plain browser await btAlert() gave no visual pointer to WHICH chip to click, and an unpicked chip
      (outline only) looks close enough to a picked one (solid fill) to miss the difference. */
   @keyframes plr-nudge{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,0);}25%,75%{box-shadow:0 0 0 3px rgba(255,200,118,.55);}}
   .plr-candidates-nudge{animation:plr-nudge .5s ease-in-out 2;border-radius:8px;}
@@ -1548,7 +1548,7 @@ async function loadCutNames(category_id){
 // itself — the same visibility problem the Variation panel's own "+ Add new…" link already solved.
 async function addNewCutName(){
   const category_id = document.getElementById('category').value;
-  if (!category_id){ alert('Select a Category first.'); return; }
+  if (!category_id){ await btAlert('Select a Category first.'); return; }
   const sel = document.getElementById('cut_name_id');
   const entered = await showAddCatalogModal({ title: 'Add new cut name', labelEn: 'English (e.g. "Loin")', labelEs: 'Spanish (e.g. "Lomo")' });
   if (!entered) return;
@@ -1564,7 +1564,7 @@ async function addNewCutName(){
       if (!proceed) return;
       result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, category_id, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
-      alert('Error creating cut: ' + e.message);
+      await btAlert('Error creating cut: ' + e.message);
       return;
     }
   }
@@ -1657,7 +1657,7 @@ async function loadVariations(category_id){
 // EN/ES gap the catalog-matching rules exist to prevent.
 async function addNewVariation(){
   const category_id = document.getElementById('category').value;
-  if (!category_id){ alert('Select a Category first.'); return; }
+  if (!category_id){ await btAlert('Select a Category first.'); return; }
   const entered = await showAddCatalogModal({ title: 'Add new variation', labelEn: 'English (e.g. "Bone-In")', labelEs: 'Spanish (e.g. "con hueso")' });
   if (!entered) return;
   const { en: name_en, es: name_es } = entered;
@@ -1672,7 +1672,7 @@ async function addNewVariation(){
       if (!proceed) return;
       result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, category_id, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
-      alert('Error creating variation: ' + e.message);
+      await btAlert('Error creating variation: ' + e.message);
       return;
     }
   }
@@ -1961,7 +1961,7 @@ async function deletePlant(id){
   try {
     await callApi('plants-delete', { actor: currentActor(), id });
   } catch (e) {
-    alert('Error deleting: ' + e.message);
+    await btAlert('Error deleting: ' + e.message);
     return;
   }
   if (currentPlantId === id) closePlantView();
@@ -2314,7 +2314,7 @@ async function deletePlantDocument(id){
   try {
     await callApi('plant-documents-delete', { actor: currentActor(), id });
   } catch (e) {
-    alert('Error deleting: ' + e.message);
+    await btAlert('Error deleting: ' + e.message);
     return;
   }
   await loadPlantDocuments();
@@ -2337,7 +2337,7 @@ async function loadPlantPendingMatches(){
     // pending," which is exactly the wrong thing to look like right after clicking a badge that
     // said there WAS something. Surface the failure instead of hiding it.
     plantPendingMatches = [];
-    alert('Error loading pending matches: ' + e.message);
+    await btAlert('Error loading pending matches: ' + e.message);
     renderPlantPendingMatches();
     return;
   }
@@ -2489,7 +2489,7 @@ async function resolvePlantPendingMatch(id){
       try {
         const res = await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId });
         link = res.plant_product;
-      } catch (e) { alert(`Couldn't save this plant's link: ${e.message}`); return; }
+      } catch (e) { await btAlert(`Couldn't save this plant's link: ${e.message}`); return; }
       await callApi('plant-products-update', { actor: currentActor(), id: link.id, declined_at: new Date().toISOString() });
     } else {
       await callApi('plant-products-apply-match', {
@@ -2500,7 +2500,7 @@ async function resolvePlantPendingMatch(id){
     }
     await callApi('plant-pending-matches-update', { actor: currentActor(), id, product_id: productId });
   } catch (e) {
-    alert(`Couldn't save this match: ${e.message}`);
+    await btAlert(`Couldn't save this match: ${e.message}`);
     return;
   }
   // Real bug, confirmed live 2026-09-10 ("le doy match a uno y se pierden todos los matches que
@@ -2525,7 +2525,7 @@ async function matchAllConfirmedPendingMatches(){
     const tightIds = Array.isArray(m.candidate_product_ids) ? m.candidate_product_ids : [];
     return m._pickedProductId || (tightIds.length === 1 && !m.candidates_conflicted);
   });
-  if (!eligible.length){ alert('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch, or wait for a row that already has a single confident match.'); return; }
+  if (!eligible.length){ await btAlert('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch, or wait for a row that already has a single confident match.'); return; }
   if (!confirm(`Apply ${eligible.length} confirmed match${eligible.length > 1 ? 'es' : ''}?`)) return;
   // Real gap found live 2026-09-10 ("no graba" — the data was actually all saved, confirmed
   // against the real DB, but a several-second run of sequential API calls with zero visible
@@ -4257,7 +4257,7 @@ async function deleteLocation(id){
   try {
     await callApi('plant-locations-delete', { actor: currentActor(), id });
   } catch (e) {
-    alert('Error: ' + e.message);
+    await btAlert('Error: ' + e.message);
     return;
   }
   await loadPlantLocations();
@@ -4377,7 +4377,7 @@ async function useExistingProduct(productId){
   try {
     await callApi('plant-products-link', { actor: currentActor(), plant_id: currentPlantId, product_id: productId });
   } catch (e) {
-    alert('Error linking product: ' + e.message);
+    await btAlert('Error linking product: ' + e.message);
     return;
   }
   closeForm();
@@ -4411,7 +4411,7 @@ async function downloadPlantProductFile(fileUrl, filename, btn){
     if (btn){ btn.textContent = '✓ Descargada'; setTimeout(() => { btn.disabled = false; btn.textContent = originalLabel; }, 1500); }
   } catch(e){
     if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
-    alert('No se pudo descargar (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
+    await btAlert('No se pudo descargar (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
     window.open(fileUrl, '_blank');
   }
 }
@@ -4720,7 +4720,7 @@ async function emailPlantLocation(locId){
   if (!loc) return;
   const plant = plants.find(p => p.id === currentPlantId);
   const email = loc.email || (plant && plant.email);
-  if (!email){ alert('Neither this location nor the plant has an email on file.'); return; }
+  if (!email){ await btAlert('Neither this location nor the plant has an email on file.'); return; }
   const contactName = loc.contact_name || (plant && plant.contact_name) || 'there';
   const contact = contactName.split(' ')[0];
   const subject = `Pick-up appointment — ${loc.location_name || 'your location'}`;

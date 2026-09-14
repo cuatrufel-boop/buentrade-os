@@ -877,13 +877,13 @@ function requestCustomsDocsMessage(o){
   const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
   return `Hi, for order ${o.order_number} — ${o.product_name || ''}, please send us: ${docsLine}. Thank you.`;
 }
-function requestCustomsDocsClick(orderNumber){
+async function requestCustomsDocsClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   const carrierPhone = o.carrier ? (o.carrier.phone || '').replace(/\D/g, '') : '';
   const plantPhone = o.plant ? (o.plant.whatsapp || o.plant.phone || '').replace(/\D/g, '') : '';
   const phone = carrierPhone || plantPhone;
-  if (!phone){ alert('No carrier/plant phone on file to request customs documents.'); return; }
+  if (!phone){ await btAlert('No carrier/plant phone on file to request customs documents.'); return; }
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(requestCustomsDocsMessage(o)), '_blank');
 }
 // Approved copy 2026-09-12 — see project_approved_email_whatsapp_copy_table.md for the full table;
@@ -936,7 +936,7 @@ async function confirmPickupReadyClick(orderNumber){
       if (!pickedId) return; // trader cancelled — nothing sent, nothing saved
       location = locations.find(l => l.id === pickedId);
       try { await callApi('shipments-set-pickup-location', { actor: currentActor(), order_number: orderNumber, pickup_location_id: pickedId }); }
-      catch (e) { alert('Could not save the pickup location: ' + e.message); return; }
+      catch (e) { await btAlert('Could not save the pickup location: ' + e.message); return; }
     }
   }
 
@@ -946,7 +946,7 @@ async function confirmPickupReadyClick(orderNumber){
     // old version always had, never a dead end for the trader.
     if (hasCarrier) askFleteroWhatsApp(orderNumber);
     else if (o.plant && (o.plant.whatsapp || o.plant.phone)) askPlantWhatsApp(orderNumber);
-    else alert('No carrier/plant phone or email on file to confirm pickup.');
+    else await btAlert('No carrier/plant phone or email on file to confirm pickup.');
     return;
   }
 
@@ -971,23 +971,23 @@ async function confirmPickupReadyClick(orderNumber){
 // Real ask 2026-09-07: "todos deben ser linkeables con una accion" — Signature has no real
 // trader-side action (only the customer signs remotely), but it still needs to respond to a click
 // instead of sitting there dead. Reports the real status instead of doing nothing.
-function signatureInfoClick(orderNumber){
+async function signatureInfoClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  if (o.invoice_signed_at) alert(`Signed by the customer on ${fmtDateStr(String(o.invoice_signed_at).slice(0, 10))}.`);
-  else alert('Waiting for the customer to sign — they sign remotely once they receive the Invoice. No action needed from you.');
+  if (o.invoice_signed_at) await btAlert(`Signed by the customer on ${fmtDateStr(String(o.invoice_signed_at).slice(0, 10))}.`);
+  else await btAlert('Waiting for the customer to sign — they sign remotely once they receive the Invoice. No action needed from you.');
 }
-function openInvoiceQT(orderNumber){
+async function openInvoiceQT(orderNumber){
   const o = findStatusOrder(orderNumber);
-  if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
+  if (!o || !o.sent_offer_id){ await btAlert('This order has no linked offer — cannot open Real Costs.'); return; }
   openTTOverlay(o.sent_offer_id, `Factura — ${orderNumber}`);
 }
 // Real ask 2026-09-07: "no puedo mandar po so fo sin poder comparar siempre tengo que tener los
 // numeros a la mano" — a direct link to the same QT (trading-tool.html), open to this order's real
 // negotiated numbers, right on the order card, so the trader can check them while sending PO/SO/FO.
-function openOrderQT(orderNumber){
+async function openOrderQT(orderNumber){
   const o = findStatusOrder(orderNumber);
-  if (!o || !o.sent_offer_id){ alert('This order has no linked offer — cannot open the QT.'); return; }
+  if (!o || !o.sent_offer_id){ await btAlert('This order has no linked offer — cannot open the QT.'); return; }
   openTTOverlay(o.sent_offer_id, `QT — ${orderNumber}`);
 }
 
@@ -1037,7 +1037,7 @@ function renderMilestoneTimeline(o){
 // for every node instead of this file's own stroke-only SVG set (STEP_ICONS etc.); replicated here
 // literally, exactly as shown, rather than keeping the SVGs the mockup itself never used.
 const PIN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-function renderUnifiedTimeline(o, attentionOrderNumbers){
+async function renderUnifiedTimeline(o, attentionOrderNumbers){
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
   const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
   const deliveredIdx = LOAD_STAGES.findIndex(s => s.key === 'delivered');
@@ -1113,7 +1113,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       else if (i <= stageIdx) infoMsg = dateStr ? `${displayLabel}: ${dateStr}` : `${displayLabel} already reached.`;
       else infoMsg = `Complete the earlier steps first.`;
     }
-    const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="alert('${infoMsg.replace(/'/g, "\\'")}')"`;
+    const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="btAlert('${infoMsg.replace(/'/g, "\\'")}')"`;
     const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : infoMsg);
     // Real ask 2026-09-08: "pickup y delivered levantalos tambien como FO para hacer mas espacio"
     // — same raised treatment as FO, same curved connectors on both sides.
@@ -1131,11 +1131,11 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // Real ask 2026-09-07: "aqui no deben haber botones fijos todos deben ser linkeables con una
   // accion" — every stop now always has a click handler, never a plain HTML disabled button. A
   // done/now stop fires its real action (re-sending is a legitimate real action, not a mistake); a
-  // wait stop that isn't ready yet fires an alert() explaining exactly what has to happen first,
+  // wait stop that isn't ready yet fires an await btAlert() explaining exactly what has to happen first,
   // instead of doing nothing.
   function miniEntry(st){
     const state = st.done ? 'done' : (st.wait ? 'wait' : 'now');
-    const effectiveOnClick = (state === 'wait' && st.waitReason) ? `alert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
+    const effectiveOnClick = (state === 'wait' && st.waitReason) ? `btAlert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
     const clickable = !!effectiveOnClick;
     const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
     // Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si
@@ -1820,21 +1820,21 @@ function statusCheckMessage(o){
   }
   return `Hi, could you please confirm the current status of this load? Thank you!`;
 }
-function askFleteroWhatsApp(orderNumber){
+async function askFleteroWhatsApp(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o || !o.carrier) return;
   const phone = (o.carrier.phone || '').replace(/\D/g, '');
-  if (!phone) { alert('This carrier has no phone on file.'); return; }
+  if (!phone) { await btAlert('This carrier has no phone on file.'); return; }
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(statusCheckMessage(o)), '_blank');
 }
 
 // DAP/self-delivered counterpart to askFleteroWhatsApp — no carrier ever gets booked for these
 // loads, the plant IS the one driving it, so they're the only ones who can say where it is.
-function askPlantWhatsApp(orderNumber){
+async function askPlantWhatsApp(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o || !o.plant) return;
   const phone = (o.plant.whatsapp || o.plant.phone || '').replace(/\D/g, '');
-  if (!phone) { alert('This plant has no phone on file.'); return; }
+  if (!phone) { await btAlert('This plant has no phone on file.'); return; }
   window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(statusCheckMessage(o)), '_blank');
 }
 
@@ -1872,7 +1872,7 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
   if (!o) return;
 
   try { await callApi('shipments-update-status', { actor: currentActor(), shipment_id: o.id, status: newStatus, notes: notes || null }); }
-  catch (e) { alert('Error updating status: ' + e.message); return; }
+  catch (e) { await btAlert('Error updating status: ' + e.message); return; }
 
   const bodyFn = STAGE_EMAIL_BODY_ES[newStatus];
   const waFn = STAGE_WHATSAPP_ES[newStatus];
@@ -1882,7 +1882,7 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
     const emails = o.customer ? collectEmails(o.customer) : [];
     const phone = (o.customer && (o.customer.whatsapp || o.customer.phone)) || '';
     if (!emails.length){
-      alert('Status updated, but this customer has no email on file — no notification sent.');
+      await btAlert('Status updated, but this customer has no email on file — no notification sent.');
     } else {
       try {
         // Real bug found live 2026-09-12: this went out as "Logistics BuenTrade" — the carrier/
@@ -1892,7 +1892,7 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
         await sendEmailApi('offers', emails, subjFn(o), bodyFn(o, contact), [], { phone, message: waFn(o, contact) });
         showToast('Cliente notificado', emails.join(', '));
       } catch (e){
-        if (!e.cancelled) alert('No se pudo enviar la notificación: ' + e.message);
+        if (!e.cancelled) await btAlert('No se pudo enviar la notificación: ' + e.message);
       }
     }
   }
@@ -1948,18 +1948,18 @@ async function confirmPlantPaymentSent(orderNumber){
   if (!o) return;
   const paymentsEmails = o.plant ? collectEmails({ email: o.plant.payments_email, email_cc: null }) : [];
   if (!paymentsEmails.length){
-    alert(`This plant has no Payments Contact email on file — add it in Plants (Profile → Payments Contact) before confirming payment for ${orderNumber}.`);
+    await btAlert(`This plant has no Payments Contact email on file — add it in Plants (Profile → Payments Contact) before confirming payment for ${orderNumber}.`);
     return;
   }
   const salesEmails = o.plant ? collectEmails(o.plant) : [];
 
-  alert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
+  await btAlert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
   const file = await pickBankConfirmationFile();
   if (!file) return; // cancelled — no bank confirmation selected, nothing sent
 
   let base64;
   try { base64 = await readFileAsBase64(file); }
-  catch (e) { alert('No se pudo leer el archivo: ' + e.message); return; }
+  catch (e) { await btAlert('No se pudo leer el archivo: ' + e.message); return; }
 
   // Real ask 2026-09-14: subject renamed to "Payment & Release Number" — the body already asked
   // for the release number in this same email (see below); the subject now says so too, plainly.
@@ -1973,7 +1973,7 @@ async function confirmPlantPaymentSent(orderNumber){
   } catch (e) {
     if (e.cancelled) return;
     // Real bug found live 2026-09-14: "el sistema no reconoce bien que se envio" — this used to
-    // just alert() and stop, with no way to confirm a manual send, unlike every other doc send in
+    // just await btAlert() and stop, with no way to confirm a manual send, unlike every other doc send in
     // this file (see gmailFallbackLinkHtml). plant_paid_at stayed unset forever whenever the
     // automatic send failed (Netlify still paused), silently blocking Release # and everything after.
     const url = gmailComposeUrl(paymentsEmails, subject, body + EMAIL_SIGNATURE);
@@ -1982,13 +1982,13 @@ async function confirmPlantPaymentSent(orderNumber){
     return;
   }
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { alert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
+  catch (e) { await btAlert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
   showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
   await loadStatusOrders();
 }
 async function markPlantPaidFallback(orderNumber){
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { alert('No se pudo marcar el pago: ' + e.message); return; }
+  catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
   showToast('Pago marcado', 'Ya puedes pedir el release number.');
   await loadStatusOrders();
 }
@@ -2001,9 +2001,9 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   const waPhone = o.plant && (o.plant.payments_whatsapp || o.plant.whatsapp || o.plant.phone);
-  if (!waPhone){ alert('No WhatsApp/phone on file for this plant.'); return; }
+  if (!waPhone){ await btAlert('No WhatsApp/phone on file for this plant.'); return; }
   window.open(BANK_LOGIN_URL, '_blank');
-  alert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
+  await btAlert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
   const file = await pickBankConfirmationFile();
   if (!file) return;
   const url = URL.createObjectURL(file);
@@ -2012,7 +2012,7 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
   const waMessagePay = `Hi, I'm sharing the payment confirmation for this order here. Please confirm receipt and send me the release number so we can arrange pickup. Thank you!`;
   bcConfirmWaSend(waPhone, waMessagePay, file.name);
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { alert('No se pudo marcar el pago: ' + e.message); return; }
+  catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
   showToast('Pago confirmado', 'Se compartió el comprobante a la planta — ya puedes pedir el release number.');
   await loadStatusOrders();
 }
@@ -2030,7 +2030,7 @@ async function recordReleaseNumber(orderNumber){
   const trimmed = value.trim();
   if (!trimmed) return;
   try { await callApi('shipments-set-release-number', { actor: currentActor(), order_number: orderNumber, release_number: trimmed }); }
-  catch (e) { alert('Could not save the release number: ' + e.message); return; }
+  catch (e) { await btAlert('Could not save the release number: ' + e.message); return; }
   showToast('Release number saved', trimmed);
   await loadStatusOrders();
 }
@@ -2054,7 +2054,7 @@ async function editPickupDateClick(orderNumber){
   const value = await new Promise(resolve => { editPickupDateModalResolveFn = resolve; });
   if (!value) return;
   try { await callApi('purchase-orders-set-delivery-date', { actor: currentActor(), order_number: orderNumber, delivery_date: value }); }
-  catch (e) { alert('Could not save the date: ' + e.message); return; }
+  catch (e) { await btAlert('Could not save the date: ' + e.message); return; }
   showToast('Date updated', fmtDateStr(value));
   await loadStatusOrders();
 }
@@ -2064,9 +2064,9 @@ function releaseNumberMessage(o){
 async function sendReleaseNumberToCarrier(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  if (!o.release_number){ alert('No release number recorded yet for this order.'); return; }
+  if (!o.release_number){ await btAlert('No release number recorded yet for this order.'); return; }
   const phone = o.carrier && o.carrier.phone;
-  if (!phone){ alert('No carrier phone on file to send the release number.'); return; }
+  if (!phone){ await btAlert('No carrier phone on file to send the release number.'); return; }
   window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(releaseNumberMessage(o)), '_blank');
   await markDocSent(orderNumber, 'release_number');
   await loadStatusOrders();
@@ -2121,8 +2121,8 @@ function cancelSignature(){
   if (sigModalResolve) sigModalResolve(null);
   sigModalResolve = null;
 }
-function acceptSignature(){
-  if (!sigHasStroke){ alert('Por favor, pide al cliente que firme antes de continuar.'); return; }
+async function acceptSignature(){
+  if (!sigHasStroke){ await btAlert('Por favor, pide al cliente que firme antes de continuar.'); return; }
   const dataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
   document.getElementById('sigModalOverlay').style.display = 'none';
   if (sigModalResolve) sigModalResolve(dataUrl);
@@ -2164,7 +2164,7 @@ function closeTTOverlay(){
 async function markDeliveredWithSignature(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  if (!o.sent_offer_id){ alert('This order has no linked offer — cannot open Real Costs.'); return; }
+  if (!o.sent_offer_id){ await btAlert('This order has no linked offer — cannot open Real Costs.'); return; }
   await openTTOverlay(o.sent_offer_id, `Factura — ${orderNumber}`);
   await advanceLoadStatus(orderNumber, 'delivered');
 }
@@ -2648,7 +2648,7 @@ async function buildPODoc(orderNumber){
 
 async function exportPO(orderNumber){
   let built;
-  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildPODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   built.doc.save(`PO-BT-${btNum(orderNumber)}.pdf`);
 }
 
@@ -2847,12 +2847,12 @@ function runDocSendSequence(orderNumber, kinds){
 
 async function sharePO(orderNumber){
   let built;
-  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildPODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   const emails = collectEmails(built.plant);
-  if (!emails.length){ alert('This plant has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This plant has no email on file.'); return; }
   const filename = `PO-BT-${btNum(orderNumber)}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ await btAlert('Upload error: ' + e.message); return; }
   // Real bug found live 2026-09-11: this cache is only ever populated once per order (see
   // toggleOrderDocs) — without invalidating it here, the Documents panel keeps showing "Not
   // generated" forever in this session even though the file above just landed in Storage.
@@ -2942,18 +2942,18 @@ async function buildSODoc(orderNumber){
 
 async function exportSO(orderNumber){
   let built;
-  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildSODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   built.doc.save(`SO-BT-${btNum(orderNumber)}.pdf`);
 }
 
 async function shareSO(orderNumber){
   let built;
-  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildSODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   const emails = collectEmails(built.customer);
-  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This customer has no email on file.'); return; }
   const filename = `SO-BT-${btNum(orderNumber)}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ await btAlert('Upload error: ' + e.message); return; }
   orderDocsFileCache.delete(orderNumber);
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
@@ -3044,18 +3044,18 @@ async function buildFODocs(orderNumber){
 
 async function exportFO(orderNumber){
   let built;
-  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildFODocs(orderNumber); } catch(e){ await btAlert(e.message); return; }
   built.forEach(b => b.doc.save(b.filename));
 }
 
 async function shareFO(orderNumber){
   let built;
-  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildFODocs(orderNumber); } catch(e){ await btAlert(e.message); return; }
   for (const b of built){
     const emails = collectEmails(b.carrier);
-    if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
+    if (!emails.length){ await btAlert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
-    try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
+    try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     orderDocsFileCache.delete(orderNumber);
     const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
@@ -3159,7 +3159,7 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
   const paymentsEmails = (customer && customer.payments_contact_email) ? [customer.payments_contact_email] : [];
   const emails = paymentsEmails.length ? paymentsEmails : generalEmails;
   const ccEmails = paymentsEmails.length ? generalEmails : [];
-  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This customer has no email on file.'); return; }
   let base64;
   try {
     const res = await fetch(fileUrl);
@@ -3170,7 +3170,7 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  } catch(e){ alert('Error al cargar el archivo: ' + e.message); return; }
+  } catch(e){ await btAlert('Error al cargar el archivo: ' + e.message); return; }
   const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
   const subject = `INV-BT-${btNum(orderNumber)} — INVOICE`;
   // Real gap found live 2026-09-12: a resend before the customer ever signed re-sent the exact
@@ -3184,7 +3184,7 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
   if (!alreadySigned){
     let issueRes;
     try { issueRes = await callApi('orders-invoice-signature', { action: 'issue', actor: currentActor(), order_number: orderNumber }); }
-    catch (e) { alert('Error creando el link de firma: ' + e.message); return; }
+    catch (e) { await btAlert('Error creando el link de firma: ' + e.message); return; }
     const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
     body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, firma aquí: ${signLink} para su confirmación.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   } else {
@@ -3209,11 +3209,11 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
 // Documentos panel. Same direct-download-then-WhatsApp pattern shareDocAndOpenWhatsApp already
 // uses for PO/SO/FO (a real jsPDF doc there vs. an already-uploaded file here — same UX either
 // way), same message text resendInvoiceEmail already sends inside its own WhatsApp option.
-function waResendInvoice(orderNumber, fileUrl, filename){
+async function waResendInvoice(orderNumber, fileUrl, filename){
   const o = findStatusOrder(orderNumber);
   const customer = o ? o.customer : null;
   const phone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
-  if (!phone){ alert('No WhatsApp/phone on file for this customer.'); return; }
+  if (!phone){ await btAlert('No WhatsApp/phone on file for this customer.'); return; }
   const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
   const a = document.createElement('a');
   a.href = fileUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
@@ -3234,7 +3234,7 @@ function waResendInvoice(orderNumber, fileUrl, filename){
 // already fixed in orders-compose-so.
 async function shareCustoms(orderNumber){
   const shipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
-  if (!shipment){ alert('Order not found.'); return; }
+  if (!shipment){ await btAlert('Order not found.'); return; }
 
   let agencyId = null;
   if (shipment.customer_id){
@@ -3245,13 +3245,13 @@ async function shareCustoms(orderNumber){
     const sentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
     agencyId = sentOffer && sentOffer.customs_agency_provider_id;
   }
-  if (!agencyId){ alert('No customs agency on file for this customer.'); return; }
+  if (!agencyId){ await btAlert('No customs agency on file for this customer.'); return; }
   const agency = ((await callApi('providers-search', { id: agencyId })).results || [])[0];
   const emails = collectEmails(agency);
-  if (!emails.length){ alert('This customs agency has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This customs agency has no email on file.'); return; }
 
   const pending = shipment.pending_pickup_documents || [];
-  if (!pending.length){ alert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
+  if (!pending.length){ await btAlert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
 
   const attachments = [];
   for (const doc of pending){
@@ -3267,7 +3267,7 @@ async function shareCustoms(orderNumber){
       attachments.push({ filename: doc.filename, content: base64 });
     } catch(e){ /* one file failing to fetch never blocks the others */ }
   }
-  if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
+  if (!attachments.length){ await btAlert('No se pudieron cargar los documentos recibidos.'); return; }
 
   const customerName = shipment.customer_name || '';
   const subject = `${customerName} — BT-${orderNumber} — BuenTrade`;
@@ -3294,7 +3294,7 @@ async function shareCustoms(orderNumber){
 }
 async function markCustomsSentFallback(orderNumber, documentIds){
   try { await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: documentIds }); }
-  catch (e) { alert('No se pudo marcar los documentos: ' + e.message); return; }
+  catch (e) { await btAlert('No se pudo marcar los documentos: ' + e.message); return; }
   await markDocSent(orderNumber, 'customs');
   showToast('Documentos marcados como enviados a aduana', '');
   await loadStatusOrders();

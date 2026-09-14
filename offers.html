@@ -1094,7 +1094,7 @@ function loadTTPanel(id){
 async function markOffer(id, status){
   if (status === 'lost'){
     try { await callApi('sent-offers-mark-lost', { actor: currentActor(), sent_offer_id: id }); }
-    catch (e) { alert('Error: ' + e.message); return; }
+    catch (e) { await btAlert('Error: ' + e.message); return; }
     loadOffers();
     return;
   }
@@ -1140,7 +1140,7 @@ async function markWon(id, overrideCreditCheck, confirmedDeliveryDate){
       }
       return;
     }
-    alert('Error marking won: ' + e.message);
+    await btAlert('Error marking won: ' + e.message);
     return;
   }
   await sendWonDocs(result);
@@ -1406,8 +1406,8 @@ function creditLimitResolve(choice){
 // que pidamos mas cupo." Placeholder copy — texto real pendiente de aprobación ("ponle cualquier
 // mensaje despues lo ponemos bien", confirmed explicitly), same as the rest of Collections' new
 // customer-facing copy.
-function requestFinancialStatements(customerEmail, customerName){
-  if (!customerEmail){ alert('This customer has no email on file.'); return; }
+async function requestFinancialStatements(customerEmail, customerName){
+  if (!customerEmail){ await btAlert('This customer has no email on file.'); return; }
   const subject = 'BuenTrade — Solicitud de estados financieros';
   const body = `Hola${customerName ? ' ' + customerName : ''},\n\nPara poder aumentar tu línea de crédito con BuenTrade, ¿nos podrías compartir tus estados financieros más recientes?\n\nGracias,\nBuenTrade Team`;
   window.open(gmailComposeUrl([customerEmail], subject, body), '_blank');
@@ -1694,7 +1694,7 @@ async function buildPODoc(orderNumber){
 
 async function exportPO(orderNumber){
   let built;
-  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildPODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   built.doc.save(`PO-BT-${btNum(orderNumber)}.pdf`);
 }
 
@@ -1808,12 +1808,12 @@ function showToast(title, detail, isError, linkHtml){
 
 async function sharePO(orderNumber){
   let built;
-  try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildPODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   const emails = collectEmails(built.plant);
-  if (!emails.length){ alert('This plant has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This plant has no email on file.'); return; }
   const filename = `PO-BT-${btNum(orderNumber)}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ await btAlert('Upload error: ' + e.message); return; }
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
   const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
@@ -1915,18 +1915,18 @@ async function buildSODoc(orderNumber){
 
 async function exportSO(orderNumber){
   let built;
-  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildSODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   built.doc.save(`SO-BT-${btNum(orderNumber)}.pdf`);
 }
 
 async function shareSO(orderNumber){
   let built;
-  try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildSODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   const emails = collectEmails(built.customer);
-  if (!emails.length){ alert('This customer has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This customer has no email on file.'); return; }
   const filename = `SO-BT-${btNum(orderNumber)}.pdf`;
   let url;
-  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
+  try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ await btAlert('Upload error: ' + e.message); return; }
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
   const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
@@ -2022,18 +2022,18 @@ async function buildFODocs(orderNumber){
 
 async function exportFO(orderNumber){
   let built;
-  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildFODocs(orderNumber); } catch(e){ await btAlert(e.message); return; }
   built.forEach(b => b.doc.save(b.filename));
 }
 
 async function shareFO(orderNumber){
   let built;
-  try { built = await buildFODocs(orderNumber); } catch(e){ alert(e.message); return; }
+  try { built = await buildFODocs(orderNumber); } catch(e){ await btAlert(e.message); return; }
   for (const b of built){
     const emails = collectEmails(b.carrier);
-    if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
+    if (!emails.length){ await btAlert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
-    try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
+    try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
@@ -2064,14 +2064,14 @@ async function shareFO(orderNumber){
 // them here. Never auto-forwarded; this is the explicit confirm step.
 async function shareCustoms(orderNumber){
   const sentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
-  if (!sentOffer || !sentOffer.customs_agency_provider_id){ alert('No customs agency on file for this order.'); return; }
+  if (!sentOffer || !sentOffer.customs_agency_provider_id){ await btAlert('No customs agency on file for this order.'); return; }
   const agency = ((await callApi('providers-search', { id: sentOffer.customs_agency_provider_id })).results || [])[0];
   const emails = collectEmails(agency);
-  if (!emails.length){ alert('This customs agency has no email on file.'); return; }
+  if (!emails.length){ await btAlert('This customs agency has no email on file.'); return; }
 
   const shipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
   const pending = (shipment && shipment.pending_pickup_documents) || [];
-  if (!pending.length){ alert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
+  if (!pending.length){ await btAlert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
 
   const attachments = [];
   for (const doc of pending){
@@ -2087,7 +2087,7 @@ async function shareCustoms(orderNumber){
       attachments.push({ filename: doc.filename, content: base64 });
     } catch(e){ /* one file failing to fetch never blocks the others */ }
   }
-  if (!attachments.length){ alert('No se pudieron cargar los documentos recibidos.'); return; }
+  if (!attachments.length){ await btAlert('No se pudieron cargar los documentos recibidos.'); return; }
 
   const customerName = shipment && shipment.customer_name || '';
   const subject = `${customerName} — BT-${orderNumber} — BuenTrade`;
@@ -2113,7 +2113,7 @@ async function shareCustoms(orderNumber){
 }
 async function markCustomsSentFallback(orderNumber, documentIds){
   try { await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: documentIds }); }
-  catch (e) { alert('No se pudo marcar los documentos: ' + e.message); return; }
+  catch (e) { await btAlert('No se pudo marcar los documentos: ' + e.message); return; }
   await markDocSent(orderNumber, 'customs');
   showToast('Documentos marcados como enviados a aduana', '');
 }

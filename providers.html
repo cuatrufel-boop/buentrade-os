@@ -180,6 +180,17 @@
   .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;overflow-wrap:break-word;word-break:break-word;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
+  /* Real ask 2026-09-14: "cambialo por diseno buentrade" — same dark-glass modal every other page
+     already uses (js/email-modal.js injects into this, both for its own Review-before-sending
+     screen and the shared btAlert() that now replaces every native await btAlert() here). */
+  .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:2000;display:flex;align-items:center;justify-content:center;}
+  .email-modal-box{background:rgba(255,255,255,.06);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:480px;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
+  .email-modal-box h3{margin:0 0 14px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .email-modal-field{margin-bottom:12px;}
+  .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
+  .email-modal-field textarea{min-height:110px;resize:vertical;}
+  .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
   /* Same badge convention as plants.html/orders.html — verbatim, not a new component. Used by the
      History tab's Sent/Not sent status. */
   .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
@@ -284,6 +295,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="js/email-modal.js"></script>
 <script src="js/contact-validation.js"></script>
 <script>
 const firebaseConfig = {
@@ -1350,7 +1362,7 @@ async function deleteProvider(id){
   try {
     await callApi('providers-delete', { actor: currentActor(), id });
   } catch (e) {
-    alert('Error: ' + e.message);
+    await btAlert('Error: ' + e.message);
     return;
   }
   closeProviderCard();
@@ -1945,7 +1957,7 @@ async function saveRateInline(key, locationId){
       if (row){ row.destination = place; row.rate = rate; }
     }
   } catch (e) {
-    alert('Error saving: ' + e.message);
+    await btAlert('Error saving: ' + e.message);
     return;
   }
   editingRateKey = null;
@@ -2016,7 +2028,7 @@ async function saveRateField(rateId, field, value, inputEl){
   try {
     await callApi('provider-rates-update', { actor: currentActor(), id: rateId, [field]: value });
   } catch (e) {
-    alert('Error saving: ' + e.message);
+    await btAlert('Error saving: ' + e.message);
     return;
   }
   row[field] = value;
@@ -2045,7 +2057,7 @@ async function addRateRow(){
     allRates.push(created.rate);
     renderRateTable();
   } catch (e) {
-    alert('Error: ' + e.message);
+    await btAlert('Error: ' + e.message);
   } finally {
     addRateRowInFlight = false;
   }
@@ -2056,7 +2068,7 @@ async function deleteRate(rateId){
   try {
     await callApi('provider-rates-delete', { actor: currentActor(), id: rateId });
   } catch (e) {
-    alert('Error: ' + e.message);
+    await btAlert('Error: ' + e.message);
     return;
   }
   allRates = allRates.filter(r => r.id !== rateId);
