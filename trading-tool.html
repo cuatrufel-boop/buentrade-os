@@ -2254,11 +2254,22 @@ async function sendInvoicePreviewEmail(){
     msgEl.innerHTML = `Automatic send failed: ${negoEscapeHtml(e.message)} — <a href="${negoEscapeHtml(url)}" target="bt_gmail" rel="noopener" onclick="markInvoiceSentFallback()" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
   }
 }
-function sendInvoicePreviewWhatsApp(){
+// Real bug found live 2026-09-14: "los dos medios whatsapp y email crean el doc y queda terminada
+// la orden y pasa a collections?" — no, only the Email path (sendInvoicePreviewEmail) ever called
+// shipments-mark-doc-sent; sending only by WhatsApp left invoice_sent_at null forever, so the order
+// silently never reached Collections (collections-search's own base filter is literally
+// `invoice_sent_at is not null`) and Signature never unlocked. Same fix as orders.html's
+// waCardPO/SO/FO already had — the milestone-marking call belongs on every real send path, not
+// just the one someone happened to build first.
+async function sendInvoicePreviewWhatsApp(){
   const ctx = invoicePreviewCtx;
   if (!ctx || !ctx.waPhone) return;
   ctx.doc.save(ctx.filename);
   window.open('https://wa.me/' + ctx.waPhone.replace(/\D/g, '') + '?text=' + encodeURIComponent(ctx.waMessage), '_blank');
+  try {
+    await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
+    document.getElementById('invoiceMsg').innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
+  } catch (e) { /* best-effort — the WhatsApp send itself already went out above regardless */ }
 }
 function openInvoiceDocPreview(ctx){
   invoicePreviewCtx = ctx;
