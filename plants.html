@@ -4273,7 +4273,8 @@ function renderPlantProducts(){
   const wrap = document.getElementById('plantProductRows');
   const term = (document.getElementById('plantProductSearchBox').value || '').trim().toLowerCase();
   const filtered = term
-    ? plantProducts.filter(p => (p.name_en || p.name || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term))
+    ? plantProducts.filter(p => [p.full_name_en, p.full_name_es, p.name_en, p.name, p.business_id]
+        .some(v => (v || '').toLowerCase().includes(term)))
     : plantProducts;
   document.getElementById('plantEmpty').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('plantEmpty').textContent = plantProducts.length ? 'No products match your search.' : 'No products linked to this plant yet.';
