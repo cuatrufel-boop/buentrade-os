@@ -529,6 +529,7 @@ auth.onAuthStateChanged(user => {
       <button type="button" class="tab-btn active" id="plantTabBtn_products" onclick="setPlantTab('products')">Products &amp; Prices</button>
       <button type="button" class="tab-btn" id="plantTabBtn_locations" onclick="setPlantTab('locations')">Locations</button>
       <button type="button" class="tab-btn" id="plantTabBtn_pending" onclick="setPlantTab('pending')">Pending Matches<span id="plantPendingTabBadge" style="display:none;"></span></button>
+      <button type="button" class="tab-btn" id="plantTabBtn_history" onclick="setPlantTab('history')">History</button>
     </div>
 
     <!-- ============ PRODUCTS & PRICES — default tab; this is the daily action, always the
@@ -674,6 +675,17 @@ auth.onAuthStateChanged(user => {
         <tbody id="plantPendingMatchRows"></tbody>
       </table>
       <div id="plantPendingMatchesEmpty" class="empty" style="display:none;">Nothing waiting on a match for this plant.</div>
+    </div>
+
+    <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO... debe
+         alojarse en el perfil de cada destinatario" — every PO ever created for this plant, in
+         date order, with whether/when it actually went out. ============ -->
+    <div id="plantTab_history" style="display:none;">
+      <table>
+        <thead><tr><th>Date</th><th>Order</th><th>Product</th><th>Weight</th><th>Amount</th><th>Sent</th></tr></thead>
+        <tbody id="plantHistoryRows"></tbody>
+      </table>
+      <div id="plantHistoryEmpty" class="empty" style="display:none;">No PO has been created for this plant yet.</div>
     </div>
 
     <!-- ============ DETAILS — contact/logistics terms, set-once fields. Switching to this tab
@@ -2532,12 +2544,60 @@ async function matchAllConfirmedPendingMatches(){
   setTimeout(() => { if (status.textContent === `${done} match${done > 1 ? 'es' : ''} applied.`) status.textContent = ''; }, 4000);
 }
 
-const PLANT_TABS = ['details', 'products', 'locations', 'pending'];
+const PLANT_TABS = ['details', 'products', 'locations', 'pending', 'history'];
 function setPlantTab(tab){
   PLANT_TABS.forEach(t => {
     document.getElementById('plantTab_' + t).style.display = (t === tab) ? 'block' : 'none';
     document.getElementById('plantTabBtn_' + t).classList.toggle('active', t === tab);
   });
+  if (tab === 'history') renderPlantHistory();
+}
+
+// Real ask 2026-09-14: "yo necesito es que se guarde el pdf" — the real PDF already lands in the
+// order-documents bucket the moment it's actually sent (uploadOrderPdf, orders.html/offers.html),
+// filename always {DOC_TYPE}-BT-{order_number}.pdf at the bucket root. Deterministic, so the link
+// can be built here with no extra backend round-trip — only shown once sent_at proves the file
+// really exists (a created-but-not-sent doc has no PDF in storage yet to link to).
+function docPdfUrl(docType, orderNumber){
+  return `https://geqhjykbxvxugvnpnygn.supabase.co/storage/v1/object/public/order-documents/${docType}-BT-${orderNumber}.pdf`;
+}
+// Real bug found live 2026-09-14: "no sirven los links de ordenes" — filenames are saved as
+// "{DOC}-BT-" + btNum(orderNumber) since the 2026-09-14 "BT-BT-" duplicate-prefix fix, but a
+// legacy order could genuinely have been sent BEFORE that fix, meaning its real stored file is
+// still named with the old doubled prefix. No client-side way to know which applies to a given
+// row without asking, so this tries the current (single-prefix) name first, falls back to legacy.
+function btNum(orderNumber){
+  return String(orderNumber || '').replace(/^BT-/, '');
+}
+async function openDocPdf(docType, orderNumber){
+  const primary = docPdfUrl(docType, btNum(orderNumber));
+  const legacy = docPdfUrl(docType, orderNumber);
+  if (primary === legacy){ window.open(primary, '_blank'); return; }
+  try {
+    const res = await fetch(primary, { method: 'HEAD' });
+    window.open(res.ok ? primary : legacy, '_blank');
+  } catch (e) { window.open(legacy, '_blank'); }
+}
+// Real ask 2026-09-14: "en el momento en el que creo PO SO FO INV debe alojarse en el perfil de
+// cada destinatario... tener el historico por fecha" — every PO ever created for this plant.
+async function renderPlantHistory(){
+  const tbody = document.getElementById('plantHistoryRows');
+  const emptyEl = document.getElementById('plantHistoryEmpty');
+  tbody.innerHTML = '';
+  emptyEl.style.display = 'none';
+  if (!currentPlantId) return;
+  let rows;
+  try { rows = (await callApi('order-documents-history', { entity_type: 'plant', entity_id: currentPlantId })).results || []; }
+  catch (e) { emptyEl.textContent = 'Error loading history: ' + e.message; emptyEl.style.display = 'block'; return; }
+  if (!rows.length){ emptyEl.style.display = 'block'; return; }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+    <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" class="doc-row-link" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
+    <td class="muted">${escapeHtml(r.product_name || '—')}</td>
+    <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
+    <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+    <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>
+  </tr>`).join('');
 }
 
 function countryName(countryId){

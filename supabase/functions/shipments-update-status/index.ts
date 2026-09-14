@@ -1,6 +1,10 @@
-// shipments.updateStatus — advances a load through pending_pickup → picked_up → unloading →
-// delivered (the real 4 stages, confirmed against offers.html's actual Status tab and its
-// per-stage WhatsApp copy — not scheduled/in_transit, which were guessed before that audit).
+// shipments.updateStatus — advances a load through pending_pickup → picked_up → delivered.
+// Real correction 2026-09-14: "solo necesitamos saber que se entrego ese paso de que llego [a la
+// frontera] es innecesario" — Unloading (the intermediate US-border-arrival checkpoint) is removed
+// as a tracked stage; Picked Up goes straight to Delivered now. 'unloading' stays a legal historical
+// value in shipment_events (real rows already logged it) and unloading_at is left on shipments —
+// just never written again by any code path (see the migration that moved existing 'unloading'
+// shipments back to 'picked_up').
 // Every call logs a shipment_event (the tracking history), and can record that the customer was
 // actually notified at this exact step — "en el transcurso del recorrido de la carga debemos
 // notificar a los clientes cuando recoge, cuando va a llegar, y cuando la reciben," called out as
@@ -13,9 +17,9 @@ import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
-const STATUS_ORDER = ["pending_pickup", "picked_up", "unloading", "delivered"];
+const STATUS_ORDER = ["pending_pickup", "picked_up", "delivered"];
 const EVENT_FOR_STATUS: Record<string, string> = {
-  picked_up: "picked_up", unloading: "unloading", delivered: "delivered",
+  picked_up: "picked_up", delivered: "delivered",
 };
 const VALID_CHANNELS = ["email", "whatsapp"];
 
@@ -49,10 +53,8 @@ Deno.serve(async (req) => {
       let deliveredAt = shipment.delivered_at;
       let paymentDueDate = shipment.payment_due_date;
       let pickedUpAt = shipment.picked_up_at;
-      let unloadingAt = shipment.unloading_at;
 
       if (status === "picked_up") pickedUpAt = new Date().toISOString();
-      if (status === "unloading") unloadingAt = new Date().toISOString();
       if (status === "delivered") {
         deliveredAt = new Date().toISOString();
         if (shipment.customer_id) {
@@ -66,7 +68,7 @@ Deno.serve(async (req) => {
       }
 
       const [updatedShipment] = await tx`
-        update shipments set status = ${status}, picked_up_at = ${pickedUpAt}, unloading_at = ${unloadingAt}, delivered_at = ${deliveredAt}, payment_due_date = ${paymentDueDate}, updated_at = now()
+        update shipments set status = ${status}, picked_up_at = ${pickedUpAt}, delivered_at = ${deliveredAt}, payment_due_date = ${paymentDueDate}, updated_at = now()
         where id = ${shipment_id} returning *
       `;
 

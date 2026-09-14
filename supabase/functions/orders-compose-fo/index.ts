@@ -48,7 +48,11 @@ Deno.serve(async (req) => {
         pick_up_address: resolveBorder(fo.origin),
         delivery_address: resolveBorder(fo.destination),
         temperature_setting: temperatureFromSpec(offer?.product_spec),
-        product_name: offer?.product_name || null,
+        // Real ask 2026-09-14: "producto no esta completo debe ir FULL en cualquier orden" — this
+        // showed only the short cut name (e.g. "Bellies #2"), never the full descriptive spec
+        // (e.g. "Pork Skinless Bellies #2 Frozen, Box") that PO/SO already print. Same
+        // spec-falls-back-to-name convention as orders-compose-po/so.
+        product_name: offer?.product_spec || offer?.product_name || null,
         weight: offer?.weight || null,
         delivery_dates: offer?.delivery_dates || null,
         rate: fo.actual_rate ?? fo.quoted_rate,

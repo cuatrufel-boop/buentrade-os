@@ -609,6 +609,21 @@ auth.onAuthStateChanged(user => {
     </div>
   </div>
 </div>
+<!-- Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — same gate as
+     trading-tool.html's negoSaveDefinitive: Create Order (even offers.html's quick "Ganada" path)
+     never fires without the trader confirming the real, final PU/Delivery date first. -->
+<div id="dateConfirmOverlay" class="menu-overlay" style="display:none;">
+  <div class="confirm-box">
+    <div class="confirm-title" id="dateConfirmTitle"></div>
+    <div class="confirm-message" id="dateConfirmMessage"></div>
+    <input type="date" id="dateConfirmInput" style="width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink);margin:10px 0 4px;">
+    <div id="dateConfirmError" style="font-size:12px;color:#C4432E;min-height:16px;margin-bottom:8px;"></div>
+    <div class="confirm-actions">
+      <button class="btn secondary" onclick="dateConfirmResolve(null)">Cancel</button>
+      <button class="btn win" onclick="dateConfirmSubmit()">Confirm & Create Order</button>
+    </div>
+  </div>
+</div>
 <!-- Collections module (2026-09-08): "si el cliente me da un bid por una carga y no tiene cupo
      debemos poder enviar un mensaje... o la otra opcion que liberes el cupo" — real action, not
      just a warning, at the exact moment a new deal would exceed a customer's credit_limit. -->
@@ -1092,22 +1107,30 @@ async function markOffer(id, status){
 // same provider_rates row the offer itself was built from), and any customs costs charged. This
 // used to be ~55 lines of that same logic duplicated here (and diverging from trading-tool.html's
 // own copy, which only ever handled the US leg) — now there's exactly one implementation.
-async function markWon(id, overrideCreditCheck){
+async function markWon(id, overrideCreditCheck, confirmedDeliveryDate){
   const o = offers.find(x => x.id === id);
   if (!o) return;
   if (!overrideCreditCheck){
     const ok = await showConfirm('Create Order?', `${o.product_name} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
     if (!ok) return;
   }
+  // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — asked fresh
+  // every time, same gate as trading-tool.html's Create Order, never inherited silently from
+  // whatever the quote said when it was priced. Only asked once through the credit-override retry.
+  if (!confirmedDeliveryDate){
+    const isFob = Number(o.us_freight_amount) > 0;
+    confirmedDeliveryDate = await showDateConfirm(isFob, (o.delivery_dates && o.delivery_dates[0]) || '');
+    if (!confirmedDeliveryDate) return; // trader cancelled — nothing created
+  }
 
   const wonIdempotencyKey = `sent-offers-mark-won|${id}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('sent-offers-mark-won', { actor: currentActor(), sent_offer_id: id, override_credit_check: !!overrideCreditCheck, won_idempotency_key: wonIdempotencyKey });
+    result = await callApi('sent-offers-mark-won', { actor: currentActor(), sent_offer_id: id, override_credit_check: !!overrideCreditCheck, confirmed_delivery_date: confirmedDeliveryDate, won_idempotency_key: wonIdempotencyKey });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
       const choice = await showCreditLimitOverlay(e.data.message);
-      if (choice === 'override') return markWon(id, true);
+      if (choice === 'override') return markWon(id, true, confirmedDeliveryDate);
       if (choice === 'collect'){ window.open('collections.html', '_blank'); return; }
       if (choice === 'financials'){
         let customerEmail = null;
@@ -1152,6 +1175,12 @@ async function sendWonDocs(result){
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+// Real bug found live 2026-09-14: "consecutivo debe estar bien tiene typos repetido el BT" — same
+// fix as orders.html: legacy orders still literally start with "BT-" (the old "BT-0042" scheme),
+// so "PO-BT-" + orderNumber doubled into "PO-BT-BT-0019". No-op for the new bare consecutives.
+function btNum(orderNumber){
+  return String(orderNumber || '').replace(/^BT-/, '');
 }
 
 // ============ ROW ACTIONS MENU (Documents + Real Costs + History — replaces three separate
@@ -1332,6 +1361,36 @@ function confirmResolve(val){
   confirmResolveFn = null;
 }
 
+let dateConfirmResolveFn = null;
+// Same real gate as trading-tool.html's showTTDateConfirm — isFob true asks "PU Date" (BuenTrade's
+// carrier picks up), false asks "Delivery Date" (plant self-delivers, DAP). Resolves the chosen
+// YYYY-MM-DD, or null on Cancel.
+function showDateConfirm(isFob, defaultDate){
+  const label = isFob ? 'PU Date' : 'Delivery Date';
+  document.getElementById('dateConfirmTitle').textContent = `Confirm ${label}`;
+  document.getElementById('dateConfirmMessage').textContent = isFob
+    ? 'This is the real, final pick-up date BuenTrade\'s carrier will pick up on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.'
+    : 'This is the real, final delivery date the plant will self-deliver on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.';
+  const input = document.getElementById('dateConfirmInput');
+  input.value = defaultDate || '';
+  document.getElementById('dateConfirmError').textContent = '';
+  document.getElementById('dateConfirmOverlay').style.display = 'flex';
+  return new Promise(resolve => { dateConfirmResolveFn = resolve; });
+}
+function dateConfirmSubmit(){
+  const value = document.getElementById('dateConfirmInput').value;
+  if (!value){ document.getElementById('dateConfirmError').textContent = 'Pick a date to continue.'; return; }
+  document.getElementById('dateConfirmOverlay').style.display = 'none';
+  const resolve = dateConfirmResolveFn;
+  dateConfirmResolveFn = null;
+  if (resolve) resolve(value);
+}
+function dateConfirmResolve(val){
+  document.getElementById('dateConfirmOverlay').style.display = 'none';
+  if (dateConfirmResolveFn) dateConfirmResolveFn(val);
+  dateConfirmResolveFn = null;
+}
+
 let creditLimitResolveFn = null;
 function showCreditLimitOverlay(message){
   document.getElementById('creditLimitMessage').textContent = message;
@@ -1405,30 +1464,24 @@ function pdfHeader(doc, docTitle, orderNumber, contactEmail){
   doc.setFillColor(10, 37, 71);
   doc.rect(0, 0, 612, 88, 'F');
 
-  doc.setFillColor(18, 58, 107);
-  doc.circle(58, 42, 17, 'F');
-  doc.setDrawColor(62, 123, 196);
-  doc.setLineWidth(1.3);
-  doc.circle(58, 42, 17, 'S');
-  doc.setDrawColor(95, 168, 232);
-  doc.setLineWidth(1.6);
-  doc.lines([[5, -5], [5, 7], [5, -6]], 47, 46, [1, 1], 'S', false);
-  doc.setFillColor(0, 169, 160);
-  doc.rect(52, 33, 12, 8, 'F');
-
+  // Real correction 2026-09-14: "pon solo buentrade como esta en home y quita ese logo... no es de
+  // buentrade" — the icon (circle/wave/rect) was only ever a decorative mark on the sign-in gate
+  // screen, never the real persistent brand mark; the actual app header is plain text only —
+  // "Buen" white + "Trade" blue, no icon. Text-only here now too, shifted to the header's own left
+  // margin since there's no icon to sit next to.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(19);
   doc.setTextColor(255, 255, 255);
-  doc.text(COMPANY.name1, 86, 46);
+  doc.text(COMPANY.name1, 40, 46);
   const w = doc.getTextWidth(COMPANY.name1);
   doc.setTextColor(94, 175, 255);
-  doc.text(COMPANY.name2, 86 + w, 46);
+  doc.text(COMPANY.name2, 40 + w, 46);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(178, 197, 222);
-  doc.text(COMPANY.address, 86, 60);
-  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 86, 71);
+  doc.text(COMPANY.address, 40, 60);
+  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 40, 71);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(19);
@@ -1576,7 +1629,7 @@ async function buildPODoc(orderNumber){
   const isFob = composed.incoterms.startsWith('FCA');
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Purchase Order', 'PO-BT-' + orderNumber, CONTACT_EMAIL_PO);
+  pdfHeader(doc, 'Purchase Order', 'PO-BT-' + btNum(orderNumber), CONTACT_EMAIL_PO);
 
   const vendorLines = composed.vendor.split('\n');
   pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
@@ -1595,7 +1648,7 @@ async function buildPODoc(orderNumber){
     [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
     ['SHIP VIA', 'Refrigerated Trucking'],
     ['PAYMENT TERMS', composed.payment_terms],
-    ['ORDER #', 'PO-BT-' + orderNumber],
+    ['ORDER #', 'PO-BT-' + btNum(orderNumber)],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
@@ -1642,7 +1695,7 @@ async function buildPODoc(orderNumber){
 async function exportPO(orderNumber){
   let built;
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
-  built.doc.save(`PO-BT-${orderNumber}.pdf`);
+  built.doc.save(`PO-BT-${btNum(orderNumber)}.pdf`);
 }
 
 // Mirrors netlify/functions/send-email.js's FROM_ADDRESSES/SIGNATURE_TEXT exactly — the preview
@@ -1697,11 +1750,12 @@ function gmailFallbackLinkHtml(emails, subject, body){
 // a prior pass invented an image workaround instead of just handing over the real PDF. Downloading
 // the real PDF and letting the trader attach it themselves is no harder and is the actual document,
 // not a re-derived stand-in.
+// Real ask 2026-09-13: "no manda atachment" — same shared confirmation as orders.html now
+// (bcConfirmWaSend, js/email-modal.js) instead of a toast that faded before anyone could act on it.
 function shareDocAndOpenWhatsApp(doc, filename, phone, message){
   doc.save(filename);
-  showToast('PDF descargado', 'Arrástralo o adjúntalo dentro de WhatsApp.');
   if (!phone){ showToast('Sin WhatsApp en archivo', 'Adjunta el PDF manualmente.', true); return; }
-  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+  bcConfirmWaSend(phone, message, filename);
 }
 
 // Real gap found live 2026-09-07: these three still had their own leftover WhatsApp text from
@@ -1712,7 +1766,7 @@ async function waCardPO(orderNumber){
   try { built = await buildPODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const plant = built.plant;
   const phone = plant && (plant.whatsapp || plant.phone);
-  shareDocAndOpenWhatsApp(built.doc, `PO-BT-${orderNumber}.pdf`, phone, `PO-BT-${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
+  shareDocAndOpenWhatsApp(built.doc, `PO-BT-${btNum(orderNumber)}.pdf`, phone, `PO-BT-${btNum(orderNumber)}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 async function waCardSO(orderNumber){
@@ -1720,7 +1774,7 @@ async function waCardSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ showToast('Error', e.message, true); return; }
   const customer = built.customer;
   const phone = customer && (customer.whatsapp || customer.phone);
-  shareDocAndOpenWhatsApp(built.doc, `SO-BT-${orderNumber}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
+  shareDocAndOpenWhatsApp(built.doc, `SO-BT-${btNum(orderNumber)}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
 }
 
 async function waCardFO(orderNumber){
@@ -1729,7 +1783,7 @@ async function waCardFO(orderNumber){
   const b = built[0];
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
   const phone = b.carrier && b.carrier.phone;
-  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO-BT-${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
+  shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO-BT-${btNum(orderNumber)}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
 }
 
 const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>';
@@ -1757,22 +1811,23 @@ async function sharePO(orderNumber){
   try { built = await buildPODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.plant);
   if (!emails.length){ alert('This plant has no email on file.'); return; }
-  const filename = `PO-BT-${orderNumber}.pdf`;
+  const filename = `PO-BT-${btNum(orderNumber)}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
-  const subject = `PO-BT-${orderNumber} — BuenTrade — ${poProductName}`;
+  const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
   const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
     + `Total: $${(po.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Pick-up / Delivery Date: ${fmtDatesList(po.delivery_dates)}`;
-  const waPhonePo = built.plant && (built.plant.whatsapp || built.plant.phone);
-  const waMessagePo = `PO-BT-${orderNumber}\nHi, I sent the PO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
   try {
-    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhonePo, message: waMessagePo });
+    // Real ask 2026-09-14: "un solo boton de whatsapp por pantalla" — this preview already has its
+    // own standalone WhatsApp button (waCardPO), so no waInfo here to avoid a duplicate inside the
+    // Email modal.
+    await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], null);
     showToast('PO sent', emails.join(', '));
     markDocSent(orderNumber, 'po');
   } catch(e){
@@ -1802,7 +1857,7 @@ async function buildSODoc(orderNumber){
   const { document: composed, so, customer } = result;
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Confirmación de Venta', 'SO-BT-' + orderNumber, CONTACT_EMAIL_SO);
+  pdfHeader(doc, 'Confirmación de Venta', 'SO-BT-' + btNum(orderNumber), CONTACT_EMAIL_SO);
 
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
   pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
@@ -1810,7 +1865,7 @@ async function buildSODoc(orderNumber){
   const yLeft = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()],
     ['CONDICIONES DE PAGO', composed.condiciones_pago],
-    ['ORDEN #', 'SO-BT-' + orderNumber],
+    ['ORDEN #', 'SO-BT-' + btNum(orderNumber)],
   ]);
   const yRight = pdfKeyValueRows(doc, 320, 240, [
     ['INCOTERMS', composed.incoterms],
@@ -1861,7 +1916,7 @@ async function buildSODoc(orderNumber){
 async function exportSO(orderNumber){
   let built;
   try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
-  built.doc.save(`SO-BT-${orderNumber}.pdf`);
+  built.doc.save(`SO-BT-${btNum(orderNumber)}.pdf`);
 }
 
 async function shareSO(orderNumber){
@@ -1869,22 +1924,20 @@ async function shareSO(orderNumber){
   try { built = await buildSODoc(orderNumber); } catch(e){ alert(e.message); return; }
   const emails = collectEmails(built.customer);
   if (!emails.length){ alert('This customer has no email on file.'); return; }
-  const filename = `SO-BT-${orderNumber}.pdf`;
+  const filename = `SO-BT-${btNum(orderNumber)}.pdf`;
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ alert('Upload error: ' + e.message); return; }
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
-  const subject = `SO-BT-${orderNumber} — Orden de Venta — ${soProductName}`;
+  const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
   const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
     + `Total: $${(so.total_sale || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}\n`
     + `Entrega estimada: ${fmtDatesList(so.delivery_dates)}`;
-  const waPhoneSo = built.customer && (built.customer.whatsapp || built.customer.phone);
-  const waMessageSo = `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`;
   try {
-    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], { phone: waPhoneSo, message: waMessageSo });
+    await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], null);
     showToast('SO sent', emails.join(', '));
     markDocSent(orderNumber, 'so');
   } catch(e){
@@ -1904,7 +1957,7 @@ async function buildFODocs(orderNumber){
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + orderNumber, CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
@@ -1930,7 +1983,7 @@ async function buildFODocs(orderNumber){
     const yRight = pdfKeyValueRows(doc, 320, 240, [
       ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
       ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
-      ['CLIENT ORDER #', 'FO-BT-' + orderNumber],
+      ['CLIENT ORDER #', 'FO-BT-' + btNum(orderNumber)],
       ['APPT. / CHECK-IN #', '____________________'],
       ['RELEASE #', '____________________'],
     ]);
@@ -1962,7 +2015,7 @@ async function buildFODocs(orderNumber){
     // performance) and the MBG reference examples didn't include one either.
     pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
     pdfFooter(doc, 'en');
-    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-BT-${orderNumber}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-BT-${btNum(orderNumber)}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
 }
@@ -1981,15 +2034,13 @@ async function shareFO(orderNumber){
     if (!emails.length){ alert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ alert('Upload error: ' + e.message); continue; }
-    const subject = `FO-BT-${orderNumber} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
+    const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
     const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-    const waPhoneFo = b.carrier && (b.carrier.whatsapp || b.carrier.phone);
-    const waMessageFo = `FO-BT-${orderNumber}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`;
     try {
-      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], { phone: waPhoneFo, message: waMessageFo });
+      await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], null);
       showToast('FO sent', emails.join(', '));
       markDocSent(orderNumber, 'fo');
     } catch(e){
@@ -2051,8 +2102,20 @@ async function shareCustoms(orderNumber){
     markDocSent(orderNumber, 'customs');
   } catch(e){
     if (e.cancelled) return;
-    showToast('Automatic send failed', e.message, true);
+    // Real bug found live 2026-09-14 (same gap fixed in orders.html): no way to confirm a manual
+    // send when the automatic one fails (Netlify still paused) — customs_sent_at and the pending
+    // documents' forwarded flag stayed unset forever.
+    const url = gmailComposeUrl(emails, subject, body + EMAIL_SIGNATURE);
+    const ids = JSON.stringify(pending.map(d => d.id));
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" onclick='markCustomsSentFallback("${orderNumber}", ${ids})' style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`);
   }
+}
+async function markCustomsSentFallback(orderNumber, documentIds){
+  try { await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: documentIds }); }
+  catch (e) { alert('No se pudo marcar los documentos: ' + e.message); return; }
+  await markDocSent(orderNumber, 'customs');
+  showToast('Documentos marcados como enviados a aduana', '');
 }
 
 rqDefaultDates();

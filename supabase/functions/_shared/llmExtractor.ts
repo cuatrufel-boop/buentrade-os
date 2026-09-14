@@ -86,6 +86,15 @@ Rules for "items" (priced products):
 - A line that only says "Call for availability", "N/A", "Check with X", or similar with no real number is not extractable — skip it.
 - If a whole table/list has no per-item temperature stated anywhere (no Fresh/Frozen section headers, no per-item word), leave temperature null for all of them rather than guessing.
 - Never invent a product that isn't actually named in the text.
+- Real, confirmed shape: a short reply to a one-product price request. The email may quote an
+  earlier message (lines starting with ">", or introduced by "On ... wrote:") that names exactly
+  one product — this happens when the quoted text is BuenTrade's own outgoing "we don't have a
+  current price on file for X — could you send your current price?" ask. If the sender's own new
+  text (not the quoted part) states a price with no product name attached to it, and the quoted
+  part names exactly one product, that price belongs to that quoted product — use the quoted
+  product's name as this item's name. This is reading what's already in the email, not guessing:
+  only do this when the quote names exactly one product; if it names more than one, or none, leave
+  the bare price line unextracted rather than pick one.
 
 Rules for "declined_items" (products this plant does NOT produce at all — a separate, permanent signal, not a price):
 - Extract a declined_item ONLY when the plant states, as a general/structural fact, that they do not produce, do not make, do not carry, or have discontinued a specific product — in whatever words they actually use (e.g. "we don't produce bone-in picnics", "that's not something we make", "no fabricamos eso", "we discontinued that item", "that's not a product we carry"). This is free-text judgment, not a fixed phrase list — recognize the same meaning however it's worded, in English or Spanish.

@@ -4,7 +4,7 @@
 // when, what's overdue right now, what's coming due soon, and where every active load stands.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse } from "../_shared/matching.ts";
+import { jsonResponse, traderDisplayName } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     // sent_offers.won_by is a free-text email, stamped by whoever's logged in when an offer is
     // marked won (see sent-offers-mark-won). It's the closest real thing to "who closed this,"
     // just never normalized into an actual users table.
-    const topTraders = await sql`
+    const topTradersRaw = await sql`
       select o.won_by as trader, count(*)::int as order_count, coalesce(sum(sh.sale_amount), 0) as total_sales
       from shipments sh join sent_offers o on o.id = sh.sent_offer_id
       where o.won_by is not null
@@ -97,6 +97,11 @@ Deno.serve(async (req) => {
       order by total_sales desc
       limit 5
     `;
+    // Real ask 2026-09-14: "ahora el unico buyer y trader es Felipe Cuartas" — every login goes
+    // through the shared info@buentradegroup.com account right now, which printed as the raw,
+    // wrong "info" everywhere a trader name showed. traderDisplayName maps that one real name in;
+    // falls back to the email's local part once real per-trader logins exist.
+    const topTraders = topTradersRaw.map((t: any) => ({ ...t, trader: traderDisplayName(t.trader) }));
 
     // Real gap confirmed live: real_weight (the actual customs-pedimento weight) is rarely
     // populated today — this falls back to the quoted sent_offers.weight the same way

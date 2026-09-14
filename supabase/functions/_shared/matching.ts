@@ -206,6 +206,20 @@ export async function finalizeShipmentPaid(
   return { shipment: updatedShipment, notification };
 }
 
+// Real ask 2026-09-14: "ahora el unico buyer y trader es Felipe Cuartas" — every current login
+// goes through the shared info@buentradegroup.com account (no per-trader login exists yet), so
+// splitting won_by on "@" printed the ugly, wrong "info" as the Buyer/Trader name on every PO/SO.
+// This maps that one shared account to the real name for now; the split-based fallback stays for
+// whenever a real named account (felipe@..., maria@...) actually exists, so this doesn't have to
+// be touched again once real per-trader logins are set up — just add another entry here then.
+const TRADER_DISPLAY_NAMES: Record<string, string> = {
+  "info@buentradegroup.com": "Felipe Cuartas",
+};
+export function traderDisplayName(email: string | null | undefined): string | null {
+  if (!email) return null;
+  return TRADER_DISPLAY_NAMES[email.toLowerCase()] || email.split("@")[0];
+}
+
 export async function writeAuditLog(
   tx: any,
   hmacSecret: string,

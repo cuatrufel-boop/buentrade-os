@@ -11,7 +11,7 @@
 // Read off sent_offers.us_freight_rate_id, the actual field the original logic keys off of.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse } from "../_shared/matching.ts";
+import { jsonResponse, traderDisplayName } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const trader = offer?.won_by ? offer.won_by.split("@")[0] : null;
+    const trader = traderDisplayName(offer?.won_by);
 
     const doc = {
       order_number,

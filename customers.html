@@ -117,6 +117,7 @@
   .table-scroll{overflow-x:auto;}
   .muted{color:var(--ink-soft);}
   .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px;text-align:center;}
   .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
@@ -158,6 +159,11 @@
   .section-title{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px;}
   .section-title:first-child{margin-top:0;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  /* Same badge convention as plants.html/orders.html — verbatim, not a new component. Used by the
+     History tab's Sent/Not sent status. */
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
+  .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
+  .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
@@ -386,6 +392,7 @@ auth.onAuthStateChanged(user => {
     <div class="tab-row">
       <button type="button" class="tab-btn active" id="custTabBtn_products" onclick="setCustomerTab('products')">Products</button>
       <button type="button" class="tab-btn" id="custTabBtn_details" onclick="setCustomerTab('details')">Details</button>
+      <button type="button" class="tab-btn" id="custTabBtn_history" onclick="setCustomerTab('history')">History</button>
     </div>
 
     <!-- ============ PRODUCTS THEY BUY — default tab: what does this customer buy, at a
@@ -439,6 +446,17 @@ auth.onAuthStateChanged(user => {
         <div><label class="view-label">Customs Agency</label><span id="v_customs_agency">—</span></div>
       </div>
       <div style="margin-top:10px;"><label class="view-label">Notes</label><span id="v_notes">—</span></div>
+    </div>
+
+    <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO SO FO INV
+         debe alojarse en el perfil de cada destinatario" — every SO and Invoice ever created for
+         this customer, in date order. ============ -->
+    <div id="custTab_history" style="display:none;">
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Order</th><th>Product</th><th>Weight</th><th>Amount</th><th>Sent</th></tr></thead>
+        <tbody id="custHistoryRows"></tbody>
+      </table>
+      <div id="custHistoryEmpty" class="empty" style="display:none;">No SO or Invoice has been created for this customer yet.</div>
     </div>
   </div>
 
@@ -1014,12 +1032,63 @@ async function removeCustomerProduct(linkId){
   renderCustomerProducts();
 }
 
-const CUST_TABS = ['products', 'details'];
+const CUST_TABS = ['products', 'details', 'history'];
 function setCustomerTab(tab){
   CUST_TABS.forEach(t => {
     document.getElementById('custTab_' + t).style.display = (t === tab) ? 'block' : 'none';
     document.getElementById('custTabBtn_' + t).classList.toggle('active', t === tab);
   });
+  if (tab === 'history') renderCustomerHistory();
+}
+
+// Real ask 2026-09-14: "yo necesito es que se guarde el pdf" — the real PDF already lands in the
+// order-documents bucket the moment it's actually sent (uploadOrderPdf, orders.html/offers.html),
+// filename always {DOC_TYPE}-BT-{order_number}.pdf at the bucket root. Deterministic, so the link
+// can be built here with no extra backend round-trip — only shown once sent_at proves the file
+// really exists.
+function docPdfUrl(docType, orderNumber){
+  return `https://geqhjykbxvxugvnpnygn.supabase.co/storage/v1/object/public/order-documents/${docType}-BT-${orderNumber}.pdf`;
+}
+// Real bug found live 2026-09-14: "no sirven los links de ordenes" — filenames are saved as
+// "{DOC}-BT-" + btNum(orderNumber) since the 2026-09-14 "BT-BT-" duplicate-prefix fix, but a
+// legacy order (e.g. "BT-0019") could genuinely have been sent BEFORE that fix, meaning its real
+// stored file is still named with the old doubled prefix ("INV-BT-BT-0019.pdf"). No client-side
+// way to know which one applies to a given row without asking, so this tries the current
+// (single-prefix) name first and falls back to the legacy (double-prefix) one.
+function btNum(orderNumber){
+  return String(orderNumber || '').replace(/^BT-/, '');
+}
+async function openDocPdf(docType, orderNumber){
+  const primary = docPdfUrl(docType, btNum(orderNumber));
+  const legacy = docPdfUrl(docType, orderNumber);
+  if (primary === legacy){ window.open(primary, '_blank'); return; }
+  try {
+    const res = await fetch(primary, { method: 'HEAD' });
+    window.open(res.ok ? primary : legacy, '_blank');
+  } catch (e) { window.open(legacy, '_blank'); }
+}
+// Real ask 2026-09-14: "en el momento en el que creo PO SO FO INV debe alojarse en el perfil de
+// cada destinatario... tener el historico por fecha" — every SO and Invoice ever created for this
+// customer, in date order.
+async function renderCustomerHistory(){
+  const tbody = document.getElementById('custHistoryRows');
+  const emptyEl = document.getElementById('custHistoryEmpty');
+  tbody.innerHTML = '';
+  emptyEl.style.display = 'none';
+  if (!viewingCustomerId) return;
+  let rows;
+  try { rows = (await callApi('order-documents-history', { entity_type: 'customer', entity_id: viewingCustomerId })).results || []; }
+  catch (e) { emptyEl.textContent = 'Error loading history: ' + e.message; emptyEl.style.display = 'block'; return; }
+  if (!rows.length){ emptyEl.style.display = 'block'; return; }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+    <td>${escapeHtml(r.doc_type)}</td>
+    <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
+    <td class="muted">${escapeHtml(r.product_name || '—')}</td>
+    <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
+    <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+    <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>
+  </tr>`).join('');
 }
 
 function countryName(countryId){

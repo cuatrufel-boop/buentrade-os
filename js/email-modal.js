@@ -116,8 +116,47 @@ function emailModalSendWhatsApp(){
   const message = document.getElementById('emailModalWaBody').value;
   const { phone, filename, content, contentType } = bcEmailModalWaInfo;
   if (content && typeof downloadBase64File === 'function') downloadBase64File(filename, content, contentType);
-  if (typeof showToast === 'function') showToast(content ? 'Archivo descargado' : 'Abriendo WhatsApp', content ? 'Arrástralo o adjúntalo dentro de WhatsApp.' : '');
-  window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank');
+  bcConfirmWaSend(phone, message, content ? filename : null);
+}
+
+// Real ask 2026-09-13: "no manda atachment" — WhatsApp has no way to auto-attach a file to a
+// wa.me link (a real platform limit, nothing any code can work around). A toast that fades in a
+// couple seconds isn't enough — the trader clicked past it and reached an empty chat with no PDF.
+// This stays on screen until they actually confirm, and only THEN opens wa.me (also keeps that
+// window.open on a fresh click/user-gesture, so it isn't popup-blocked). One shared implementation
+// so every page's WhatsApp button — inside this modal and any page's own share-and-open helper —
+// gets the same real confirmation instead of each hand-rolling its own toast.
+function bcEnsureWaAttachModal(){
+  if (document.getElementById('bcWaAttachModalOverlay')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+<div id="bcWaAttachModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:440px;text-align:center;">
+    <h3>PDF descargado</h3>
+    <div class="email-modal-from" id="bcWaAttachModalFilename" style="font-weight:700;"></div>
+    <div class="email-modal-from">Se acaba de descargar a tu computadora. Al abrir WhatsApp, arrástralo (o adjúntalo con el clip) dentro del chat antes de enviar el mensaje — WhatsApp no permite adjuntarlo automáticamente.</div>
+    <div class="email-modal-actions" style="justify-content:center;">
+      <button onclick="bcWaAttachModalContinue()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:13px;cursor:pointer;">Entendido, abrir WhatsApp</button>
+    </div>
+  </div>
+</div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+let bcWaAttachPending = null;
+function bcWaAttachModalContinue(){
+  document.getElementById('bcWaAttachModalOverlay').style.display = 'none';
+  const pending = bcWaAttachPending;
+  bcWaAttachPending = null;
+  if (pending) window.open('https://wa.me/' + pending.phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(pending.message), '_blank');
+}
+// Call right after downloading the file (or with filename=null when there's nothing to attach —
+// e.g. no phone on file already stopped it earlier, or the message alone has no document).
+function bcConfirmWaSend(phone, message, filename){
+  if (!filename){ window.open('https://wa.me/' + phone.replace(/\D/g, '') + '?text=' + encodeURIComponent(message), '_blank'); return; }
+  bcEnsureWaAttachModal();
+  bcWaAttachPending = { phone, message };
+  document.getElementById('bcWaAttachModalFilename').textContent = filename;
+  document.getElementById('bcWaAttachModalOverlay').style.display = 'flex';
 }
 
 // opts: { fromAlias, to, subject, text, attachments, waInfo, cc, fromDisplay, title }

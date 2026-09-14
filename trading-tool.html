@@ -940,6 +940,25 @@ if (FIREBASE_READY) {
 </div>
 <style>@keyframes ttMenuPop{from{opacity:0;transform:translateY(-4px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}</style>
 
+<!-- Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — Create Order
+     used to inherit whatever date sat on the original quote (an estimate from whenever it was
+     priced) straight into the PO/SO with no one confirming it's still real. This asks explicitly,
+     every time, before the order is created — PU Date when the load is FOB (BuenTrade's carrier
+     picks up), Delivery Date when it's DAP (plant self-delivers, e.g. Seaboard) — same styled-modal
+     convention as ttConfirmOverlay above, not a raw prompt(). -->
+<div id="ttDateConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);--ink:#0F1F33;--ink-soft:#64748B;">
+    <div id="ttDateConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;"></div>
+    <div id="ttDateConfirmMessage" style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:16px;"></div>
+    <input type="date" id="ttDateConfirmInput" style="width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;color:var(--ink);margin-bottom:8px;">
+    <div id="ttDateConfirmError" style="font-size:12px;color:#C4432E;min-height:16px;margin-bottom:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;">
+      <button onclick="ttDateConfirmResolve(null)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="ttDateConfirmSubmit()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(15,138,95,.3);">Confirm & Create Order</button>
+    </div>
+  </div>
+</div>
+
 <!-- Collections module (2026-09-08): "si el cliente me da un bid por una carga y no tiene cupo
      debemos poder enviar un mensaje... o la otra opcion que liberes el cupo" — real action, not
      just a warning, at the exact moment a new deal would exceed a customer's credit_limit. -->
@@ -989,6 +1008,37 @@ function ttConfirmResolve(val){
   document.getElementById('ttConfirmOverlay').style.display = 'none';
   if (ttConfirmResolveFn) ttConfirmResolveFn(val);
   ttConfirmResolveFn = null;
+}
+
+let ttDateConfirmResolveFn = null;
+// isFob true -> "PU Date" (BuenTrade's carrier picks up); false -> "Delivery Date" (plant
+// self-delivers, e.g. Seaboard/DAP). defaultDate pre-fills the quote's own estimated date so the
+// trader can just confirm it, but never fires Create Order without this screen being seen and
+// answered. Resolves the chosen YYYY-MM-DD string, or null on Cancel.
+function showTTDateConfirm(isFob, defaultDate){
+  const label = isFob ? 'PU Date' : 'Delivery Date';
+  document.getElementById('ttDateConfirmTitle').textContent = `Confirm ${label}`;
+  document.getElementById('ttDateConfirmMessage').textContent = isFob
+    ? 'This is the real, final pick-up date BuenTrade\'s carrier will pick up on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.'
+    : 'This is the real, final delivery date the plant will self-deliver on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.';
+  const input = document.getElementById('ttDateConfirmInput');
+  input.value = defaultDate || '';
+  document.getElementById('ttDateConfirmError').textContent = '';
+  document.getElementById('ttDateConfirmOverlay').style.display = 'flex';
+  return new Promise(resolve => { ttDateConfirmResolveFn = resolve; });
+}
+function ttDateConfirmSubmit(){
+  const value = document.getElementById('ttDateConfirmInput').value;
+  if (!value){ document.getElementById('ttDateConfirmError').textContent = 'Pick a date to continue.'; return; }
+  document.getElementById('ttDateConfirmOverlay').style.display = 'none';
+  const resolve = ttDateConfirmResolveFn;
+  ttDateConfirmResolveFn = null;
+  if (resolve) resolve(value);
+}
+function ttDateConfirmResolve(val){
+  document.getElementById('ttDateConfirmOverlay').style.display = 'none';
+  if (ttDateConfirmResolveFn) ttDateConfirmResolveFn(val);
+  ttDateConfirmResolveFn = null;
 }
 </script>
 
@@ -1829,14 +1879,29 @@ let negoOffer = null, negoPlant = null, negoCustomer = null;
 function negoEscapeHtml(str){
   return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
+// Real bug found live 2026-09-14: "consecutivo debe estar bien tiene typos repetido el BT" — same
+// fix as orders.html/offers.html: legacy orders still literally start with "BT-" (the old
+// "BT-0042" scheme), so "INV-BT-" + orderNumber doubled into "INV-BT-BT-0019".
+function btNum(orderNumber){
+  return String(orderNumber || '').replace(/^BT-/, '');
+}
 function negoFirstName(name){
   return (name || '').trim().split(/\s+/)[0] || '';
 }
 
+// Real correction 2026-09-14: "esos numero no confio en ellos necesito ver que me los arroje el
+// qt" — orders.html's split view used to show its own hand-built summary of raw sent_offers
+// columns instead of the real QT screen actually computing them; now it embeds this same page with
+// readonly=1, so the trader sees the calculator's own real output (Product(s)/Profitability, same
+// calc() this whole tool already runs), just with nothing to click that doesn't belong in a
+// side-by-side reference view — no Negotiation history, no Create Order, no Create & Share Invoice.
+function isReadOnlyEmbed(){
+  return __qp.get('readonly') === '1';
+}
 async function negoInit(){
   const offerId = __qp.get('offerId');
   if (!offerId) return;
-  document.getElementById('negoCard').style.display = 'block';
+  if (!isReadOnlyEmbed()) document.getElementById('negoCard').style.display = 'block';
   let offer;
   try { offer = ((await callApi('sent-offers-search', { id: offerId })).results || [])[0]; }
   catch (e) { document.getElementById('negoMsg').textContent = 'Could not load this offer: ' + e.message; return; }
@@ -1890,11 +1955,13 @@ async function negoInit(){
     if (offer.tramite_aduanal_amount) document.getElementById('tramiteAduanal').value = offer.tramite_aduanal_amount;
     if (offer.bodega_americana_amount) document.getElementById('bodegaAmericana').value = offer.bodega_americana_amount;
     calc();
-    // Already closed — Plant/Customer/Win don't apply anymore. Instead show the real-cost
-    // entry right next to the same numbers that went into the PO/SO/FO, so nothing needs
-    // comparing against a separate table.
-    await realCostsInit();
-  } else {
+    if (!isReadOnlyEmbed()){
+      // Already closed — Plant/Customer/Win don't apply anymore. Instead show the real-cost
+      // entry right next to the same numbers that went into the PO/SO/FO, so nothing needs
+      // comparing against a separate table.
+      await realCostsInit();
+    }
+  } else if (!isReadOnlyEmbed()){
     document.getElementById('negoQbLeft').style.display = 'flex';
     document.getElementById('negoQbRight').style.display = 'flex';
     document.getElementById('negoCreateOrderBtn').style.display = 'inline-flex';
@@ -1922,17 +1989,16 @@ const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C
 function pdfDoc(){ const { jsPDF } = window.jspdf; return new jsPDF({ unit: 'pt', format: 'letter' }); }
 function pdfHeader(doc, docTitle, orderNumber, contactEmail){
   doc.setFillColor(10, 37, 71); doc.rect(0, 0, 612, 88, 'F');
-  doc.setFillColor(18, 58, 107); doc.circle(58, 42, 17, 'F');
-  doc.setDrawColor(62, 123, 196); doc.setLineWidth(1.3); doc.circle(58, 42, 17, 'S');
-  doc.setDrawColor(95, 168, 232); doc.setLineWidth(1.6); doc.lines([[5, -5], [5, 7], [5, -6]], 47, 46, [1, 1], 'S', false);
-  doc.setFillColor(0, 169, 160); doc.rect(52, 33, 12, 8, 'F');
+  // Real correction 2026-09-14: "pon solo buentrade como esta en home y quita ese logo... no es de
+  // buentrade" — the icon was only ever the sign-in gate's decoration, never the real persistent
+  // brand mark (the app header is plain text only). Text-only now, at the header's left margin.
   doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(255, 255, 255);
-  doc.text(COMPANY.name1, 86, 46);
+  doc.text(COMPANY.name1, 40, 46);
   const w = doc.getTextWidth(COMPANY.name1);
-  doc.setTextColor(94, 175, 255); doc.text(COMPANY.name2, 86 + w, 46);
+  doc.setTextColor(94, 175, 255); doc.text(COMPANY.name2, 40 + w, 46);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(178, 197, 222);
-  doc.text(COMPANY.address, 86, 60);
-  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 86, 71);
+  doc.text(COMPANY.address, 40, 60);
+  doc.text(`${contactEmail}  ·  ${COMPANY.phone}`, 40, 71);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(10, 37, 71);
   doc.text(docTitle, 40, 120);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
@@ -2000,7 +2066,7 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
   const finalTotal = finalWeight * pricePerLb;
 
   const doc = pdfDoc();
-  pdfHeader(doc, 'Factura', 'INV-BT-' + orderNumber, CONTACT_EMAIL_SO);
+  pdfHeader(doc, 'Factura', 'INV-BT-' + btNum(orderNumber), CONTACT_EMAIL_SO);
   pdfInfoBlock(doc, 40, 168, 'CLIENTE', composed.cliente.split('\n'));
   pdfInfoBlock(doc, 320, 168, 'ENTREGAR A', (composed.entregar_a || '').split('\n'));
 
@@ -2013,7 +2079,7 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
   }
   const y = pdfKeyValueRows(doc, 40, 240, [
     ['FECHA', todayStr()], ['FECHA DE ENTREGA', todayStr()], ['INCOTERMS', composed.incoterms],
-    ['ORDEN DEL CLIENTE', 'INV-BT-' + orderNumber], ['CONDICIONES DE PAGO', composed.condiciones_pago], ['FECHA DE VENCIMIENTO', dueDateStr],
+    ['ORDEN DEL CLIENTE', 'INV-BT-' + btNum(orderNumber)], ['CONDICIONES DE PAGO', composed.condiciones_pago], ['FECHA DE VENCIMIENTO', dueDateStr],
   ]);
 
   const nameEs = composed.linea.descripcion_es || '';
@@ -2093,13 +2159,13 @@ async function createAndShareInvoice(){
   const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
 
   const { doc, finalTotal } = buildInvoicePdfUnsigned(composed, so, customer, orderNumber);
-  const filename = `INV-BT-${orderNumber}.pdf`;
+  const filename = `INV-BT-${btNum(orderNumber)}.pdf`;
   let invoiceUrl;
   try { invoiceUrl = await uploadOrderPdf(doc, filename); }
   catch (e) { msgEl.textContent = 'Error subiendo el PDF: ' + e.message; return; }
 
   const contact = customer && customer.contact_name ? negoFirstName(customer.contact_name) : '';
-  const subject = `INV-BT-${orderNumber} — INVOICE`;
+  const subject = `INV-BT-${btNum(orderNumber)} — INVOICE`;
   const body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, firma aquí: ${signLink} para su confirmación.\n\n`
     + `Gracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   const waPhone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
@@ -2116,12 +2182,29 @@ function closeDocPreview(){
   document.getElementById('docPreviewOverlay').style.display = 'none';
   document.getElementById('docPreviewFrame').src = 'about:blank';
 }
+function gmailComposeUrl(emails, subject, body){
+  return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: (Array.isArray(emails) ? emails.join(',') : emails), su: subject, body }).toString()}`;
+}
+// Real bug found live 2026-09-14: "ya cree un invoice y no me deja enviar signature a cliente" —
+// the automatic send failing (Netlify still paused, see [[project_netlify_suspended_until_sept15]])
+// just showed a bare alert() and left invoice_sent_at unset forever, with no way to confirm a
+// manual send — unlike orders.html's PO/SO/Payment sends, which all already have this exact
+// "Open in Gmail" fallback that marks the doc sent once the trader actually clicks through it.
+async function markInvoiceSentFallback(){
+  const ctx = invoicePreviewCtx;
+  if (!ctx) return;
+  await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
+  const msgEl = document.getElementById('invoiceMsg');
+  if (msgEl) msgEl.innerHTML = 'Invoice marked sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
+}
 async function sendInvoicePreviewEmail(){
   const ctx = invoicePreviewCtx;
   if (!ctx) return;
   const msgEl = document.getElementById('invoiceMsg');
   try {
-    await sendEmailApi('offers', ctx.emails, ctx.subject, ctx.body, [pdfAttachment(ctx.doc, ctx.filename)], { phone: ctx.waPhone, message: ctx.waMessage }, ctx.ccEmails);
+    // Real ask 2026-09-14: "un solo boton de whatsapp por pantalla" — this preview already has its
+    // own standalone WhatsApp button (sendInvoicePreviewWhatsApp), so no waInfo here.
+    await sendEmailApi('offers', ctx.emails, ctx.subject, ctx.body, [pdfAttachment(ctx.doc, ctx.filename)], null, ctx.ccEmails);
     await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
     closeDocPreview();
     // Collections module (2026-09-08): "el flujo debe llevarme a collections" — the order now has
@@ -2129,7 +2212,9 @@ async function sendInvoicePreviewEmail(){
     // instead of leaving them to remember to go look for it.
     msgEl.innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
   } catch (e) {
-    if (!e.cancelled) alert('Could not send: ' + e.message);
+    if (e.cancelled) return;
+    const url = gmailComposeUrl(ctx.emails, ctx.subject, ctx.body + EMAIL_SIGNATURE);
+    msgEl.innerHTML = `Automatic send failed: ${negoEscapeHtml(e.message)} — <a href="${negoEscapeHtml(url)}" target="bt_gmail" rel="noopener" onclick="markInvoiceSentFallback()" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`;
   }
 }
 function sendInvoicePreviewWhatsApp(){
@@ -2359,11 +2444,22 @@ async function negoSendToCustomer(channel){
 // Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
 // right now in the calculator (not the original quoted snapshot), and additionally pings the
 // customs agency on file — offers.html's quick "Ganada" doesn't need that since nothing changed.
-async function negoSaveDefinitive(overrideCreditCheck){
+async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate){
   if (!negoOffer) return;
+  const freightEl = document.getElementById('freight');
+  const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
+  const isFob = us_freight_amount > 0;
   if (!overrideCreditCheck){
     const ok = await showTTConfirm('Create Order?', `${negoOffer.product_name} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
     if (!ok) return;
+  }
+  // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... es muy delicado" — asked fresh
+  // every time, never inherited silently from whatever the quote happened to say when it was
+  // priced. Only asked once even through the credit-override retry below (confirmedDeliveryDate
+  // threaded through that recursive call), not re-asked on the second pass.
+  if (!confirmedDeliveryDate){
+    confirmedDeliveryDate = await showTTDateConfirm(isFob, (negoOffer.delivery_dates && negoOffer.delivery_dates[0]) || '');
+    if (!confirmedDeliveryDate) return; // trader cancelled — nothing created
   }
   document.getElementById('negoMsg').innerHTML = '<span style="color:var(--ink-soft);">Saving — creating order and documents…</span>';
 
@@ -2374,8 +2470,6 @@ async function negoSaveDefinitive(overrideCreditCheck){
   // to be its own separate, US-freight-only copy of that cascade.
   const purchase_price = negoCurrentCost();
   const sale_per_lb = negoCurrentSale();
-  const freightEl = document.getElementById('freight');
-  const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
   const weight = (window.__calc && window.__calc.totalWeight) || negoOffer.weight || 40000;
   const total_cost = purchase_price * weight;
   const total_sale = sale_per_lb * weight;
@@ -2386,13 +2480,14 @@ async function negoSaveDefinitive(overrideCreditCheck){
     result = await callApi('sent-offers-mark-won', {
       actor: currentActor(), sent_offer_id: negoOffer.id, override_credit_check: !!overrideCreditCheck,
       purchase_price, sale_per_lb, us_freight_amount, total_cost, total_sale, weight,
+      confirmed_delivery_date: confirmedDeliveryDate,
       won_idempotency_key: wonIdempotencyKey,
     });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
       const choice = await showCreditLimitOverlay(e.data.message);
       document.getElementById('negoMsg').textContent = '';
-      if (choice === 'override') return negoSaveDefinitive(true);
+      if (choice === 'override') return negoSaveDefinitive(true, confirmedDeliveryDate);
       if (choice === 'collect'){ window.open('collections.html', '_blank'); return; }
       if (choice === 'financials'){
         let customerEmail = null;
@@ -2413,7 +2508,7 @@ async function negoSaveDefinitive(overrideCreditCheck){
     let agency = null;
     try { agency = ((await callApi('providers-search', { id: negoOffer.customs_agency_provider_id })).results || [])[0] || null; } catch (e) {}
     if (agency && (agency.email || agency.phone || agency.whatsapp)){
-      const msg = `Nueva carga confirmada — Orden ${orderNumber}: ${negoOffer.product_name}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${(negoOffer.delivery_dates || []).join(', ') || 'por confirmar'}.`;
+      const msg = `Nueva carga confirmada — Orden ${orderNumber}: ${negoOffer.product_name}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${confirmedDeliveryDate}.`;
       if (agency.email){
         window.open(`mailto:${agency.email}?subject=${encodeURIComponent('Nueva carga — ' + orderNumber)}&body=${encodeURIComponent(msg)}`, '_blank');
       } else {

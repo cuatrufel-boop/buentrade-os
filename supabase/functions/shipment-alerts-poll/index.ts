@@ -227,14 +227,17 @@ Deno.serve(async (req) => {
 
       // Point 4/9 — the fixed 2-day window to the US-side border handoff, computed from the real
       // pickup time when known (falls back to the planned date only if it hasn't actually picked
-      // up yet, which shouldn't happen for picked_up/unloading but is a safe fallback).
-      if ((sh.status === "picked_up" || sh.status === "unloading") && !sh.border_overdue_alert_sent_at) {
+      // up yet, which shouldn't happen but is a safe fallback). Real correction 2026-09-14: "solo
+      // necesitamos saber que se entrego" — Unloading is no longer a tracked status (Picked Up goes
+      // straight to Delivered); this alert now only ever checks picked_up, which already excludes
+      // delivered shipments on its own.
+      if (sh.status === "picked_up" && !sh.border_overdue_alert_sent_at) {
         // Real bug found live 2026-09-06: postgres.js returns timestamptz columns as native Date
         // objects, not strings — String(dateObject) produces "Sun Sep 06 2026 01:32:42 GMT..." and
         // slicing that gives "Sun Sep 06", not a real ISO date. computeBorderArrivalDate then built
         // an Invalid Date and .toISOString() threw, crashing this ENTIRE poll (one bad shipment
-        // took down alerts for every shipment) the moment any load first reached picked_up/
-        // unloading. toISOString() first normalizes to the real ISO date before slicing.
+        // took down alerts for every shipment) the moment any load first reached picked_up.
+        // toISOString() first normalizes to the real ISO date before slicing.
         const fromDate = sh.picked_up_at ? new Date(sh.picked_up_at).toISOString().slice(0, 10) : sh.pickup_date;
         const expected = fromDate ? computeBorderArrivalDate(fromDate) : null;
         if (expected && new Date(expected + "T00:00:00") < today) {

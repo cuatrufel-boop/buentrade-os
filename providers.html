@@ -179,6 +179,12 @@
   .profile-row .view-label{margin-bottom:0;}
   .profile-row-value{font-size:14px;color:var(--ink);line-height:1.5;overflow-wrap:break-word;word-break:break-word;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
+  /* Same badge convention as plants.html/orders.html — verbatim, not a new component. Used by the
+     History tab's Sent/Not sent status. */
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
+  .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
+  .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
   /* Same full-screen overlay pattern as the Trading Tool panel and plants.html's Load Price List —
      "Cargar precios" used to unhide a card in place, pushing the rest of the page down; the request
      was explicit: never a partial-page card, always a real full-screen panel like the TT. */
@@ -480,6 +486,7 @@ auth.onAuthStateChanged(user => {
     <div class="tab-row" style="margin-top:18px;">
       <button class="tab-btn active" id="provTabBtn_profile" onclick="setProvCardTab('profile')">Profile</button>
       <button class="tab-btn" id="provTabBtn_rates" onclick="setProvCardTab('rates')">Rates</button>
+      <button class="tab-btn" id="provTabBtn_history" onclick="setProvCardTab('history')">History</button>
     </div>
 
     <!-- ============ PROFILE ============ -->
@@ -603,6 +610,18 @@ auth.onAuthStateChanged(user => {
       </div>
 
       <div id="rateTableWrap"></div>
+    </div>
+
+    <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO SO FO INV
+         debe alojarse en el perfil de cada destinatario" — every FO ever created for this carrier,
+         in date order. Empty for a non-carrier provider (customs agency etc.), which is correct —
+         they never get an FO. ============ -->
+    <div id="provTab_history" style="display:none;">
+      <table>
+        <thead><tr><th>Date</th><th>Order</th><th>Product</th><th>Weight</th><th>Amount</th><th>Sent</th></tr></thead>
+        <tbody id="provHistoryRows"></tbody>
+      </table>
+      <div id="provHistoryEmpty" class="empty" style="display:none;">No FO has been created for this provider yet.</div>
     </div>
   </div>
 </div>
@@ -1140,9 +1159,59 @@ function setProvCardTab(tab){
   providerCardTab = tab;
   document.getElementById('provTabBtn_profile').classList.toggle('active', tab === 'profile');
   document.getElementById('provTabBtn_rates').classList.toggle('active', tab === 'rates');
+  document.getElementById('provTabBtn_history').classList.toggle('active', tab === 'history');
   document.getElementById('provTab_profile').style.display = tab === 'profile' ? 'block' : 'none';
   document.getElementById('provTab_rates').style.display = tab === 'rates' ? 'block' : 'none';
+  document.getElementById('provTab_history').style.display = tab === 'history' ? 'block' : 'none';
   if (tab === 'rates') openProviderRates(currentProviderId);
+  if (tab === 'history') renderProviderHistory();
+}
+
+// Real ask 2026-09-14: "yo necesito es que se guarde el pdf" — the real PDF already lands in the
+// order-documents bucket the moment it's actually sent (uploadOrderPdf, orders.html/offers.html),
+// filename always {DOC_TYPE}-BT-{order_number}.pdf at the bucket root. Deterministic, so the link
+// can be built here with no extra backend round-trip — only shown once sent_at proves the file
+// really exists.
+function docPdfUrl(docType, orderNumber){
+  return `https://geqhjykbxvxugvnpnygn.supabase.co/storage/v1/object/public/order-documents/${docType}-BT-${orderNumber}.pdf`;
+}
+// Real bug found live 2026-09-14: "no sirven los links de ordenes" — filenames are saved as
+// "{DOC}-BT-" + btNum(orderNumber) since the 2026-09-14 "BT-BT-" duplicate-prefix fix, but a
+// legacy order could genuinely have been sent BEFORE that fix, meaning its real stored file is
+// still named with the old doubled prefix. No client-side way to know which applies to a given
+// row without asking, so this tries the current (single-prefix) name first, falls back to legacy.
+function btNum(orderNumber){
+  return String(orderNumber || '').replace(/^BT-/, '');
+}
+async function openDocPdf(docType, orderNumber){
+  const primary = docPdfUrl(docType, btNum(orderNumber));
+  const legacy = docPdfUrl(docType, orderNumber);
+  if (primary === legacy){ window.open(primary, '_blank'); return; }
+  try {
+    const res = await fetch(primary, { method: 'HEAD' });
+    window.open(res.ok ? primary : legacy, '_blank');
+  } catch (e) { window.open(legacy, '_blank'); }
+}
+// Real ask 2026-09-14: "en el momento en el que creo PO SO FO INV debe alojarse en el perfil de
+// cada destinatario... tener el historico por fecha" — every FO ever created for this carrier.
+async function renderProviderHistory(){
+  const tbody = document.getElementById('provHistoryRows');
+  const emptyEl = document.getElementById('provHistoryEmpty');
+  tbody.innerHTML = '';
+  emptyEl.style.display = 'none';
+  if (!currentProviderId) return;
+  let rows;
+  try { rows = (await callApi('order-documents-history', { entity_type: 'carrier', entity_id: currentProviderId })).results || []; }
+  catch (e) { emptyEl.textContent = 'Error loading history: ' + e.message; emptyEl.style.display = 'block'; return; }
+  if (!rows.length){ emptyEl.style.display = 'block'; return; }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+    <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
+    <td class="muted">${escapeHtml(r.product_name || '—')}</td>
+    <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
+    <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+    <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>
+  </tr>`).join('');
 }
 
 function selectProvider(id){

@@ -29,6 +29,13 @@ Deno.serve(async (req) => {
       // snapshot whatever's actually on screen at that moment, not the last-saved values.
       purchase_price = null, sale_per_lb = null, total_cost = null, total_sale = null,
       weight = null, us_freight_amount = null, won_idempotency_key = null,
+      // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — the PU/
+      // delivery date used to just be whatever sat on the offer from whenever it was quoted/priced,
+      // copied straight into the PO/SO with nobody re-confirming it's still real. Required (not
+      // defaulted to offer.delivery_dates) so no caller can silently skip asking — both real UI
+      // entry points (trading-tool.html's Create Order, offers.html's quick "Ganada") now always
+      // ask the trader first and always pass this.
+      confirmed_delivery_date = null,
     } = body;
 
     const [offer] = await sql`select * from sent_offers where id = ${sent_offer_id}`;
@@ -51,6 +58,13 @@ Deno.serve(async (req) => {
     if (offer.status !== "sent") {
       return jsonResponse({ error: "not_pending", message: `This offer is already '${offer.status}', not 'sent' — can't mark it won again.`, current_status: offer.status }, 409);
     }
+
+    // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — enforced here,
+    // not just trusted from the UI, so no future call site can silently skip asking.
+    if (!confirmed_delivery_date) {
+      return jsonResponse({ error: "missing required fields", missing: ["confirmed_delivery_date"], message: "The real, final PU/delivery date must be confirmed before an order can be created." }, 400);
+    }
+    const finalDeliveryDates = [confirmed_delivery_date];
 
     const finalPurchasePrice = purchase_price ?? offer.purchase_price;
     const finalSalePerLb = sale_per_lb ?? offer.sale_per_lb;
@@ -91,6 +105,7 @@ Deno.serve(async (req) => {
           purchase_price = ${finalPurchasePrice}, sale_per_lb = ${finalSalePerLb},
           total_cost = ${finalTotalCost}, total_sale = ${finalTotalSale},
           weight = ${finalWeight}, us_freight_amount = ${finalUsFreightAmount},
+          delivery_dates = ${tx.json(finalDeliveryDates)},
           won_idempotency_key = ${won_idempotency_key}
         where id = ${sent_offer_id} returning *
       `;
@@ -98,14 +113,14 @@ Deno.serve(async (req) => {
 
       const [purchaseOrder] = await tx`
         insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(offer.delivery_dates)}, 'open')
+        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(finalDeliveryDates)}, 'open')
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "purchase_orders", record_id: purchaseOrder.id, after: purchaseOrder });
 
       const [salesOrder] = await tx`
         insert into sales_orders (order_number, sent_offer_id, customer_id, customer_name, product_id, product_name, product_spec, product_name_es, product_spec_es, sale_price, weight, total_sale, delivery_dates, status)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${offer.customer_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${offer.product_name_es}, ${offer.product_spec_es}, ${finalSalePerLb}, ${finalWeight}, ${finalTotalSale}, ${tx.json(offer.delivery_dates)}, 'open')
+        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${offer.customer_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${offer.product_name_es}, ${offer.product_spec_es}, ${finalSalePerLb}, ${finalWeight}, ${finalTotalSale}, ${tx.json(finalDeliveryDates)}, 'open')
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "sales_orders", record_id: salesOrder.id, after: salesOrder });
