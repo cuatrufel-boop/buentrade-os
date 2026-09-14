@@ -364,7 +364,10 @@ Deno.serve(async (req) => {
       // a submission → re-apply → notify again, unbounded, firing again every 15 minutes forever
       // until this was caught. Any email whose subject contains this exact, only-ever-generated-by-
       // us phrase is never a real submission — skip it before any plant matching runs at all.
-      if (subject.includes("prices you were waiting on just came in") || subject.includes("price you were waiting on just came in")) {
+      if (
+        subject.includes("prices you were waiting on just came in") || subject.includes("price you were waiting on just came in") ||
+        subject.includes("prices just applied") || subject.includes("price just applied")
+      ) {
         await sql`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
         results.push({ id: m.id, skipped: "self_notification_email" });
         continue;
@@ -561,6 +564,12 @@ Deno.serve(async (req) => {
       // never touches that column, so the value it returns is exactly the pre-apply state), so one
       // notification can go out for this plant's whole batch at the end, not one email per line.
       const resolvedForTrader: { name: string; price: number }[] = [];
+      // Real ask 2026-09-15, walking Wholestone's own first live email through end to end: "que
+      // reconozca el resto y los suba y me notifique" — a routine price refresh (nothing anyone
+      // was specifically waiting on) used to apply completely silently by design. Every item this
+      // run actually applied — requested or not — goes here so the notification below always fires
+      // once real prices land, not only the narrower "you were waiting on this" case above.
+      const allAppliedForNotification: { name: string; price: number }[] = [];
       // Real fix for a real 51-item Tyson list hitting a Postgres connection rate limit partway
       // through: these three now run IN-PROCESS (see _shared/productMatcher.ts,
       // applyPlantProductMatch.ts, pendingMatch.ts) sharing this function's own single `sql`
@@ -587,6 +596,7 @@ Deno.serve(async (req) => {
             if ("applied" in applyResult && applyResult.plant_product.last_requested_at) {
               resolvedForTrader.push({ name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price });
             }
+            allAppliedForNotification.push({ name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price });
             applied++;
           } else {
             await createPendingMatch(sql, HMAC_SECRET, {
@@ -626,14 +636,24 @@ Deno.serve(async (req) => {
       }
       pending += declined;
 
-      // Real addition, explicit ask: one notification per plant, only when this run actually
-      // resolved something someone was waiting on — never fires on a routine price refresh nobody
-      // had asked for. Fire-and-forget on purpose: a notification failing to send should never
-      // fail the whole poll run or block the next message from processing.
-      if (resolvedForTrader.length && TRADER_NOTIFICATION_EMAILS.length) {
-        const lines = resolvedForTrader.map((r) => `${r.name} — $${r.price.toFixed(4)}/lb`).join("\n");
-        const subject = `${plant.name} — ${resolvedForTrader.length} price${resolvedForTrader.length === 1 ? "" : "s"} you were waiting on just came in`;
-        const body = `${plant.name} just sent updated pricing, and it included ${resolvedForTrader.length} product${resolvedForTrader.length === 1 ? "" : "s"} you'd asked them for:\n\n${lines}\n\nOpen Quotes to send ${resolvedForTrader.length === 1 ? "it" : "these"} now.`;
+      // One notification per plant whenever this run actually applied real prices — originally
+      // scoped to only "something someone was waiting on" (resolvedForTrader), widened 2026-09-15
+      // ("que reconozca el resto y los suba y me notifique") so a routine price refresh notifies
+      // too, not just a requested one. resolvedForTrader's own wording still wins when it applies
+      // (a trader cares more that a specific ask got answered than a generic count). Fire-and-
+      // forget on purpose: a notification failing to send should never fail the whole poll run or
+      // block the next message from processing.
+      if (allAppliedForNotification.length && TRADER_NOTIFICATION_EMAILS.length) {
+        const useRequested = resolvedForTrader.length > 0;
+        const items = useRequested ? resolvedForTrader : allAppliedForNotification;
+        const lines = items.map((r) => `${r.name} — $${r.price.toFixed(4)}/lb`).join("\n");
+        const pendingNote = pending > 0 ? `\n\n${pending} other line${pending === 1 ? "" : "s"} from this email still need${pending === 1 ? "s" : ""} a manual match in Pending Matches.` : "";
+        const subject = useRequested
+          ? `${plant.name} — ${items.length} price${items.length === 1 ? "" : "s"} you were waiting on just came in`
+          : `${plant.name} — ${items.length} price${items.length === 1 ? "" : "s"} just applied`;
+        const body = useRequested
+          ? `${plant.name} just sent updated pricing, and it included ${items.length} product${items.length === 1 ? "" : "s"} you'd asked them for:\n\n${lines}\n\nOpen Quotes to send ${items.length === 1 ? "it" : "these"} now.${pendingNote}`
+          : `${plant.name} just sent updated pricing. ${items.length} product${items.length === 1 ? "" : "s"} applied automatically:\n\n${lines}${pendingNote}`;
         for (const to of TRADER_NOTIFICATION_EMAILS) {
           try { await sendGmailNotification(authHeaders, to, subject, body); }
           catch (e) { errors.push(`notify ${to}: ${e}`); }
