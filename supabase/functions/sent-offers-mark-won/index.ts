@@ -29,6 +29,13 @@ Deno.serve(async (req) => {
       // snapshot whatever's actually on screen at that moment, not the last-saved values.
       purchase_price = null, sale_per_lb = null, total_cost = null, total_sale = null,
       weight = null, us_freight_amount = null, won_idempotency_key = null,
+      // Real ask 2026-09-14: "cuando creo orden ya numeros y involucrados deben quedar fijados
+      // para continuar" — trading-tool.html's Create Order now requires the trader to confirm a
+      // real carrier (showTTCarrierConfirm) whenever the deal is FOB, instead of leaving
+      // carrier_provider_id null for Real Costs to maybe fill in later. Optional so offers.html's
+      // quick "Ganada" (no carrier picker of its own) keeps working exactly as before — the
+      // freight_order still gets created either way, just still TBD if this isn't passed.
+      carrier_provider_id = null,
       // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — the PU/
       // delivery date used to just be whatever sat on the offer from whenever it was quoted/priced,
       // copied straight into the PO/SO with nobody re-confirming it's still real. Required (not
@@ -132,18 +139,22 @@ Deno.serve(async (req) => {
       // quotes.html rqAverageUsFreightRate — us_freight_rate_id is null for it, same as "Del
       // Border"). Previously the manual-amount case created no row at all, so the FO silently
       // never sent and Real Costs had nothing to attach a carrier to later (it can only update an
-      // existing row, never create one). Whichever carrier actually books the load can still be
-      // TBD at this point — carrier_provider_id stays null and gets filled in via Real Costs
-      // (realCostSetCarrier) — but the row, origin/destination and quoted amount are always real
-      // from the moment the deal is won.
+      // existing row, never create one).
+      // Real correction 2026-09-14: "cuando creo orden ya numeros y involucrados deben quedar
+      // fijados para continuar" — carrier_provider_id used to always start null whenever no
+      // specific provider_rates row was behind the quote (a manual/average freight amount), left
+      // for Real Costs to maybe fill in later, with nothing forcing that. trading-tool.html's
+      // Create Order now requires the trader to confirm a real carrier up front whenever the deal
+      // is FOB and passes it as carrier_provider_id — that explicit choice wins over whatever the
+      // matched rate's own provider would have been, since the trader looked at it last.
       let freightOrder = null;
       if (finalUsFreightAmount > 0) {
-        let provider_id: string | null = null, origin: string | null = offer.plant_name, destination = "Border";
+        let provider_id: string | null = carrier_provider_id, origin: string | null = offer.plant_name, destination = "Border";
         let currency = "USD", currency_id: string | null = null;
         if (offer.us_freight_rate_id) {
           const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;
           if (rate) {
-            provider_id = rate.provider_id;
+            provider_id = carrier_provider_id || rate.provider_id;
             origin = rate.origin;
             destination = rate.destination;
             currency = rate.currency;
