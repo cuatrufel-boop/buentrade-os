@@ -516,6 +516,7 @@ Deno.serve(async (req) => {
         const mapped = extracted.items.map((it) => ({
           rawText: it.temperature === "Unknown" ? it.name : `${it.temperature} — ${it.name}`,
           price: it.price, freightIncluded: it.delivered,
+          locationName: it.location && it.location.trim() ? it.location.trim() : null,
         }));
         // Real bug, caught live against a real Seaboard email: a block-format line quoting both an
         // FOB and a Delivered price for the same product makes the LLM correctly emit two items —

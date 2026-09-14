@@ -21,6 +21,7 @@ export interface ExtractedItem {
   price: number; // USD/lb, already normalized to a decimal by the model (see prompt rule below)
   temperature: "Fresh" | "Frozen" | "Unknown";
   delivered: boolean; // true = a stated Delivered/landed price (freight included), false = FOB/unstated
+  location: string; // "City, ST" exactly as written near this item (e.g. "Sioux Falls, SD"), or "" when none/only a broad region ("Midwest", "East Coast") is stated — see prompt rule below
 }
 
 // Real addition, explicit ask, walking the off-spec flow end to end: a plant reply can also say
@@ -53,8 +54,9 @@ const EXTRACTION_SCHEMA = {
           price: { type: "number", description: "The price in USD per lb, as a decimal (e.g. 0.98)." },
           temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if stated anywhere for this item (directly, or via a section header covering it) — Unknown only if genuinely never stated." },
           delivered: { type: "boolean", description: "true only if this specific price is explicitly stated as Delivered/landed (freight already included) — e.g. a second price column labeled Delivered, or the word 'Delivered' near this price. false for FOB or when nothing is said about freight." },
+          location: { type: "string", description: "The specific FOB/EXW pickup city and state stated near this item, as 'City, ST' (e.g. 'Sioux Falls, SD') — only a real, specific city, never a broad region word like 'Midwest' or 'East Coast' and never the incoterm word itself ('FOB'/'EXW'). Empty string when no specific city is stated (including when only a region is named)." },
         },
-        required: ["name", "price", "temperature", "delivered"],
+        required: ["name", "price", "temperature", "delivered", "location"],
         additionalProperties: false,
       },
     },
@@ -86,6 +88,7 @@ Rules for "items" (priced products):
 - A line that only says "Call for availability", "N/A", "Check with X", or similar with no real number is not extractable — skip it.
 - A month name, a "Week of X" note, a date range (e.g. "OCT", "SEPT/OCT", "Week of 10/5"), a specific ship date ("to ship on 9/11", "October ship", "late Sep ship"), a production-date note ("(Nov 2025 Prod)"), or a shipping origin/incoterm ("FOB Sioux Falls, SD", "FOB Midwest", "EXW Midwest") next to an item is never part of the product's own name — it says when/where/on what terms that price applies. Extract the item and price normally but leave all of that out of "name" entirely; it changes on every list and would otherwise make the same real product look like a different one each time.
 - A weight, count, or piece-count qualifier attached to a pack style (e.g. "60 lb.", "20 Kg", "30lb", "2-3 bones", "4/6") describes the size of that particular container, not a different product — leave it out of "name" too, same reason: it varies list to list for what is really the same item.
+- Separately, capture the FOB/EXW pickup city in "location" when the plant states one right next to this specific item (e.g. "FOB Sioux Falls, SD", "EXW Denison, IA") — as "City, ST". Only a real, specific city counts; a broad region word ("FOB Midwest", "FOB East Coast") is not a city, leave "location" as "" for those (do not invent a city for a region, and never put the region word itself in "location").
 - If a whole table/list has no per-item temperature stated anywhere (no Fresh/Frozen section headers, no per-item word), leave temperature null for all of them rather than guessing.
 - Never invent a product that isn't actually named in the text.
 - Real, confirmed shape: a short reply to a one-product price request. The email may quote an
