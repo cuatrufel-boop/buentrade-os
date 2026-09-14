@@ -202,6 +202,26 @@ auth.onAuthStateChanged(user => {
   <h1>This Month <span class="refresh" onclick="loadAll()">↻ refresh</span></h1>
   <div class="kpis" id="kpis"><div class="empty">Loading…</div></div>
 
+  <!-- Real ask 2026-09-14 ("top orden mas grande, ventas totales, ventas del periodo, top 5 de
+       productos, top 5 de traders"): built with what's actually on file (7 real shipments) — a
+       "trader" is only ever the free-text email that closed the offer (sent_offers.won_by, no
+       normalized user table), and product quantity mostly falls back to the quoted sent_offers
+       weight since real_weight is rarely captured yet. See dashboard-summary for the real query. -->
+  <h1>Sales Overview</h1>
+  <div class="kpis" id="salesKpis"><div class="empty">Loading…</div></div>
+
+  <h1>Best Orders <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by margin</span></h1>
+  <div class="tbl-wrap"><table id="tblTopMargin"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Sale</th><th>Margin</th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Top 5 Products <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by revenue</span></h1>
+  <div class="tbl-wrap"><table id="tblTopProductsRevenue"><thead><tr><th>Product</th><th>Orders</th><th>Total Sales</th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Top 5 Products <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by quantity</span></h1>
+  <div class="tbl-wrap"><table id="tblTopProductsQty"><thead><tr><th>Product</th><th>Orders</th><th>Total Weight</th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Top 5 Traders</h1>
+  <div class="tbl-wrap"><table id="tblTopTraders"><thead><tr><th>Trader</th><th>Orders Won</th><th>Total Sales</th></tr></thead><tbody></tbody></table></div>
+
   <h1>Accounts Receivable</h1>
   <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Customer</th><th>Outstanding</th><th>Credit Limit</th><th>Overdue</th></tr></thead><tbody></tbody></table></div>
 
@@ -258,6 +278,11 @@ async function loadAll(){
       callApi('sent-offers-search', {}),
     ]);
     renderKpis(summary);
+    renderSalesKpis(summary);
+    renderTopMargin(summary.top_orders_by_margin);
+    renderTopProductsRevenue(summary.top_products_by_revenue);
+    renderTopProductsQty(summary.top_products_by_quantity);
+    renderTopTraders(summary.top_traders);
     renderOutstanding(summary.outstanding_by_customer);
     renderPendingPlantPayments(summary.pending_plant_payments, summary.pending_plant_payments_total);
     renderShipments(shipments.results);
@@ -275,6 +300,60 @@ function renderKpis(s){
     <div class="kpi"><div class="kpi-label">Overdue Accounts</div><div class="kpi-value ${overdue?'red':''}">${overdue}</div></div>
     <div class="kpi"><div class="kpi-label">Due Soon (7 days)</div><div class="kpi-value ${upcoming?'amber':''}">${upcoming}</div></div>
   `;
+}
+
+// Real ask 2026-09-14: total/monthly sales and the single biggest order — all sourced from
+// shipments (real won orders), never sent_offers (would overcount lost/pending quotes).
+function renderSalesKpis(s){
+  const biggest = s.biggest_order;
+  document.getElementById('salesKpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Total Sales (All-Time)</div><div class="kpi-value">${money(s.total_sales_all_time)}</div></div>
+    <div class="kpi"><div class="kpi-label">Sales This Month</div><div class="kpi-value">${money(s.sales_this_month)}</div></div>
+    <div class="kpi">
+      <div class="kpi-label">Biggest Order</div>
+      <div class="kpi-value" style="font-size:19px;">${biggest ? money(biggest.sale_amount) : '—'}</div>
+      ${biggest ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${escapeHtml(biggest.order_number)} — ${escapeHtml(biggest.customer_name || '')}</div>` : ''}
+    </div>
+  `;
+}
+
+// Margin is the real, final shipments.net_profit once an order is paid — until then it's the
+// exact same live estimate collections.html's own aging report already shows as "profit so far",
+// tagged Estimated here so it's never confused with a locked-in number.
+function renderTopMargin(rows){
+  const tbody = document.querySelector('#tblTopMargin tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No orders yet.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td><strong>${escapeHtml(r.order_number)}</strong></td>
+      <td>${escapeHtml(r.customer_name || '—')}</td>
+      <td>${escapeHtml(r.product_name || '—')}</td>
+      <td>${money(r.sale_amount)}</td>
+      <td>${money(r.margin)} ${r.is_final ? '<span class="tag paid">Final</span>' : '<span class="tag sent">Estimated</span>'}</td>
+    </tr>`).join('');
+}
+
+function renderTopProductsRevenue(rows){
+  const tbody = document.querySelector('#tblTopProductsRevenue tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No orders yet.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.product_name)}</td><td>${r.order_count}</td><td>${money(r.total_sales)}</td></tr>`).join('');
+}
+
+// Real gap, shown honestly rather than hidden: real_weight (the actual customs weight) is rarely
+// captured today, so this mostly totals the quoted sent_offers.weight — the same fallback
+// collections.html/orders.html already use wherever real_weight would otherwise be missing.
+function renderTopProductsQty(rows){
+  const tbody = document.querySelector('#tblTopProductsQty tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No orders yet.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.product_name)}</td><td>${r.order_count}</td><td>${Number(r.total_weight || 0).toLocaleString()} lb</td></tr>`).join('');
+}
+
+// "Trader" is only ever the free-text email that closed the offer (sent_offers.won_by) — there's
+// no normalized user/employee table behind it yet, so this shows exactly that email, nothing more.
+function renderTopTraders(rows){
+  const tbody = document.querySelector('#tblTopTraders tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No won offers yet.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.trader)}</td><td>${r.order_count}</td><td>${money(r.total_sales)}</td></tr>`).join('');
 }
 
 function renderOutstanding(rows){

@@ -72,6 +72,93 @@ Deno.serve(async (req) => {
     `;
     const pendingPlantPaymentsTotal = pendingPlantPayments.reduce((sum, r) => sum + Number(r.total_cost ?? 0), 0);
 
+    // Real ask 2026-09-14 ("quiero ver... top orden mas grande, ventas totales, ventas del
+    // periodo, top 5 de productos por cantidades, top 5 de traders"): shipments (not sent_offers)
+    // is the real-sales source — sent_offers includes lost/pending quotes that never became a real
+    // order, which would overcount. sale_amount + created_at on shipments is what's actually a won,
+    // real order (see sent-offers-mark-won, which is the only thing that inserts a shipments row).
+    const [{ total_sales_all_time }] = await sql`select coalesce(sum(sale_amount), 0) as total_sales_all_time from shipments`;
+    const [biggestOrder] = await sql`
+      select sh.order_number, sh.sale_amount, sh.created_at, o.customer_name, o.product_name
+      from shipments sh join sent_offers o on o.id = sh.sent_offer_id
+      order by sh.sale_amount desc nulls last
+      limit 1
+    `;
+
+    // Real gap confirmed live (2026-09-14 investigation): "trader" isn't a real column anywhere —
+    // sent_offers.won_by is a free-text email, stamped by whoever's logged in when an offer is
+    // marked won (see sent-offers-mark-won). It's the closest real thing to "who closed this,"
+    // just never normalized into an actual users table.
+    const topTraders = await sql`
+      select o.won_by as trader, count(*)::int as order_count, coalesce(sum(sh.sale_amount), 0) as total_sales
+      from shipments sh join sent_offers o on o.id = sh.sent_offer_id
+      where o.won_by is not null
+      group by o.won_by
+      order by total_sales desc
+      limit 5
+    `;
+
+    // Real gap confirmed live: real_weight (the actual customs-pedimento weight) is rarely
+    // populated today — this falls back to the quoted sent_offers.weight the same way
+    // collections-search/orders.html already do, so "by quantity" is honest about ranking mostly
+    // quoted weight right now, not always the true delivered weight.
+    const topProductsByRevenue = await sql`
+      select o.product_name, count(*)::int as order_count, coalesce(sum(sh.sale_amount), 0) as total_sales
+      from shipments sh join sent_offers o on o.id = sh.sent_offer_id
+      where o.product_name is not null
+      group by o.product_name
+      order by total_sales desc
+      limit 5
+    `;
+    const topProductsByQuantity = await sql`
+      select o.product_name, count(*)::int as order_count,
+        coalesce(sum(coalesce(nullif(so2.real_weight, 0), o.weight, 0)), 0) as total_weight
+      from shipments sh
+      join sent_offers o on o.id = sh.sent_offer_id
+      left join sales_orders so2 on so2.order_number = sh.order_number
+      where o.product_name is not null
+      group by o.product_name
+      order by total_weight desc
+      limit 5
+    `;
+
+    // Real margin, exactly the same formula finalizeShipmentPaid uses for a paid shipment
+    // (net_profit, already computed once and stored) — but that's null until an order is actually
+    // paid. "Construyelo con lo que hay" (explicit ask): rather than only ranking the handful of
+    // already-paid orders, an open order gets the exact same live, never-stored estimate
+    // collections-search already shows as profit_so_far, so "best orders by margin" reflects every
+    // real order on file, clearly distinguishing which numbers are final vs. still estimated.
+    const [{ value: rateStr }] = await sql`select value from app_settings where key = 'collections_interest_rate_annual'`;
+    const annualRate = parseFloat(rateStr ?? "0.15");
+    const marginRows = await sql`
+      select sh.order_number, sh.sale_amount, sh.paid_at, sh.net_profit, sh.invoice_sent_at, sh.delivered_at, sh.created_at,
+        o.customer_name, o.product_name, o.cost_per_lb, o.total_cost, o.us_freight_amount, o.inspection_amount,
+        so2.real_weight,
+        coalesce((select sum(amount) from order_extra_costs where order_number = sh.order_number), 0) as extra_costs_total
+      from shipments sh
+      join sent_offers o on o.id = sh.sent_offer_id
+      left join sales_orders so2 on so2.order_number = sh.order_number
+    `;
+    const now = new Date();
+    const topOrdersByMargin = marginRows
+      .map((r: Record<string, any>) => {
+        if (r.paid_at != null) {
+          return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, sale_amount: r.sale_amount, margin: Number(r.net_profit ?? 0), is_final: true };
+        }
+        const invoiceDate = r.invoice_sent_at ?? r.delivered_at ?? r.created_at;
+        const daysSinceInvoice = invoiceDate ? Math.max(0, Math.round((now.getTime() - new Date(invoiceDate).getTime()) / 86400000)) : 0;
+        const realWeight = r.real_weight != null ? Number(r.real_weight) : null;
+        const purchaseCost = (realWeight != null && r.cost_per_lb != null) ? realWeight * Number(r.cost_per_lb) : (r.total_cost != null ? Number(r.total_cost) : null);
+        const interestSoFar = Number(r.sale_amount) * (annualRate / 365) * daysSinceInvoice;
+        const marginEstimate = purchaseCost != null
+          ? Number(r.sale_amount) - purchaseCost - Number(r.us_freight_amount ?? 0) - Number(r.inspection_amount ?? 0) - Number(r.extra_costs_total) - interestSoFar
+          : null;
+        return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, sale_amount: r.sale_amount, margin: marginEstimate, is_final: false };
+      })
+      .filter((r) => r.margin != null)
+      .sort((a, b) => (b.margin as number) - (a.margin as number))
+      .slice(0, 5);
+
     return jsonResponse({
       invoiced_this_month,
       outstanding_by_customer: outstandingByCustomer,
@@ -80,6 +167,13 @@ Deno.serve(async (req) => {
       shipments_by_status: byStatus,
       pending_plant_payments: pendingPlantPayments,
       pending_plant_payments_total: pendingPlantPaymentsTotal,
+      total_sales_all_time,
+      sales_this_month: invoiced_this_month,
+      biggest_order: biggestOrder || null,
+      top_orders_by_margin: topOrdersByMargin,
+      top_products_by_revenue: topProductsByRevenue,
+      top_products_by_quantity: topProductsByQuantity,
+      top_traders: topTraders,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
