@@ -49,7 +49,7 @@ const EXTRACTION_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          name: { type: "string", description: "The product name/description exactly as written in the source text — do not repeat a section header or temperature word that's already captured in the temperature field." },
+          name: { type: "string", description: "The product name/description exactly as written in the source text — do not repeat a section header or temperature word that's already captured in the temperature field, and do not include a timing/availability qualifier (a month name, 'Week of 10/5', a date range like 'SEPT/OCT') — those describe when the price is good for, not what the product is, and change every list." },
           price: { type: "number", description: "The price in USD per lb, as a decimal (e.g. 0.98)." },
           temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if stated anywhere for this item (directly, or via a section header covering it) — Unknown only if genuinely never stated." },
           delivered: { type: "boolean", description: "true only if this specific price is explicitly stated as Delivered/landed (freight already included) — e.g. a second price column labeled Delivered, or the word 'Delivered' near this price. false for FOB or when nothing is said about freight." },
@@ -84,6 +84,7 @@ Rules for "items" (priced products):
 - If the SAME product name appears twice with two different prices (e.g. once under a "Fresh" section and once under a "Frozen" section), extract BOTH as separate items — never merge or drop one.
 - A price stated with a formula instead of a number (e.g. "DPS*1.2+0.12") is not extractable — skip it, do not guess a numeric value.
 - A line that only says "Call for availability", "N/A", "Check with X", or similar with no real number is not extractable — skip it.
+- A month name, a "Week of X" note, or a date range (e.g. "OCT", "SEPT/OCT", "Week of 10/5") next to an item just says when that price is good for — it is never part of the product's own name. Extract the item and price normally but leave that qualifier out of "name" entirely; it changes every list and would otherwise make the same real product look like a different one each time.
 - If a whole table/list has no per-item temperature stated anywhere (no Fresh/Frozen section headers, no per-item word), leave temperature null for all of them rather than guessing.
 - Never invent a product that isn't actually named in the text.
 - Real, confirmed shape: a short reply to a one-product price request. The email may quote an

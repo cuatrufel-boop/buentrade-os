@@ -355,6 +355,21 @@ Deno.serve(async (req) => {
       const emailMatch = fromHeader.match(/<([^>]+)>/);
       const fromEmail = (emailMatch ? emailMatch[1] : fromHeader).trim().toLowerCase();
 
+      // CRITICAL bug found live 2026-09-14, running on the real */15min cron: the internal-sender
+      // Subject fallback just below (added earlier the same day) let this poller match its OWN
+      // auto-generated "X prices you were waiting on just came in" notification email (built at the
+      // bottom of this same function, subject literally "{plant.name} — N prices...") as if it were
+      // a genuine new price submission — the plant's name IS the notification's own subject prefix.
+      // That created a real, live, self-perpetuating loop: apply → notify → notify email re-read as
+      // a submission → re-apply → notify again, unbounded, firing again every 15 minutes forever
+      // until this was caught. Any email whose subject contains this exact, only-ever-generated-by-
+      // us phrase is never a real submission — skip it before any plant matching runs at all.
+      if (subject.includes("prices you were waiting on just came in") || subject.includes("price you were waiting on just came in")) {
+        await sql`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
+        results.push({ id: m.id, skipped: "self_notification_email" });
+        continue;
+      }
+
       let [plant] = await sql`select id, name, docs_included from plants where lower(email) = ${fromEmail}`;
       // Real ask 2026-09-14: "debe reconocer el correo de cada planta pero tambien el correo si lo
       // mandamos nosotros" — a plant's own price list arrives with their real email as sender, matched
