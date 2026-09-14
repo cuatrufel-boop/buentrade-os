@@ -355,7 +355,29 @@ Deno.serve(async (req) => {
       const emailMatch = fromHeader.match(/<([^>]+)>/);
       const fromEmail = (emailMatch ? emailMatch[1] : fromHeader).trim().toLowerCase();
 
-      const [plant] = await sql`select id, name, docs_included from plants where lower(email) = ${fromEmail}`;
+      let [plant] = await sql`select id, name, docs_included from plants where lower(email) = ${fromEmail}`;
+      // Real ask 2026-09-14: "debe reconocer el correo de cada planta pero tambien el correo si lo
+      // mandamos nosotros" — a plant's own price list arrives with their real email as sender, matched
+      // above. But a price the trader received by WhatsApp/phone and forwards into this SAME inbox
+      // (purchasing@buentradegroup.com, already the one real dedicated pricing address, no new inbox
+      // needed) arrives as a self-send — the sender is BuenTrade's own address, never a plant's, so the
+      // match above always misses. Fallback: when the sender is internal, resolve the plant by name
+      // in the Subject instead — the trader's own real discipline (always name the plant in Subject
+      // when forwarding), not a guess from body content, so it can never cross-match the wrong plant.
+      if (!plant && fromEmail.endsWith("@buentradegroup.com")) {
+        const allPlants = await sql`select id, name, docs_included from plants`;
+        // Real ask 2026-09-14: "no prenda todos los sensores que reconozca solo tyson" — matching
+        // the full plant name ("tyson foods") was too strict for how a trader actually types a
+        // quick subject ("tyson"). Matches on the plant's own first real word instead (its most
+        // distinctive part — "Tyson", "Seaboard", "Smithfield") in either direction: subject
+        // contains it, or it contains the subject — still real plant identity, not a guess from
+        // unrelated body content.
+        const subjectLower = subject.toLowerCase().trim();
+        plant = allPlants.find((p: { name: string }) => {
+          const firstWord = (p.name || "").trim().toLowerCase().split(/\s+/)[0];
+          return firstWord && firstWord.length >= 3 && (subjectLower.includes(firstWord) || firstWord.includes(subjectLower));
+        });
+      }
       if (!plant) {
         await sql`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
         results.push({ id: m.id, skipped: "no_matching_plant", from: fromEmail });
