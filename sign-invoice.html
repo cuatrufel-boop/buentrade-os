@@ -136,6 +136,11 @@
         <button type="button" class="clear-link" onclick="clearSignature()">Borrar</button>
       </div>
 
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-top:16px;font-size:13px;line-height:1.4;cursor:pointer;">
+        <input type="checkbox" id="consentCheck" style="margin-top:2px;flex-shrink:0;">
+        <span>Confirmo que recibí la mercancía descrita en esta factura y acepto el saldo y la fecha de vencimiento indicados.</span>
+      </label>
+
       <button type="button" class="btn-sign" id="signBtn" onclick="submitSignature()" style="margin-top:18px;">Firmar y Confirmar Recepción</button>
       <p class="msg" id="submitMsg"></p>
     </div>
@@ -238,6 +243,33 @@ async function uploadOrderPdf(doc, filename){
   const { error } = await storageClient.storage.from('order-documents').upload(filename, blob, { upsert: true, contentType: 'application/pdf' });
   if (error) throw error;
   return storageClient.storage.from('order-documents').getPublicUrl(filename).data.publicUrl;
+}
+
+// Real ask 2026-09-14: "busca la mejor forma... como lo hacen las grandes empresas" — a standalone
+// "Certificate of Signature" page, same idea as DocuSign's Certificate of Completion: a plain,
+// legible record of the signature EVENT itself (who, when, from where, what they agreed to, and
+// the hash of the exact invoice file they signed) — separate from the invoice document so it can
+// be handed to anyone (legal, the customer, an auditor) without needing to re-derive this from
+// raw DB columns.
+function buildSignatureCertificatePdf(orderNumber, signedByName, signedAtDate, ip, userAgent, pdfHash, consentText){
+  const doc = pdfDoc();
+  pdfHeader(doc, 'Certificate of Signature', orderNumber, CONTACT_EMAIL_SO);
+  // pdfKeyValueRows prints each value on one line with no wrap — a full user-agent string runs
+  // well past the page's right margin there, so it's truncated to a legible length here instead.
+  const shortUserAgent = userAgent ? (userAgent.length > 70 ? userAgent.slice(0, 70) + '…' : userAgent) : 'Not captured';
+  const y = pdfKeyValueRows(doc, 40, 168, [
+    ['Signed by', signedByName],
+    ['Date & time', signedAtDate],
+    ['IP address', ip || 'Not captured'],
+    ['Device / browser', shortUserAgent],
+    ['Document hash (SHA-256)', pdfHash],
+  ]);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text('CONSENT STATEMENT', 40, y + 24);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(15, 31, 51);
+  doc.text(doc.splitTextToSize(consentText, 532), 40, y + 42);
+  pdfFooter(doc, 'en');
+  return doc;
 }
 
 function buildInvoicePdf(composed, so, customer, signatureDataUrl, signedByName, orderNumber){
@@ -360,6 +392,28 @@ async function init(){
     return;
   }
   const { document: composed, so, customer } = result;
+
+  // Real ask 2026-09-14: "como lo hacen las grandes empresas" — the "someone actually opened this
+  // link" audit event, same idea as an email read-receipt. Also the real expiry/already-signed
+  // check the trader-facing gates already rely on, straight from the shipment row — unlike the
+  // best-effort tracking write itself, THIS result decides whether the form even shows.
+  try {
+    const openRes = await callApi('orders-invoice-signature', { action: 'track_open', order_number: orderNumber, token });
+    if (openRes.already_signed){ showState('alreadySignedState'); return; }
+  } catch (e) {
+    if (e.data && e.data.error === 'link_expired'){
+      document.getElementById('errorText').textContent = 'Este link de firma ya venció. Contacta a tu representante de BuenTrade para que te envíe uno nuevo.';
+      showState('errorState');
+      return;
+    }
+    if (e.data && e.data.error === 'invalid_token'){
+      document.getElementById('errorText').textContent = 'Este link ya no es válido. Contacta a tu representante de BuenTrade.';
+      showState('errorState');
+      return;
+    }
+    // Any other failure here (network blip, etc.) must never block a real signature — fall through.
+  }
+
   pageState = { orderNumber, token, composed, so, customer };
 
   const pricePerLb = composed.linea.precio || 0;
@@ -378,11 +432,26 @@ async function init(){
   initSignatureCanvas();
 }
 
+// Real ask 2026-09-14: "como lo hacen las grandes empresas" — a SHA-256 hash of the actual signed
+// PDF bytes, computed client-side right after the file is built, so it's provable later whether
+// the file retained in storage still matches what was really signed (same tamper-evidence idea
+// DocuSign/Adobe Sign use). Web Crypto is available in every real browser this page runs in.
+async function sha256Hex(blob){
+  const buf = await blob.arrayBuffer();
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf), b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function submitSignature(){
   if (!pageState) return;
   const name = document.getElementById('signerName').value.trim();
   if (!name){ document.getElementById('submitMsg').textContent = 'Por favor escribe tu nombre.'; document.getElementById('submitMsg').className = 'msg error'; return; }
   if (!sigHasStroke){ document.getElementById('submitMsg').textContent = 'Por favor firma antes de continuar.'; document.getElementById('submitMsg').className = 'msg error'; return; }
+  if (!document.getElementById('consentCheck').checked){
+    document.getElementById('submitMsg').textContent = 'Debes confirmar que recibiste la mercancía antes de firmar.';
+    document.getElementById('submitMsg').className = 'msg error';
+    return;
+  }
 
   const btn = document.getElementById('signBtn');
   btn.disabled = true;
@@ -393,14 +462,38 @@ async function submitSignature(){
     const signatureDataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
     const { composed, so, customer, orderNumber, token } = pageState;
     const { doc } = buildInvoicePdf(composed, so, customer, signatureDataUrl, name, orderNumber);
+    const pdfBlob = doc.output('blob');
+    const pdfHash = await sha256Hex(pdfBlob);
     const invoiceUrl = await uploadOrderPdf(doc, `INV-${orderNumber}.pdf`);
 
-    const redeemRes = await callApi('orders-invoice-signature', { action: 'redeem', order_number: orderNumber, token, invoice_url: invoiceUrl, signed_by_name: name });
+    const redeemRes = await callApi('orders-invoice-signature', {
+      action: 'redeem', order_number: orderNumber, token, invoice_url: invoiceUrl, signed_by_name: name,
+      consent_confirmed: true, pdf_hash: pdfHash,
+    });
     if (redeemRes.already_signed){ showState('alreadySignedState'); return; }
+
+    // Best-effort — the certificate is a nice-to-have record of the event, the signature itself
+    // (redeemRes above) is what actually matters and must never be blocked by this failing.
+    try {
+      const sh = redeemRes.shipment;
+      const consentText = 'By signing, I confirm receipt of the merchandise described in this invoice and accept the outstanding balance and payment due date indicated.';
+      const certDoc = buildSignatureCertificatePdf(
+        orderNumber, name, new Date(sh.invoice_signed_at).toLocaleString('en-US'),
+        sh.invoice_signed_ip, sh.invoice_signed_user_agent, pdfHash, consentText,
+      );
+      const certUrl = await uploadOrderPdf(certDoc, `CERT-${orderNumber}.pdf`);
+      await callApi('orders-invoice-signature', { action: 'save_certificate_url', order_number: orderNumber, token, certificate_url: certUrl });
+    } catch (e) { /* certificate is supplementary — never blocks the real signature above */ }
+
     showState('successState');
   } catch (e) {
     if (e.data && e.data.error === 'invalid_token'){
       document.getElementById('errorText').textContent = 'Este link ya no es válido. Contacta a tu representante de BuenTrade.';
+      showState('errorState');
+      return;
+    }
+    if (e.data && e.data.error === 'link_expired'){
+      document.getElementById('errorText').textContent = 'Este link de firma ya venció. Contacta a tu representante de BuenTrade para que te envíe uno nuevo.';
       showState('errorState');
       return;
     }
