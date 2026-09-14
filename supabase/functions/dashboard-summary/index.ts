@@ -107,22 +107,26 @@ Deno.serve(async (req) => {
     // populated today — this falls back to the quoted sent_offers.weight the same way
     // collections-search/orders.html already do, so "by quantity" is honest about ranking mostly
     // quoted weight right now, not always the true delivered weight.
+    // Full catalog name+spec, never the bare short cut name (feedback-full-names-full-consecutives-
+    // always) — product_spec carries that full text the same way the Best Orders table above
+    // already prefers it (r.product_spec || r.product_name); only falls back to product_name when
+    // an older row never had a spec captured.
     const topProductsByRevenue = await sql`
-      select o.product_name, count(*)::int as order_count, coalesce(sum(sh.sale_amount), 0) as total_sales
+      select coalesce(o.product_spec, o.product_name) as product_name, count(*)::int as order_count, coalesce(sum(sh.sale_amount), 0) as total_sales
       from shipments sh join sent_offers o on o.id = sh.sent_offer_id
       where o.product_name is not null
-      group by o.product_name
+      group by coalesce(o.product_spec, o.product_name)
       order by total_sales desc
       limit 5
     `;
     const topProductsByQuantity = await sql`
-      select o.product_name, count(*)::int as order_count,
+      select coalesce(o.product_spec, o.product_name) as product_name, count(*)::int as order_count,
         coalesce(sum(coalesce(nullif(so2.real_weight, 0), o.weight, 0)), 0) as total_weight
       from shipments sh
       join sent_offers o on o.id = sh.sent_offer_id
       left join sales_orders so2 on so2.order_number = sh.order_number
       where o.product_name is not null
-      group by o.product_name
+      group by coalesce(o.product_spec, o.product_name)
       order by total_weight desc
       limit 5
     `;
