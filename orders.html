@@ -2969,7 +2969,8 @@ async function sharePO(orderNumber){
     // second "También por WhatsApp" duplicating it — passing no waInfo just hides that inner button.
     await sendEmailApi('purchasing', emails, subject, body, [pdfAttachment(built.doc, filename)], null);
     showToast('PO sent', emails.join(', '));
-    markDocSent(orderNumber, 'po');
+    await markDocSent(orderNumber, 'po');
+    await loadStatusOrders();
   } catch(e){
     if (e.cancelled) return;
     // Same fix as shareSO: reuse the real `body` (with all line-item detail) instead of a separate
@@ -3064,7 +3065,8 @@ async function shareSO(orderNumber){
   try {
     await sendEmailApi('offers', emails, subject, body, [pdfAttachment(built.doc, filename)], null);
     showToast('SO sent', emails.join(', '));
-    markDocSent(orderNumber, 'so');
+    await markDocSent(orderNumber, 'so');
+    await loadStatusOrders();
   } catch(e){
     if (e.cancelled) return;
     // Real bug found live 2026-09-07: "mal el subject, te mande el mensaje completo" — this fallback
@@ -3162,7 +3164,8 @@ async function shareFO(orderNumber){
     try {
       await sendEmailApi('logistics', emails, subject, body, [pdfAttachment(b.doc, b.filename)], null);
       showToast('FO sent', emails.join(', '));
-      markDocSent(orderNumber, 'fo');
+      await markDocSent(orderNumber, 'fo');
+      await loadStatusOrders();
     } catch(e){
       if (e.cancelled) continue;
       // Same fix as shareSO: reuse the real `body` (with all line-item detail) instead of a separate
@@ -3218,7 +3221,8 @@ async function waCardPO(orderNumber){
   // only (no email) never marked po_sent_at, so the milestone timeline stayed stuck on "wait —
   // Send the PO first" for SO forever, even though the PDF really did go out. The Email path
   // already calls this on success (see sharePO); WhatsApp needs the exact same call.
-  markDocSent(orderNumber, 'po');
+  await markDocSent(orderNumber, 'po');
+  await loadStatusOrders();
 }
 
 async function waCardSO(orderNumber){
@@ -3227,7 +3231,8 @@ async function waCardSO(orderNumber){
   const customer = built.customer;
   const phone = customer && (customer.whatsapp || customer.phone);
   shareDocAndOpenWhatsApp(built.doc, `SO-BT-${btNum(orderNumber)}.pdf`, phone, `Hola, te envié la confirmación de la orden de venta por correo. Te la adjunto también por aquí para asegurarme de que la recibiste. ¿Me confirmas, por favor? Saludos.`);
-  markDocSent(orderNumber, 'so');
+  await markDocSent(orderNumber, 'so');
+  await loadStatusOrders();
 }
 
 async function waCardFO(orderNumber){
@@ -3237,7 +3242,8 @@ async function waCardFO(orderNumber){
   if (!b){ showToast('No freight leg on this order.', '', true); return; }
   const phone = b.carrier && b.carrier.phone;
   shareDocAndOpenWhatsApp(b.doc, b.filename, phone, `FO-BT-${btNum(orderNumber)}\nHi, I sent the FO by email and I'm attaching it here as well, just to make sure you have it. Please confirm once you receive it. Thanks!`);
-  markDocSent(orderNumber, 'fo');
+  await markDocSent(orderNumber, 'fo');
+  await loadStatusOrders();
 }
 
 // Invoice can't be rebuilt from scratch on a resend — it carries the real captured signature and
@@ -3290,7 +3296,8 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
   try {
     await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], null, ccEmails);
     showToast('Factura enviada', emails.join(', '));
-    markDocSent(orderNumber, 'invoice');
+    await markDocSent(orderNumber, 'invoice');
+    await loadStatusOrders();
   } catch(e){
     if (e.cancelled) return;
     // Real bug found live 2026-09-14: "no reconoce que ya puede pasar a firma" — this used to just
@@ -3376,7 +3383,8 @@ async function shareCustoms(orderNumber){
     await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
     showToast('Documentos reenviados a aduana', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
-    markDocSent(orderNumber, 'customs');
+    await markDocSent(orderNumber, 'customs');
+    await loadStatusOrders();
   } catch(e){
     if (e.cancelled) return;
     // Real bug found live 2026-09-14: "el sistema no reconoce bien que se envio" — this used to
