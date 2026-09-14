@@ -34,14 +34,14 @@ Deno.serve(async (req) => {
     `;
 
     const overdue = await sql`
-      select sh.*, o.customer_name, o.product_name
+      select sh.*, o.customer_name, o.product_name, o.product_spec
       from shipments sh join sent_offers o on o.id = sh.sent_offer_id
       where sh.paid_at is null and sh.payment_due_date is not null and sh.payment_due_date < current_date
       order by sh.payment_due_date asc
     `;
 
     const upcomingDue = await sql`
-      select sh.*, o.customer_name, o.product_name
+      select sh.*, o.customer_name, o.product_name, o.product_spec
       from shipments sh join sent_offers o on o.id = sh.sent_offer_id
       where sh.paid_at is null and sh.payment_due_date is not null
         and sh.payment_due_date >= current_date and sh.payment_due_date <= current_date + interval '7 days'
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     // real order (see sent-offers-mark-won, which is the only thing that inserts a shipments row).
     const [{ total_sales_all_time }] = await sql`select coalesce(sum(sale_amount), 0) as total_sales_all_time from shipments`;
     const [biggestOrder] = await sql`
-      select sh.order_number, sh.sale_amount, sh.created_at, o.customer_name, o.product_name
+      select sh.order_number, sh.sale_amount, sh.created_at, o.customer_name, o.product_name, o.product_spec
       from shipments sh join sent_offers o on o.id = sh.sent_offer_id
       order by sh.sale_amount desc nulls last
       limit 1
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
     const annualRate = parseFloat(rateStr ?? "0.15");
     const marginRows = await sql`
       select sh.order_number, sh.sale_amount, sh.paid_at, sh.net_profit, sh.invoice_sent_at, sh.delivered_at, sh.created_at,
-        o.customer_name, o.product_name, o.cost_per_lb, o.total_cost, o.us_freight_amount, o.inspection_amount,
+        o.customer_name, o.product_name, o.product_spec, o.cost_per_lb, o.total_cost, o.us_freight_amount, o.inspection_amount,
         so2.real_weight,
         coalesce((select sum(amount) from order_extra_costs where order_number = sh.order_number), 0) as extra_costs_total
       from shipments sh
@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
     const topOrdersByMargin = marginRows
       .map((r: Record<string, any>) => {
         if (r.paid_at != null) {
-          return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, sale_amount: r.sale_amount, margin: Number(r.net_profit ?? 0), is_final: true };
+          return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, product_spec: r.product_spec, sale_amount: r.sale_amount, margin: Number(r.net_profit ?? 0), is_final: true };
         }
         const invoiceDate = r.invoice_sent_at ?? r.delivered_at ?? r.created_at;
         const daysSinceInvoice = invoiceDate ? Math.max(0, Math.round((now.getTime() - new Date(invoiceDate).getTime()) / 86400000)) : 0;
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
         const marginEstimate = purchaseCost != null
           ? Number(r.sale_amount) - purchaseCost - Number(r.us_freight_amount ?? 0) - Number(r.inspection_amount ?? 0) - Number(r.extra_costs_total) - interestSoFar
           : null;
-        return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, sale_amount: r.sale_amount, margin: marginEstimate, is_final: false };
+        return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, product_spec: r.product_spec, sale_amount: r.sale_amount, margin: marginEstimate, is_final: false };
       })
       .filter((r) => r.margin != null)
       .sort((a, b) => (b.margin as number) - (a.margin as number))

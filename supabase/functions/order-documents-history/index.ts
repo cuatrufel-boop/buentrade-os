@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     if (entity_type === "plant") {
       results = await sql`
         select po.order_number, 'PO' as doc_type, po.created_at, sh.po_sent_at as sent_at,
-          po.product_name, po.weight, po.total_cost as amount
+          po.product_name, po.product_spec, po.weight, po.total_cost as amount
         from purchase_orders po
         left join shipments sh on sh.order_number = po.order_number
         where po.plant_id = ${entity_id}
@@ -38,13 +38,13 @@ Deno.serve(async (req) => {
     } else if (entity_type === "customer") {
       results = await sql`
         select so.order_number, 'SO' as doc_type, so.created_at, sh.so_sent_at as sent_at,
-          so.product_name, so.weight, so.total_sale as amount
+          so.product_name, so.product_spec, so.weight, so.total_sale as amount
         from sales_orders so
         left join shipments sh on sh.order_number = so.order_number
         where so.customer_id = ${entity_id}
         union all
         select so.order_number, 'INV' as doc_type, so.created_at, sh.invoice_sent_at as sent_at,
-          so.product_name, so.weight, so.total_sale as amount
+          so.product_name, so.product_spec, so.weight, so.total_sale as amount
         from sales_orders so
         join shipments sh on sh.order_number = so.order_number
         where so.customer_id = ${entity_id} and sh.invoice_sent_at is not null
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     } else {
       results = await sql`
         select fo.order_number, 'FO' as doc_type, fo.created_at, sh.fo_sent_at as sent_at,
-          po.product_name, po.weight, fo.quoted_rate as amount
+          po.product_name, po.product_spec, po.weight, fo.quoted_rate as amount
         from freight_orders fo
         left join shipments sh on sh.order_number = fo.order_number
         left join purchase_orders po on po.order_number = fo.order_number

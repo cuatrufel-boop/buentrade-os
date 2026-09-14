@@ -22,6 +22,20 @@ const GMAIL_REFRESH_TOKEN = Deno.env.get("GMAIL_REFRESH_TOKEN")!;
 const STORAGE_API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
 const STORAGE_ROOT = "https://geqhjykbxvxugvnpnygn.supabase.co/storage/v1/object";
 
+// Real ask 2026-09-14: same as release-number-emails-poll — this used to save real documents
+// completely silently. Same sendPush shape as shipment-alerts-poll's own notify(), duplicated here
+// (Edge Functions run in isolated runtimes, no shared import).
+const API_ROOT = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/";
+const API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
+const APP_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
+async function sendPush(actor: string, title: string, body: string, orderNumber: string) {
+  await fetch(API_ROOT + "push-send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + API_KEY, apikey: API_KEY },
+    body: JSON.stringify({ actor, title, body, url: `${APP_ORIGIN}/orders.html?focus=${orderNumber}`, actions: [{ action: "open_app", title: "Abrir en BuenTrade OS", url: `${APP_ORIGIN}/orders.html?focus=${orderNumber}` }] }),
+  }).catch(() => {});
+}
+
 async function getAccessToken(): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -113,16 +127,25 @@ Deno.serve(async (req) => {
       // scheme for a single per-order consecutive ("2026-1001") shared by its PO/SO/FO/Invoice —
       // each document reads "PO-BT-2026-1001" (doc type, then BT-, then the consecutive) — a
       // plant/carrier realistically quotes back whichever document we sent them, so this matches
-      // any of the four prefixes and strips them before comparing against shipments.order_number,
-      // which stores the bare consecutive only.
+      // any of the four prefixes.
+      // Real bug found live 2026-09-14, same session as the order_number full-string migration
+      // (see project_document_numbering_format memory): shipments.order_number is now the FULL
+      // "BT-2026-1001" string (not the bare consecutive this used to strip down to) — capturing
+      // group now includes the "BT-" so it compares equal to the real stored value.
       const bodyText = extractPlainText(msgData.payload);
-      const orderMatch = (subject + " " + bodyText).match(/(?:PO|SO|FO|INV)-BT-(\d{4}-\d+)/i);
+      const orderMatch = (subject + " " + bodyText).match(/(?:PO|SO|FO|INV)-(BT-\d{4}-\d+)/i);
       const orderNumber = orderMatch ? orderMatch[1] : null;
 
       let shipmentId: string | null = null;
+      let wonBy: string | null = null;
+      let plantName: string | null = null;
       if (orderNumber) {
-        const [shipment] = await sql`select id from shipments where order_number = ${orderNumber}`;
-        if (shipment) shipmentId = shipment.id;
+        const [shipment] = await sql`
+          select sh.id, o.won_by, o.plant_name
+          from shipments sh join sent_offers o on o.id = sh.sent_offer_id
+          where sh.order_number = ${orderNumber}
+        `;
+        if (shipment) { shipmentId = shipment.id; wonBy = shipment.won_by; plantName = shipment.plant_name; }
       }
 
       let savedCount = 0;
@@ -165,6 +188,10 @@ Deno.serve(async (req) => {
         values (${m.id}, ${fromEmail}, ${subject}, ${orderNumber}, ${shipmentId !== null}, ${savedCount})
         on conflict (message_id) do nothing
       `;
+      if (savedCount > 0 && wonBy && orderNumber) {
+        await sendPush(wonBy, `Documentos de pickup recibidos — ${orderNumber} — ${plantName || ""}`,
+          `Llegaron ${savedCount} documento${savedCount === 1 ? "" : "s"} (BOL/packing list/fotos). El siguiente paso ya está listo.`, orderNumber);
+      }
       results.push({ id: m.id, source, order_number: orderNumber, shipment_matched: shipmentId !== null, attachments_saved: savedCount });
     }
 

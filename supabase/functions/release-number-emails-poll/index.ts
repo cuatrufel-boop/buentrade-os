@@ -25,6 +25,22 @@ const GMAIL_REFRESH_TOKEN = Deno.env.get("GMAIL_REFRESH_TOKEN")!;
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 const MODEL = "claude-sonnet-5";
 
+// Real ask 2026-09-14: "el sistema me lleva... incluyendo las pull que se llenan solas... y me
+// notifique" — this poller already filled release_number silently; the trader had no way to know
+// short of reopening the order themselves. Same sendPush shape as shipment-alerts-poll's own
+// notify() (same push-send endpoint, same ?focus= deep link into the guided flow's next step),
+// duplicated here rather than imported since Edge Functions each run in their own isolated runtime.
+const API_ROOT = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/";
+const API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
+const APP_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
+async function sendPush(actor: string, title: string, body: string, orderNumber: string) {
+  await fetch(API_ROOT + "push-send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + API_KEY, apikey: API_KEY },
+    body: JSON.stringify({ actor, title, body, url: `${APP_ORIGIN}/orders.html?focus=${orderNumber}`, actions: [{ action: "open_app", title: "Abrir en BuenTrade OS", url: `${APP_ORIGIN}/orders.html?focus=${orderNumber}` }] }),
+  }).catch(() => {}); // best-effort — a push failure must never break the poll loop for other messages
+}
+
 async function getAccessToken(): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -133,8 +149,13 @@ Deno.serve(async (req) => {
       // Same consecutive-order-number match as pickup-docs-emails-poll — the subject we sent was
       // literally "{order_number} — BuenTrade — Payment & Release Number", so a plain reply quotes
       // it back unchanged (still matches even without a PO-/SO-/FO- prefix).
+      // Real bug found live 2026-09-14, same session as the order_number full-string migration
+      // (see project_document_numbering_format memory): order_number is now the FULL "BT-2026-1001"
+      // string, not the bare "2026-1001" this regex used to capture — matching on the bare group
+      // would never find the shipment again (order_number = '2026-1001' never equals the real
+      // 'BT-2026-1001' row). Captures the "BT-" prefix too now.
       const bodyText = extractPlainText(msgData.payload);
-      const orderMatch = (subject + " " + bodyText).match(/(\d{4}-\d+)/);
+      const orderMatch = (subject + " " + bodyText).match(/(BT-\d{4}-\d+)/);
       const orderNumber = orderMatch ? orderMatch[1] : null;
 
       if (!orderNumber) {
@@ -143,7 +164,11 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const [shipment] = await sql`select * from shipments where order_number = ${orderNumber}`;
+      const [shipment] = await sql`
+        select sh.*, o.won_by, o.plant_name
+        from shipments sh join sent_offers o on o.id = sh.sent_offer_id
+        where sh.order_number = ${orderNumber}
+      `;
       // Conservative on purpose: only act while this shipment is actually waiting on a release
       // number (paid, none recorded yet) — never overwrite a value the trader already entered by
       // hand, and never touch a shipment that never asked for one.
@@ -168,6 +193,10 @@ Deno.serve(async (req) => {
           await writeAuditLog(tx, HMAC_SECRET, { actor: "release-number-emails-poll", action: "update", table_name: "shipments", record_id: shipment.id, before: shipment, after: updatedShipment });
         });
         updated = true;
+        if (shipment.won_by) {
+          await sendPush(shipment.won_by, `Release # recibido — ${orderNumber} — ${shipment.plant_name || ""}`,
+            `La planta respondió con el release number (${extracted.release_number}). El siguiente paso ya está listo.`, orderNumber);
+        }
       }
 
       await sql`

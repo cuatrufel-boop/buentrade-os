@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
       select
         sh.*, c.trade_name as customer_trade_name, c.credit_limit, c.payment_days,
         c.email as customer_email, c.whatsapp as customer_whatsapp, c.contact_name as customer_contact_name,
-        so_.cost_per_lb, so_.total_cost, so_.us_freight_amount, so_.inspection_amount, so_.product_name, so_.product_name_es,
+        so_.cost_per_lb, so_.total_cost, so_.us_freight_amount, so_.inspection_amount, so_.product_name, so_.product_name_es, so_.product_spec, so_.product_spec_es,
         sales.real_weight,
         coalesce((select sum(amount) from order_extra_costs where order_number = sh.order_number), 0) as extra_costs_total
       from shipments sh

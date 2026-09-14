@@ -429,7 +429,7 @@ async function callApi(fn, body){
     body: JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  if (!res.ok) { const err = new Error(data.message || data.error || res.status); err.data = data; throw err; }
   return data;
 }
 function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
@@ -800,7 +800,7 @@ function renderOffers(){
   });
   const attnHtml = (hotOffers.length || Object.keys(coldByCustomer).length) ? `
     <div class="attn-strip">
-      ${hotOffers.map(o => `<button type="button" class="attn-pill hot" onclick="jumpToCustomer('${escapeHtml(o.customer_name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${escapeHtml(o.customer_name)}</b> — bid in on ${escapeHtml(o.product_name)}</button>`).join('')}
+      ${hotOffers.map(o => `<button type="button" class="attn-pill hot" onclick="jumpToCustomer('${escapeHtml(o.customer_name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${escapeHtml(o.customer_name)}</b> — bid in on ${escapeHtml([o.product_name, o.product_spec].filter(Boolean).join(' — '))}</button>`).join('')}
       ${Object.entries(coldByCustomer).map(([name, rows]) => {
         const maxDays = Math.max(...rows.map(o => offerAgeDays(o.sent_at) || 0));
         return `<button type="button" class="attn-pill cold" onclick="jumpToCustomer('${escapeHtml(name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${rows.length} offer${rows.length === 1 ? '' : 's'}</b> to ${escapeHtml(name)} — ${maxDays}d with no reply</button>`;
@@ -825,7 +825,7 @@ function renderOffers(){
       ? `<button class="row-menu-btn" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`
       : '';
     return `<tr>
-        <td>${escapeHtml(o.product_name || '—')}</td>
+        <td>${escapeHtml([o.product_name, o.product_spec].filter(Boolean).join(' — ') || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
         <td class="num">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</td>
         <td>${statusTag}</td>
@@ -869,7 +869,7 @@ function renderOffers(){
     const purchaseHtml = `<span${purchaseCls}>$${(o.purchase_price || 0).toFixed(4)}</span>`;
     const saleHtml = `<span${saleCls}>$${(o.sale_per_lb || 0).toFixed(4)}</span>`;
     return `<tr>
-        <td>${escapeHtml(o.product_name || '—')}</td>
+        <td>${escapeHtml([o.product_name, o.product_spec].filter(Boolean).join(' — ') || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
         <td class="num price-link" onclick="openNegotiationView('${o.id}')" title="Open negotiation">${purchaseHtml} → ${saleHtml}</td>
         <td>${statusHtml}</td>
@@ -990,7 +990,7 @@ function toggleTT(id){
   ttOpenId = id;
   const o = offers.find(x => x.id === id);
   document.getElementById('ttOverlayTitle').textContent = o
-    ? `${o.product_name || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : 'Negotiate';
+    ? `${[o.product_name, o.product_spec].filter(Boolean).join(' — ') || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : 'Negotiate';
   const plant = o && o.plant_id ? offerPlantsById[o.plant_id] : null;
   const logo = plant && (plant.logo_url || plant.logo_url_dark);
   const logoEl = document.getElementById('ttOverlayLogo');
@@ -1051,7 +1051,7 @@ function openNegotiationView(offerId){
     { to: 'customer_original', price: o.sale_per_lb, at: o.sent_at },
     ...(o.negotiation_log || []),
   ];
-  document.getElementById('negoViewTitle').textContent = `${o.product_name || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}`;
+  document.getElementById('negoViewTitle').textContent = `${[o.product_name, o.product_spec].filter(Boolean).join(' — ') || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}`;
   document.getElementById('negoViewChart').innerHTML = negoViewSparklineSvg(steps);
   document.getElementById('negoViewLog').innerHTML = steps.map(e => {
     const meta = NEGO_STEP_META[e.to] || { dir: 'out', label: () => e.to };
@@ -1111,7 +1111,7 @@ async function markWon(id, overrideCreditCheck, confirmedDeliveryDate){
   const o = offers.find(x => x.id === id);
   if (!o) return;
   if (!overrideCreditCheck){
-    const ok = await showConfirm('Create Order?', `${o.product_name} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
+    const ok = await showConfirm('Create Order?', `${[o.product_name, o.product_spec].filter(Boolean).join(' — ')} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
     if (!ok) return;
   }
   // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — asked fresh
@@ -1817,7 +1817,7 @@ async function sharePO(orderNumber){
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
   const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
-  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
+  const body = `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
@@ -1836,7 +1836,7 @@ async function sharePO(orderNumber){
     // one place the trader still has to attach it themselves — the API path above always sends
     // the real PDF when it works.
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} here:\n${url}`));
+      gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} here:\n${url}`));
   }
 }
 
@@ -1930,7 +1930,7 @@ async function shareSO(orderNumber){
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
   const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
@@ -1943,7 +1943,7 @@ async function shareSO(orderNumber){
   } catch(e){
     if (e.cancelled) return;
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}:\n${url}`));
+      gmailFallbackLinkHtml(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}:\n${url}`));
   }
 }
 
@@ -2035,7 +2035,7 @@ async function shareFO(orderNumber){
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
+    const body = `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -2049,7 +2049,7 @@ async function shareFO(orderNumber){
       // "was this still counted as the same user gesture," so every leg in the batch works the
       // same, not just the first one.
       showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-        gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} here:\n${url}`));
+        gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} here:\n${url}`));
     }
   }
 }
@@ -2090,11 +2090,11 @@ async function shareCustoms(orderNumber){
   if (!attachments.length){ await btAlert('No se pudieron cargar los documentos recibidos.'); return; }
 
   const customerName = shipment && shipment.customer_name || '';
-  const subject = `${customerName} — BT-${orderNumber} — BuenTrade`;
-  const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${orderNumber}.\n\n`
+  const subject = `${customerName} — BT-${btNum(orderNumber)} — BuenTrade`;
+  const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${btNum(orderNumber)}.\n\n`
     + `Please confirm receipt of the documents and that you have everything needed on your end for the shipment. We will proceed accordingly.\n\nThank you,`;
   const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
-  const waMessageCustoms = `Orden ${orderNumber}\nHi BT-${orderNumber}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
+  const waMessageCustoms = `Orden BT-${btNum(orderNumber)}\nHi BT-${btNum(orderNumber)}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
   try {
     await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
     showToast('Documentos reenviados a aduana', emails.join(', '));

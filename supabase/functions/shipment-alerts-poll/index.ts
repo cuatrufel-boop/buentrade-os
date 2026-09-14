@@ -30,6 +30,21 @@ const APP_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
 function appLink(orderNumber: string): string {
   return `${APP_ORIGIN}/orders.html?focus=${orderNumber}`;
 }
+// Same helper every frontend PO/SO/FO/Invoice builder already uses (orders.html/offers.html/
+// trading-tool.html) — see project_document_numbering_format memory: a legacy order_number
+// ("BT-0018") already carries its own "BT-" prefix, so wrapping it again would double it
+// ("BT-BT-0018"); a new-format one ("2026-1005") has none yet, so this adds it. Kept in sync
+// manually since this runs in a different runtime (Edge Function, not the browser).
+function btNum(orderNumber: string): string {
+  return String(orderNumber || "").replace(/^BT-/, "");
+}
+// Real bug found live 2026-09-14 (real Gmail screenshot): every alert here showed the short
+// sent_offers.product_name ("Bellies #2") instead of the full catalog name + spec shown
+// everywhere else in the app — same fix as orders.html's fullProductLabel, this is the Edge
+// Function equivalent. sent_offers already carries product_spec directly (no extra join needed).
+function fullProductLabel(sh: { product_name?: string; product_spec?: string }): string {
+  return [sh.product_name, sh.product_spec].filter(Boolean).join(" — ");
+}
 
 // Same fixed rule as offers.html's computeBorderArrivalDate — ship date + 2 calendar days, weekend
 // rolls to Monday. Kept in sync manually since this runs in a different runtime (Edge Function,
@@ -125,7 +140,7 @@ Deno.serve(async (req) => {
   try {
     const gmailToken = await getGmailAccessToken();
     const shipments = await sql`
-      select sh.*, o.won_by, o.product_name, o.plant_name,
+      select sh.*, o.won_by, o.product_name, o.product_spec, o.plant_name,
         (select po.delivery_dates->>0 from purchase_orders po where po.order_number = sh.order_number limit 1) as pickup_date,
         (select po.docs_on from purchase_orders po where po.order_number = sh.order_number limit 1) as docs_on,
         pl.whatsapp as plant_whatsapp, pl.phone as plant_phone, pl.email as plant_email,
@@ -152,8 +167,8 @@ Deno.serve(async (req) => {
         const daysUntil = Math.round((pickup.getTime() - today.getTime()) / 86400000);
 
         if (daysUntil < 0 && !sh.missed_pickup_alert_sent_at) {
-          await notify(gmailToken, sh.won_by, `⚠ Missed pickup — ${sh.order_number} — ${sh.plant_name}`,
-            `${sh.product_name} — ${sh.plant_name}. Pickup date (${sh.pickup_date}) already passed and this load is still pending_pickup. Confirm with plant and carrier now.`,
+          await notify(gmailToken, sh.won_by, `⚠ Missed pickup — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+            `${fullProductLabel(sh)} — ${sh.plant_name}. Pickup date (${sh.pickup_date}) already passed and this load is still pending_pickup. Confirm with plant and carrier now.`,
             sh.order_number);
           await sql`update shipments set missed_pickup_alert_sent_at = now() where id = ${sh.id}`;
           alertsSent++;
@@ -172,8 +187,8 @@ Deno.serve(async (req) => {
           // plant-payment reminder below). This alert stays scoped to pickup-day logistics only.
           // Real ask 2026-09-06: "cada notificacion debe dar los datos explicitos de la accion" —
           // the trader-facing text names the exact date and the exact carrier, not just "tomorrow."
-          await notify(gmailToken, sh.won_by, `Pickup tomorrow (${sh.pickup_date}) — ${sh.order_number} — ${sh.plant_name}`,
-            `${sh.product_name} — ${sh.plant_name}. Pickup scheduled for ${sh.pickup_date}${sh.carrier_name ? ` with ${sh.carrier_name}` : ""}. Confirm with plant and carrier that everything is ready.`,
+          await notify(gmailToken, sh.won_by, `Pickup tomorrow (${sh.pickup_date}) — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+            `${fullProductLabel(sh)} — ${sh.plant_name}. Pickup scheduled for ${sh.pickup_date}${sh.carrier_name ? ` with ${sh.carrier_name}` : ""}. Confirm with plant and carrier that everything is ready.`,
             sh.order_number);
           await sql`update shipments set pre_pickup_alert_sent_at = now() where id = ${sh.id}`;
           alertsSent++;
@@ -191,16 +206,16 @@ Deno.serve(async (req) => {
       if (sh.status === "pending_pickup" && !sh.plant_payment_alert_sent_at && !sh.plant_paid_at) {
         const daysSinceWon = (Date.now() - new Date(sh.created_at).getTime()) / 86400000;
         if (daysSinceWon >= PLANT_PAYMENT_REMINDER_DAYS_AFTER_WON) {
-          await notify(gmailToken, sh.won_by, `Pay plant — ${sh.order_number} — ${sh.plant_name}`,
-            `${sh.product_name} — ${sh.plant_name}. Pay the plant now, then confirm it in Orders — that sends the plant a real payment confirmation and unlocks asking for the release number.`,
+          await notify(gmailToken, sh.won_by, `Pay plant — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+            `${fullProductLabel(sh)} — ${sh.plant_name}. Pay the plant now, then confirm it in Orders — that sends the plant a real payment confirmation and unlocks asking for the release number.`,
             sh.order_number);
           await sql`update shipments set plant_payment_alert_sent_at = now() where id = ${sh.id}`;
           alertsSent++;
         }
       }
       if (sh.status === "pending_pickup" && sh.plant_paid_at && !sh.release_number_alert_sent_at) {
-        await notify(gmailToken, sh.won_by, `Pedir Release Number — ${sh.order_number} — ${sh.plant_name}`,
-          `${sh.product_name} — ${sh.plant_name}. Pago confirmado — pide el release number para que el transportista pueda recoger la carga.`,
+        await notify(gmailToken, sh.won_by, `Pedir Release Number — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+          `${fullProductLabel(sh)} — ${sh.plant_name}. Pago confirmado — pide el release number para que el transportista pueda recoger la carga.`,
           sh.order_number);
         await sql`update shipments set release_number_alert_sent_at = now() where id = ${sh.id}`;
         alertsSent++;
@@ -217,8 +232,8 @@ Deno.serve(async (req) => {
             ? "label photos, Bill of Lading, packing list, and USDA papers"
             : "label photos, Bill of Lading, and packing list";
 
-          await notify(gmailToken, sh.won_by, `Pickup documents needed — ${sh.order_number} — ${sh.plant_name}`,
-            `${sh.product_name} — ${sh.plant_name}. Ask the plant and carrier for: ${docsLine}. These get forwarded to the customs agency.`,
+          await notify(gmailToken, sh.won_by, `Pickup documents needed — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+            `${fullProductLabel(sh)} — ${sh.plant_name}. Ask the plant and carrier for: ${docsLine}. These get forwarded to the customs agency.`,
             sh.order_number);
           await sql`update shipments set pickup_docs_alert_sent_at = now() where id = ${sh.id}`;
           alertsSent++;
@@ -241,8 +256,8 @@ Deno.serve(async (req) => {
         const fromDate = sh.picked_up_at ? new Date(sh.picked_up_at).toISOString().slice(0, 10) : sh.pickup_date;
         const expected = fromDate ? computeBorderArrivalDate(fromDate) : null;
         if (expected && new Date(expected + "T00:00:00") < today) {
-          await notify(gmailToken, sh.won_by, `⚠ Debería haber llegado a la frontera — ${sh.order_number} — ${sh.plant_name}`,
-            `${sh.product_name} — ${sh.plant_name}. Se esperaba en la frontera (entrega a aduana US) el ${expected} y no hay actualización.`,
+          await notify(gmailToken, sh.won_by, `⚠ Debería haber llegado a la frontera — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+            `${fullProductLabel(sh)} — ${sh.plant_name}. Se esperaba en la frontera (entrega a aduana US) el ${expected} y no hay actualización.`,
             sh.order_number);
           await sql`update shipments set border_overdue_alert_sent_at = now() where id = ${sh.id}`;
           alertsSent++;
@@ -260,8 +275,8 @@ Deno.serve(async (req) => {
       if ((sh.pending_docs_count || 0) > 0) {
         const lastSent = sh.docs_ready_alert_sent_at ? new Date(sh.docs_ready_alert_sent_at).getTime() : 0;
         if (Date.now() - lastSent > 60 * 60 * 1000) {
-          await notify(gmailToken, sh.won_by, `📎 Docs listos para aduana — ${sh.order_number} — ${sh.plant_name}`,
-            `${sh.product_name} — ${sh.plant_name}. ${sh.pending_docs_count} documento(s) de recogida recibido(s) — todavía sin enviar a la agencia aduanal.`,
+          await notify(gmailToken, sh.won_by, `📎 Docs listos para aduana — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
+            `${fullProductLabel(sh)} — ${sh.plant_name}. ${sh.pending_docs_count} documento(s) de recogida recibido(s) — todavía sin enviar a la agencia aduanal.`,
             sh.order_number);
           await sql`update shipments set docs_ready_alert_sent_at = now() where id = ${sh.id}`;
           alertsSent++;

@@ -40,26 +40,42 @@ function bcEnsureEmailModal(){
       <label>Attachments</label>
       <div class="email-modal-attachments" id="emailModalAttachments"></div>
     </div>
+    <div class="email-modal-field" id="emailModalSentWrap" style="display:none;">
+      <div style="display:flex;align-items:center;gap:8px;color:#3DDC97;font-weight:700;font-size:13.5px;">✓ Email sent</div>
+    </div>
     <div class="email-modal-field" id="emailModalWaWrap" style="display:none;">
       <label>WhatsApp — <span id="emailModalWaPhone"></span></label>
       <textarea id="emailModalWaBody" autocomplete="off"></textarea>
     </div>
+    <div id="emailModalErr" style="display:none;color:#FF9C8A;font-size:12.5px;margin-top:4px;"></div>
     <div class="email-modal-actions">
-      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:var(--card);color:#3DDC97;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 También por WhatsApp</button>
-      <button onclick="emailModalCancel()" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
-      <button onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
+      <button id="emailModalWaBtn" onclick="emailModalSendWhatsApp()" style="display:none;background:var(--card);color:#3DDC97;border:1.5px solid #1DA851;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;margin-right:auto;">💬 Also send via WhatsApp</button>
+      <button id="emailModalCancelBtn" onclick="emailModalCancel()" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button id="emailModalSendBtn" onclick="emailModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Send</button>
+      <button id="emailModalDoneBtn" onclick="emailModalDone()" style="display:none;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Done</button>
     </div>
   </div>
 </div>`;
   document.body.appendChild(wrap.firstElementChild);
 }
 
-// opts: { to, cc, subject, text, attachments, fromDisplay, waInfo, title }
+// opts: { fromAlias, to, cc, subject, text, attachments, fromDisplay, waInfo, title }
 // to/cc may be an array or a comma-joined string either way — always normalized to a display
-// string for the input, and always re-split back into an array by the caller on confirm.
-// Resolves { to, cc, subject, text } (edited) on Send, or null on Cancel.
+// string for the input, and re-split back into an array before the real send.
+// Real ask 2026-09-14: "deberia primero enviar correo, confirmar que envio correo y despues dar
+// la opcion de enviar whatsapp... como esta es confuso y no tiene un flujo" — the WhatsApp box and
+// its button used to sit right next to Send, both visible before anything was actually sent, so
+// clicking Send looked like it silently ignored WhatsApp. The real send now happens INSIDE this
+// modal (moved here from bcSendEmailApi) so it can walk through real states: compose → Sending… →
+// either an inline error (stays open, edit and retry) or Email sent ✓ (WhatsApp box/button appear
+// only now, as the next optional step, with a Done button to close without it). Resolves
+// { cancelled: true } | { sent: true, result } | { failed: true, error } — bcSendEmailApi below
+// unwraps this into the same throw/return contract every caller already had, so none of the ~50
+// real call sites (or their own catch-block Gmail-fallback logic) change at all.
+let bcEmailModalOpts = null;
 function bcOpenEmailModal(opts){
   opts = opts || {};
+  bcEmailModalOpts = opts;
   bcEnsureEmailModal();
   const joinList = (v) => Array.isArray(v) ? v.join(', ') : (v || '');
 
@@ -71,6 +87,7 @@ function bcOpenEmailModal(opts){
   document.getElementById('emailModalCc').value = joinList(opts.cc);
   document.getElementById('emailModalSubject').value = opts.subject || '';
   document.getElementById('emailModalBody').value = opts.text || '';
+  ['emailModalTo', 'emailModalCc', 'emailModalSubject', 'emailModalBody'].forEach(id => document.getElementById(id).disabled = false);
 
   const attachments = opts.attachments || [];
   const attachWrap = document.getElementById('emailModalAttachWrap');
@@ -80,14 +97,20 @@ function bcOpenEmailModal(opts){
     .join('');
 
   bcEmailModalWaInfo = (opts.waInfo && opts.waInfo.phone) ? opts.waInfo : null;
-  const waWrap = document.getElementById('emailModalWaWrap');
-  const waBtn = document.getElementById('emailModalWaBtn');
-  waWrap.style.display = bcEmailModalWaInfo ? '' : 'none';
-  waBtn.style.display = bcEmailModalWaInfo ? '' : 'none';
+  document.getElementById('emailModalWaWrap').style.display = 'none';
+  document.getElementById('emailModalWaBtn').style.display = 'none';
+  document.getElementById('emailModalSentWrap').style.display = 'none';
   if (bcEmailModalWaInfo){
     document.getElementById('emailModalWaPhone').textContent = bcEmailModalWaInfo.phone;
     document.getElementById('emailModalWaBody').value = bcEmailModalWaInfo.message || '';
   }
+
+  document.getElementById('emailModalErr').style.display = 'none';
+  document.getElementById('emailModalCancelBtn').style.display = '';
+  document.getElementById('emailModalSendBtn').style.display = '';
+  document.getElementById('emailModalSendBtn').disabled = false;
+  document.getElementById('emailModalSendBtn').textContent = 'Send';
+  document.getElementById('emailModalDoneBtn').style.display = 'none';
 
   document.getElementById('emailModalOverlay').style.display = 'flex';
   return new Promise(resolve => { bcEmailModalResolve = resolve; });
@@ -95,19 +118,72 @@ function bcOpenEmailModal(opts){
 
 function emailModalCancel(){
   document.getElementById('emailModalOverlay').style.display = 'none';
-  if (bcEmailModalResolve) bcEmailModalResolve(null);
+  if (bcEmailModalResolve) bcEmailModalResolve({ cancelled: true });
   bcEmailModalResolve = null;
 }
 
-function emailModalConfirm(){
-  const result = {
-    to: document.getElementById('emailModalTo').value,
-    cc: document.getElementById('emailModalCc').value,
-    subject: document.getElementById('emailModalSubject').value,
-    text: document.getElementById('emailModalBody').value,
-  };
+// Fires the real send right here, while the modal stays open so the trader sees it actually go
+// out before WhatsApp is even offered — see the real ask quoted above bcOpenEmailModal.
+async function emailModalConfirm(){
+  const to = document.getElementById('emailModalTo').value;
+  const cc = document.getElementById('emailModalCc').value;
+  const subject = document.getElementById('emailModalSubject').value;
+  const text = document.getElementById('emailModalBody').value;
+  const finalTo = to.split(',').map(s => s.trim()).filter(Boolean);
+  const finalCc = cc.split(',').map(s => s.trim()).filter(Boolean);
+
+  document.getElementById('emailModalSendBtn').disabled = true;
+  document.getElementById('emailModalSendBtn').textContent = 'Sending…';
+  document.getElementById('emailModalCancelBtn').style.display = 'none';
+  document.getElementById('emailModalErr').style.display = 'none';
+
+  const opts = bcEmailModalOpts || {};
+  let result;
+  try {
+    const res = await fetch('/.netlify/functions/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: opts.fromAlias, to: finalTo, cc: finalCc.length ? finalCc : undefined,
+        subject, text, attachments: opts.attachments || [],
+      }),
+    });
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Send failed');
+    }
+    result = await res.json();
+  } catch (e){
+    document.getElementById('emailModalErr').textContent = e.message;
+    document.getElementById('emailModalErr').style.display = '';
+    document.getElementById('emailModalSendBtn').disabled = false;
+    document.getElementById('emailModalSendBtn').textContent = 'Send';
+    document.getElementById('emailModalCancelBtn').style.display = '';
+    return; // stays open — trader can fix and retry, or Cancel to fall back to Gmail
+  }
+
+  // Sent — lock the compose fields, show confirmation, and only now offer WhatsApp as the next
+  // optional step (or close outright when there's nothing to offer).
+  ['emailModalTo', 'emailModalCc', 'emailModalSubject', 'emailModalBody'].forEach(id => document.getElementById(id).disabled = true);
+  document.getElementById('emailModalSentWrap').style.display = '';
+  document.getElementById('emailModalSendBtn').style.display = 'none';
+  document.getElementById('emailModalDoneBtn').style.display = '';
+  if (bcEmailModalWaInfo){
+    document.getElementById('emailModalWaWrap').style.display = '';
+    document.getElementById('emailModalWaBtn').style.display = '';
+  } else {
+    document.getElementById('emailModalOverlay').style.display = 'none';
+    if (bcEmailModalResolve) bcEmailModalResolve({ sent: true, result });
+    bcEmailModalResolve = null;
+    return;
+  }
+  bcEmailModalSentResult = result;
+}
+let bcEmailModalSentResult = null;
+
+function emailModalDone(){
   document.getElementById('emailModalOverlay').style.display = 'none';
-  if (bcEmailModalResolve) bcEmailModalResolve(result);
+  if (bcEmailModalResolve) bcEmailModalResolve({ sent: true, result: bcEmailModalSentResult });
   bcEmailModalResolve = null;
 }
 
@@ -117,6 +193,7 @@ function emailModalSendWhatsApp(){
   const { phone, filename, content, contentType } = bcEmailModalWaInfo;
   if (content && typeof downloadBase64File === 'function') downloadBase64File(filename, content, contentType);
   bcConfirmWaSend(phone, message, content ? filename : null);
+  emailModalDone();
 }
 
 // Real ask 2026-09-13: "no manda atachment" — WhatsApp has no way to auto-attach a file to a
@@ -193,9 +270,10 @@ function btAlertResolve(){
 }
 
 // opts: { fromAlias, to, subject, text, attachments, waInfo, cc, fromDisplay, title }
-// The one real network call every calling file's own sendEmailApi now delegates to. Throws a
-// cancelled-flagged Error if the trader hits Cancel (same contract every caller already expects),
-// or a plain Error with the backend's message on a real send failure.
+// The real send now happens inside bcOpenEmailModal itself (see the real ask quoted there) — this
+// just unwraps its { cancelled | sent | failed } result into the same throw/return contract every
+// caller already had: a cancelled-flagged Error on Cancel, a plain Error with the backend's message
+// on a real send failure, or the backend's result object on success. No caller changes.
 async function bcSendEmailApi(opts){
   opts = opts || {};
   const attachments = opts.attachments || [];
@@ -206,30 +284,15 @@ async function bcSendEmailApi(opts){
     ? { ...opts.waInfo, filename: attachments[0].filename, content: attachments[0].content, contentType: attachments[0].contentType }
     : opts.waInfo;
 
-  const edited = await bcOpenEmailModal({
-    to: opts.to, cc: opts.cc, subject: opts.subject, text: opts.text,
+  const outcome = await bcOpenEmailModal({
+    fromAlias: opts.fromAlias, to: opts.to, cc: opts.cc, subject: opts.subject, text: opts.text,
     attachments, fromDisplay: opts.fromDisplay, waInfo: waInfoWithFile, title: opts.title,
   });
-  if (!edited){
+  if (outcome.cancelled){
     const cancelErr = new Error('Cancelled by user');
     cancelErr.cancelled = true;
     throw cancelErr;
   }
-
-  const finalTo = edited.to.split(',').map(s => s.trim()).filter(Boolean);
-  const finalCc = edited.cc.split(',').map(s => s.trim()).filter(Boolean);
-
-  const res = await fetch('/.netlify/functions/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: opts.fromAlias, to: finalTo, cc: finalCc.length ? finalCc : undefined,
-      subject: edited.subject, text: edited.text, attachments,
-    }),
-  });
-  if (!res.ok){
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Send failed');
-  }
-  return res.json();
+  if (outcome.failed) throw new Error(outcome.error);
+  return outcome.result;
 }

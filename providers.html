@@ -322,7 +322,7 @@ async function callApi(fn, body){
     body: JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  if (!res.ok) { const err = new Error(data.message || data.error || res.status); err.data = data; throw err; }
   return data;
 }
 function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
@@ -1219,7 +1219,7 @@ async function renderProviderHistory(){
   tbody.innerHTML = rows.map(r => `<tr>
     <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
     <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
-    <td class="muted">${escapeHtml(r.product_name || '—')}</td>
+    <td class="muted">${escapeHtml([r.product_name, r.product_spec].filter(Boolean).join(' — ') || '—')}</td>
     <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
     <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
     <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>

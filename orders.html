@@ -444,7 +444,7 @@ async function callApi(fn, body){
     body: JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const err = new Error(data.error || res.status); err.data = data; throw err; }
+  if (!res.ok) { const err = new Error(data.message || data.error || res.status); err.data = data; throw err; }
   return data;
 }
 function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
@@ -604,7 +604,12 @@ auth.onAuthStateChanged(user => {
   <div id="orderDetailBox">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
       <h2 id="orderDetailTitle" style="margin:0;"></h2>
-      <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft,#8a94a6);cursor:pointer;user-select:none;" title="When on, finishing one step automatically opens the next real action on this order.">
+          <input type="checkbox" id="guidedModeToggle" checked onchange="guidedModeEnabled=this.checked;">Guided
+        </label>
+        <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
+      </div>
     </div>
     <div id="orderDetailBody"></div>
   </div>
@@ -771,6 +776,46 @@ const LOAD_STAGES = [
 let statusOrders = [];
 let openOrderNumber = null; // order_number whose detail modal is currently open, if any
 
+// ============ GUIDED FLOW (real ask 2026-09-14: "el sistema me esta llevando de un paso al
+// otro y yo solo voy aprobando... incluyendo las pull que se llenan solas") ============
+// Only fires while the order's own detail modal is open — never redirects the trader away from
+// wherever they are. Two kinds of step:
+//   PUSH  — the trader generates/sends something (PO/SO/FO, Confirm PU, Sent to customs, Invoice).
+//           Only the ones that open a REVIEW modal (nothing auto-sent without a real click inside
+//           it) are auto-opened here — never an action that fires immediately on click (opening
+//           the bank tab, marking Picked up/Delivered, a bare wa.me popup) or asks the trader to
+//           assert a real-world fact happened (Pay Plant, Pick up, Delivered). Those still show as
+//           the current blinking step; the trader clicks them deliberately, on their own time.
+//   PULL  — waits on someone else (Release #, Customs docs, Signature). Never auto-fired; the
+//           order just sits in "waiting" until release-number-emails-poll/pickup-docs-emails-poll/
+//           orders-invoice-signature fill it and (once wired) push-notify the trader back to it.
+const GUIDED_AUTOOPEN_ACTIONS = {
+  'PO': o => openDocPreview('PO', o.order_number),
+  'SO': o => openDocPreview('SO', o.order_number),
+  'FO': o => openDocPreview('FO', o.order_number),
+  'Confirm PU': o => confirmPickupReadyClick(o.order_number),
+  'Sent to customs': o => shareCustoms(o.order_number),
+  'Invoice': o => openInvoiceQT(o.order_number),
+};
+let guidedModeEnabled = true; // safety valve — trader can flip this off if the auto-opening gets in the way
+let guidedFiredLabel = null; // last step label auto-opened for the currently-open order — dedup so it never re-fires on every re-render
+// Called after any re-render of the order detail modal (open or refresh) with that render's real
+// nextLabel — the exact same leftmost-pending label the Stage/Next Action badges already show, so
+// this can never point somewhere different from what the trader sees on screen.
+function maybeAutoAdvanceGuided(o, nextLabel){
+  // docSeq (below) already owns the PO->SO->FO chain right after winning a deal — never fire a
+  // second, competing auto-open while that sequence is actively running.
+  if (docSeq) return;
+  if (!guidedModeEnabled || !o || openOrderNumber !== o.order_number) return;
+  if (!nextLabel || nextLabel === guidedFiredLabel) return;
+  const action = GUIDED_AUTOOPEN_ACTIONS[nextLabel];
+  // A pull/manual step is reached — nothing to auto-open, but reset the dedup guard so if the
+  // trader later manually advances past it, the next real push step can still fire once.
+  if (!action) { guidedFiredLabel = null; return; }
+  guidedFiredLabel = nextLabel;
+  setTimeout(() => action(o), 350); // brief pause so the transition is visible, not a jarring jump-cut
+}
+
 async function loadStatusOrders(){
   const wrap = document.getElementById('statusCards');
   wrap.innerHTML = '<div class="empty">Loading…</div>';
@@ -873,18 +918,56 @@ function renderRouteTrack(o){
 // and shipped in computeAttentionItems' "Request pickup documents" item (2026-09-06) — not new
 // copy — instead of the old requestPickupDocsClick, which wrongly fired the generic
 // askFleteroWhatsApp/askPlantWhatsApp (statusCheckMessage), same bug the user just caught live.
+// Real ask 2026-09-14: "sigue con el nombre corto del producto porfavor grabalo global" — every
+// plant/carrier-facing message on this page (customs docs, pickup appointment, payment/release
+// number) used to drop in the short o.product_name ("Ham", "Bellies #2") instead of the real full
+// catalog name + spec shown everywhere else on the card ("Pork Skinless Bellies #2 Frozen, Box").
+// One shared helper now, reused by every one of those messages, instead of each building its own
+// short label — never touches the customer-facing STAGE_EMAIL_BODY_ES/STAGE_WHATSAPP_ES copy
+// (frozen, approved separately, see [[project_approved_email_whatsapp_copy_table]]).
+function fullProductLabel(o){
+  const cp = o.catalogProduct;
+  return [cp ? (cp.name_en || cp.name) : o.product_name, o.product_spec].filter(Boolean).join(' — ');
+}
 function requestCustomsDocsMessage(o){
   const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
-  return `Hi, for order ${o.order_number} — ${o.product_name || ''}, please send us: ${docsLine}. Thank you.`;
+  return `Hi, for order BT-${btNum(o.order_number)} — ${fullProductLabel(o)}, please send us: ${docsLine}. Thank you.`;
 }
+function requestCustomsDocsSubject(orderNumber){
+  return `Documents needed — Order BT-${btNum(orderNumber)}`;
+}
+// Real ask 2026-09-14: "debe abrir email primero whatsapp opcional despues de mandar email. el
+// email es mejor para que la lea el api despues" — this used to be WhatsApp-only, which the
+// plant/carrier reply can't be parsed from automatically. Rebuilt to match confirmPickupReadyClick's
+// pattern exactly: real EMAIL first (to the carrier when one's booked, else the plant, same
+// hasCarrier priority already used everywhere else on this card), WhatsApp offered as the optional
+// follow-up inside the same send modal (waInfo) — never a second separate step. Falls back to the
+// old WhatsApp-only path only when neither side has an email on file at all.
 async function requestCustomsDocsClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  const carrierPhone = o.carrier ? (o.carrier.phone || '').replace(/\D/g, '') : '';
-  const plantPhone = o.plant ? (o.plant.whatsapp || o.plant.phone || '').replace(/\D/g, '') : '';
-  const phone = carrierPhone || plantPhone;
-  if (!phone){ await btAlert('No carrier/plant phone on file to request customs documents.'); return; }
-  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(requestCustomsDocsMessage(o)), '_blank');
+  const hasCarrier = !!(o.carrier && (o.carrier.email || o.carrier.phone));
+  const toEmail = (hasCarrier && o.carrier.email) || (o.plant && o.plant.email) || null;
+  const waPhone = ((hasCarrier && o.carrier.phone) || (o.plant && (o.plant.whatsapp || o.plant.phone)) || '').replace(/\D/g, '');
+
+  if (!toEmail){
+    if (!waPhone){ await btAlert('No carrier/plant phone or email on file to request customs documents.'); return; }
+    window.open('https://wa.me/' + waPhone + '?text=' + encodeURIComponent(requestCustomsDocsMessage(o)), '_blank');
+    return;
+  }
+
+  const subject = requestCustomsDocsSubject(orderNumber);
+  const body = requestCustomsDocsMessage(o);
+  const waInfo = waPhone ? { phone: waPhone, message: requestCustomsDocsMessage(o) } : null;
+
+  try {
+    await sendEmailApi('logistics', [toEmail], subject, body, [], waInfo);
+    showToast('Customs documents requested', toEmail);
+  } catch (e) {
+    if (e.cancelled) return;
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      gmailFallbackLinkHtml([toEmail], subject, body));
+  }
 }
 // Approved copy 2026-09-12 — see project_approved_email_whatsapp_copy_table.md for the full table;
 // this is the newest entry, "Confirm Load — to Plant location (+ CC Carrier when FOB)", same
@@ -899,7 +982,11 @@ function confirmLoadEmailSubject(orderNumber, locationName){
 // request already includes it — one less thing the trader has to remember to relay separately.
 function confirmLoadEmailBody(orderNumber, productName, locationName, releaseNumber){
   const releaseLine = releaseNumber ? `\nRelease Number: ${releaseNumber}` : '';
-  return `Hi,\n\nWe'd like to schedule pick-up for Order PO-BT-${btNum(orderNumber)} (${productName || ''}) at ${locationName}. Please confirm the earliest available appointment.\n\nPO Number: PO-BT-${btNum(orderNumber)}\nOrder Number: ${orderNumber}${releaseLine}\n\nThank you,\nBuenTrade Team`;
+  // Real correction 2026-09-14: "de donde sacas order number diferente a po number es solo uno" —
+  // PO Number and Order Number were never two different identifiers, just the same order_number
+  // wrapped in two different prefixes (bare vs PO-BT-) — showing both read as two real numbers.
+  // One line now, the PO Number (the actual reference the plant/carrier should use).
+  return `Hi,\n\nWe'd like to schedule pick-up for Order PO-BT-${btNum(orderNumber)} (${productName || ''}) at ${locationName}. Please confirm the earliest available appointment.\n\nPO Number: PO-BT-${btNum(orderNumber)}${releaseLine}\n\nThank you,\nBuenTrade Team`;
 }
 
 // Real ask 2026-09-07: "antes de esa fecha [FOB] un boton confirmar con carrier o con planta de
@@ -952,7 +1039,7 @@ async function confirmPickupReadyClick(orderNumber){
 
   const locationLabel = (location && location.location_name) || o.plant_name || 'the plant';
   const subject = confirmLoadEmailSubject(orderNumber, locationLabel);
-  const body = confirmLoadEmailBody(orderNumber, o.product_name, locationLabel, o.release_number);
+  const body = confirmLoadEmailBody(orderNumber, fullProductLabel(o), locationLabel, o.release_number);
   const cc = (hasCarrier && o.carrier.email) ? [o.carrier.email] : [];
   const waInfo = waPhone ? { phone: waPhone, message: statusCheckMessage(o) } : null;
 
@@ -1037,7 +1124,7 @@ function renderMilestoneTimeline(o){
 // for every node instead of this file's own stroke-only SVG set (STEP_ICONS etc.); replicated here
 // literally, exactly as shown, rather than keeping the SVGs the mockup itself never used.
 const PIN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-async function renderUnifiedTimeline(o, attentionOrderNumbers){
+function renderUnifiedTimeline(o, attentionOrderNumbers){
   const stageIdx = LOAD_STAGES.findIndex(s => s.key === (o.load_status || 'pending_pickup'));
   const pickedUpIdx = LOAD_STAGES.findIndex(s => s.key === 'picked_up');
   const deliveredIdx = LOAD_STAGES.findIndex(s => s.key === 'delivered');
@@ -1289,14 +1376,15 @@ async function renderUnifiedTimeline(o, attentionOrderNumbers){
   // after — not a single bare text badge. Reuses this same entries/blinkIdx computation, no second
   // rule invented.
   function nextActionPreview(){
-    if (blinkIdx < 0) return '<span class="muted">All caught up</span>';
+    if (blinkIdx < 0) return '<span class="payment-badge ok">All caught up</span>';
     const slice = [];
     if (blinkIdx > 0) slice.push({ e: entries[blinkIdx - 1], state: 'done' });
     slice.push({ e: entries[blinkIdx], state: 'current' });
     if (blinkIdx < entries.length - 1) slice.push({ e: entries[blinkIdx + 1], state: 'wait' });
     const nodesHtml = slice.map((s, i) => {
       const cls = s.state === 'done' ? ' done' : s.state === 'current' ? ' current' : '';
-      const style = s.state === 'current' ? ' style="border-color:var(--amber);color:var(--amber);"' : '';
+      const currentColor = attentionOrderNumbers.has(o.order_number) ? 'var(--amber)' : 'var(--blue-bright)';
+      const style = s.state === 'current' ? ` style="border-color:${currentColor};color:${currentColor};"` : '';
       const node = `<div class="c-node${cls}"${style} title="${escapeHtml(s.e.label)}">${s.e.icon}</div>`;
       const line = i < slice.length - 1 ? `<div class="c-line${s.state === 'done' ? ' done' : ''}"></div>` : '';
       return node + line;
@@ -1314,6 +1402,7 @@ async function renderUnifiedTimeline(o, attentionOrderNumbers){
     nextLabel,
     allDone: doneSteps === totalSteps,
     pendingCount: totalSteps - doneSteps,
+    isUrgent: attentionOrderNumbers.has(o.order_number),
   };
 }
 
@@ -1326,9 +1415,9 @@ async function renderUnifiedTimeline(o, attentionOrderNumbers){
 // right next to it in the new compact table row. Reuses this file's own existing color semantics,
 // nothing invented: amber = action needed now (same as .u-mini.now), blue-bright = in progress
 // (same as .u-main.current), green = done (same as .u-main.done/.payment-badge.ok).
-function currentStageBadge(nextLabel, allDone){
+function currentStageBadge(nextLabel, allDone, isUrgent){
   const label = allDone ? 'Delivered' : nextLabel;
-  const cls = allDone ? 'ok' : 'due-soon';
+  const cls = allDone ? 'ok' : (isUrgent ? 'due-soon' : 'active');
   return `<span class="payment-badge ${cls}" style="display:inline-flex;align-items:center;gap:5px;"><svg viewBox="0 0 24 24" style="width:12px;height:12px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${PIN_ICON.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg> ${escapeHtml(label)}</span>`;
 }
 function pendingActionsBadge(n){
@@ -1401,7 +1490,7 @@ function computeAttentionItems(){
   statusOrders.forEach(o => {
     const stage = o.load_status || 'pending_pickup';
     const plantName = o.plant_name || 'plant';
-    const productName = o.product_name || '';
+    const productName = fullProductLabel(o);
     const label = `${o.order_number} — ${plantName}`;
     const plantEmail = o.plant ? (o.plant.email || '') : '';
 
@@ -1418,11 +1507,11 @@ function computeAttentionItems(){
       const daysUntil = Math.round((pickup - today) / 86400000);
       if (daysUntil < 0){
         items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)} — ${productName}`,
-          btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. This load is past its pickup date, please advise.`, `${o.order_number} — Missed pickup`) });
+          btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. This load is past its pickup date, please advise.`, `BT-${btNum(o.order_number)} — Missed pickup`) });
       } else if (daysUntil === 1){
         const carrierName = o.carrier && o.carrier.name ? ` with ${o.carrier.name}` : '';
         items.push({ orderNumber: label, order_number: o.order_number, text: `Pickup tomorrow (${fmtDateStr(o.pickup_date)})${carrierName} — confirm everything is ready — ${productName}`,
-          btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `${o.order_number} — Pickup tomorrow`) });
+          btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `BT-${btNum(o.order_number)} — Pickup tomorrow`) });
       }
     }
     // Real correction 2026-09-06: pay-the-plant and ask-for-release# are TWO separate steps, not
@@ -1440,12 +1529,12 @@ function computeAttentionItems(){
     }
     if (stage === 'pending_pickup' && o.plant_paid_at){
       items.push({ orderNumber: label, order_number: o.order_number, text: `Get the Release Number from the carrier — ${productName}`,
-        btn: pickupBtns(`Hi, following up on order ${o.order_number} — ${productName}. We've confirmed payment — please provide the release number for the carrier's pickup.`, `${o.order_number} — Release number`) });
+        btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. We've confirmed payment — please provide the release number for the carrier's pickup.`, `BT-${btNum(o.order_number)} — Release number`) });
     }
     if (stage === 'picked_up' && !(o.pending_pickup_documents && o.pending_pickup_documents.length)){
       const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
       items.push({ orderNumber: label, order_number: o.order_number, text: `Request pickup documents (${docsLine}) — ${productName}`,
-        btn: pickupBtns(`Hi, for order ${o.order_number} — ${productName}, please send us: ${docsLine}. Thank you.`, `${o.order_number} — Pickup documents needed`) });
+        btn: pickupBtns(`Hi, for order BT-${btNum(o.order_number)} — ${productName}, please send us: ${docsLine}. Thank you.`, `BT-${btNum(o.order_number)} — Pickup documents needed`) });
     }
     if (stage === 'picked_up'){
       const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
@@ -1712,15 +1801,14 @@ function renderStatusOrders(){
 }
 
 function renderOrderRow(o, attentionOrderNumbers){
-  const { nextActionHtml, nextLabel, allDone } = renderUnifiedTimeline(o, attentionOrderNumbers);
-  const cp = o.catalogProduct;
-  const productName = cp ? (cp.name_en || cp.name) : o.product_name;
+  const { nextActionHtml, nextLabel, allDone, isUrgent } = renderUnifiedTimeline(o, attentionOrderNumbers);
+  const productName = fullProductLabel(o);
   return `<tr class="order-row">
     <td class="order-num">${escapeHtml(o.order_number)}</td>
     <td>${escapeHtml(o.customer_name || '—')}</td>
     <td class="muted">${escapeHtml(productName || '—')}</td>
     <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
-    <td>${currentStageBadge(nextLabel, allDone)}</td>
+    <td>${currentStageBadge(nextLabel, allDone, isUrgent)}</td>
     <td>${nextActionHtml}</td>
     <td><button class="btn small" onclick="openOrderDetail('${o.order_number}')">View</button></td>
   </tr>`;
@@ -1729,7 +1817,7 @@ function renderOrderRow(o, attentionOrderNumbers){
 // The exact content that used to render inline for every order at once — unchanged, just extracted
 // so it can be built for one order on demand (openOrderDetail) instead of all of them always.
 function renderOrderCardBody(o, attentionOrderNumbers){
-  const { html: unifiedTimelineHtml, nextLabel, allDone, pendingCount } = renderUnifiedTimeline(o, attentionOrderNumbers);
+  const { html: unifiedTimelineHtml, nextLabel, allDone, pendingCount, isUrgent } = renderUnifiedTimeline(o, attentionOrderNumbers);
 
   const pendingDocs = o.pending_pickup_documents || [];
   const pickupDocsBtn = pendingDocs.length
@@ -1752,7 +1840,7 @@ function renderOrderCardBody(o, attentionOrderNumbers){
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-        ${currentStageBadge(nextLabel, allDone)}
+        ${currentStageBadge(nextLabel, allDone, isUrgent)}
         ${pendingActionsBadge(pendingCount)}
         ${pickupReadinessBadge(o)}
         ${paymentBadge(o)}
@@ -1777,13 +1865,16 @@ function openOrderDetail(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   openOrderNumber = orderNumber;
+  guidedFiredLabel = null; // fresh open — a step already auto-opened on a PREVIOUS visit to this order is allowed to fire again
   const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
   document.getElementById('orderDetailOverlay').style.display = 'flex';
+  maybeAutoAdvanceGuided(o, renderUnifiedTimeline(o, attentionOrderNumbers).nextLabel);
 }
 function closeOrderDetail(){
   openOrderNumber = null;
+  guidedFiredLabel = null;
   document.getElementById('orderDetailOverlay').style.display = 'none';
 }
 function refreshOpenOrderDetail(attentionOrderNumbers){
@@ -1792,6 +1883,7 @@ function refreshOpenOrderDetail(attentionOrderNumbers){
   if (!o) { closeOrderDetail(); return; }
   const attn = attentionOrderNumbers || new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attn);
+  maybeAutoAdvanceGuided(o, renderUnifiedTimeline(o, attn).nextLabel);
 }
 
 function findStatusOrder(orderNumber){
@@ -1848,12 +1940,12 @@ async function askPlantWhatsApp(orderNumber){
 // skips the notification when no STAGE_* entry exists for a status, per its own `if (bodyFn &&
 // subjFn)` guard.
 const STAGE_EMAIL_BODY_ES = {
-  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${o.product_name} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
-  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${o.product_name} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabel(o)} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabel(o)} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
 };
 const STAGE_WHATSAPP_ES = {
-  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${o.product_name} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
-  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga ${o.order_number} de ${o.product_name} fue entregada con éxito.`,
+  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${fullProductLabel(o)} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
+  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga BT-${btNum(o.order_number)} de ${fullProductLabel(o)} fue entregada con éxito.`,
 };
 const STAGE_SUBJECTS_ES = {
   picked_up: o => `${o.order_number} — Tu carga va en camino`,
@@ -1964,7 +2056,7 @@ async function confirmPlantPaymentSent(orderNumber){
   // Real ask 2026-09-14: subject renamed to "Payment & Release Number" — the body already asked
   // for the release number in this same email (see below); the subject now says so too, plainly.
   const subject = `${orderNumber} — BuenTrade — Payment & Release Number`;
-  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${o.product_name || ''}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
+  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${fullProductLabel(o)}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
   try {
     // Real ask 2026-09-14: "un solo boton de whatsapp por pantalla" — this row already has its own
     // separate WhatsApp button (confirmPlantPaymentWhatsApp) right next to Email, so the modal's
@@ -2059,7 +2151,7 @@ async function editPickupDateClick(orderNumber){
   await loadStatusOrders();
 }
 function releaseNumberMessage(o){
-  return `Hi, here's the release number for order ${o.order_number} — ${o.product_name || ''}: ${o.release_number}. Please use it for pickup. Thank you!`;
+  return `Hi, here's the release number for order BT-${btNum(o.order_number)} — ${fullProductLabel(o)}: ${o.release_number}. Please use it for pickup. Thank you!`;
 }
 async function sendReleaseNumberToCarrier(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -2860,7 +2952,7 @@ async function sharePO(orderNumber){
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
   const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
-  const body = `Hi,\n\nPlease find the Purchase Order for order ${orderNumber} attached.\n\n`
+  const body = `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
@@ -2958,7 +3050,7 @@ async function shareSO(orderNumber){
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
   const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden ${orderNumber}.\n\n`
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
@@ -3058,7 +3150,7 @@ async function shareFO(orderNumber){
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     orderDocsFileCache.delete(orderNumber);
     const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order ${orderNumber} attached.\n\n`
+    const body = `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -3270,11 +3362,11 @@ async function shareCustoms(orderNumber){
   if (!attachments.length){ await btAlert('No se pudieron cargar los documentos recibidos.'); return; }
 
   const customerName = shipment.customer_name || '';
-  const subject = `${customerName} — BT-${orderNumber} — BuenTrade`;
-  const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${orderNumber}.\n\n`
+  const subject = `${customerName} — BT-${btNum(orderNumber)} — BuenTrade`;
+  const body = `Hi,\n\nPlease find attached the documents for our customer, ${customerName}, regarding order BT-${btNum(orderNumber)}.\n\n`
     + `Please confirm receipt of the documents and that you have everything needed on your end for the shipment. We will proceed accordingly.\n\nThank you,`;
   const waPhoneCustoms = agency && (agency.whatsapp || agency.phone);
-  const waMessageCustoms = `Orden ${orderNumber}\nHi BT-${orderNumber}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
+  const waMessageCustoms = `Orden BT-${btNum(orderNumber)}\nHi BT-${btNum(orderNumber)}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
   try {
     await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
     showToast('Documentos reenviados a aduana', emails.join(', '));
