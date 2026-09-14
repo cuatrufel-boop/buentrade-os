@@ -69,6 +69,14 @@ function detectTempPackFromLine(
     const frozen = temperatures.find((t) => (t.name_en || "").toLowerCase() === "frozen");
     if (frozen) tempId = frozen.id;
   }
+  // Real ask 2026-09-14, verified against a real Tyson price list: "las offals siempre vienen
+  // congelado" — an explicit, stated business fact (not a guess), so the "Offals" section header
+  // (already folded into raw_text) resolves temperature to Frozen on its own — this section's
+  // lines rarely restate "Fresh"/"Frozen" per item the way Boxed Muscles/Green Meats do.
+  if (!tempId && wordBoundary("Offals").test(norm)) {
+    const frozen = temperatures.find((t) => (t.name_en || "").toLowerCase() === "frozen");
+    if (frozen) tempId = frozen.id;
+  }
   // VAC is the only packaging value that will ever exist in BuenTrade's catalog for vacuum-sealed
   // product — VP, CVP, COV and "Vacuum" are all plant wording for the exact same thing, never a
   // separate catalog entry (explicit, standing rule, confirmed multiple times).
@@ -100,6 +108,19 @@ function detectTempPackFromLine(
     const combo = packagings.find((p) => (p.name_en || "").toLowerCase() === "combo");
     const fresh = temperatures.find((t) => (t.name_en || "").toLowerCase() === "fresh");
     if (combo && fresh && packagingId === combo.id) tempId = fresh.id;
+  }
+
+  // Real ask 2026-09-14, verified against a real Tyson price list: "si dice fresh pero no combo es
+  // caja fresh box... frozen box puede ser frozen vac o poly... las que no dicen eso son simples
+  // cajas" — once the temperature is known (explicit word, or folded in from the section header —
+  // raw_text already has that folded in by the time this runs, see plant-price-emails-poll's
+  // currentSection fold) and the line named no other real packaging (VAC/Poly Bag/Combo, all
+  // checked above and always win as an explicit override), Box is the one safe universal default —
+  // it's the single most common packaging across the whole catalog, never guessed when temperature
+  // itself is still unknown (a line with neither could just as easily be garbage/unmatched text).
+  if (!packagingId && tempId) {
+    const box = packagings.find((p) => (p.name_en || "").toLowerCase() === "box");
+    if (box) packagingId = box.id;
   }
 
   return { tempId, packagingId };
