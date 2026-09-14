@@ -29,12 +29,18 @@ Deno.serve(async (req) => {
       // snapshot whatever's actually on screen at that moment, not the last-saved values.
       purchase_price = null, sale_per_lb = null, total_cost = null, total_sale = null,
       weight = null, us_freight_amount = null, won_idempotency_key = null,
-      // Real ask 2026-09-14: "cuando creo orden ya numeros y involucrados deben quedar fijados
-      // para continuar" — trading-tool.html's Create Order now requires the trader to confirm a
-      // real carrier (showTTCarrierConfirm) whenever the deal is FOB, instead of leaving
-      // carrier_provider_id null for Real Costs to maybe fill in later. Optional so offers.html's
-      // quick "Ganada" (no carrier picker of its own) keeps working exactly as before — the
-      // freight_order still gets created either way, just still TBD if this isn't passed.
+      // Real correction 2026-09-14: "cuando escoges el precio de flete y el nombre del carrier
+      // ese debe salir para crear la FO" — the trader already picks a real carrier + rate together
+      // in one place, the freight rate dropdown (trading-tool.html's ttPickFreightRate, which shows
+      // provider_name right next to each price) — the fix isn't a second, separate carrier picker,
+      // it's making sure THAT selection actually reaches this endpoint. Same "last-minute snapshot"
+      // reasoning as purchase_price/sale_per_lb above: the trader's live pick may never have been
+      // saved via sent_offers.negotiate before Create Order was clicked, so this overrides
+      // offer.us_freight_rate_id when passed instead of trusting a possibly-stale DB value.
+      us_freight_rate_id_override = null,
+      // Fallback only for when the dropdown resolved no real rate at all (a manual amount, or a
+      // known city with no carrier rate on file yet) — trading-tool.html's required carrier-confirm
+      // step only asks for this in that specific case, never when a real rate was already picked.
       carrier_provider_id = null,
       // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — the PU/
       // delivery date used to just be whatever sat on the offer from whenever it was quoted/priced,
@@ -151,8 +157,9 @@ Deno.serve(async (req) => {
       if (finalUsFreightAmount > 0) {
         let provider_id: string | null = carrier_provider_id, origin: string | null = offer.plant_name, destination = "Border";
         let currency = "USD", currency_id: string | null = null;
-        if (offer.us_freight_rate_id) {
-          const [rate] = await tx`select * from provider_rates where id = ${offer.us_freight_rate_id}`;
+        const effectiveRateId = us_freight_rate_id_override || offer.us_freight_rate_id;
+        if (effectiveRateId) {
+          const [rate] = await tx`select * from provider_rates where id = ${effectiveRateId}`;
           if (rate) {
             provider_id = carrier_provider_id || rate.provider_id;
             origin = rate.origin;

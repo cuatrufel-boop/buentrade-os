@@ -2495,12 +2495,16 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
     confirmedDeliveryDate = await showTTDateConfirm(isFob, (negoOffer.delivery_dates && negoOffer.delivery_dates[0]) || '');
     if (!confirmedDeliveryDate) return; // trader cancelled — nothing created
   }
-  // Real ask 2026-09-14: "cuando creo orden ya numeros y involucrados deben quedar fijados para
-  // continuar" — a FOB deal used to be able to reach FO-send with carrier_provider_id still null
-  // ("TBD — not yet booked"), only ever filled in later via Real Costs, with nothing forcing that
-  // follow-up. Same threading as confirmedDeliveryDate above — asked once, carried through the
+  // Real correction 2026-09-14: "cuando escoges el precio de flete y el nombre del carrier ese
+  // debe salir para crear la FO" — the trader already picks a real carrier together with its rate
+  // in the freight dropdown above (ttPickFreightRate, provider_name shown right next to the
+  // price) — window.__ttFreightRateId is that live pick. This required picker only ever fires as a
+  // genuine fallback: FOB with NO real rate resolved (a manual amount typed in, or a known city
+  // with no carrier rate on file) — never a second, redundant ask when a real rate was already
+  // chosen. Same threading as confirmedDeliveryDate above — asked once, carried through the
   // credit-override retry, never re-asked.
-  if (isFob && !carrierChoice){
+  const pickedRateId = window.__ttFreightRateId || null;
+  if (isFob && !pickedRateId && !carrierChoice){
     carrierChoice = await showTTCarrierConfirm(us_freight_amount);
     if (!carrierChoice) return; // trader cancelled — nothing created
   }
@@ -2527,6 +2531,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
       actor: currentActor(), sent_offer_id: negoOffer.id, override_credit_check: !!overrideCreditCheck,
       purchase_price, sale_per_lb, us_freight_amount: finalFreightAmount, total_cost, total_sale, weight,
       confirmed_delivery_date: confirmedDeliveryDate,
+      us_freight_rate_id_override: pickedRateId,
       carrier_provider_id: carrierChoice ? carrierChoice.carrier_provider_id : null,
       won_idempotency_key: wonIdempotencyKey,
     });
