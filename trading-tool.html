@@ -2454,8 +2454,12 @@ async function negoSendToPlant(channel){
 
   if (channel === 'email'){
     if (!negoPlant.email){ document.getElementById('negoMsg').textContent = 'This plant has no email on file.'; return; }
+    // Same "Also send via WhatsApp" follow-up every other module's email modal offers once the
+    // email is confirmed sent — real gap found live 2026-09-15: this call never passed waInfo, so
+    // the modal here never showed that button at all, unlike offers.html/orders.html/plants.html.
+    const plantPhone = (negoPlant.whatsapp || negoPlant.phone || '').replace(/\D/g, '');
     try {
-      await sendEmailApi('purchasing', negoPlant.email, 'Counteroffer', body);
+      await sendEmailApi('purchasing', negoPlant.email, 'Counteroffer', body, [], plantPhone ? { phone: plantPhone, message: body } : null);
     } catch(e){
       if (e.cancelled) return;
       window.open(`mailto:${negoPlant.email}?subject=${encodeURIComponent('Counteroffer')}&body=${encodeURIComponent(body)}`, '_blank');
@@ -2475,8 +2479,10 @@ async function negoSendToCustomer(channel){
   const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.`;
   if (channel === 'email'){
     if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'This customer has no email on file.'; return; }
+    // Same follow-up gap as negoSendToPlant above — waInfo was never passed here either.
+    const customerPhone = (negoCustomer.whatsapp || negoCustomer.phone || '').replace(/\D/g, '');
     try {
-      await sendEmailApi('offers', negoCustomer.email, 'Cotización', body);
+      await sendEmailApi('offers', negoCustomer.email, 'Cotización', body, [], customerPhone ? { phone: customerPhone, message: body } : null);
     } catch(e){
       if (e.cancelled) return;
       window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
