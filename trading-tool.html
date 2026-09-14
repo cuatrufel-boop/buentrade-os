@@ -737,15 +737,18 @@ if (FIREBASE_READY) {
 
     <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="display:none;height:36px;padding:0 18px;font-size:12.5px;align-items:center;gap:6px;">✓ Create Order</button>
     <!-- Real ask 2026-09-14: "pon este boton arriba del qt y con diseno buentrade" — this used to
-         live at the bottom of realCostsCard, past every cost field, as a bespoke green-gradient
-         button with its own emoji — the only button on this whole page not built from the shared
-         .wa-btn component every other real action here uses (Create Order right next to it, WhatsApp
-         Plant/Customer). Same visibility gate as realCostsCard itself (realCostsInit), so it only
-         ever appears once there's a real won order to invoice. -->
+         live at the bottom of a now-removed "realCostsCard" wrapper, past every cost field, as a
+         bespoke green-gradient button with its own emoji — the only button on this whole page not
+         built from the shared .wa-btn component every other real action here uses (Create Order
+         right next to it, WhatsApp Plant/Customer). That wrapper card is gone now too (an empty
+         rounded box was left behind once its only real content — this button — moved up here); its
+         status text (invoiceMsg) moved to right below this button instead. Shown/hidden by
+         realCostsInit, so it only ever appears once there's a real won order to invoice. -->
     <button id="createShareInvoiceBtn" class="wa-btn" onclick="createAndShareInvoice()" title="Creates and sends the customer invoice" style="display:none;height:36px;padding:0 18px;font-size:12.5px;align-items:center;gap:6px;">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       Create &amp; Share Invoice
     </button>
+    <div id="invoiceMsg" style="font-size:12px;color:var(--ink-soft);text-align:center;width:100%;"></div>
     </div>
 
 <div id="negoQbRight" style="display:none;grid-column:3;align-items:center;gap:10px;justify-self:end;">
@@ -916,16 +919,6 @@ if (FIREBASE_READY) {
       </div>
     </div>
 
-    <!-- Real correction 2026-09-07: this used to be a whole separate "Real Costs" card (freight
-         actual-rate/carrier reconciliation, a "Peso real (pedimento)" field, ad-hoc extra costs) —
-         removed, unrequested scope. Weight/freight/costs are edited directly in the Direct Costs
-         card above, same fields as always; this is just the one button the trader actually asked
-         for, reading whatever orders-compose-so returns at the moment it's clicked. -->
-    <div class="card" id="realCostsCard" style="display:none;">
-      <div class="card-body">
-        <div id="invoiceMsg" style="font-size:12px;color:var(--ink-soft);text-align:center;"></div>
-      </div>
-    </div>
 
 
 
@@ -2164,7 +2157,6 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
 }
 
 async function realCostsInit(){
-  document.getElementById('realCostsCard').style.display = 'block';
   document.getElementById('createShareInvoiceBtn').style.display = 'inline-flex';
 }
 
