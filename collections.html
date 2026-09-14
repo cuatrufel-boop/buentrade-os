@@ -368,7 +368,7 @@ function renderAging(){
 function exportAgingCsv(){
   const header = ['Order', 'Customer', 'Product', 'Invoiced', 'Due', 'Bucket', 'Days Overdue', 'Balance', 'Interest', 'Profit'];
   const rows = collData.shipments.map(s => [
-    s.order_number, s.customer_trade_name || '', (s.product_spec_es || s.product_spec || s.product_name_es || s.product_name),
+    s.order_number, s.customer_trade_name || '', (s.product_spec || s.product_spec_es || s.product_name || s.product_name_es),
     fmtDateStr(s.invoice_sent_at), fmtDateStr(s.payment_due_date),
     s.paid_at ? 'paid' : (AGING_LABEL[s.aging_bucket] || ''),
     s.days_overdue || 0, s.balance,
@@ -462,7 +462,7 @@ function renderOrders(){
     return `<tr${rowClass}>
       <td class="order-num">${escapeHtml(s.order_number)}</td>
       <td>${s.customer_id ? `<span class="cust-name" onclick="openCustomerProfile('${s.customer_id}')">${escapeHtml(s.customer_trade_name || '—')}</span>` : escapeHtml(s.customer_trade_name || '—')}</td>
-      <td class="muted">${escapeHtml((s.product_spec_es || s.product_spec || s.product_name_es || s.product_name) || '—')}</td>
+      <td class="muted">${escapeHtml((s.product_spec || s.product_spec_es || s.product_name || s.product_name_es) || '—')}</td>
       <td class="mono">${fmtDateStr(s.invoice_sent_at)}</td>
       <td class="mono">${fmtDateStr(s.payment_due_date)}</td>
       <td>${statusBadge}</td>
