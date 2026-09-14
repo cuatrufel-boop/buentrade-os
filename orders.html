@@ -925,9 +925,14 @@ function renderRouteTrack(o){
 // One shared helper now, reused by every one of those messages, instead of each building its own
 // short label — never touches the customer-facing STAGE_EMAIL_BODY_ES/STAGE_WHATSAPP_ES copy
 // (frozen, approved separately, see [[project_approved_email_whatsapp_copy_table]]).
+// Real correction 2026-09-14: "no dejes short y full name... QUITA short y deja full" — this used
+// to join name + spec ("Bellies #2 — Pork Skinless Bellies #2 Frozen, Box"), but product_spec is
+// already the full description and already contains the short name inside it — joining both just
+// duplicated it. Spec alone when present; the short name is only ever the fallback for a product
+// with no spec on file.
 function fullProductLabel(o){
   const cp = o.catalogProduct;
-  return [cp ? (cp.name_en || cp.name) : o.product_name, o.product_spec].filter(Boolean).join(' — ');
+  return o.product_spec || (cp ? (cp.name_en || cp.name) : o.product_name);
 }
 function requestCustomsDocsMessage(o){
   const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';

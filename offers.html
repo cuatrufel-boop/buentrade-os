@@ -800,7 +800,7 @@ function renderOffers(){
   });
   const attnHtml = (hotOffers.length || Object.keys(coldByCustomer).length) ? `
     <div class="attn-strip">
-      ${hotOffers.map(o => `<button type="button" class="attn-pill hot" onclick="jumpToCustomer('${escapeHtml(o.customer_name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${escapeHtml(o.customer_name)}</b> — bid in on ${escapeHtml([o.product_name, o.product_spec].filter(Boolean).join(' — '))}</button>`).join('')}
+      ${hotOffers.map(o => `<button type="button" class="attn-pill hot" onclick="jumpToCustomer('${escapeHtml(o.customer_name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${escapeHtml(o.customer_name)}</b> — bid in on ${escapeHtml((o.product_spec || o.product_name))}</button>`).join('')}
       ${Object.entries(coldByCustomer).map(([name, rows]) => {
         const maxDays = Math.max(...rows.map(o => offerAgeDays(o.sent_at) || 0));
         return `<button type="button" class="attn-pill cold" onclick="jumpToCustomer('${escapeHtml(name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${rows.length} offer${rows.length === 1 ? '' : 's'}</b> to ${escapeHtml(name)} — ${maxDays}d with no reply</button>`;
@@ -825,7 +825,7 @@ function renderOffers(){
       ? `<button class="row-menu-btn" title="Actions" onclick="toggleRowMenu(event,'${o.id}','${o.order_number}',${o.customs_agency_provider_id ? 'true' : 'false'},${(o.negotiation_log || []).length})">${KEBAB_ICON}</button>`
       : '';
     return `<tr>
-        <td>${escapeHtml([o.product_name, o.product_spec].filter(Boolean).join(' — ') || '—')}</td>
+        <td>${escapeHtml((o.product_spec || o.product_name) || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
         <td class="num">$${(o.purchase_price || 0).toFixed(4)} → $${(o.sale_per_lb || 0).toFixed(4)}</td>
         <td>${statusTag}</td>
@@ -869,7 +869,7 @@ function renderOffers(){
     const purchaseHtml = `<span${purchaseCls}>$${(o.purchase_price || 0).toFixed(4)}</span>`;
     const saleHtml = `<span${saleCls}>$${(o.sale_per_lb || 0).toFixed(4)}</span>`;
     return `<tr>
-        <td>${escapeHtml([o.product_name, o.product_spec].filter(Boolean).join(' — ') || '—')}</td>
+        <td>${escapeHtml((o.product_spec || o.product_name) || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
         <td class="num price-link" onclick="openNegotiationView('${o.id}')" title="Open negotiation">${purchaseHtml} → ${saleHtml}</td>
         <td>${statusHtml}</td>
@@ -990,7 +990,7 @@ function toggleTT(id){
   ttOpenId = id;
   const o = offers.find(x => x.id === id);
   document.getElementById('ttOverlayTitle').textContent = o
-    ? `${[o.product_name, o.product_spec].filter(Boolean).join(' — ') || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : 'Negotiate';
+    ? `${(o.product_spec || o.product_name) || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : 'Negotiate';
   const plant = o && o.plant_id ? offerPlantsById[o.plant_id] : null;
   const logo = plant && (plant.logo_url || plant.logo_url_dark);
   const logoEl = document.getElementById('ttOverlayLogo');
@@ -1051,7 +1051,7 @@ function openNegotiationView(offerId){
     { to: 'customer_original', price: o.sale_per_lb, at: o.sent_at },
     ...(o.negotiation_log || []),
   ];
-  document.getElementById('negoViewTitle').textContent = `${[o.product_name, o.product_spec].filter(Boolean).join(' — ') || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}`;
+  document.getElementById('negoViewTitle').textContent = `${(o.product_spec || o.product_name) || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}`;
   document.getElementById('negoViewChart').innerHTML = negoViewSparklineSvg(steps);
   document.getElementById('negoViewLog').innerHTML = steps.map(e => {
     const meta = NEGO_STEP_META[e.to] || { dir: 'out', label: () => e.to };
@@ -1111,7 +1111,7 @@ async function markWon(id, overrideCreditCheck, confirmedDeliveryDate){
   const o = offers.find(x => x.id === id);
   if (!o) return;
   if (!overrideCreditCheck){
-    const ok = await showConfirm('Create Order?', `${[o.product_name, o.product_spec].filter(Boolean).join(' — ')} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
+    const ok = await showConfirm('Create Order?', `${(o.product_spec || o.product_name)} — ${o.plant_name} — ${o.customer_name}`, '✓ Create Order');
     if (!ok) return;
   }
   // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... muy delicado" — asked fresh

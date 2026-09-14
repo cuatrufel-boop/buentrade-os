@@ -327,7 +327,7 @@ function renderTopMargin(rows){
     <tr>
       <td><strong>${escapeHtml(r.order_number)}</strong></td>
       <td>${escapeHtml(r.customer_name || '—')}</td>
-      <td>${escapeHtml([r.product_name, r.product_spec].filter(Boolean).join(' — ') || '—')}</td>
+      <td>${escapeHtml((r.product_spec || r.product_name) || '—')}</td>
       <td>${money(r.sale_amount)}</td>
       <td>${money(r.margin)} ${r.is_final ? '<span class="tag paid">Final</span>' : '<span class="tag sent">Estimated</span>'}</td>
     </tr>`).join('');
@@ -399,7 +399,7 @@ function renderShipments(rows){
     <tr>
       <td><strong>${escapeHtml(r.order_number)}</strong></td>
       <td>${escapeHtml(r.customer_name || '—')}</td>
-      <td>${escapeHtml([r.product_name, r.product_spec].filter(Boolean).join(' — ') || '—')}</td>
+      <td>${escapeHtml((r.product_spec || r.product_name) || '—')}</td>
       <td><span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
       <td>${dt(r.delivered_at || r.border_delivery_date)}</td>
       <td>${payTag}</td>
@@ -414,7 +414,7 @@ function renderOffers(rows){
   tbody.innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.customer_name)}</td>
-      <td>${escapeHtml([r.product_name, r.product_spec].filter(Boolean).join(' — '))}</td>
+      <td>${escapeHtml((r.product_spec || r.product_name))}</td>
       <td>${escapeHtml(r.plant_name)}</td>
       <td>${r.channel}</td>
       <td><span class="tag ${r.status}">${r.status}</span></td>

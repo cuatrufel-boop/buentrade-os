@@ -2450,7 +2450,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate){
   const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
   const isFob = us_freight_amount > 0;
   if (!overrideCreditCheck){
-    const ok = await showTTConfirm('Create Order?', `${[negoOffer.product_name, negoOffer.product_spec].filter(Boolean).join(' — ')} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
+    const ok = await showTTConfirm('Create Order?', `${(negoOffer.product_spec || negoOffer.product_name)} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
     if (!ok) return;
   }
   // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... es muy delicado" — asked fresh
@@ -2508,7 +2508,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate){
     let agency = null;
     try { agency = ((await callApi('providers-search', { id: negoOffer.customs_agency_provider_id })).results || [])[0] || null; } catch (e) {}
     if (agency && (agency.email || agency.phone || agency.whatsapp)){
-      const msg = `Nueva carga confirmada — Orden BT-${btNum(orderNumber)}: ${[negoOffer.product_name, negoOffer.product_spec].filter(Boolean).join(' — ')}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${confirmedDeliveryDate}.`;
+      const msg = `Nueva carga confirmada — Orden BT-${btNum(orderNumber)}: ${(negoOffer.product_spec || negoOffer.product_name)}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${confirmedDeliveryDate}.`;
       if (agency.email){
         window.open(`mailto:${agency.email}?subject=${encodeURIComponent('Nueva carga — BT-' + btNum(orderNumber))}&body=${encodeURIComponent(msg)}`, '_blank');
       } else {

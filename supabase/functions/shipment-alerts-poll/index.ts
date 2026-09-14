@@ -42,8 +42,12 @@ function btNum(orderNumber: string): string {
 // sent_offers.product_name ("Bellies #2") instead of the full catalog name + spec shown
 // everywhere else in the app — same fix as orders.html's fullProductLabel, this is the Edge
 // Function equivalent. sent_offers already carries product_spec directly (no extra join needed).
+// Real correction 2026-09-14: product_spec is already the FULL description (name + temp +
+// packaging, e.g. "Pork Skinless Bellies #2 Frozen, Box") — it already contains the short name,
+// so joining both produced a duplicated "Bellies #2 — Pork Skinless Bellies #2 Frozen, Box".
+// Spec alone when present; short name only as the fallback when no spec is on file.
 function fullProductLabel(sh: { product_name?: string; product_spec?: string }): string {
-  return [sh.product_name, sh.product_spec].filter(Boolean).join(" — ");
+  return sh.product_spec || sh.product_name || "";
 }
 
 // Same fixed rule as offers.html's computeBorderArrivalDate — ship date + 2 calendar days, weekend
