@@ -2580,13 +2580,22 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
 
   // Give the customs agency on file a heads-up that a new load is coming — no formal document
   // for this yet, just a message, same idea as PO/SO/FO but for the crossing broker.
+  // Real correction 2026-09-16: "no todos igual... que funcionen que esten bien el flujo con api"
+  // — this used to be a raw mailto: with no API attempt at all, the one undocumented inconsistency
+  // in an otherwise-consistent app (every other document send here goes through sendEmailApi
+  // first). Unified to the same pattern: real API send via the trader's own compose-and-confirm
+  // modal (bcOpenEmailModal, same as PO/SO/FO), Gmail/WhatsApp only if the trader picks that
+  // channel or the send fails inside the modal — never a plain OS-default mailto: link.
   if (negoOffer.customs_agency_provider_id){
     let agency = null;
     try { agency = ((await callApi('providers-search', { id: negoOffer.customs_agency_provider_id })).results || [])[0] || null; } catch (e) {}
     if (agency && (agency.email || agency.phone || agency.whatsapp)){
       const msg = `Nueva carga confirmada — Orden BT-${btNum(orderNumber)}: ${(negoOffer.product_spec || negoOffer.product_name)}, ${weight.toLocaleString('en-US')} lbs, desde ${negoOffer.plant_name}. Fecha: ${confirmedDeliveryDate}.`;
       if (agency.email){
-        window.open(`mailto:${agency.email}?subject=${encodeURIComponent('Nueva carga — BT-' + btNum(orderNumber))}&body=${encodeURIComponent(msg)}`, '_blank');
+        const phone = (agency.whatsapp || agency.phone || '').replace(/\D/g, '');
+        try {
+          await sendEmailApi('logistics', agency.email, 'Nueva carga — BT-' + btNum(orderNumber), msg, [], phone ? { phone, message: msg } : null);
+        } catch (e) { if (!e.cancelled) console.error('Customs agency heads-up failed:', e.message); }
       } else {
         const phone = (agency.whatsapp || agency.phone || '').replace(/\D/g, '');
         if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');

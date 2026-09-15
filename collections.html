@@ -573,10 +573,25 @@ function computeCollectionsAttentionItems(){
   });
   return items;
 }
-function sendCollectionsReminder(email, contactName, message, orderNumber){
+// Real correction 2026-09-16: "no todos igual... que funcionen que esten bien el flujo con api" —
+// this used to go straight to a Gmail compose link, the one send in this module that never
+// attempted the real API at all, no comment justifying it (unlike quotes.html's deliberate
+// Gmail-first customer-offer send). Unified to the same API-first pattern as PO/SO/FO/Invoice
+// elsewhere: try the real send (Resend) first, only fall back to Gmail if that actually fails.
+async function sendCollectionsReminder(email, contactName, message, orderNumber){
   const subject = `${orderNumber} — Recordatorio de pago`;
   const body = `Hola${contactName ? ' ' + contactName : ''},\n\n${message}\n\nGracias,\nBuenTrade Team`;
-  window.open(`https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: email, su: subject, body }).toString()}`, '_blank');
+  try {
+    const res = await fetch('/.netlify/functions/send-email', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'offers', to: email, subject, text: body }),
+    });
+    if (!res.ok){ const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Send failed'); }
+    showToast('Recordatorio enviado', email);
+  } catch (e) {
+    window.open(`https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: email, su: subject, body }).toString()}`, '_blank');
+    showToast('Envío automático falló', e.message + ' — se abrió Gmail', true);
+  }
 }
 let urgentQueue = [];
 let urgentQueueIndex = 0;

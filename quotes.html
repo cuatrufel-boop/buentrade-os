@@ -4864,16 +4864,15 @@ function rqWaModalClose(){
   overlay.classList.remove('rq-split-left', 'rq-split-right');
 }
 
-// Real redesign 2026-09-01, explicit ask, repeated several times: one click here used to open an
-// in-app editable preview with its own "Make an Offer" button — a real API send (Resend) happening
-// behind that button, invisible until it either worked or silently failed. Explicit ask: every send
-// anywhere in the OS should land the trader directly in their own real Gmail instead — they can see,
-// edit, and CC people right there, and a real Sent-folder copy is proof it went out, which the old
-// API path never gave them. Gmail's own compose can't carry a file attachment (no URL param does,
-// for any mail provider — allowing that would let any page silently attach arbitrary files to an
-// email the trader never chose) — the real, already-proven fix (see rqWaModalOpenOne's
-// downloadFiles) is triggering the actual file download the instant Gmail opens, so it's sitting in
-// Downloads ready to drag into the compose window that just appeared.
+// Real correction 2026-09-16: "no todos igual... que funcionen que esten bien el flujo con api" —
+// every other document send in the app (PO/SO/FO/Invoice in orders.html/offers.html, negotiation
+// emails in trading-tool.html) tries the real API first and only falls back to Gmail if that
+// fails; this customer-offer send was the one deliberate exception (2026-09-01 ask: Gmail as the
+// primary path, so a real Sent-folder copy exists as proof). Unified now to the same API-first
+// pattern as everywhere else — attachments already exist as base64 (rqPrepareOfferFilesByPlant's
+// `attachment` field, built alongside the download-for-WhatsApp copy), so the API call can carry
+// the real combined PDF instead of asking the trader to drag a downloaded file into Gmail. Gmail
+// only opens now if the API call actually fails, exactly like every other send flow.
 async function sendOfferEmailTo(customerId){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices())) return;
   const c = rqMatchedCustomers.find(x => x.id === customerId);
@@ -4884,20 +4883,26 @@ async function sendOfferEmailTo(customerId){
   const full = rqCustomerOfferPlantsFor(c.id);
   const firstName = rqFirstName(c.contact_name || c.trade_name);
   const filesByPlant = await rqPrepareOfferFilesByPlant();
-  const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
-  downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
-  // Real bug caught testing this exact change, confirmed live: rqOpenGmail's click can navigate
-  // THIS SAME tab (confirmed live — the "bt_gmail" target didn't always open a separate one),
-  // which tears down this page's whole JS context the instant it commits. Anything called after
-  // that click was a coin flip whether it ever actually ran. Logging the send first, before the
-  // click that might immediately end this page, is the only order that's reliably real.
-  rqLogSentOffersRows(full, [c], 'email');
+  const attachments = full.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean);
   // Multiple variants can be in this recap at once — the subject names every distinct one
   // involved instead of one global spec that was only ever right for a single product.
   const subjectSpecs = [...new Set(full.map(({ plant }) => rqSpecEsForPlant(plant)).filter(Boolean))];
-  rqOpenGmail(c.email, `Cotización — ${subjectSpecs.join(' / ')}`, buildCustomerOfferText(firstName, full));
-  if (downloadFiles.length){
-    rqShowNotice(`Gmail se abrió — ${downloadFiles.length} archivo${downloadFiles.length > 1 ? 's' : ''} descargado${downloadFiles.length > 1 ? 's' : ''}, arrástra${downloadFiles.length > 1 ? 'los' : 'lo'} a la ventana de Gmail.`);
+  const subject = `Cotización — ${subjectSpecs.join(' / ')}`;
+  const body = buildCustomerOfferText(firstName, full);
+  try {
+    await sendEmailApiRaw('offers', c.email, subject, body, null, attachments);
+    rqLogSentOffersRows(full, [c], 'email');
+    rqShowNotice(`Cotización enviada a ${c.email}.`);
+  } catch (e) {
+    // API failed — same fallback every other send flow uses: open the real Gmail compose so the
+    // send isn't fully blocked, downloading the attachments first since Gmail can't accept them
+    // via URL param (no mail provider's compose link can — that would let any page silently
+    // attach arbitrary files to an email the trader never chose).
+    const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
+    downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
+    rqLogSentOffersRows(full, [c], 'email');
+    rqOpenGmail(c.email, subject, body);
+    rqShowNotice(`Envío automático falló (${e.message}) — se abrió Gmail` + (downloadFiles.length ? `, ${downloadFiles.length} archivo${downloadFiles.length > 1 ? 's' : ''} descargado${downloadFiles.length > 1 ? 's' : ''}, arrástra${downloadFiles.length > 1 ? 'los' : 'lo'} a la ventana.` : '.'));
   }
 }
 
@@ -4936,12 +4941,11 @@ async function sendOfferWhatsAppTo(customerId){
 // them repeated just because Smithfield's price finally came in — each customer's card here only
 // ever contains the plants THEY don't already have (rqUnsentPlantsFor), a customer with nothing
 // new is skipped entirely rather than sent an empty or repeat message.
-// Real redesign 2026-09-01, explicit ask: same "straight to real Gmail, no in-app API preview"
-// rule as sendOfferEmailTo above — several real Gmail tabs can't all open from one click (Chrome
-// blocks a burst of auto-opened windows the same way it always has), so this still shows one real
-// link per customer, but clicking any one of them now goes straight to that customer's own real
-// Gmail compose (downloadFiles triggers the actual attachment download first, same as WhatsApp) —
-// never the old API "Make an Offer" button hiding a send behind it.
+// Real correction 2026-09-16: "no todos igual... que funcionen que esten bien el flujo con api" —
+// unified to the same API-first pattern as sendOfferEmailTo above (see that function's comment).
+// Each customer is sent automatically through the API with the real PDF attachment; only the ones
+// that actually fail fall back to the review-and-Gmail modal, so the trader only has to look at
+// (and manually finish) real failures instead of every send in the batch.
 // filterProductIds (optional, see rqPricedPlantsSorted): scopes this send to just those variants
 // instead of every variant currently in the building quote — used by Pending Quotes' own per-card
 // Email all (qSendPendingProductEmail) so clicking one card's button never also sends whatever
@@ -4951,20 +4955,20 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
   const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
   const filesByPlant = await rqPrepareOfferFilesByPlant(filterProductIds, filterPlantIds);
   const withEmail = rqMatchedCustomers.filter(c => c.email);
-  const items = [];
+  const toSend = [];
   withEmail.forEach(c => {
     const unsent = rqUnsentPlantsFor(c.id, sentByCustomer, filterProductIds, filterPlantIds);
     if (!unsent.length) return; // nothing new for this customer — stay quiet, don't repeat
     const full = rqCustomerOfferPlantsFor(c.id, filterProductIds, filterPlantIds);
     const firstName = rqFirstName(c.contact_name || c.trade_name);
-    const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
     // The recap can span multiple variants at once — name every distinct one involved instead of
     // one global spec that was only ever right for a single product.
     const subjectSpecs = [...new Set(full.map(({ plant }) => rqSpecEsForPlant(plant)).filter(Boolean))];
-    items.push({
+    toSend.push({
       id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${subjectSpecs.join(' / ')}`,
-      body: buildCustomerOfferText(firstName, full), downloadFiles,
-      onSent: () => rqLogSentOffersRows(full, [c], 'email'),
+      body: buildCustomerOfferText(firstName, full), full, c,
+      attachments: full.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean),
+      downloadFiles: full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean),
     });
   });
   // Real bug caught live, explicit complaint ("no manda las pending offers"): this same message
@@ -4973,29 +4977,41 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
   // situations, one real fact-check away (Customers module) from the other being nothing to worry
   // about. A trader reading "already has every priced plant" with NO customer at all had every
   // reason to think the send was broken instead of missing a linked customer.
-  if (!items.length){
+  if (!toSend.length){
     rqShowNotice(withEmail.length
       ? 'Every matched customer with an email already has every priced plant for this quote.'
       : 'No customer with an email is linked to any variant in this quote yet — link one in Customers first.');
     return;
   }
-  // Real bug caught live, explicit complaint ("sigue sacando ese preview"): exactly one real
-  // recipient still went through the same editable-fields-then-a-real-link modal built for the
-  // genuine multi-recipient case (several real Gmail tabs can't all auto-open from one click —
-  // that part's still true). With only one customer there's no such constraint — this is now the
-  // exact same one-click-straight-to-Gmail path sendOfferEmailTo already uses, not a smaller
-  // version of the modal.
+  const failed = [];
+  for (const it of toSend) {
+    try {
+      await sendEmailApiRaw('offers', it.to, it.subject, it.body, null, it.attachments);
+      rqLogSentOffersRows(it.full, [it.c], 'email');
+    } catch (e) {
+      failed.push({ ...it, error: e.message });
+    }
+  }
+  const sentCount = toSend.length - failed.length;
+  if (!failed.length){
+    rqShowNotice(`Cotización enviada a ${sentCount} cliente${sentCount > 1 ? 's' : ''}.`);
+    return;
+  }
+  if (sentCount) rqShowNotice(`Cotización enviada a ${sentCount} cliente${sentCount > 1 ? 's' : ''} — ${failed.length} fallaron, revisa abajo.`);
+  // Only real failures get the review-and-Gmail modal now — a customer that already sent fine
+  // through the API never shows up here for the trader to look at.
+  const items = failed.map(it => ({
+    id: it.id, label: it.label, to: it.to, subject: it.subject, body: it.body, downloadFiles: it.downloadFiles,
+    onSent: () => rqLogSentOffersRows(it.full, [it.c], 'email'),
+  }));
   if (items.length === 1){
     const it = items[0];
     it.downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
     await it.onSent();
     rqOpenGmail(it.to, it.subject, it.body);
-    if (it.downloadFiles.length){
-      rqShowNotice(`Gmail se abrió — ${it.downloadFiles.length} archivo${it.downloadFiles.length > 1 ? 's' : ''} descargado${it.downloadFiles.length > 1 ? 's' : ''}, arrástra${it.downloadFiles.length > 1 ? 'los' : 'lo'} a la ventana de Gmail.`);
-    }
     return;
   }
-  rqOpenEmailModal(`Email offer — All customers (${items.length})`, items, false);
+  rqOpenEmailModal(`Email offer — Failed sends (${items.length})`, items, false);
 }
 
 // filterProductIds — see sendOfferEmailToAll's own note; same scoping, used by Pending Quotes'
