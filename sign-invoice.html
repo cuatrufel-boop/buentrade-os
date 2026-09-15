@@ -395,11 +395,15 @@ async function init(){
   const params = new URLSearchParams(location.search);
   let orderNumber = params.get('order');
   let token = params.get('token');
-  // Real ask 2026-09-15: the short link (/f/x7k9m2, rewritten by netlify.toml to
-  // /sign-invoice.html?c=x7k9m2) only carries a short code — resolve it to the real order/token
-  // first, then fall through to the exact same flow as the long link. Not itself a security check;
-  // track_open/redeem below still validate the real token same as always.
-  const shortCode = params.get('c');
+  // Real bug found live 2026-09-16, confirmed on the actual deployed site: netlify.toml's
+  // /f/* -> /sign-invoice.html?c=:splat is a 200 REWRITE, which only substitutes the query string
+  // server-side for Netlify's own routing — the browser's actual address bar (and therefore
+  // location.search, which this file's JS reads) stays exactly "/f/x7k9m2" with NO query string
+  // at all. Confirmed via location.href in a live browser after the redirect: no ?c= ever
+  // arrives. The short code has to be read from the PATH instead — a query-string ?c= is kept as
+  // a fallback for any old link already sent, but the path is now the real source.
+  const pathMatch = location.pathname.match(/\/f\/([^/?#]+)/);
+  const shortCode = params.get('c') || (pathMatch ? pathMatch[1] : null);
   if (!orderNumber && !token && shortCode){
     try {
       const resolved = await callApi('orders-invoice-signature', { action: 'resolve_short_code', short_code: shortCode });

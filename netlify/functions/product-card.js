@@ -130,8 +130,16 @@ ${redirectScript}
 </body></html>`;
 }
 
+// Real bug found live 2026-09-16, confirmed on the actual deployed site: netlify.toml's
+// /p/* -> /.netlify/functions/product-card?code=:splat rewrite does NOT actually deliver a
+// resolved `code` query param to this function — event.queryStringParameters came back empty on
+// a real request to /p/sgw3epst. What the redirect DOES preserve is the original request path
+// (event.path, still "/p/sgw3epst"), same underlying issue as sign-invoice.html's matching fix —
+// so the short code is read from the path first, the query param kept only as a fallback for any
+// link shared with the old ?code= form.
 exports.handler = async (event) => {
-  const code = (event.queryStringParameters || {}).code;
+  const pathMatch = (event.path || '').match(/\/p\/([^/?#]+)/);
+  const code = (event.queryStringParameters || {}).code || (pathMatch ? pathMatch[1] : null);
   if (!code) return errorPage('Link inválido.', 400);
 
   let data;
