@@ -3,6 +3,23 @@
 // business event, not a data-integrity risk), but the referenced product/plant/customer must be
 // real, and the record snapshots their names/specs at send time (so a later rename in the catalog
 // never silently rewrites what a customer was actually shown historically).
+//
+// Real ask 2026-09-15: sending a product offer over WhatsApp used to mean downloading the photo
+// and manually dragging it into the chat (real, working, just manual). Now the POST path (create)
+// also snapshots photo_url and mints a short_code (see 20260915020000_add_sent_offers_short_code
+// and the invoice-signature short-code precedent at shipments.invoice_short_code) — the trader
+// sends `${APP_ORIGIN}/p/${short_code}` instead. Kept in this one function (not a new one) because
+// the Supabase Edge Function project cap was already at 99/100 with zero room to spare.
+//
+// The GET branch below returns plain JSON, not the HTML card page itself — real, live-tested
+// finding 2026-09-15: Supabase's own Edge Function gateway silently overrides any Content-Type a
+// function sets to text/plain (confirmed via curl: a Response built here with
+// "Content-Type: text/html" still arrives at the client as text/plain, `x-content-type-options:
+// nosniff`), so a browser/WhatsApp's crawler renders the raw markup as literal text instead of a
+// page — there's no known way to make this gateway honor a custom content type. The actual HTML
+// (Open Graph tags + the small branded card) is built in netlify/functions/product-card.js
+// instead, which fetches this JSON and returns it with a real, honored text/html header — Netlify
+// Functions don't have this restriction.
 
 import postgres from "npm:postgres@3.4.4";
 import { computeCustomerExposure, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
@@ -13,8 +30,26 @@ const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 const REQUIRED_FIELDS = ["actor", "channel", "plant_id", "customer_id"];
 const VALID_CHANNELS = ["email", "whatsapp"];
 
+const SHORT_CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+function randomShortCode(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => SHORT_CODE_ALPHABET[b % SHORT_CODE_ALPHABET.length]).join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
+
+  // Plain JSON lookup by short code — the actual HTML card page (with Open Graph tags) is built
+  // in netlify/functions/product-card.js, which calls this and renders it with a real text/html
+  // header that Netlify (unlike Supabase's Edge Function gateway) actually honors.
+  if (req.method === "GET") {
+    const code = new URL(req.url).searchParams.get("code");
+    if (!code) return jsonResponse({ error: "missing required fields", missing: ["code"] }, 400);
+    const [offer] = await sql`select * from sent_offers where short_code = ${code}`;
+    if (!offer) return jsonResponse({ error: "invalid_short_code" }, 404);
+    return jsonResponse({ offer });
+  }
 
   try {
     const body = await req.json();
@@ -33,6 +68,7 @@ Deno.serve(async (req) => {
       customs_agency_provider_id = null, tramite_aduanal_amount = 0, bodega_americana_amount = 0,
       extra_fields = [], weight = 40000, cost_per_lb = null, sale_per_lb = null,
       total_cost = null, total_sale = null, delivery_dates = [], idempotency_key = null,
+      photo_url = null, spec_url = null,
     } = body;
 
     if (!VALID_CHANNELS.includes(channel)) return jsonResponse({ error: "invalid channel", valid_channels: VALID_CHANNELS }, 400);
@@ -60,6 +96,18 @@ Deno.serve(async (req) => {
     const [customer] = await sql`select * from customers where id = ${customer_id}`;
     if (!customer) return jsonResponse({ error: "unknown customer_id" }, 400);
 
+    // Only mint a short code when there's a real photo or a real spec sheet to show — a
+    // hand-typed, unmatched product has neither, so a link would have nothing real to show.
+    // Collision-check against the unique index same as the invoice short code.
+    let shortCode: string | null = null;
+    if (photo_url || spec_url) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidate = randomShortCode();
+        const [clash] = await sql`select id from sent_offers where short_code = ${candidate}`;
+        if (!clash) { shortCode = candidate; break; }
+      }
+    }
+
     const offer = await sql.begin(async (tx) => {
       const [offer] = await tx`
         insert into sent_offers (
@@ -68,14 +116,16 @@ Deno.serve(async (req) => {
           us_freight_rate_id, us_freight_amount, docs_on, inspection_amount,
           mexican_dest_rate_id, mexican_freight_mxn, customs_agency_provider_id,
           tramite_aduanal_amount, bodega_americana_amount, extra_fields, weight,
-          cost_per_lb, sale_per_lb, total_cost, total_sale, delivery_dates, status, idempotency_key
+          cost_per_lb, sale_per_lb, total_cost, total_sale, delivery_dates, status, idempotency_key,
+          photo_url, spec_url, short_code
         ) values (
           ${actor}, ${channel}, ${product_id}, ${finalProductName}, ${finalProductNameEs}, ${finalProductSpec}, ${finalProductSpecEs},
           ${plant_id}, ${plant.name}, ${customer_id}, ${customer.trade_name}, ${purchase_price},
           ${us_freight_rate_id}, ${us_freight_amount}, ${docs_on}, ${inspection_amount},
           ${mexican_dest_rate_id}, ${mexican_freight_mxn}, ${customs_agency_provider_id},
           ${tramite_aduanal_amount}, ${bodega_americana_amount}, ${tx.json(extra_fields)}, ${weight},
-          ${cost_per_lb}, ${sale_per_lb}, ${total_cost}, ${total_sale}, ${tx.json(delivery_dates)}, 'sent', ${idempotency_key}
+          ${cost_per_lb}, ${sale_per_lb}, ${total_cost}, ${total_sale}, ${tx.json(delivery_dates)}, 'sent', ${idempotency_key},
+          ${photo_url}, ${spec_url}, ${shortCode}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "sent_offers", record_id: offer.id, after: offer });

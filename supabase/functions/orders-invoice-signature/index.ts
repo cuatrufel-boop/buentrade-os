@@ -41,12 +41,39 @@ function randomToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Real ask 2026-09-15: the real token (above) is what actually gates track_open/redeem — this is
+// just a short, WhatsApp-message-friendly lookup key so the outbound link can read /f/x7k9m2
+// instead of the long token URL. 8 chars from a 32-symbol alphabet (no 0/O/1/I/l) is ~40 bits,
+// plenty for a random lookup key with a 30-day expiry, collision-checked below regardless.
+const SHORT_CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+function randomShortCode(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => SHORT_CODE_ALPHABET[b % SHORT_CODE_ALPHABET.length]).join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
     const body = await req.json();
-    const { action, order_number } = body;
-    if (!action || !order_number) return jsonResponse({ error: "missing required fields", missing: ["action", "order_number"].filter((k) => !body[k]) }, 400);
+    const { action } = body;
+    if (!action) return jsonResponse({ error: "missing required fields", missing: ["action"] }, 400);
+
+    // Real ask 2026-09-15: sign-invoice.html loaded from the short link (/f/x7k9m2, rewritten by
+    // netlify.toml to /sign-invoice.html?c=x7k9m2) has only the short code, not an order_number yet
+    // — that's the whole point of the short link. Handle it before the order_number-required check
+    // every other action needs, and hand back exactly what the page needs to continue the normal
+    // flow (order_number + the real token) so track_open/redeem still do the real validation.
+    if (action === "resolve_short_code") {
+      const { short_code } = body;
+      if (!short_code) return jsonResponse({ error: "missing required fields", missing: ["short_code"] }, 400);
+      const [shipment] = await sql`select order_number, invoice_token from shipments where invoice_short_code = ${short_code}`;
+      if (!shipment) return jsonResponse({ error: "invalid_short_code" }, 404);
+      return jsonResponse({ order_number: shipment.order_number, token: shipment.invoice_token });
+    }
+
+    const { order_number } = body;
+    if (!order_number) return jsonResponse({ error: "missing required fields", missing: ["order_number"] }, 400);
 
     const [shipment] = await sql`select * from shipments where order_number = ${order_number}`;
     if (!shipment) return jsonResponse({ error: "unknown order_number" }, 404);
@@ -56,14 +83,23 @@ Deno.serve(async (req) => {
       if (!actor) return jsonResponse({ error: "missing required fields", missing: ["actor"] }, 400);
       const token = randomToken();
       const expiresAt = new Date(Date.now() + LINK_VALID_DAYS * 86400000).toISOString();
+      // Collision-check the short code against the unique index — astronomically unlikely at 8
+      // chars/32 symbols, but a retry loop costs nothing and keeps the guarantee real.
+      let shortCode = "";
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidate = randomShortCode();
+        const [clash] = await sql`select id from shipments where invoice_short_code = ${candidate}`;
+        if (!clash) { shortCode = candidate; break; }
+      }
+      if (!shortCode) return jsonResponse({ error: "could not generate a unique short code, try again" }, 500);
       // A fresh "issue" always means a brand-new link — the open/expiry state from any earlier,
       // now-dead link must not leak into this one.
       const [updated] = await sql`
-        update shipments set invoice_token = ${token}, invoice_link_expires_at = ${expiresAt}, invoice_link_opened_at = null
+        update shipments set invoice_token = ${token}, invoice_short_code = ${shortCode}, invoice_link_expires_at = ${expiresAt}, invoice_link_opened_at = null
         where id = ${shipment.id} returning *
       `;
       await writeAuditLog(sql, HMAC_SECRET, { actor, action: "update", table_name: "shipments", record_id: shipment.id, before: shipment, after: updated });
-      return jsonResponse({ issued: true, token, expires_at: expiresAt });
+      return jsonResponse({ issued: true, token, short_code: shortCode, expires_at: expiresAt });
     }
 
     // Called once by sign-invoice.html right after it confirms the token is real, before the
@@ -130,7 +166,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ saved: true });
     }
 
-    return jsonResponse({ error: "invalid action", valid_actions: ["issue", "track_open", "redeem", "save_certificate_url"] }, 400);
+    return jsonResponse({ error: "invalid action", valid_actions: ["issue", "resolve_short_code", "track_open", "redeem", "save_certificate_url"] }, 400);
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }

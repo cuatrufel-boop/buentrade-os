@@ -4,21 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Firmar Factura — BuenTrade</title>
-<!-- Real ask 2026-09-14: "que se vea como un boton en un mensaje de whatsapp" — WhatsApp can't
+<!-- Real ask 2026-09-14/15: "que se vea como un boton en un mensaje de whatsapp" — WhatsApp can't
      render a real button from a plain wa.me text message (that's a WhatsApp Business Platform
      template feature, a different, unbuilt integration), but it DOES auto-render a rich preview
-     card (image + title + description) for any link with proper Open Graph tags, read from this
-     raw HTML by WhatsApp's own link-preview crawler — not from anything JS sets after load, so
-     these stay generic (not per-order) on purpose. That card reads as a real branded invite to tap,
-     not a bare blue link. Card image is the same app icon manifest.json already uses. -->
-<meta property="og:title" content="👆 Toca aquí para firmar — BuenTrade">
-<meta property="og:description" content="Ver tu factura y confirmar la recepción de tu carga. Solo toma un momento.">
-<meta property="og:image" content="https://wonderful-longma-8b07c7.netlify.app/icons/icon-512.png">
+     card (image + title) for any link with proper Open Graph tags, read from this raw HTML by
+     WhatsApp's own link-preview crawler — not from anything JS sets after load, so this stays
+     generic (not per-order) on purpose. Real ask 2026-09-15: word "firma" never appears anywhere
+     in the outbound message or this card — the customer only sees "Confirmar" until they actually
+     open this page and sign; also dropped the description line (title-only card, less clutter).
+     Card image (icons/invoice-confirm-card.png) is a custom BuenTrade-branded button graphic (BT
+     monogram, brand blues, Baloo 2 — the same font/colors as the rest of the site), not the plain
+     app icon. -->
+<meta property="og:title" content="👆 Confirmar — BuenTrade">
+<meta property="og:image" content="https://wonderful-longma-8b07c7.netlify.app/icons/invoice-confirm-card.png">
 <meta property="og:type" content="website">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="👆 Toca aquí para firmar — BuenTrade">
-<meta name="twitter:description" content="Ver tu factura y confirmar la recepción de tu carga. Solo toma un momento.">
-<meta name="twitter:image" content="https://wonderful-longma-8b07c7.netlify.app/icons/icon-512.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="👆 Confirmar — BuenTrade">
+<meta name="twitter:image" content="https://wonderful-longma-8b07c7.netlify.app/icons/invoice-confirm-card.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
 <link rel="shortcut icon" href="/icons/favicon.ico">
@@ -391,8 +393,24 @@ function showState(id){
 
 async function init(){
   const params = new URLSearchParams(location.search);
-  const orderNumber = params.get('order');
-  const token = params.get('token');
+  let orderNumber = params.get('order');
+  let token = params.get('token');
+  // Real ask 2026-09-15: the short link (/f/x7k9m2, rewritten by netlify.toml to
+  // /sign-invoice.html?c=x7k9m2) only carries a short code — resolve it to the real order/token
+  // first, then fall through to the exact same flow as the long link. Not itself a security check;
+  // track_open/redeem below still validate the real token same as always.
+  const shortCode = params.get('c');
+  if (!orderNumber && !token && shortCode){
+    try {
+      const resolved = await callApi('orders-invoice-signature', { action: 'resolve_short_code', short_code: shortCode });
+      orderNumber = resolved.order_number;
+      token = resolved.token;
+    } catch (e) {
+      document.getElementById('errorText').textContent = 'Este link ya no es válido. Contacta a tu representante de BuenTrade.';
+      showState('errorState');
+      return;
+    }
+  }
   if (!orderNumber || !token){
     document.getElementById('errorText').textContent = 'Falta información en el link. Contacta a tu representante de BuenTrade.';
     showState('errorState');

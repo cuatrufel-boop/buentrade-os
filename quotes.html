@@ -909,6 +909,7 @@ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 // goes through an Edge Function; there is no direct table access from this page anymore.
 const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
 const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+const APP_ORIGIN = 'https://wonderful-longma-8b07c7.netlify.app';
 
 async function callApi(fn, body){
   const res = await fetch(API_ROOT + fn, {
@@ -3902,6 +3903,29 @@ function buildCustomerOfferText(customerFirstName, plantsOverride){
   return greeting + lines + (pending ? '\n\n' + pending : '');
 }
 
+// Real ask 2026-09-15: WhatsApp-only twin of buildCustomerOfferText — email keeps the plain text
+// above (the real combined PDF is the attachment there, see rqBuildCombinedPdf), but WhatsApp
+// can't attach a file to a pre-filled wa.me message, so each plant's line here also carries its
+// own short product-card link (${APP_ORIGIN}/p/short_code — see product-card.js) whose WhatsApp
+// preview shows that plant's real photo/spec. offersByPlantId maps plant.id -> the sent_offers
+// row just created for it (see rqLogSentOffersRows's returned `offers`), read here for its
+// short_code; a plant with neither a real photo nor a real spec has no short_code at all (see
+// sent-offers-create's own "only mint one when there's something real to show" comment), so its
+// line stays plain text, same as before this feature existed.
+function buildCustomerOfferTextWithLinks(customerFirstName, withCalc, offersByPlantId){
+  const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
+  const lines = withCalc.map(({ plant, calc }) => {
+    const delivery = rqDeliveryDatesText();
+    const staleFlag = plant.rqIncludeStale && plant.rqPriceDate && (rqPriceAgeDays(plant.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS
+      ? ' (precio preliminar, sujeto a confirmación)' : '';
+    const offer = offersByPlantId.get(plant.id);
+    const link = offer && offer.short_code ? `\n${APP_ORIGIN}/p/${offer.short_code}` : '';
+    return `${plant.name} — ${rqSpecEsForPlant(plant) || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + delivery : ''}${staleFlag}${link}`;
+  }).join('\n\n');
+  const pending = rqPendingNote();
+  return greeting + lines + (pending ? '\n\n' + pending : '');
+}
+
 // One shared line for both the text and HTML customer offer — kept generic (no plant name) since
 // the customer has no context for which supplier that is yet, only that another option may follow.
 function rqPendingNote(){
@@ -4553,27 +4577,38 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
         total_cost: calc.totalCost,
         total_sale: calc.totalSale,
         delivery_dates: [...rqDeliveryDates],
+        // Real ask 2026-09-15: sending an offer over WhatsApp used to mean downloading the photo
+        // and dragging it into the chat by hand — now sent-offers-create mints a short_code from
+        // these (see the "plant_id" tag on this row, used below to build the product-card link
+        // per plant) so the trader can send a link instead, whose WhatsApp preview card shows the
+        // real photo/spec already uploaded on this plant_products row.
+        photo_url: plant.photo_url || null,
+        spec_url: plant.spec_url || null,
       });
     });
   });
-  if (!rows.length) return [];
+  if (!rows.length) return { warnings: [], offers: [] };
   // sent_offers.create is single-row — no batch variant exists, so a multi-plant × multi-customer
   // send logs one call per row. Kept sequential (not Promise.all) so one failure is attributable
   // to a specific plant/customer pair in the console instead of an unordered Promise.all rejection.
   // Real ask 2026-09-12: a customer over their credit limit is never blocked from being quoted —
   // sent-offers-create just returns an advisory (credit_warning) alongside the normal 201, which
   // callers surface to the trader instead of silently dropping.
+  // Real ask 2026-09-15: callers also need the created offer back now (specifically its
+  // short_code) to build the WhatsApp product-card link — see sendOfferWhatsAppTo.
   const warnings = [];
+  const offers = [];
   for (const row of rows) {
     try {
       const result = await callApi('sent-offers-create', row);
+      if (result.offer) offers.push(result.offer);
       if (result.credit_warning && !warnings.some(w => w.message === result.credit_warning.message)) {
         warnings.push(result.credit_warning);
       }
     }
     catch (e) { console.error('Failed to log sent offer:', e.message, row); }
   }
-  return warnings;
+  return { warnings, offers };
 }
 
 // Sends through the Netlify function (Resend) so the correct BuenTrade alias goes out as the
@@ -4876,14 +4911,17 @@ async function sendOfferWhatsAppTo(customerId){
   const unsent = rqUnsentPlantsFor(c.id, sentByCustomer);
   if (!unsent.length){ rqShowNotice(`${c.trade_name} already has every priced plant for this quote.`); return; }
   const full = rqCustomerOfferPlantsFor(c.id);
-  const filesByPlant = await rqPrepareOfferFilesByPlant();
-  const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
+  // Real ask 2026-09-15: the message body itself now needs each plant's short product-card link
+  // (see buildCustomerOfferTextWithLinks), which only exists once sent_offers has actually logged
+  // the row — so this now logs BEFORE opening the modal, same order sendOfferEmailTo already uses
+  // (see that function's own comment on why logging first is the reliable order), confirmed with
+  // the user as an acceptable change from the old "only log once WhatsApp is actually opened."
+  const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
+  warnings.forEach(w => rqShowNotice(w.message));
+  const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
-    id: c.id, label: c.trade_name, phone, body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name), full), downloadFiles,
-    onOpened: async () => {
-      const warnings = await rqLogSentOffersRows(full, [c], 'whatsapp');
-      warnings.forEach(w => rqShowNotice(w.message));
-    },
+    id: c.id, label: c.trade_name, phone,
+    body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId),
   }], true);
 }
 
@@ -4965,23 +5003,23 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
 async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds){
   if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds))) return;
   const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
-  const filesByPlant = await rqPrepareOfferFilesByPlant(filterProductIds, filterPlantIds);
   const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   const items = [];
-  withWa.forEach(c => {
+  // Real ask 2026-09-15: same "log first, get short_code back" order as sendOfferWhatsAppTo —
+  // sequential per customer (not Promise.all) so one customer's logging failure never blocks the
+  // rest from getting their own real links.
+  for (const c of withWa) {
     const unsent = rqUnsentPlantsFor(c.id, sentByCustomer, filterProductIds, filterPlantIds);
-    if (!unsent.length) return; // nothing new for this customer — stay quiet, don't repeat
+    if (!unsent.length) continue; // nothing new for this customer — stay quiet, don't repeat
     const full = rqCustomerOfferPlantsFor(c.id, filterProductIds, filterPlantIds);
-    const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
+    const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
+    warnings.forEach(w => rqShowNotice(w.message));
+    const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
     items.push({
       id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
-      body: buildCustomerOfferText(rqFirstName(c.contact_name || c.trade_name), full), downloadFiles,
-      onOpened: async () => {
-        const warnings = await rqLogSentOffersRows(full, [c], 'whatsapp');
-        warnings.forEach(w => rqShowNotice(w.message));
-      },
+      body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId),
     });
-  });
+  }
   if (!items.length){
     rqShowNotice(withWa.length
       ? 'Every matched customer with a WhatsApp number already has every priced plant for this quote.'

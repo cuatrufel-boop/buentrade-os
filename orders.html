@@ -1680,6 +1680,21 @@ function renderTradeDocRow(label, sentAt, matchedFiles, actionsHtml, actionsWhen
   return `<div class="doc-row">${labelLink}${actionsHtml || ''}<span class="doc-row-status${sentAt ? ' sent' : ''}">${sentAt ? 'Sent ' + when : 'Generated, not sent'}</span></div>`;
 }
 
+// Real ask 2026-09-15: "hay que agregar esto en los docs de esa carga como evidencia en caso de
+// algun problema futuro" — orders-invoice-signature already captures a real audit trail (IP,
+// user-agent, PDF hash, consent, timestamp) and builds a signed Certificate PDF the moment the
+// customer signs, but nothing in this panel ever surfaced it — signatureInfoClick only showed a
+// plain date in an alert, no way to actually open/download the proof. This row is that missing
+// link: the certificate itself once signed, or a plain "not signed yet" status before.
+function renderSignatureEvidenceRow(o){
+  if (!o.invoice_signed_at) return `<div class="doc-row"><span class="doc-row-label">Signature Evidence</span><span class="doc-row-status">Not signed yet</span></div>`;
+  const when = new Date(o.invoice_signed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const labelLink = o.invoice_certificate_url
+    ? `<span class="doc-row-label"><a href="${o.invoice_certificate_url}" target="_blank" rel="noopener" class="doc-row-link">Signature Evidence</a></span>`
+    : `<span class="doc-row-label">Signature Evidence</span>`;
+  return `<div class="doc-row">${labelLink}<span class="doc-row-status sent">Signed ${when}</span></div>`;
+}
+
 // Real ask 2026-09-06: "si no se manda pero queda guardado debo poder entrar y darme la
 // posibilidad de compartir por whatsapp o por correo a sus destinatarios" — every generated
 // document (sent already or not) gets its own Email/WhatsApp actions right in this row, reusing
@@ -1758,6 +1773,7 @@ function renderOrderDocsPanel(o){
       ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
       ${paymentRow}
       ${renderTradeDocRow('Invoice', o.invoice_sent_at, invoiceFiles, invoiceActions)}
+      ${renderSignatureEvidenceRow(o)}
       ${pickupDocs.length
         ? pickupDocs.map(d => `<div class="doc-row"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
         : '<div class="doc-row-empty">No pickup documents yet.</div>'}
@@ -3288,8 +3304,11 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
     let issueRes;
     try { issueRes = await callApi('orders-invoice-signature', { action: 'issue', actor: currentActor(), order_number: orderNumber }); }
     catch (e) { await btAlert('Error creando el link de firma: ' + e.message); return; }
-    const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
-    body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, firma aquí: ${signLink} para su confirmación.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    // Real ask 2026-09-15: short link (/f/x7k9m2) everywhere instead of the long ?order=&token=
+    // URL — WhatsApp always shows the raw link text next to the branded preview card, no way to
+    // hide it.
+    const signLink = `${APP_ORIGIN}/f/${encodeURIComponent(issueRes.short_code)}`;
+    body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, confírmala aquí: ${signLink}\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   } else {
     body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   }

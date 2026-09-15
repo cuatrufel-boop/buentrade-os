@@ -1,2 +1,24 @@
 [functions]
   directory = "netlify/functions"
+
+# Real ask 2026-09-15: short WhatsApp-message-friendly invoice-signature links — /f/x7k9m2 instead
+# of sign-invoice.html's long ?order=&token= URL (WhatsApp always shows the raw link text next to
+# the branded preview card, no way to hide it without the paid WhatsApp Business API). A rewrite
+# (not a redirect) keeps the short URL in the address bar and, more importantly, keeps WhatsApp's
+# link-preview crawler hitting a URL whose HTML carries sign-invoice.html's own Open Graph tags.
+[[redirects]]
+  from = "/f/*"
+  to = "/sign-invoice.html?c=:splat"
+  status = 200
+
+# Real ask 2026-09-15: same idea as /f/* above, but for product-offer cards sent from quotes.html.
+# Routes to netlify/functions/product-card.js, which fetches the offer JSON from the
+# sent-offers-create Edge Function (kept in that existing function, not a new one — the Supabase
+# Edge Function project cap was already at 99/100) and renders the small branded card (real
+# product photo, name, price) as real HTML — Supabase's own Edge Function gateway was confirmed
+# live to silently force text/plain on any Content-Type an Edge Function sets, so the HTML
+# rendering had to move to a Netlify Function instead (see product-card.js's header comment).
+[[redirects]]
+  from = "/p/*"
+  to = "/.netlify/functions/product-card?code=:splat"
+  status = 200

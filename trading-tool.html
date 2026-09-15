@@ -2193,7 +2193,9 @@ async function createAndShareInvoice(){
   let issueRes;
   try { issueRes = await callApi('orders-invoice-signature', { action: 'issue', actor: currentActor(), order_number: orderNumber }); }
   catch (e) { msgEl.textContent = 'Error creando el link de firma: ' + e.message; return; }
-  const signLink = `${APP_ORIGIN}/sign-invoice.html?order=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(issueRes.token)}`;
+  // Real ask 2026-09-15: short link (/f/x7k9m2) everywhere instead of the long ?order=&token= URL
+  // — WhatsApp always shows the raw link text next to the branded preview card, no way to hide it.
+  const signLink = `${APP_ORIGIN}/f/${encodeURIComponent(issueRes.short_code)}`;
 
   const { doc, finalTotal } = buildInvoicePdfUnsigned(composed, so, customer, orderNumber);
   const filename = `INV-BT-${btNum(orderNumber)}.pdf`;
@@ -2206,7 +2208,9 @@ async function createAndShareInvoice(){
   const body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden BT-${btNum(orderNumber)}, firma aquí: ${signLink} para su confirmación.\n\n`
     + `Gracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   const waPhone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
-  const waMessage = `Hola${contact ? ' ' + contact : ''}! Te mando la factura de la orden ${orderNumber}. Para confirmar, firma aquí: ${signLink}. ¡Gracias!`;
+  // Real ask 2026-09-15: exact copy from the user — no "firma"/"link" wording, the WhatsApp card
+  // preview (see sign-invoice.html's Open Graph tags) already says "Confirmar" on its own.
+  const waMessage = `Hola${contact ? ' ' + contact : ''}! Esta es la factura de la orden ${orderNumber}. Confírmala en cuanto puedas. ${signLink} Un Abrazo & Saludos!`;
 
   msgEl.textContent = '';
   // Real ask 2026-09-12: same preview-before-send screen PO/SO/FO already have — this used to
