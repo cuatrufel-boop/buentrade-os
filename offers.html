@@ -365,6 +365,16 @@
   .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
   .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
   .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  /* Real ask 2026-09-16: "SEARCH unificado diseno buentrade" — same glass-pill search already
+     shipped on Products/Quotes/Plants (see plants.html's own comment on this exact block),
+     scoped "of-" for this page. Copied verbatim, not reinvented. */
+  .of-search-wrap{position:relative;width:280px;height:40px;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .of-search-wrap:focus-within{border-color:var(--blue-bright);box-shadow:0 10px 28px rgba(4,12,26,.4),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -12px 16px -12px rgba(0,0,0,.25),0 0 0 3px rgba(90,170,255,.25);}
+  .of-search-wrap::before{content:'';position:absolute;top:1px;left:0;right:0;height:42%;background:linear-gradient(180deg, rgba(255,255,255,.4), rgba(255,255,255,0));border-radius:999px 999px 100% 100%/100% 100% 30% 30%;pointer-events:none;}
+  .of-search-ico{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(255,255,255,.55);pointer-events:none;}
+  .of-search-input{width:100%;height:100%;padding:0 14px 0 38px;border:none;background:transparent;color:#fff;font-size:13px;font-family:inherit;}
+  .of-search-input::placeholder{color:rgba(255,255,255,.5);}
+  .of-search-input:focus{outline:none;}
 </style>
 </head>
 <body>
@@ -540,7 +550,7 @@ auth.onAuthStateChanged(user => {
   <div id="offerPanel_pipeline">
     <div class="stats-row" id="pipelineStats"></div>
     <div class="card">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:end;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end;">
         <div class="field"><label>Status</label>
           <input type="hidden" id="f_status" value="sent">
           <div class="seg-control" id="f_status_seg">
@@ -551,6 +561,12 @@ auth.onAuthStateChanged(user => {
         </div>
         <div class="field"><label>From</label><input type="date" id="f_from" onchange="loadOffers()"></div>
         <div class="field"><label>To</label><input type="date" id="f_to" onchange="loadOffers()"></div>
+        <div class="field"><label>Search</label>
+          <div class="of-search-wrap">
+            <svg class="of-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="f_search" type="text" placeholder="Customer, product, order…" oninput="renderOffers()" class="of-search-input">
+          </div>
+        </div>
       </div>
     </div>
 
@@ -762,7 +778,15 @@ function setStatusFilter(val, btn){
 function renderOffers(){
   renderStats();
   const status = document.getElementById('f_status').value;
-  const filtered = offers.filter(o => !status || o.status === status);
+  // Real ask 2026-09-16: "SEARCH unificado" — matches by customer, product (either language), or
+  // order number, same fields a trader would actually be scanning for on this screen.
+  const q = (document.getElementById('f_search').value || '').trim().toLowerCase();
+  const filtered = offers.filter(o => {
+    if (status && o.status !== status) return false;
+    if (!q) return true;
+    return [o.customer_name, o.product_name, o.product_name_es, o.product_spec, o.product_spec_es, o.order_number, o.plant_name]
+      .some(v => v && String(v).toLowerCase().includes(q));
+  });
   const wrap = document.getElementById('offerRows');
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('emptyState').textContent = 'No offers match.';
