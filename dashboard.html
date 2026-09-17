@@ -356,17 +356,24 @@ function renderTopTraders(rows){
   tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.trader)}</td><td>${r.order_count}</td><td>${money(r.total_sales)}</td></tr>`).join('');
 }
 
+// Real ask 2026-09-16: "en que momento me avisa" — the red "Cupo" tag on offers.html is passive
+// (only seen if a trader happens to open that screen); this same over-limit fact now also shows
+// right here on the landing page every trader sees first, so it doesn't depend on remembering to
+// check offers.html. Same raw numbers (outstanding, credit_limit) dashboard-summary already
+// returns — no new query, just a highlight this table never had.
 function renderOutstanding(rows){
   const tbody = document.querySelector('#tblOutstanding tbody');
   if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing pending collection.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => `
-    <tr>
+  tbody.innerHTML = rows.map(r => {
+    const overLimit = r.credit_limit != null && Number(r.outstanding) > Number(r.credit_limit);
+    return `
+    <tr${overLimit ? ' style="background:rgba(196,67,46,.08);"' : ''}>
       <td>${escapeHtml(r.customer_name)}</td>
       <td>${money(r.outstanding)}</td>
       <td>${r.credit_limit != null ? money(r.credit_limit) : '<span style="color:var(--ink-soft)">not set</span>'}</td>
-      <td>${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} overdue</span>` : '—'}</td>
-    </tr>
-  `).join('');
+      <td>${overLimit ? '<span class="tag unpaid">Over limit</span> ' : ''}${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} overdue</span>` : (overLimit ? '' : '—')}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderPendingPlantPayments(rows, total){

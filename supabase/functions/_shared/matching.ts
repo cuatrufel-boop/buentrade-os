@@ -5,6 +5,19 @@
 
 import { createHmac } from "node:crypto";
 
+// Real bug caught live 2026-09-16, same class already hit once in plants.html (toDateOnly) and
+// documented there: a `date` column comes back from postgres.js as a JS Date object, and
+// String(dateObject) calls .toString() (locale format, "Wed Sep 16 2026...") — NOT .toISOString().
+// Slicing that to 10 chars is not even a valid date string, and fed straight into a ::date column
+// it silently parsed as some unrelated date (caught producing 2001-09-16 for an actual 2026-09-16)
+// instead of throwing. Always go through this instead of `String(x).slice(0, 10)` on anything that
+// might be a Date object coming back from a query result.
+export function toDateOnly(v: unknown): string | null {
+  if (v == null) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).slice(0, 10);
+}
+
 export function normalize(s: string | null | undefined): string {
   return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -116,17 +129,115 @@ export async function matchOrCreateLocationId(tx: any, locationName: string | nu
 // or not — a shipment row exists the moment an offer is won, so this counts real, already-sold
 // exposure, not just what's been invoiced (a narrower AR-aging number collections-search shows,
 // a different purpose).
+//
+// asOfDate (2026-09-16) — real ask: "si la carga es para una fecha despues de la fecha en que se
+// le vence una factura en teoria si se la puedo vender." A shipment already delivered has a real
+// payment_due_date (set in shipments-update-status); if that due date falls strictly before the
+// NEW load's own delivery date, that old balance is presumed collected by then and is excluded
+// from the projected exposure. A shipment with no payment_due_date yet (not delivered) always
+// still counts — there's no future date to reason about it being paid by. Passing no asOfDate
+// (existing callers before this date) keeps the exact previous flat-sum behavior.
 export async function computeCustomerExposure(
   sql: any,
   customerId: string,
+  asOfDate: string | null = null,
 ): Promise<{ creditLimit: number; outstanding: number } | null> {
   const [customer] = await sql`select credit_limit from customers where id = ${customerId}`;
   if (customer?.credit_limit == null) return null;
   const [{ outstanding }] = await sql`
     select coalesce(sum(sale_amount), 0) as outstanding from shipments
     where customer_id = ${customerId} and paid_at is null
+      and (${asOfDate}::date is null or payment_due_date is null or payment_due_date >= ${asOfDate}::date)
   `;
   return { creditLimit: Number(customer.credit_limit), outstanding: Number(outstanding) };
+}
+
+// Same "which date do we mean" resolution used by every caller of computeCustomerExposure that
+// only has a delivery_dates array (not yet a single confirmed date, see sent-offers-mark-won's
+// confirmed_delivery_date) — the earliest one is the first point this new sale becomes real
+// exposure, so it's the conservative choice: only balances due before THAT date are presumed paid.
+export function earliestDeliveryDate(dates: unknown): string | null {
+  if (!Array.isArray(dates) || dates.length === 0) return null;
+  const valid = dates.filter((d): d is string => typeof d === "string" && d.length > 0).sort();
+  return valid.length ? valid[0] : null;
+}
+
+// Market-wide price trend for a product (2026-09-16) — every plant that sells it, not just one
+// ("una cosa es el precio del producto de la misma marca y otra el precio del producto en el
+// mercado, o sea todas las marcas"). "Today" = the most recent price_date any plant has on file
+// for this product; compared against the average of every price recorded before that date, within
+// the prior 30 days. Returns null — no signal, not a fabricated one — whenever there's nothing
+// yet to compare against (price_history only started 2026-09-16, so this stays null for weeks on
+// real products until enough data accumulates; it doesn't need building later, it just starts
+// working once the data exists).
+export async function computeProductPriceSignal(
+  sql: any,
+  productId: string,
+): Promise<{ latestBest: number; avgPrior30d: number; pctChange: number } | null> {
+  const [row] = await sql`
+    with latest as (select max(price_date) as d from price_history where product_id = ${productId})
+    select
+      (select min(price) from price_history where product_id = ${productId} and price_date = (select d from latest)) as latest_best,
+      (select avg(price) from price_history where product_id = ${productId}
+         and price_date < (select d from latest) and price_date >= (select d from latest) - interval '30 days') as avg_prior_30d
+  `;
+  if (!row || row.latest_best == null || row.avg_prior_30d == null) return null;
+  const latestBest = Number(row.latest_best);
+  const avgPrior30d = Number(row.avg_prior_30d);
+  if (avgPrior30d === 0) return null;
+  return { latestBest, avgPrior30d, pctChange: ((latestBest - avgPrior30d) / avgPrior30d) * 100 };
+}
+
+// The combined "necesidad" signal (2026-09-16) — real ask: "no quiero cotizarle a nadie sin que
+// sepan que sabemos y creemos la necesidad." Joins the 3 axes already built (cupo con fecha,
+// cadencia por cliente-producto, tendencia de precio de mercado) into one message, but ONLY states
+// what's real — a customer with no cadence set, no price trend yet, and normal credit gets no
+// message at all, never a filler reason to justify the contact. PRICE_FAVORABLE_THRESHOLD_PCT is a
+// starting assumption (2%); revisit once real price_history accumulates and this gets used for
+// real. Real order history comes from sales_orders (a row only exists once an offer is actually
+// won, see sent-offers-mark-won) — never sent_offers, which also holds quotes that never closed.
+const PRICE_FAVORABLE_THRESHOLD_PCT = -2;
+
+export async function computeCustomerProductSignal(
+  sql: any,
+  customerId: string,
+  productId: string,
+): Promise<{ message: string | null; overCreditLimit: boolean } | null> {
+  const [cp] = await sql`select frequency_days, last_known_order_date from customer_products where customer_id = ${customerId} and product_id = ${productId}`;
+  const [{ last_order_date: realLastOrderDate }] = await sql`
+    select max(d.delivery_date) as last_order_date
+    from sales_orders so, lateral (select (jsonb_array_elements_text(so.delivery_dates))::date as delivery_date) d
+    where so.customer_id = ${customerId} and so.product_id = ${productId}
+  `;
+  // A real order in the live system always wins over the historical/manual fallback — never the
+  // other way, so a real sale immediately becomes the anchor instead of a stale import date.
+  const last_order_date = realLastOrderDate ?? cp?.last_known_order_date ?? null;
+
+  // Real correction 2026-09-16: frequency_days is only ever "how often BUENTRADE sold them this,"
+  // never the customer's real total buying cycle — a customer this app never sells to for 400+
+  // days may just be buying it from someone else the whole time, not "overdue." Saying "le toca"
+  // claims certainty about the customer's real need that this data can't support. This states only
+  // the two real facts (our own cadence with them, days since our own last sale) and never implies
+  // they're due — no "le toca," no urgency language, no cutoff that pretends to know their total
+  // demand.
+  const parts: string[] = [];
+  if (cp?.frequency_days != null && last_order_date) {
+    const daysSince = Math.floor((Date.now() - new Date(last_order_date).getTime()) / 86400000);
+    if (daysSince >= Number(cp.frequency_days)) {
+      parts.push(`Used to order every ${cp.frequency_days} days — last order from us was ${daysSince} days ago.`);
+    }
+  }
+
+  const priceSignal = await computeProductPriceSignal(sql, productId);
+  if (priceSignal && priceSignal.pctChange <= PRICE_FAVORABLE_THRESHOLD_PCT) {
+    parts.push(`Price ${Math.abs(Math.round(priceSignal.pctChange))}% better than the last 30-day average.`);
+  }
+
+  const exposure = await computeCustomerExposure(sql, customerId);
+  const overCreditLimit = !!(exposure && exposure.outstanding > exposure.creditLimit);
+
+  if (!parts.length && !overCreditLimit) return null;
+  return { message: parts.length ? parts.join(" ") : null, overCreditLimit };
 }
 
 // Collections module (2026-09-08). The one real moment a shipment becomes fully settled — used by

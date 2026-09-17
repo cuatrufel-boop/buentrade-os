@@ -233,6 +233,14 @@
   .cp-product-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
   .cp-product-title{font-weight:600;font-size:13.5px;color:var(--ink);}
   .cp-product-sub{font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  /* Real ask 2026-09-16: capture on this same card what the trader is told on a call ("compro 3
+     cargas por semana de este producto") — same .field input tokens (border/radius/bg) this page
+     already uses for the profile form, just scaled down to sit inline in a compact card row. Saves
+     immediately on change (customer-products-update), same immediacy as add/remove on this list —
+     no separate Save button for this list, never was one. */
+  .cp-cadence{flex-shrink:0;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-soft);white-space:nowrap;}
+  .cp-cadence-input{width:38px;padding:4px 5px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
+  .cp-cadence-input:focus{outline:none;border-color:var(--blue);}
   .cp-remove-btn{flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s;}
   .cp-remove-btn:hover{border-color:var(--red);color:#FF9C8A;background:rgba(196,67,46,.12);}
   .cp-remove-btn svg{width:13px;height:13px;}
@@ -950,7 +958,7 @@ async function loadCustomerProducts(customerId){
   try {
     const res = await callApi('customer-products-search', { customer_id: customerId });
     currentCustProducts = (res.results || [])
-      .map(r => ({ linkId: r.id, product: allCustProducts.find(p => p.id === r.product_id) }))
+      .map(r => ({ linkId: r.id, product: allCustProducts.find(p => p.id === r.product_id), frequencyDays: r.frequency_days, loadsPerCycle: r.loads_per_cycle }))
       .filter(r => r.product);
   } catch (e) {
     currentCustProducts = [];
@@ -966,11 +974,20 @@ function renderCustomerProducts(){
     .sort((a, b) => custProductLabel(a.product).localeCompare(custProductLabel(b.product)))
     .map(r => {
       const p = r.product;
+      const freqVal = r.frequencyDays != null ? r.frequencyDays : '';
+      const loadsVal = r.loadsPerCycle != null ? r.loadsPerCycle : '';
       return `<div class="cp-product-card">
         <div class="cp-product-icon">${CP_PRODUCT_ICON_SVG}</div>
         <div class="cp-product-info">
           <div class="cp-product-title">${escapeHtml(custProductLabel(p))}</div>
           <div class="cp-product-sub">${custTempBadgeHtml(p)}<span>${escapeHtml(p.full_name_en || '')}</span></div>
+        </div>
+        <div class="cp-cadence" title="Lo que el cliente dice por teléfono: cada cuánto y cuántas cargas por ciclo">
+          <span>Cada</span>
+          <input type="number" min="1" class="cp-cadence-input" value="${freqVal}" placeholder="—" onchange="updateCustomerProductCadence('${r.linkId}', 'frequency_days', this.value)">
+          <span>días,</span>
+          <input type="number" min="1" class="cp-cadence-input" value="${loadsVal}" placeholder="—" onchange="updateCustomerProductCadence('${r.linkId}', 'loads_per_cycle', this.value)">
+          <span>cargas</span>
         </div>
         <button class="cp-remove-btn" title="Quitar" onclick="removeCustomerProduct('${r.linkId}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>`;
@@ -1031,6 +1048,22 @@ async function cpSelectSuggestionIdx(i){
   document.getElementById('cp_search_input').value = '';
   cpHideSuggestions();
   renderCustomerProducts();
+}
+
+// Real ask 2026-09-16: saves immediately on change, same immediacy as add/remove on this list —
+// never a batch Save for this widget. Empty input clears the field back to null (e.g. the trader
+// mis-typed or the customer said they're not sure any more), not zero.
+async function updateCustomerProductCadence(linkId, field, value){
+  const num = value === '' ? null : Math.max(1, parseInt(value, 10) || 1);
+  const row = currentCustProducts.find(r => r.linkId === linkId);
+  try {
+    await callApi('customer-products-update', { actor: currentActor(), id: linkId, [field]: num });
+  } catch (e) {
+    await btAlert('Error: ' + e.message);
+    renderCustomerProducts(); // reset the input back to the last known-good value
+    return;
+  }
+  if (row) row[field === 'frequency_days' ? 'frequencyDays' : 'loadsPerCycle'] = num;
 }
 
 async function removeCustomerProduct(linkId){

@@ -245,6 +245,13 @@
      "in progress / waiting" hue — orders.html's stage badge (.payment-badge.active) already uses
      the identical color+border for the same "not done, not urgent, just moving along" meaning. */
   .pkg-tag.sent{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  /* Real ask 2026-09-16: an open offer being negotiated above the customer's available credit
+     (over_credit_limit from sent-offers-search) — never blocks the negotiation any more, just
+     signals it can only close once the customer's last invoice is paid. Same outline-pill
+     pattern as .won/.lost/.price/.sent, this app's own --red token (used elsewhere only for
+     .toast.error), steady — not blinking, this isn't an escalating emergency like the 30-day
+     overdue rows in collections.html. */
+  .pkg-tag.credit-hold{background:transparent;color:var(--red);border-color:rgba(196,67,46,.45);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   /* Real ask 2026-09-08: "el boton de negotiate solo diga QT en un circulo azul... igual que lo
      que ya hicimos" — same circular QT button as orders.html's openOrderQT link (36px circle,
@@ -883,9 +890,12 @@ function renderOffers(){
   // just a reply to it). The other, not-last-touched side sits idle (blue, static).
   function renderOpenRow(o){
     const hot = offerIsHot(o);
-    const statusHtml = hot
+    const statusHtml = (hot
       ? `<span class="pkg-tag hot">Bid</span>`
-      : `<span class="pkg-tag sent">Sent</span>`;
+      : `<span class="pkg-tag sent">Sent</span>`)
+      + (o.over_credit_limit
+        ? `<span class="pkg-tag credit-hold" style="margin-left:5px;" title="${o.customer_name || 'This customer'}'s outstanding balance ($${Number(o.outstanding_balance || 0).toLocaleString()}) plus this offer would exceed their credit limit ($${Number(o.credit_limit || 0).toLocaleString()}). Can close once their last invoice is paid.">Over Limit</span>`
+        : '');
     const log = o.negotiation_log || [];
     const last = log.length ? log[log.length - 1] : null;
     let purchaseCls = '', saleCls = '';

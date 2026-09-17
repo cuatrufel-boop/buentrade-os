@@ -6,7 +6,7 @@
 // (upserts both tables in one transaction, on purpose, so a price with no alias or an alias with
 // no price can never happen from a partial failure).
 
-import { writeAuditLog, matchOrCreateLocationId } from "./matching.ts";
+import { writeAuditLog, matchOrCreateLocationId, toDateOnly } from "./matching.ts";
 
 export type ApplyMatchResult =
   | { applied: true; plant_product: Record<string, any>; alias: Record<string, any> }
@@ -68,6 +68,15 @@ export async function applyPlantProductMatch(
         freight_included = excluded.freight_included,
         updated_at = now()
       returning *
+    `;
+
+    // price_history (2026-09-16) — every price this plant/product pair has ever carried, appended
+    // here since this is the one real write path every ingestion flow (paste, plant email, pending
+    // re-evaluation) already goes through. Same transaction as the price write itself, so the two
+    // can never drift out of sync.
+    await tx`
+      insert into price_history (plant_id, product_id, price, price_currency_id, price_date)
+      values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${toDateOnly(price_date) ?? new Date().toISOString().slice(0, 10)})
     `;
 
     const [alias] = await tx`

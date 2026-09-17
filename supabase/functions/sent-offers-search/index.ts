@@ -5,7 +5,7 @@
 // producto" — pass order_by: "product" to flip to product-then-customer instead.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse } from "../_shared/matching.ts";
+import { computeCustomerExposure, earliestDeliveryDate, jsonResponse } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const VALID_STATUSES = ["sent", "won", "lost"];
@@ -38,6 +38,26 @@ Deno.serve(async (req) => {
       ${orderClause}
       limit ${limit}
     `;
+
+    // Real ask 2026-09-16: flag a still-open offer being negotiated above the customer's available
+    // credit (as of its own delivery date, same date-aware formula as sent-offers-create/mark-won)
+    // — never blocks anything (the plant-contact hard block was removed the same day), just lets
+    // offers.html show the red "Cupo" tag so the trader knows this can be negotiated to the end but
+    // can only close once the customer's last invoice is paid. Computed per open offer, not per
+    // customer, because each open offer can carry its own delivery date.
+    for (const offer of results) {
+      if (offer.status === "sent" && offer.customer_id && offer.total_sale != null) {
+        const exposure = await computeCustomerExposure(sql, offer.customer_id, earliestDeliveryDate(offer.delivery_dates));
+        if (exposure) {
+          const projected = exposure.outstanding + Number(offer.total_sale);
+          offer.over_credit_limit = projected > exposure.creditLimit;
+          if (offer.over_credit_limit) {
+            offer.credit_limit = exposure.creditLimit;
+            offer.outstanding_balance = exposure.outstanding;
+          }
+        }
+      }
+    }
 
     return jsonResponse({ results });
   } catch (err) {

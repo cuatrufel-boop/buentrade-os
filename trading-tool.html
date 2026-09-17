@@ -908,6 +908,10 @@ if (FIREBASE_READY) {
           <span><span style="color:var(--blue);font-weight:700;">→</span> Sent (your number)</span>
           <span id="negoSaveStatus" style="font-weight:700;"></span>
         </div>
+        <!-- Real ask 2026-09-16: same combined necesidad signal as quotes.html's customer list —
+             cadencia/precio favorable, or falta de cupo, for THIS specific customer+product. Empty
+             when computeCustomerProductSignal has nothing real to say. -->
+        <div id="negoSignal" style="font-size:11px;margin-bottom:8px;line-height:1.4;"></div>
         <!-- Horizontal timeline instead of a tall vertical list that pushed the Profit card below
              it out of view — a sparkline shows the price arc at a glance, and the steps scroll
              sideways (not down) if a round runs long, so this card's own height never grows past
@@ -1957,6 +1961,7 @@ async function negoInit(){
   if (offer.customer_id){
     try { negoCustomer = ((await callApi('customers-search', { ids: [offer.customer_id] })).results || [])[0] || null; } catch (e) { negoCustomer = null; }
   }
+  negoRenderSignal();
   negoRenderLog();
   if (offer.status === 'won'){
     // Real bug found live 2026-09-07: "el QT del invoice debe traer los numeros no en cero" —
@@ -2439,17 +2444,16 @@ async function negoSendToPlant(channel){
   const contact = negoFirstName(negoPlant.contact_name || negoPlant.name);
   const body = `Hi ${contact},\n\nCan you confirm ${price.toFixed(4)} USD/lb for this load?`;
 
-  // Real ask 2026-09-12: "el boton de bloqueo verdadero cuando voy a pasarle un bid a la planta" —
-  // this contact IS the bid (see negoQbLeft's own note above), so the credit check has to run and
-  // block BEFORE any message goes out, not after like the old fire-and-forget negoLogEvent call.
-  // Hard block, no override — sent-offers-log-event rejects this outright when it fires.
+  // Contacting the plant no longer blocks on credit exposure (removed 2026-09-16, "ese bloqueo de
+  // planta lo podemos quitar por ahora") — the over-limit signal instead shows as the red tag on
+  // the offer in offers.html (sent-offers-search's over_credit_limit), never here.
   negoSetSaveStatus('saving');
   let logResult;
   try {
     logResult = await callApi('sent-offers-log-event', { actor: currentActor(), sent_offer_id: negoOffer.id, to: 'plant', price });
   } catch (e) {
     document.getElementById('negoSaveStatus').textContent = '';
-    document.getElementById('negoMsg').textContent = (e.data && e.data.error === 'credit_limit_exceeded') ? e.data.message : ('Error: ' + e.message);
+    document.getElementById('negoMsg').textContent = 'Error: ' + e.message;
     return;
   }
   negoOffer.negotiation_log = logResult.offer.negotiation_log;
@@ -2475,12 +2479,34 @@ async function negoSendToPlant(channel){
   }
 }
 
+// Real ask 2026-09-16: same combined necesidad signal quotes.html shows per matched customer,
+// here for the one customer+product this negotiation is already about. Silent when
+// customer-product-signal has nothing real to say — no placeholder, no invented reason.
+async function negoRenderSignal(){
+  const el = document.getElementById('negoSignal');
+  if (!el) return;
+  el.innerHTML = '';
+  if (!negoOffer || !negoOffer.customer_id || !negoOffer.product_id) return;
+  let signals = [];
+  try { signals = (await callApi('customer-product-signal', { customer_id: negoOffer.customer_id, product_ids: [negoOffer.product_id] })).signals || []; } catch (e) { return; }
+  const signal = signals[0];
+  if (!signal) return;
+  const parts = [];
+  if (signal.message) parts.push(`<span style="color:#3FCB7E;">${negoEscapeHtml(signal.message)}</span>`);
+  if (signal.overCreditLimit) parts.push(`<span style="color:var(--red);margin-left:6px;">No credit available today</span>`);
+  el.innerHTML = parts.join(' ');
+}
+
 // Message to the customer stays Spanish — same rule as the SO document, Latin American buyers.
 async function negoSendToCustomer(channel){
   if (!negoCustomer){ document.getElementById('negoMsg').textContent = 'No customer on file for this offer.'; return; }
   const price = negoCurrentSale();
   const contact = negoFirstName(negoCustomer.contact_name || negoCustomer.trade_name);
-  const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.`;
+  // Real ask 2026-09-16: same credit-hold line quotes.html appends to every customer-facing offer
+  // — negoOffer.over_credit_limit already comes straight from sent-offers-search (loaded when this
+  // negotiation opened), the same computeCustomerExposure check, never recomputed differently here.
+  const creditHoldLine = negoOffer.over_credit_limit ? '\n\nCarga sujeta a pago de la última factura.' : '';
+  const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.${creditHoldLine}`;
   if (channel === 'email'){
     if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'This customer has no email on file.'; return; }
     // Same follow-up gap as negoSendToPlant above — waInfo was never passed here either.

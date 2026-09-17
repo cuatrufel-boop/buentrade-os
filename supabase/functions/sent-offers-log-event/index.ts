@@ -6,7 +6,7 @@
 // negotiation_log array — negoRenderLog() in trading-tool.html already reads either shape.
 
 import postgres from "npm:postgres@3.4.4";
-import { computeCustomerExposure, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -34,27 +34,12 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "not_pending", message: `This offer is already '${offer.status}' — nothing left to negotiate.`, current_status: offer.status }, 409);
     }
 
-    // Real ask 2026-09-12: "el bloqueo verdadero cuando voy a pasarle un bid a la planta" —
-    // contacting the plant on an offer already out to a customer IS the bid (see trading-tool.html's
-    // negoSendToPlant), the moment BuenTrade actually commits to the exposure. Hard block, no
-    // override — unlike markWon's softer "Create Anyway" check further down the same lifecycle.
-    // Quoting/offering the customer (to === "customer") is never blocked here, only the plant leg.
-    if (to === "plant" && offer.customer_id && offer.total_sale != null) {
-      const exposure = await computeCustomerExposure(sql, offer.customer_id);
-      if (exposure) {
-        const projected = exposure.outstanding + Number(offer.total_sale);
-        if (projected > exposure.creditLimit) {
-          return jsonResponse({
-            error: "credit_limit_exceeded",
-            message: `Cannot contact the plant: ${offer.customer_name}'s outstanding balance ($${exposure.outstanding.toLocaleString()}) plus this offer ($${Number(offer.total_sale).toLocaleString()}) would exceed their credit limit ($${exposure.creditLimit.toLocaleString()}). The customer must pay down enough to free up credit before this bid can go out.`,
-            outstanding_balance: exposure.outstanding,
-            offer_amount: offer.total_sale,
-            credit_limit: exposure.creditLimit,
-            projected_total: projected,
-          }, 409);
-        }
-      }
-    }
+    // Real ask 2026-09-12 ("el bloqueo verdadero cuando voy a pasarle un bid a la planta") put a
+    // hard, no-override block here. Removed 2026-09-16: "ese bloqueo de planta lo podemos quitar
+    // por ahora" — negotiating with the plant is never blocked by credit exposure any more. The
+    // customer-facing signal instead lives on sent-offers-search (over_credit_limit per open offer,
+    // rendered as the red tag in offers.html) — visible so the trader knows a deal is running above
+    // available credit, without it stopping the negotiation.
 
     const updatedOffer = await sql.begin(async (tx) => {
       const log = Array.isArray(offer.negotiation_log) ? offer.negotiation_log : [];

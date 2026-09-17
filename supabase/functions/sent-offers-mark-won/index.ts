@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
     // instead of refusing outright — override_credit_check proceeds anyway, same shape as every
     // other duplicate/limit check in this API. Uses the FINAL (possibly overridden) sale amount.
     if (offer.customer_id && finalTotalSale != null && !override_credit_check) {
-      const exposure = await computeCustomerExposure(sql, offer.customer_id);
+      const exposure = await computeCustomerExposure(sql, offer.customer_id, confirmed_delivery_date);
       if (exposure) {
         const projected = exposure.outstanding + Number(finalTotalSale);
         if (projected > exposure.creditLimit) {

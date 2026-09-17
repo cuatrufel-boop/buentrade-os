@@ -4,7 +4,7 @@
 // change.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { jsonResponse, toDateOnly, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -52,6 +52,16 @@ Deno.serve(async (req) => {
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "plant_products", record_id: id, before: existing, after: link });
+      // price_history (2026-09-16) — only when this call actually changes current_price (a hand-
+      // typed number, see this file's own header comment), same as applyPlantProductMatch's own
+      // insert for the price-list-ingestion path. Editing an unrelated field (photo, notes, brand)
+      // never logs a price that didn't change.
+      if ("current_price" in body) {
+        await tx`
+          insert into price_history (plant_id, product_id, price, price_currency_id, price_date)
+          values (${link.plant_id}, ${link.product_id}, ${link.current_price}, ${link.price_currency_id}, ${toDateOnly(link.price_date)})
+        `;
+      }
       return link;
     });
 

@@ -22,7 +22,7 @@
 // Functions don't have this restriction.
 
 import postgres from "npm:postgres@3.4.4";
-import { computeCustomerExposure, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { computeCustomerExposure, earliestDeliveryDate, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
     // offer (see feedback_app_ui_always_english's exception for this one case).
     let creditWarning = null;
     if (total_sale != null) {
-      const exposure = await computeCustomerExposure(sql, customer_id);
+      const exposure = await computeCustomerExposure(sql, customer_id, earliestDeliveryDate(delivery_dates));
       if (exposure) {
         const projected = exposure.outstanding + Number(total_sale);
         if (projected > exposure.creditLimit) {
