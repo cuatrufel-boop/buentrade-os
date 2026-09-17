@@ -171,6 +171,19 @@
   .btn-add-inline{flex-shrink:0;width:38px;height:38px;border:1.5px solid var(--blue);border-radius:7px;background:var(--card);color:var(--blue);font-size:19px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s;}
   .btn-add-inline:hover{background:var(--blue-light);}
   .btn.danger{background:var(--card);color:#FF9C8A;border:1.5px solid rgba(196,67,46,.4);padding:5px 10px;font-size:12px;}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  /* Real ask 2026-09-17: price history per product, "diseno buentrade" = orders.html's Active
+     Loads table — a pill badge (transparent fill, colored border/text carrying state) for the
+     trend, real .btn text buttons, never bare icons. Same toggle-a-hidden-row pattern offers.html
+     already uses for its own per-offer History (toggleHistory/renderHistoryPanel). */
+  .price-history-row{display:none;}
+  .price-trend-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;background:transparent;}
+  .price-trend-badge.down{color:#3FCB7E;border-color:rgba(63,203,126,.4);}
+  .price-trend-badge.up{color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  .price-trend-badge.none{color:var(--ink-soft);border-color:rgba(255,255,255,.35);font-style:italic;}
+  .price-history-table{width:100%;border-collapse:collapse;margin-top:10px;}
+  .price-history-table th{text-align:left;font-size:10.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;padding:4px 10px;}
+  .price-history-table td{padding:6px 10px;font-size:12.5px;border-top:1px solid var(--line);}
   /* Real fix 2026-09-02, explicit ask ("unifica no pueden ser distintos colores... revisa todos
      los tabs") — same flat green as every other WhatsApp button across the OS, now the one real
      gradient+shadow language quotes.html already unified to. */
@@ -1179,8 +1192,12 @@ function renderProducts(){
   wrap.innerHTML = filtered.map(p => `<tr>
       <td>
         <a class="name-link" onclick="editProduct('${p.id}')">${speciesColoredName(p.full_name_en || p.name_en || p.name || '')}</a>
+        <button type="button" class="btn secondary small" style="margin-left:10px;" onclick="togglePriceHistory('${p.id}')">Price History</button>
         <div class="prod-name-es">${escapeHtml(p.full_name_es || '—')}</div>
       </td>
+    </tr>
+    <tr id="price_history_row_${p.id}" class="price-history-row">
+      <td><div id="price_history_panel_${p.id}"></div></td>
     </tr>`).join('');
 }
 
@@ -1339,6 +1356,59 @@ function editProduct(id){
     editingProductId = id;
     openForm(p);
   }
+}
+
+// Real ask 2026-09-17: per-product price history, real ask 2026-09-16 for the underlying data
+// (price_history — filled since that date from every real price write, applyPlantProductMatch/
+// plant-products-update). Same toggle-a-hidden-row pattern offers.html already uses for its own
+// per-offer History (toggleHistory/renderHistoryPanel) — one open at a time.
+let priceHistoryOpenId = null;
+
+async function togglePriceHistory(productId){
+  const row = document.getElementById('price_history_row_' + productId);
+  if (priceHistoryOpenId && priceHistoryOpenId !== productId){
+    const prev = document.getElementById('price_history_row_' + priceHistoryOpenId);
+    if (prev) prev.style.display = 'none';
+  }
+  if (row.style.display === 'table-row'){
+    row.style.display = 'none';
+    priceHistoryOpenId = null;
+    return;
+  }
+  row.style.display = 'table-row';
+  priceHistoryOpenId = productId;
+  const panel = document.getElementById('price_history_panel_' + productId);
+  panel.innerHTML = '<div class="prod-name-es">Loading…</div>';
+  let data;
+  try { data = await callApi('price-history-search', { product_id: productId }); }
+  catch (e) { panel.innerHTML = `<div class="prod-name-es">Error: ${escapeHtml(e.message)}</div>`; return; }
+  renderPriceHistoryPanel(productId, data.results || [], data.trend || null);
+}
+
+function priceTrendBadgeHtml(trend){
+  if (!trend) return '<span class="price-trend-badge none">Not enough history yet</span>';
+  const pct = Math.round(trend.pctChange);
+  if (pct <= -1) return `<span class="price-trend-badge down">▼ ${Math.abs(pct)}% vs last 30-day average</span>`;
+  if (pct >= 1) return `<span class="price-trend-badge up">▲ ${pct}% vs last 30-day average</span>`;
+  return '<span class="price-trend-badge none">Flat vs last 30-day average</span>';
+}
+
+function renderPriceHistoryPanel(productId, rows, trend){
+  const panel = document.getElementById('price_history_panel_' + productId);
+  if (!rows.length){
+    panel.innerHTML = '<div style="padding:10px 4px;" class="prod-name-es">No price recorded for this product since price history started (2026-09-16).</div>';
+    return;
+  }
+  panel.innerHTML = `
+    <div style="padding:10px 4px;">
+      ${priceTrendBadgeHtml(trend)}
+      <table class="price-history-table">
+        <thead><tr><th>Date</th><th>Plant</th><th>Price</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr><td>${new Date(r.price_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${escapeHtml(r.plant_name)}</td><td>$${Number(r.price).toFixed(4)}/lb</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 // Grade numbers (#2), percentages (42%), and size ranges (13/15, 4/5KG) — the exact kind of
