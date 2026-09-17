@@ -233,14 +233,26 @@
   .cp-product-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
   .cp-product-title{font-weight:600;font-size:13.5px;color:var(--ink);}
   .cp-product-sub{font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  /* Real ask 2026-09-16: capture on this same card what the trader is told on a call ("compro 3
-     cargas por semana de este producto") — same .field input tokens (border/radius/bg) this page
-     already uses for the profile form, just scaled down to sit inline in a compact card row. Saves
-     immediately on change (customer-products-update), same immediacy as add/remove on this list —
-     no separate Save button for this list, never was one. */
-  .cp-cadence{flex-shrink:0;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-soft);white-space:nowrap;}
-  .cp-cadence-input{width:38px;padding:4px 5px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
-  .cp-cadence-input:focus{outline:none;border-color:var(--blue);}
+  /* Real ask 2026-09-17: "piensa en lo mejor del mercado" — standard inline-edit pattern (Notion/
+     Linear/Airtable), not always-visible tiny inputs mashed between words. Read mode is a plain
+     sentence + a small Edit action; edit mode is two properly labeled fields, same label-above-
+     input shape as .field (this page's own main profile form), just scaled to fit a compact card
+     row, with an explicit Save/Cancel — never silently saves on blur. */
+  .cp-cadence-display{flex-shrink:0;display:flex;align-items:center;gap:8px;}
+  .cp-cadence-text{font-size:12px;color:var(--ink-soft);white-space:nowrap;}
+  .cp-cadence-empty{font-size:12px;color:var(--ink-soft);opacity:.6;font-style:italic;}
+  .cp-cadence-edit-btn{flex-shrink:0;width:24px;height:24px;border-radius:7px;border:1.5px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:border-color .15s,color .15s;}
+  .cp-cadence-edit-btn:hover{border-color:var(--blue);color:var(--blue);}
+  .cp-cadence-form{flex-shrink:0;display:flex;align-items:flex-end;gap:8px;}
+  .cp-cadence-field{display:flex;flex-direction:column;gap:3px;}
+  .cp-cadence-field label{font-size:10px;font-weight:600;color:var(--ink-soft);white-space:nowrap;}
+  .cp-cadence-field input{width:64px;padding:6px 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
+  .cp-cadence-field input:focus{outline:none;border-color:var(--blue);}
+  .cp-cadence-save-btn,.cp-cadence-cancel-btn{flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:border-color .15s,color .15s,background .15s;}
+  .cp-cadence-save-btn{color:#3FCB7E;}
+  .cp-cadence-save-btn:hover{border-color:#3FCB7E;background:rgba(63,203,126,.12);}
+  .cp-cadence-cancel-btn{color:var(--ink-soft);}
+  .cp-cadence-cancel-btn:hover{border-color:var(--red);color:#FF9C8A;background:rgba(196,67,46,.12);}
   .cp-remove-btn{flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s;}
   .cp-remove-btn:hover{border-color:var(--red);color:#FF9C8A;background:rgba(196,67,46,.12);}
   .cp-remove-btn svg{width:13px;height:13px;}
@@ -966,6 +978,51 @@ async function loadCustomerProducts(customerId){
   renderCustomerProducts();
 }
 
+// Real ask 2026-09-17: "no me gusta ese metodo de formulario... piensa en lo mejor del mercado" —
+// always-visible tiny inputs with inline words mashed around them ("Cada [_] dias, [_] cargas")
+// read as a first draft, not a real form. Replaced with the standard inline-edit pattern (Notion/
+// Linear/Airtable): a plain, readable line when not editing ("Every 40 days · 1 load/cycle"), a
+// small Edit action next to it, and — only while editing — two properly labeled fields (same
+// label-above-input shape this page's own main profile form already uses, see .field), with an
+// explicit Save/Cancel. Only one row editable at a time (cpCadenceEditingId).
+let cpCadenceEditingId = null;
+
+function cpEditCadence(linkId){
+  cpCadenceEditingId = linkId;
+  renderCustomerProducts();
+}
+
+function cpCancelCadence(){
+  cpCadenceEditingId = null;
+  renderCustomerProducts();
+}
+
+async function cpSaveCadence(linkId){
+  const freqInput = document.getElementById(`cp_freq_${linkId}`);
+  const loadsInput = document.getElementById(`cp_loads_${linkId}`);
+  const toIntOrNull = v => v === '' ? null : Math.max(1, parseInt(v, 10) || 1);
+  const frequency_days = toIntOrNull(freqInput.value);
+  const loads_per_cycle = toIntOrNull(loadsInput.value);
+  try {
+    await callApi('customer-products-update', { actor: currentActor(), id: linkId, frequency_days, loads_per_cycle });
+  } catch (e) {
+    await btAlert('Error: ' + e.message);
+    return;
+  }
+  const row = currentCustProducts.find(r => r.linkId === linkId);
+  if (row){ row.frequencyDays = frequency_days; row.loadsPerCycle = loads_per_cycle; }
+  cpCadenceEditingId = null;
+  renderCustomerProducts();
+}
+
+function cpCadenceDisplayText(freqVal, loadsVal){
+  if (freqVal == null && loadsVal == null) return '<span class="cp-cadence-empty">Cadence not set</span>';
+  const bits = [];
+  if (freqVal != null) bits.push(`Every ${freqVal} day${freqVal === 1 ? '' : 's'}`);
+  if (loadsVal != null) bits.push(`${loadsVal} load${loadsVal === 1 ? '' : 's'}/cycle`);
+  return escapeHtml(bits.join(' · '));
+}
+
 function renderCustomerProducts(){
   const wrap = document.getElementById('custProductRows');
   document.getElementById('custProductsEmpty').style.display = currentCustProducts.length ? 'none' : 'flex';
@@ -974,21 +1031,32 @@ function renderCustomerProducts(){
     .sort((a, b) => custProductLabel(a.product).localeCompare(custProductLabel(b.product)))
     .map(r => {
       const p = r.product;
-      const freqVal = r.frequencyDays != null ? r.frequencyDays : '';
-      const loadsVal = r.loadsPerCycle != null ? r.loadsPerCycle : '';
+      const freqVal = r.frequencyDays != null ? r.frequencyDays : null;
+      const loadsVal = r.loadsPerCycle != null ? r.loadsPerCycle : null;
+      const cadenceHtml = cpCadenceEditingId === r.linkId
+        ? `<div class="cp-cadence-form">
+            <div class="cp-cadence-field">
+              <label>Order frequency (days)</label>
+              <input type="number" min="1" id="cp_freq_${r.linkId}" value="${freqVal != null ? freqVal : ''}" placeholder="—">
+            </div>
+            <div class="cp-cadence-field">
+              <label>Loads per cycle</label>
+              <input type="number" min="1" id="cp_loads_${r.linkId}" value="${loadsVal != null ? loadsVal : ''}" placeholder="—">
+            </div>
+            <button type="button" class="cp-cadence-save-btn" title="Save" onclick="cpSaveCadence('${r.linkId}')">✓</button>
+            <button type="button" class="cp-cadence-cancel-btn" title="Cancel" onclick="cpCancelCadence()">✕</button>
+          </div>`
+        : `<div class="cp-cadence-display">
+            <span class="cp-cadence-text">${cpCadenceDisplayText(freqVal, loadsVal)}</span>
+            <button type="button" class="cp-cadence-edit-btn" title="Edit cadence" onclick="cpEditCadence('${r.linkId}')">✎</button>
+          </div>`;
       return `<div class="cp-product-card">
         <div class="cp-product-icon">${CP_PRODUCT_ICON_SVG}</div>
         <div class="cp-product-info">
           <div class="cp-product-title">${escapeHtml(custProductLabel(p))}</div>
           <div class="cp-product-sub">${custTempBadgeHtml(p)}<span>${escapeHtml(p.full_name_en || '')}</span></div>
         </div>
-        <div class="cp-cadence" title="Lo que el cliente dice por teléfono: cada cuánto y cuántas cargas por ciclo">
-          <span>Cada</span>
-          <input type="number" min="1" class="cp-cadence-input" value="${freqVal}" placeholder="—" onchange="updateCustomerProductCadence('${r.linkId}', 'frequency_days', this.value)">
-          <span>días,</span>
-          <input type="number" min="1" class="cp-cadence-input" value="${loadsVal}" placeholder="—" onchange="updateCustomerProductCadence('${r.linkId}', 'loads_per_cycle', this.value)">
-          <span>cargas</span>
-        </div>
+        ${cadenceHtml}
         <button class="cp-remove-btn" title="Quitar" onclick="removeCustomerProduct('${r.linkId}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>`;
     }).join('');
@@ -1048,22 +1116,6 @@ async function cpSelectSuggestionIdx(i){
   document.getElementById('cp_search_input').value = '';
   cpHideSuggestions();
   renderCustomerProducts();
-}
-
-// Real ask 2026-09-16: saves immediately on change, same immediacy as add/remove on this list —
-// never a batch Save for this widget. Empty input clears the field back to null (e.g. the trader
-// mis-typed or the customer said they're not sure any more), not zero.
-async function updateCustomerProductCadence(linkId, field, value){
-  const num = value === '' ? null : Math.max(1, parseInt(value, 10) || 1);
-  const row = currentCustProducts.find(r => r.linkId === linkId);
-  try {
-    await callApi('customer-products-update', { actor: currentActor(), id: linkId, [field]: num });
-  } catch (e) {
-    await btAlert('Error: ' + e.message);
-    renderCustomerProducts(); // reset the input back to the last known-good value
-    return;
-  }
-  if (row) row[field === 'frequency_days' ? 'frequencyDays' : 'loadsPerCycle'] = num;
 }
 
 async function removeCustomerProduct(linkId){
