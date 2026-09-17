@@ -720,12 +720,13 @@
   .rq-customer-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
   .rq-customer-name{font-weight:600;color:#fff;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rq-customer-contact{font-size:11.5px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  /* Real ask 2026-09-16: the combined necesidad signal (cadencia/precio favorable in green — real,
-     positive reasons to reach out; cupo en rojo — same --red this app already uses). Empty when
-     computeCustomerProductSignal has nothing real to say, never a placeholder. */
-  .rq-customer-signal{font-size:11px;margin-top:2px;line-height:1.4;}
-  .rq-signal-need{color:#3FCB7E;}
-  .rq-signal-credit{color:var(--red);margin-left:6px;}
+  /* Real ask 2026-09-16/17: the combined necesidad signal, "diseno buentrade" = a real pill badge
+     like every other state indicator in this app — reuses this file's own existing .pkg-tag.price
+     (blue, already the "real number worth noticing" color here) and .pkg-tag.missing (red, already
+     this file's warning color), not a bespoke class. Empty when computeCustomerProductSignal has
+     nothing real to say, never a placeholder. */
+  .rq-customer-signal{margin-top:4px;line-height:1.4;}
+  .rq-customer-signal .pkg-tag{margin-right:6px;}
   .rq-customer-actions{display:flex;gap:8px;flex-shrink:0;}
   /* One shared shape (rounded pill, icon + label) for both channels — only the fill/border tells
      Email and WhatsApp apart, so the pair reads as one designed control instead of two unrelated
@@ -4219,8 +4220,8 @@ async function rqRenderCustomerSignals(){
     const withMessage = signals.find(s => s.message);
     const overLimit = signals.some(s => s.overCreditLimit);
     const parts = [];
-    if (withMessage) parts.push(`<span class="rq-signal-need">${escapeHtml(withMessage.message)}</span>`);
-    if (overLimit) parts.push('<span class="rq-signal-credit">No credit available today</span>');
+    if (withMessage) parts.push(`<span class="pkg-tag price">${escapeHtml(withMessage.message)}</span>`);
+    if (overLimit) parts.push('<span class="pkg-tag missing">No credit available today</span>');
     el.innerHTML = parts.join(' ');
   }));
 }

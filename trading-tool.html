@@ -250,6 +250,14 @@
   }
   .chip.on{background:var(--teal); border-color:var(--teal); color:#fff;}
 
+  /* Real ask 2026-09-16/17: the combined necesidad signal, "diseno buentrade" = a real pill badge
+     (same recipe as quotes.html's .pkg-tag / orders.html's .payment-badge) — transparent fill,
+     colored border+text carrying the state — this file had no equivalent class yet, so it's added
+     here rather than reusing .chip (a toggle, filled-when-on, different meaning). */
+  .tt-signal-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;background:transparent;}
+  .tt-signal-badge.price{color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  .tt-signal-badge.credit-hold{color:#FF9C8A;border-color:rgba(196,67,46,.4);margin-left:6px;}
+
   /* Freight rate dropdown — redesigned 2026-09-07 to match THIS page's own dark theme instead of
      the white Quotes-page look it was first copied from (real complaint: it read as a foreign
      component next to every other dark .inputwrap in Direct Costs). Button matches .inputwrap
@@ -2492,8 +2500,8 @@ async function negoRenderSignal(){
   const signal = signals[0];
   if (!signal) return;
   const parts = [];
-  if (signal.message) parts.push(`<span style="color:#3FCB7E;">${negoEscapeHtml(signal.message)}</span>`);
-  if (signal.overCreditLimit) parts.push(`<span style="color:var(--red);margin-left:6px;">No credit available today</span>`);
+  if (signal.message) parts.push(`<span class="tt-signal-badge price">${negoEscapeHtml(signal.message)}</span>`);
+  if (signal.overCreditLimit) parts.push(`<span class="tt-signal-badge credit-hold">No credit available today</span>`);
   el.innerHTML = parts.join(' ');
 }
 
