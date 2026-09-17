@@ -162,30 +162,46 @@ export function earliestDeliveryDate(dates: unknown): string | null {
   return valid.length ? valid[0] : null;
 }
 
-// Market-wide price trend for a product (2026-09-16) — every plant that sells it, not just one
-// ("una cosa es el precio del producto de la misma marca y otra el precio del producto en el
-// mercado, o sea todas las marcas"). "Today" = the most recent price_date any plant has on file
-// for this product; compared against the average of every price recorded before that date, within
-// the prior 30 days. Returns null — no signal, not a fabricated one — whenever there's nothing
-// yet to compare against (price_history only started 2026-09-16, so this stays null for weeks on
-// real products until enough data accumulates; it doesn't need building later, it just starts
-// working once the data exists).
+// Market-wide price trend for a product (2026-09-16, final shape confirmed 2026-09-17) — every
+// plant that sells it, not just one ("una cosa es el precio del producto de la misma marca y otra
+// el precio del producto en el mercado, o sea todas las marcas"). Two real, independent facts, so
+// a sparse product (few real prices this month) still gives the trader something honest to say:
+//  1. trend — today's best price vs. the average of every price recorded in the prior 30 calendar
+//     days. Null (no badge) when there's nothing in that window, never a fabricated percentage.
+//  2. previous — the single most recent price before today's, whenever ANY earlier price exists
+//     at all (no 30-day requirement) — "precio anterior vs precio actual," the plain fact the
+//     trader can literally read out to a customer even when the 30-day trend has nothing to show.
 export async function computeProductPriceSignal(
   sql: any,
   productId: string,
-): Promise<{ latestBest: number; avgPrior30d: number; pctChange: number } | null> {
+): Promise<{
+  latestBest: number;
+  trend: { avgPrior30d: number; pctChange: number } | null;
+  previous: { price: number; priceDate: string } | null;
+} | null> {
   const [row] = await sql`
     with latest as (select max(price_date) as d from price_history where product_id = ${productId})
     select
       (select min(price) from price_history where product_id = ${productId} and price_date = (select d from latest)) as latest_best,
       (select avg(price) from price_history where product_id = ${productId}
-         and price_date < (select d from latest) and price_date >= (select d from latest) - interval '30 days') as avg_prior_30d
+         and price_date < (select d from latest) and price_date >= (select d from latest) - interval '30 days') as avg_prior_30d,
+      (select price from price_history where product_id = ${productId} and price_date < (select d from latest)
+         order by price_date desc limit 1) as previous_price,
+      (select price_date from price_history where product_id = ${productId} and price_date < (select d from latest)
+         order by price_date desc limit 1) as previous_price_date
   `;
-  if (!row || row.latest_best == null || row.avg_prior_30d == null) return null;
+  if (!row || row.latest_best == null) return null;
   const latestBest = Number(row.latest_best);
-  const avgPrior30d = Number(row.avg_prior_30d);
-  if (avgPrior30d === 0) return null;
-  return { latestBest, avgPrior30d, pctChange: ((latestBest - avgPrior30d) / avgPrior30d) * 100 };
+  let trend: { avgPrior30d: number; pctChange: number } | null = null;
+  if (row.avg_prior_30d != null && Number(row.avg_prior_30d) !== 0) {
+    const avgPrior30d = Number(row.avg_prior_30d);
+    trend = { avgPrior30d, pctChange: ((latestBest - avgPrior30d) / avgPrior30d) * 100 };
+  }
+  const previous = row.previous_price != null
+    ? { price: Number(row.previous_price), priceDate: row.previous_price_date }
+    : null;
+  if (!trend && !previous) return null;
+  return { latestBest, trend, previous };
 }
 
 // The combined "necesidad" signal (2026-09-16) — real ask: "no quiero cotizarle a nadie sin que
@@ -229,8 +245,8 @@ export async function computeCustomerProductSignal(
   }
 
   const priceSignal = await computeProductPriceSignal(sql, productId);
-  if (priceSignal && priceSignal.pctChange <= PRICE_FAVORABLE_THRESHOLD_PCT) {
-    parts.push(`Price ${Math.abs(Math.round(priceSignal.pctChange))}% better than the last 30-day average.`);
+  if (priceSignal?.trend && priceSignal.trend.pctChange <= PRICE_FAVORABLE_THRESHOLD_PCT) {
+    parts.push(`Price ${Math.abs(Math.round(priceSignal.trend.pctChange))}% better than the last 30-day average.`);
   }
 
   const exposure = await computeCustomerExposure(sql, customerId);

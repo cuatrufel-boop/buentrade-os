@@ -91,7 +91,11 @@
      draw the native <select> popup dark in practice. Real custom dropdown now, same family as
      plants.html's .pl-cat-dropdown. */
   .pd-cat-dropdown{position:relative;display:inline-block;}
-  .pd-cat-select{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;height:40px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 45%, rgba(255,255,255,.03) 100%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:13px;font-family:inherit;cursor:pointer;}
+  /* Real ask 2026-09-17: "necesita diseno buentrade (ver boton de add product)" — was a white/gray
+     glass gradient with no color at all, unlike the blue .btn right next to it. Same blue-glass
+     recipe as .btn now, just kept the pill shape (border-radius:999px) this dropdown already had. */
+  .pd-cat-select{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;height:40px;padding:0 14px;border-radius:999px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s;}
+  .pd-cat-select:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .pd-cat-select:focus{outline:none;border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.25);}
 
   /* Real ask 2026-09-11 ("hazlo... desde el principio con el diseno buentrade para no tener que
@@ -1191,9 +1195,13 @@ function renderProducts(){
     : 'No products yet. Click "+ Add Product" to create the first one.';
   wrap.innerHTML = filtered.map(p => `<tr>
       <td>
-        <a class="name-link" onclick="editProduct('${p.id}')">${speciesColoredName(p.full_name_en || p.name_en || p.name || '')}</a>
-        <button type="button" class="btn secondary small" style="margin-left:10px;" onclick="togglePriceHistory('${p.id}')">Price History</button>
-        <div class="prod-name-es">${escapeHtml(p.full_name_es || '—')}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
+          <div>
+            <a class="name-link" onclick="editProduct('${p.id}')">${speciesColoredName(p.full_name_en || p.name_en || p.name || '')}</a>
+            <div class="prod-name-es">${escapeHtml(p.full_name_es || '—')}</div>
+          </div>
+          <button type="button" class="btn secondary small" style="flex-shrink:0;" onclick="togglePriceHistory('${p.id}')">Price History</button>
+        </div>
       </td>
     </tr>
     <tr id="price_history_row_${p.id}" class="price-history-row">
@@ -1385,29 +1393,50 @@ async function togglePriceHistory(productId){
   renderPriceHistoryPanel(productId, data.results || [], data.trend || null);
 }
 
-function priceTrendBadgeHtml(trend){
-  if (!trend) return '<span class="price-trend-badge none">Not enough history yet</span>';
-  const pct = Math.round(trend.pctChange);
+// Real ask 2026-09-17 (settled after going back and forth on 30-day vs. count-based): two
+// independent, honest facts, never one invented number. "signal" here is computeProductPriceSignal's
+// real shape: { latestBest, trend: {avgPrior30d, pctChange} | null, previous: {price, priceDate} | null }.
+function priceTrendBadgeHtml(signal){
+  if (!signal || !signal.trend) return '<span class="price-trend-badge none">Not enough history in the last 30 days for a trend</span>';
+  const pct = Math.round(signal.trend.pctChange);
   if (pct <= -1) return `<span class="price-trend-badge down">▼ ${Math.abs(pct)}% vs last 30-day average</span>`;
   if (pct >= 1) return `<span class="price-trend-badge up">▲ ${pct}% vs last 30-day average</span>`;
   return '<span class="price-trend-badge none">Flat vs last 30-day average</span>';
 }
 
-function renderPriceHistoryPanel(productId, rows, trend){
+// "Precio anterior vs precio actual" — always shown whenever ANY earlier price exists at all, no
+// 30-day requirement, so a sparsely-priced product still gives the trader a plain fact to read out
+// to a customer even when the 30-day trend badge above has nothing to show.
+function pricePreviousLineHtml(signal){
+  if (!signal || !signal.previous) return '';
+  const prevDate = new Date(signal.previous.priceDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `<div class="prod-name-es" style="margin-top:6px;">Previous: $${Number(signal.previous.price).toFixed(4)}/lb (${prevDate}) → Now: $${Number(signal.latestBest).toFixed(4)}/lb</div>`;
+}
+
+// Real ask 2026-09-17: "que hacemos cuando sean 100 precios... solo mostrar los ultimos 5 para
+// que sea visualmente manejable" — nothing is ever deleted (price-history-search still returns up
+// to 200 real rows, already sorted newest first), this just displays the most recent 5.
+const PRICE_HISTORY_DISPLAY_COUNT = 5;
+
+function renderPriceHistoryPanel(productId, rows, signal){
   const panel = document.getElementById('price_history_panel_' + productId);
   if (!rows.length){
     panel.innerHTML = '<div style="padding:10px 4px;" class="prod-name-es">No price recorded for this product since price history started (2026-09-16).</div>';
     return;
   }
+  const shown = rows.slice(0, PRICE_HISTORY_DISPLAY_COUNT);
+  const hiddenCount = rows.length - shown.length;
   panel.innerHTML = `
     <div style="padding:10px 4px;">
-      ${priceTrendBadgeHtml(trend)}
+      ${priceTrendBadgeHtml(signal)}
+      ${pricePreviousLineHtml(signal)}
       <table class="price-history-table">
         <thead><tr><th>Date</th><th>Plant</th><th>Price</th></tr></thead>
         <tbody>
-          ${rows.map(r => `<tr><td>${new Date(r.price_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${escapeHtml(r.plant_name)}</td><td>$${Number(r.price).toFixed(4)}/lb</td></tr>`).join('')}
+          ${shown.map(r => `<tr><td>${new Date(r.price_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${escapeHtml(r.plant_name)}</td><td>$${Number(r.price).toFixed(4)}/lb</td></tr>`).join('')}
         </tbody>
       </table>
+      ${hiddenCount > 0 ? `<div class="prod-name-es" style="margin-top:6px;">+ ${hiddenCount} older price${hiddenCount === 1 ? '' : 's'} on file, not shown.</div>` : ''}
     </div>`;
 }
 
