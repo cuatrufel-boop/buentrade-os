@@ -99,6 +99,7 @@
   .btn:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
   .btn.danger{background:var(--card);color:#FF9C8A;border:1.5px solid rgba(196,67,46,.4);padding:5px 10px;font-size:12px;}
+  .btn.small{padding:5px 10px;font-size:12px;}
   /* Real fix 2026-09-02, explicit ask ("unifica... revisa todos los tabs") — same gradient+shadow
      every WhatsApp button across the OS now uses, not this page's own flat green. */
   .wa-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s,border-color .18s,color .18s;}
@@ -233,30 +234,22 @@
   .cp-product-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
   .cp-product-title{font-weight:600;font-size:13.5px;color:var(--ink);}
   .cp-product-sub{font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  /* Real ask 2026-09-17: "piensa en lo mejor del mercado... no tiene diseno buentrade" — the first
-     version used flat gray-on-gray boxes (var(--line) border, no color) instead of this app's real
-     action-button language: translucent colored glass, borders that carry meaning (blue = an
-     action like .btn's own "Edit", green = confirm like collections' paid state, neutral-hover-red
-     = destructive like .cp-remove-btn). Rendered and visually compared side by side against .btn/
-     .wa-btn/.cp-remove-btn before shipping this version — see /tmp/cadence-preview. Read mode is a
-     plain sentence + a small Edit action; edit mode is two properly labeled fields, same label-
-     above-input shape as .field (this page's own main profile form), with an explicit Save/Cancel
-     — never silently saves on blur. */
+  /* Real ask 2026-09-17: "cuando te diga diseno buentrade es asi mismo" — pointed at orders.html's
+     Active Loads table (rounded pill tags with an icon and a colored border per state, plain
+     .btn/.btn.secondary text buttons like its "View") as the exact reference. Reused here: the
+     pill is the same recipe as orders.html's .payment-badge (transparent fill, border+text color
+     carrying the state — blue/set, neutral/not-set), and Edit/Save/Cancel are real .btn buttons
+     (.btn.secondary for Edit/Cancel — the same pairing this page's own profile Edit/Cancel already
+     use — .btn for Save), never bare icon-only squares. */
   .cp-cadence-display{flex-shrink:0;display:flex;align-items:center;gap:8px;}
-  .cp-cadence-text{font-size:12px;color:var(--blue-bright);font-weight:600;white-space:nowrap;}
-  .cp-cadence-empty{font-size:12px;color:var(--ink-soft);opacity:.6;font-style:italic;}
-  .cp-cadence-edit-btn{flex-shrink:0;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.05);border:1.5px solid rgba(90,170,255,.4);color:var(--blue-bright);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:background .18s,border-color .18s;}
-  .cp-cadence-edit-btn:hover{background:rgba(90,170,255,.12);}
+  .cp-cadence-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;background:transparent;}
+  .cp-cadence-badge.set{color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  .cp-cadence-badge.unset{color:var(--ink-soft);border-color:rgba(255,255,255,.35);font-style:italic;}
   .cp-cadence-form{flex-shrink:0;display:flex;align-items:flex-end;gap:8px;}
   .cp-cadence-field{display:flex;flex-direction:column;gap:3px;}
   .cp-cadence-field label{font-size:10px;font-weight:600;color:var(--ink-soft);white-space:nowrap;}
   .cp-cadence-field input{width:64px;padding:6px 8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;text-align:center;background:var(--card);color:var(--ink);}
   .cp-cadence-field input:focus{outline:none;border-color:var(--blue);}
-  .cp-cadence-save-btn,.cp-cadence-cancel-btn{flex-shrink:0;width:28px;height:28px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:background .18s,border-color .18s;}
-  .cp-cadence-save-btn{background:rgba(255,255,255,.05);border:1.5px solid rgba(95,224,151,.4);color:#5FE097;}
-  .cp-cadence-save-btn:hover{background:rgba(95,224,151,.12);}
-  .cp-cadence-cancel-btn{background:rgba(255,255,255,.05);border:1.5px solid var(--line);color:var(--ink-soft);}
-  .cp-cadence-cancel-btn:hover{border-color:var(--red);color:#FF9C8A;background:rgba(196,67,46,.12);}
   .cp-remove-btn{flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s;}
   .cp-remove-btn:hover{border-color:var(--red);color:#FF9C8A;background:rgba(196,67,46,.12);}
   .cp-remove-btn svg{width:13px;height:13px;}
@@ -1019,12 +1012,12 @@ async function cpSaveCadence(linkId){
   renderCustomerProducts();
 }
 
-function cpCadenceDisplayText(freqVal, loadsVal){
-  if (freqVal == null && loadsVal == null) return '<span class="cp-cadence-empty">Cadence not set</span>';
+function cpCadenceBadgeHtml(freqVal, loadsVal){
+  if (freqVal == null && loadsVal == null) return '<span class="cp-cadence-badge unset">Cadence not set</span>';
   const bits = [];
   if (freqVal != null) bits.push(`Every ${freqVal} day${freqVal === 1 ? '' : 's'}`);
   if (loadsVal != null) bits.push(`${loadsVal} load${loadsVal === 1 ? '' : 's'}/cycle`);
-  return escapeHtml(bits.join(' · '));
+  return `<span class="cp-cadence-badge set">${escapeHtml(bits.join(' · '))}</span>`;
 }
 
 function renderCustomerProducts(){
@@ -1047,12 +1040,12 @@ function renderCustomerProducts(){
               <label>Loads per cycle</label>
               <input type="number" min="1" id="cp_loads_${r.linkId}" value="${loadsVal != null ? loadsVal : ''}" placeholder="—">
             </div>
-            <button type="button" class="cp-cadence-save-btn" title="Save" onclick="cpSaveCadence('${r.linkId}')">✓</button>
-            <button type="button" class="cp-cadence-cancel-btn" title="Cancel" onclick="cpCancelCadence()">✕</button>
+            <button type="button" class="btn small" onclick="cpSaveCadence('${r.linkId}')">Save</button>
+            <button type="button" class="btn secondary small" onclick="cpCancelCadence()">Cancel</button>
           </div>`
         : `<div class="cp-cadence-display">
-            <span class="cp-cadence-text">${cpCadenceDisplayText(freqVal, loadsVal)}</span>
-            <button type="button" class="cp-cadence-edit-btn" title="Edit cadence" onclick="cpEditCadence('${r.linkId}')">✎</button>
+            ${cpCadenceBadgeHtml(freqVal, loadsVal)}
+            <button type="button" class="btn secondary small" onclick="cpEditCadence('${r.linkId}')">Edit</button>
           </div>`;
       return `<div class="cp-product-card">
         <div class="cp-product-icon">${CP_PRODUCT_ICON_SVG}</div>
