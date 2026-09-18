@@ -180,15 +180,24 @@ export async function computeProductPriceSignal(
   previous: { price: number; priceDate: string } | null;
 } | null> {
   const [row] = await sql`
-    with latest as (select max(price_date) as d from price_history where product_id = ${productId})
+    with latest as (select max(price_date) as d from price_history where product_id = ${productId}),
+    -- Real gap caught 2026-09-18: "esta tomando el precio de cada planta, lo que quiere es el
+    -- precio de mercado" — the aggregate numbers here already filter by product_id only (never
+    -- plant_id), so they were always market-wide, not one plant's own price. But "previous" used
+    -- to grab a single arbitrary row when two plants shared the same earlier date, instead of the
+    -- market's best (min) that date — inconsistent with latest_best's own logic. Fixed: find the
+    -- most recent PRIOR DATE with any price on file first, then take the min price across every
+    -- plant on that specific date, mirroring latest_best exactly.
+    previous_date as (
+      select max(price_date) as d from price_history
+      where product_id = ${productId} and price_date < (select d from latest)
+    )
     select
       (select min(price) from price_history where product_id = ${productId} and price_date = (select d from latest)) as latest_best,
       (select avg(price) from price_history where product_id = ${productId}
          and price_date < (select d from latest) and price_date >= (select d from latest) - interval '30 days') as avg_prior_30d,
-      (select price from price_history where product_id = ${productId} and price_date < (select d from latest)
-         order by price_date desc limit 1) as previous_price,
-      (select price_date from price_history where product_id = ${productId} and price_date < (select d from latest)
-         order by price_date desc limit 1) as previous_price_date
+      (select min(price) from price_history where product_id = ${productId} and price_date = (select d from previous_date)) as previous_price,
+      (select d from previous_date) as previous_price_date
   `;
   if (!row || row.latest_best == null) return null;
   const latestBest = Number(row.latest_best);
