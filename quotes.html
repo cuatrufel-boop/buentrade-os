@@ -953,6 +953,15 @@ function doSignIn(e){
 
 function logout(){ auth.signOut(); }
 
+// Real bug reported live 2026-09-18 ("rebota... se sale y empieza a recargar... me daña todos los
+// procesos"): Firebase refires onAuthStateChanged on its own on every silent ID-token refresh (and
+// on tab refocus/reconnect), not just on the actual sign-in. loadQuotesPage() was called
+// unconditionally on every firing, which wiped the Building Quote panel and all 3 sweep lists back
+// to "Loading…" mid-session, AND registered a brand-new setInterval(loadPendingPrices, 45000) each
+// time on top of whichever ones were already running — so the reloads got more frequent the longer
+// the tab stayed open. This flag makes the real page load happen exactly once per tab; the
+// gate/badge display still updates on every firing, which is harmless.
+let rqAuthLoaded = false;
 auth.onAuthStateChanged(user => {
   const gate = document.getElementById('authGate');
   const app = document.getElementById('appContent');
@@ -960,7 +969,7 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
-    loadQuotesPage();
+    if (!rqAuthLoaded) { rqAuthLoaded = true; loadQuotesPage(); }
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
