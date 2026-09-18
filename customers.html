@@ -738,6 +738,11 @@ function openForm(customer){
       .some(f => customer[f]);
     document.getElementById('paymentsContactDifferent').checked = hasPaymentsContact;
   }
+  // Real bug found live 2026-09-18 (products.html/plants.html): every .value = above is set
+  // programmatically, which never fires 'change' — the bt-select widget's visible label
+  // (Country/State/Currency/Incoterm/Customs Agency) never updated even though the real value was
+  // set correctly. Explicit resync now.
+  document.querySelectorAll('#formCard select[data-bt-enhanced]').forEach(s => { if (s.btSync) s.btSync(); });
   togglePaymentDaysInput();
   togglePaymentsContact();
   updateCustomerProfile();
@@ -1624,6 +1629,13 @@ function btEnhanceSelect(selectEl){
   trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
   document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
   new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  // Real bug found live 2026-09-18 (products.html/plants.html): the MutationObserver above only
+  // catches <option> nodes being added/removed — setting selectEl.value programmatically (any
+  // form-population code) changes no DOM structure at all, so the visible label never updated even
+  // though the real underlying value was set correctly. A 'change' listener plus this exposed
+  // resync method cover both cases.
+  selectEl.addEventListener('change', sync);
+  selectEl.btSync = sync;
   sync();
 }
 function btEnhanceAllSelects(root){

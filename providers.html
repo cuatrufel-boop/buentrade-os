@@ -1284,6 +1284,11 @@ function editProviderProfile(){
   const pWa = splitPhone(p.whatsapp);
   document.getElementById('p_whatsapp_code').value = pWa.code;
   document.getElementById('p_whatsapp_number').value = pWa.number;
+  // Real bug found live 2026-09-18 (products.html/plants.html): setting p_country_id.value above
+  // programmatically never fires 'change', so the bt-select widget's visible Country label never
+  // updated even though the real value was set correctly.
+  const countrySel = document.getElementById('p_country_id');
+  if (countrySel.btSync) countrySel.btSync();
   const roles = providerRolesMap[currentProviderId] || [];
   document.querySelectorAll('#profileEdit .role-cb').forEach(cb => cb.checked = roles.includes(cb.value));
   document.getElementById('formMsg').textContent = '';
@@ -2166,6 +2171,13 @@ function btEnhanceSelect(selectEl){
   trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
   document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
   new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  // Real bug found live 2026-09-18 (products.html/plants.html): the MutationObserver above only
+  // catches <option> nodes being added/removed — setting selectEl.value programmatically (any
+  // form-population code) changes no DOM structure at all, so the visible label never updated even
+  // though the real underlying value was set correctly. A 'change' listener plus this exposed
+  // resync method cover both cases.
+  selectEl.addEventListener('change', sync);
+  selectEl.btSync = sync;
   sync();
 }
 function btEnhanceAllSelects(root){

@@ -349,7 +349,13 @@ function preselectFromQuery(){
   const params = new URLSearchParams(location.search);
   const customerId = params.get('customer');
   if (customerId) {
-    document.getElementById('pmtCustomer').value = customerId;
+    const sel = document.getElementById('pmtCustomer');
+    sel.value = customerId;
+    // Real bug found live 2026-09-18 (products.html/plants.html): setting .value programmatically
+    // never fires 'change', so the bt-select widget's visible label stayed stuck on "Select
+    // customer..." even though the real customer was correctly selected underneath (arriving here
+    // via Collections' "Payment" link, ?customer=...).
+    if (sel.btSync) sel.btSync();
     onCustomerChange();
   }
 }
@@ -640,6 +646,13 @@ function btEnhanceSelect(selectEl){
   trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
   document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
   new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  // Real bug found live 2026-09-18 (products.html/plants.html): the MutationObserver above only
+  // catches <option> nodes being added/removed — setting selectEl.value programmatically (any
+  // form-population code) changes no DOM structure at all, so the visible label never updated even
+  // though the real underlying value was set correctly. A 'change' listener plus this exposed
+  // resync method cover both cases.
+  selectEl.addEventListener('change', sync);
+  selectEl.btSync = sync;
   sync();
 }
 function btEnhanceAllSelects(root){
