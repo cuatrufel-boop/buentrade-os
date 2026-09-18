@@ -5,7 +5,7 @@
 // itself both need to know which category a name belongs to.
 
 import postgres from "npm:postgres@3.4.4";
-import { duplicateResponse, isNearDuplicate, jsonResponse, normalize, writeAuditLog } from "../_shared/matching.ts";
+import { duplicateResponse, findEmbeddedVariation, isNearDuplicate, jsonResponse, normalize, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -25,6 +25,19 @@ Deno.serve(async (req) => {
 
     const [category] = await sql`select id from categories where id = ${category_id}`;
     if (!category) return jsonResponse({ error: "unknown category_id" }, 400);
+
+    // Real ask 2026-09-18: a cut name must never have a size/grade/descriptor variation baked into
+    // its own text ("Bellies #2") — that belongs in the separate Variation field. Hard block, no
+    // override, unlike the near-duplicate check below — see findEmbeddedVariation's own comment.
+    const categoryVariations = await sql`select name_en, name_es from variations where category_id = ${category_id}`;
+    const embedded = findEmbeddedVariation(name_en, name_es, categoryVariations);
+    if (embedded) {
+      return jsonResponse({
+        error: "embedded_variation",
+        message: `"${name_en}" looks like it has the variation "${embedded.name_en}" mixed into the cut name — a cut name must never include a size/grade/descriptor. Create "${name_en.replace(new RegExp(embedded.name_en, "i"), "").trim()}" as the cut name instead, and add "${embedded.name_en}" as a Variation on the product.`,
+        embedded_variation: embedded,
+      }, 400);
+    }
 
     const sameCategory = await sql`select * from cut_names where category_id = ${category_id}`;
     const exactDuplicate = sameCategory.find((c: any) => normalize(c.name_es) === normalize(name_es) || normalize(c.name_en) === normalize(name_en));

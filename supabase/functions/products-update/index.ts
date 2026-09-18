@@ -9,7 +9,7 @@
 // current value. `id` is the only field always required, plus `actor` for the audit trail.
 
 import postgres from "npm:postgres@3.4.4";
-import { duplicateResponse, isNearDuplicate, jsonResponse, normalize, normalizeLoose, writeAuditLog } from "../_shared/matching.ts";
+import { duplicateResponse, findEmbeddedVariation, isNearDuplicate, jsonResponse, normalize, normalizeLoose, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -41,6 +41,23 @@ Deno.serve(async (req) => {
     if (merged.category_id) {
       const [category] = await sql`select id from categories where id = ${merged.category_id}`;
       if (!category) return jsonResponse({ error: "unknown category_id" }, 400);
+    }
+
+    // Real ask 2026-09-18: a product's own name/name_en (the cut) must never have a size/grade/
+    // descriptor variation baked into it ("Bellies #2") — that belongs in subcategory/subcategory_en.
+    // Hard block, no override, unlike the near-duplicate check below — see findEmbeddedVariation's
+    // own comment in _shared/matching.ts. Confirmed real incident: this is exactly the bug behind 5
+    // real cut names deleted from the catalog 2026-09-18 that were still baked into 4 products.
+    if (merged.category_id) {
+      const categoryVariations = await sql`select name_en, name_es from variations where category_id = ${merged.category_id}`;
+      const embedded = findEmbeddedVariation(merged.name_en, merged.name, categoryVariations);
+      if (embedded) {
+        return jsonResponse({
+          error: "embedded_variation",
+          message: `"${merged.name_en}" looks like it has the variation "${embedded.name_en}" mixed into the product's own name — that belongs in the separate Variation field, not the cut name. Use "${merged.name_en.replace(new RegExp(embedded.name_en, "i"), "").trim()}" as the name and add "${embedded.name_en}" as a Variation instead.`,
+          embedded_variation: embedded,
+        }, 400);
+      }
     }
     if (merged.temperature_id) {
       const [t] = await sql`select id from temperature where id = ${merged.temperature_id}`;

@@ -51,6 +51,34 @@ export function isNearDuplicate(a: string, b: string): boolean {
   return dist <= 2 && dist / longer < 0.3;
 }
 
+// Real ask 2026-09-18 ("bellies va solo, nunca con variation... que no deje a nadie juntarlo"):
+// confirmed live against real data — 5 cut names ("Backribs #2", "Bellies #2", "Bellies 13/15",
+// "Bellies 15/17", "42% Trim"/"72% Trim") had a size/grade/descriptor baked directly into the cut
+// name text instead of living in the separate Variation field, and there was nothing stopping it
+// from happening again. This is a hard, unconditional block (unlike the duplicate checks elsewhere
+// in this file, which always allow an explicit override — Rule 5) because there is no legitimate
+// case for a cut name or a product's own name/name_en to contain another catalog value verbatim;
+// it is never "confirm this is genuinely different," it is always a data-entry mistake. Matches as
+// a substring on normalized (lowercased, whitespace-collapsed) text — deliberately simple, since
+// every real offender caught so far is a short, distinctive token (a number, a fraction, a %, or a
+// short English/Spanish descriptor word) that would never coincidentally appear inside an unrelated
+// cut name in this domain.
+export function findEmbeddedVariation(
+  candidateEn: string | null | undefined,
+  candidateEs: string | null | undefined,
+  categoryVariations: { name_en: string; name_es: string }[],
+): { name_en: string; name_es: string } | null {
+  const enText = normalize(candidateEn);
+  const esText = normalize(candidateEs);
+  for (const v of categoryVariations) {
+    const vEn = normalize(v.name_en);
+    const vEs = normalize(v.name_es);
+    if (vEn && enText.includes(vEn)) return v;
+    if (vEs && esText.includes(vEs)) return v;
+  }
+  return null;
+}
+
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
