@@ -632,12 +632,7 @@ auth.onAuthStateChanged(user => {
   <div id="orderDetailBox">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
       <h2 id="orderDetailTitle" style="margin:0;"></h2>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft,#8a94a6);cursor:pointer;user-select:none;" title="When on, finishing one step automatically opens the next real action on this order.">
-          <input type="checkbox" id="guidedModeToggle" checked onchange="guidedModeEnabled=this.checked;">Guided
-        </label>
-        <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
-      </div>
+      <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
     </div>
     <div id="orderDetailBody"></div>
   </div>
@@ -817,33 +812,6 @@ let openOrderNumber = null; // order_number whose detail modal is currently open
 //   PULL  — waits on someone else (Release #, Customs docs, Signature). Never auto-fired; the
 //           order just sits in "waiting" until release-number-emails-poll/pickup-docs-emails-poll/
 //           orders-invoice-signature fill it and (once wired) push-notify the trader back to it.
-const GUIDED_AUTOOPEN_ACTIONS = {
-  'PO': o => openDocPreview('PO', o.order_number),
-  'SO': o => openDocPreview('SO', o.order_number),
-  'FO': o => openDocPreview('FO', o.order_number),
-  'Confirm PU': o => confirmPickupReadyClick(o.order_number),
-  'Sent to customs': o => shareCustoms(o.order_number),
-  'Invoice': o => openInvoiceQT(o.order_number),
-};
-let guidedModeEnabled = true; // safety valve — trader can flip this off if the auto-opening gets in the way
-let guidedFiredLabel = null; // last step label auto-opened for the currently-open order — dedup so it never re-fires on every re-render
-// Called after any re-render of the order detail modal (open or refresh) with that render's real
-// nextLabel — the exact same leftmost-pending label the Stage/Next Action badges already show, so
-// this can never point somewhere different from what the trader sees on screen.
-function maybeAutoAdvanceGuided(o, nextLabel){
-  // docSeq (below) already owns the PO->SO->FO chain right after winning a deal — never fire a
-  // second, competing auto-open while that sequence is actively running.
-  if (docSeq) return;
-  if (!guidedModeEnabled || !o || openOrderNumber !== o.order_number) return;
-  if (!nextLabel || nextLabel === guidedFiredLabel) return;
-  const action = GUIDED_AUTOOPEN_ACTIONS[nextLabel];
-  // A pull/manual step is reached — nothing to auto-open, but reset the dedup guard so if the
-  // trader later manually advances past it, the next real push step can still fire once.
-  if (!action) { guidedFiredLabel = null; return; }
-  guidedFiredLabel = nextLabel;
-  setTimeout(() => action(o), 350); // brief pause so the transition is visible, not a jarring jump-cut
-}
-
 async function loadStatusOrders(){
   const wrap = document.getElementById('statusCards');
   wrap.innerHTML = '<div class="empty">Loading…</div>';
@@ -1929,16 +1897,13 @@ function openOrderDetail(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   openOrderNumber = orderNumber;
-  guidedFiredLabel = null; // fresh open — a step already auto-opened on a PREVIOUS visit to this order is allowed to fire again
   const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
   document.getElementById('orderDetailOverlay').style.display = 'flex';
-  maybeAutoAdvanceGuided(o, renderUnifiedTimeline(o, attentionOrderNumbers).nextLabel);
 }
 function closeOrderDetail(){
   openOrderNumber = null;
-  guidedFiredLabel = null;
   document.getElementById('orderDetailOverlay').style.display = 'none';
 }
 function refreshOpenOrderDetail(attentionOrderNumbers){
@@ -1947,7 +1912,6 @@ function refreshOpenOrderDetail(attentionOrderNumbers){
   if (!o) { closeOrderDetail(); return; }
   const attn = attentionOrderNumbers || new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attn);
-  maybeAutoAdvanceGuided(o, renderUnifiedTimeline(o, attn).nextLabel);
 }
 
 function findStatusOrder(orderNumber){
