@@ -13,6 +13,19 @@
 // Real ask 2026-09-15, twice: "que tal tarjeta sea nitida pequeña facil de ver" — a trader may
 // send several product cards back to back in one WhatsApp conversation, so this stays a compact
 // "summary" card (small square photo + title), not a full-width "summary_large_image" one.
+//
+// Real bug found live 2026-09-18, confirmed against the actual deployed site (not just local code):
+// the "redirect straight to the destination, no step 2" behavior below never actually fired for a
+// real visitor — the JS `window.location.replace()` in <head> is a client-side redirect that
+// depends on the requesting browser/webview actually executing it on initial parse, and it simply
+// didn't, on the live URL, in more than one real browser tested. The person stayed on the summary
+// card and had to tap "Ver Ficha Técnica" by hand — exactly the two-step flow the 2026-09-16 ask
+// was supposed to remove. Replaced with a real server-side HTTP redirect for an actual human
+// visitor, which needs no JS at all and can't be "not executed" the way a script can: this
+// function now reads the request's User-Agent, and issues a genuine 302 straight to the spec/photo
+// for anyone who isn't WhatsApp's own link-preview crawler. The crawler (identified by "WhatsApp"
+// in its User-Agent, the standard way every site does this) still gets this same HTML page with
+// its Open Graph tags, since a 302 response has no meta tags for it to read for the chat preview.
 
 const SUPABASE_FN_URL = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/sent-offers-create';
 const SUPABASE_ANON_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
@@ -46,13 +59,11 @@ function errorPage(message, statusCode) {
 // title, Precio row, Marca row, Ficha Técnica row — every row always present, every row showing
 // "—" when that specific field has no real value on file, instead of the row disappearing.
 // Real ask 2026-09-16: "no necesito paso 2 solo 1 y 3" — the intermediate BuenTrade summary card
-// (photo/price/plant) was one extra tap the user doesn't want. The human visitor now gets sent
-// straight to the real destination (the spec PDF if one exists, else the real photo, else this
-// summary page as a last resort when neither exists) — but WhatsApp's link-preview crawler must
-// still see the Open Graph tags in this page's raw HTML to build the small chat card, and crawlers
-// never execute JS or follow a meta-refresh, so this page still renders normally for them while a
-// real browser redirects immediately via JS (more reliable than meta-refresh, which some mobile
-// browsers delay or show a visible flash before).
+// (photo/price/plant) was one extra tap the user doesn't want. A real human visitor never actually
+// sees this page's body at all now — the handler below sends them straight there with a real HTTP
+// 302 before this function even runs. This function only ever renders for WhatsApp's own
+// link-preview crawler (building the small chat card off these Open Graph tags) or for the
+// genuine last-resort case where the product has neither a spec nor a photo to jump to.
 function renderCardPage(offer) {
   const productName = escapeHtml(offer.product_name_es || offer.product_name || 'Producto');
   const spec = escapeHtml(offer.product_spec_es || offer.product_spec || '');
@@ -62,15 +73,10 @@ function renderCardPage(offer) {
   const specUrl = offer.spec_url || null;
   const priceTitle = offer.sale_per_lb != null ? ` — $${Number(offer.sale_per_lb).toFixed(4)} / lb` : '';
   const cardTitle = `${productName}${priceTitle}`;
-  const redirectTarget = specUrl || photo || null;
 
   const ogImageTags = photo ? `
 <meta property="og:image" content="${escapeHtml(photo)}">
 <meta name="twitter:image" content="${escapeHtml(photo)}">` : '';
-
-  const redirectScript = redirectTarget
-    ? `<script>window.location.replace(${JSON.stringify(redirectTarget)});</script>`
-    : '';
 
   return `<!DOCTYPE html>
 <html lang="es"><head>
@@ -81,7 +87,6 @@ function renderCardPage(offer) {
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${escapeHtml(cardTitle)}">${ogImageTags}
-${redirectScript}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
@@ -151,6 +156,23 @@ exports.handler = async (event) => {
     if (!res.ok || !data.offer) return errorPage('Este link ya no es válido. Contacta a tu representante de BuenTrade.', 404);
   } catch (e) {
     return errorPage('No se pudo cargar esta oferta. Contacta a tu representante de BuenTrade.', 502);
+  }
+
+  // Real bug found live 2026-09-18 — see this function's header comment for the full story: a
+  // client-side JS redirect can't be trusted to actually run, a real HTTP redirect can't fail to.
+  // WhatsApp's crawler must still receive this HTML page (its Open Graph tags are what builds the
+  // chat preview — a crawler never follows a 302 to build that preview off the destination file
+  // instead), so it's the only visitor that gets this page's body rather than the redirect.
+  const userAgent = (event.headers && (event.headers['user-agent'] || event.headers['User-Agent'])) || '';
+  const isWhatsAppCrawler = /whatsapp/i.test(userAgent);
+  const redirectTarget = data.offer.spec_url || data.offer.photo_url || null;
+
+  if (redirectTarget && !isWhatsAppCrawler) {
+    return {
+      statusCode: 302,
+      headers: { Location: redirectTarget },
+      body: '',
+    };
   }
 
   return {
