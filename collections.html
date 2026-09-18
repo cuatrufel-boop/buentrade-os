@@ -85,7 +85,11 @@
      that was explicitly asked for. */
   .ct-row-overdue30{animation:ctOverdueRowBlink 1.3s ease-in-out infinite;}
   .mono{font-family:'IBM Plex Mono',monospace;}
-  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  /* Real bug found live 2026-09-18 ("ese error de guiones"): the − (U+2212 minus sign) used for
+     negative amounts is a valid line-break point to the browser, same as a hyphen — a narrow
+     numeric column would wrap "−$20.22" into "−" on its own line and "$20.22" below it, each
+     centered independently by the header-alignment rule. Currency values must never wrap. */
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;}
   .muted{color:var(--ink-soft);}
   .table-scroll{overflow-x:auto;}
 
