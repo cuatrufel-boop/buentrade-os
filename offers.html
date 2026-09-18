@@ -283,14 +283,6 @@
      it), not a flat list of every offer. A customer's card collapses to one line once you're not
      actively looking at it — opens on its own when it has a live bid, or when the search box
      matches it, so scanning past a quiet customer costs nothing. */
-  .attn-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
-  .attn-pill{display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:10px;font-size:12.5px;cursor:pointer;border:1px solid;transition:transform .1s;background:none;font-family:inherit;text-align:left;}
-  .attn-pill:hover{transform:translateY(-1px);}
-  .attn-pill.hot{background:rgba(15,138,95,.12);border-color:rgba(15,138,95,.4);color:#3FCB7E;}
-  .attn-pill.cold{background:rgba(196,67,46,.12);border-color:rgba(196,67,46,.4);color:#FF9C8A;}
-  .attn-pill .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-  .attn-pill.hot .dot{background:#0F8A5F;animation:hotPulse 1.4s ease-in-out infinite;}
-  .attn-pill.cold .dot{background:#C4432E;}
   .pending-group-head{cursor:pointer;user-select:none;}
   .cust-chevron{width:8px;height:8px;border-right:2px solid var(--ink-soft);border-bottom:2px solid var(--ink-soft);transform:rotate(-45deg);transition:transform .15s;flex-shrink:0;display:inline-block;margin-right:4px;}
   .pending-group.open .cust-chevron{transform:rotate(45deg);}
@@ -790,9 +782,7 @@ function offerAgeDays(dateStr){
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
 }
 
-const COLD_DAYS = 3;
 function offerIsHot(o){ return o.status === 'sent' && (o.negotiation_log || []).length > 0; }
-function offerIsCold(o){ return o.status === 'sent' && !offerIsHot(o) && (offerAgeDays(o.sent_at) || 0) >= COLD_DAYS; }
 
 // Manual open/close overrides, keyed by customer name — set the moment a trader clicks a card's
 // header, so it stays exactly how they left it across re-renders (a new search keystroke, a
@@ -800,12 +790,6 @@ function offerIsCold(o){ return o.status === 'sent' && !offerIsHot(o) && (offerA
 const custOpenOverride = new Map();
 function toggleCustGroup(name, currentlyOpen){
   custOpenOverride.set(name, !currentlyOpen);
-  renderOffers();
-}
-// Jumping from an attention pill just force-opens that customer's group — no search box to sync
-// with anymore (real ask 2026-09-08: "esa fila de search quitala").
-function jumpToCustomer(name){
-  custOpenOverride.set(name, true);
   renderOffers();
 }
 
@@ -851,26 +835,6 @@ function renderOffers(){
     return a.customerName.localeCompare(b.customerName);
   });
   groupList.forEach(g => g.rows.sort((a, b) => (isHot(b) - isHot(a))));
-
-  // Attention strip — computed off the whole loaded (date-ranged) set, not whatever the search
-  // box or status filter currently narrows to, since its entire job is "what needs a look right
-  // now" regardless of what's on screen. A hot offer gets its own pill (there's rarely more than
-  // a couple at once); cold ones are rolled up per customer so 4 quiet Murgati offers read as one
-  // line, not four.
-  const hotOffers = offers.filter(offerIsHot);
-  const coldByCustomer = {};
-  offers.filter(offerIsCold).forEach(o => {
-    const key = o.customer_name || '—';
-    (coldByCustomer[key] = coldByCustomer[key] || []).push(o);
-  });
-  const attnHtml = (hotOffers.length || Object.keys(coldByCustomer).length) ? `
-    <div class="attn-strip">
-      ${hotOffers.map(o => `<button type="button" class="attn-pill hot" onclick="jumpToCustomer('${escapeHtml(o.customer_name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${escapeHtml(o.customer_name)}</b> — bid in on ${escapeHtml((o.product_spec || o.product_name))}</button>`).join('')}
-      ${Object.entries(coldByCustomer).map(([name, rows]) => {
-        const maxDays = Math.max(...rows.map(o => offerAgeDays(o.sent_at) || 0));
-        return `<button type="button" class="attn-pill cold" onclick="jumpToCustomer('${escapeHtml(name).replace(/'/g, "\\'")}')"><span class="dot"></span><b>${rows.length} offer${rows.length === 1 ? '' : 's'}</b> to ${escapeHtml(name)} — ${maxDays}d with no reply</button>`;
-      }).join('')}
-    </div>` : '';
 
   // Real ask 2026-09-08: "analiza todo lo que hemos hecho... en lugar de eso tan grandes con
   // botones gigantes que hicimos en orden. organiza cada offer igual que esta en collections" —
@@ -946,7 +910,7 @@ function renderOffers(){
       <tr id="history_row_${o.id}" style="display:none;"><td colspan="5" style="padding:0 0 12px;"><div id="history_panel_${o.id}"></div></td></tr>`;
   }
 
-  wrap.innerHTML = attnHtml + groupList.map(g => {
+  wrap.innerHTML = groupList.map(g => {
     const openRows = g.rows.filter(o => o.status === 'sent');
     const closedRows = g.rows.filter(o => o.status !== 'sent');
     const rowsHtml = openRows.map(renderOpenRow).join('') + closedRows.map(renderClosedRow).join('');
