@@ -614,6 +614,12 @@ function doReset(e){
 function logout(){ if(auth) auth.signOut(); }
 
 if (FIREBASE_READY) {
+  // Real bug reported live 2026-09-18 ("rebota se sale se brinca de donde estoy" — same one
+  // already fixed on Quotes): Firebase refires onAuthStateChanged on its own on every silent
+  // ID-token refresh (and on tab refocus/reconnect), not just the real sign-in. negoInit() used to
+  // run unconditionally on every firing, which would wipe a calculator mid-session. This flag
+  // makes the real load happen exactly once per tab.
+  let btAuthLoaded = false;
   auth.onAuthStateChanged(user => {
     const gate = document.getElementById('authGate');
     const app = document.getElementById('appContent');
@@ -622,6 +628,8 @@ if (FIREBASE_READY) {
       app.style.display = 'block';
       const badge = document.getElementById('userBadge');
       if (badge) badge.textContent = user.email;
+      if (btAuthLoaded) return;
+      btAuthLoaded = true;
       negoInit();
       // Firebase restores a persisted session asynchronously — calling this at the bottom of the
       // script (alongside buildProductRows()/calc()) fired it before auth.currentUser existed

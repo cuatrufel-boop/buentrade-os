@@ -219,6 +219,12 @@ function doSignIn(e){
 
 function logout(){ auth.signOut(); }
 
+// Real bug reported live 2026-09-18 ("rebota se sale se brinca de donde estoy" — same one
+// already fixed on Quotes): Firebase refires onAuthStateChanged on its own on every silent
+// ID-token refresh (and on tab refocus/reconnect), not just the real sign-in. The load call below
+// used to run unconditionally on every firing, wiping the page back to "Loading…" and resetting
+// scroll/state mid-session. This flag makes the real load happen exactly once per tab.
+let btAuthLoaded = false;
 auth.onAuthStateChanged(user => {
   const gate = document.getElementById('authGate');
   const app = document.getElementById('appContent');
@@ -226,15 +232,18 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
-    // Real bug fixed 2026-09-14, confirmed live ("por que no sale nada en collections?") — the
-    // disable below removed the ONLY call to loadCollections() anywhere in this file, since it
-    // lived nested inside runUrgentQueueOnLogin() instead of standing on its own the way
-    // loadStatusOrders()/loadOffers() already do in orders.html/offers.html. Collections has had
-    // real invoiced orders in the database the whole time; the page just never asked for them.
-    loadCollections();
-    // Disabled 2026-09-13 per user: auto-trigger removed from all modules (orders/offers/collections),
-    // function kept intact to re-enable later per-module if needed.
-    // runUrgentQueueOnLogin();
+    if (!btAuthLoaded) {
+      btAuthLoaded = true;
+      // Real bug fixed 2026-09-14, confirmed live ("por que no sale nada en collections?") — the
+      // disable below removed the ONLY call to loadCollections() anywhere in this file, since it
+      // lived nested inside runUrgentQueueOnLogin() instead of standing on its own the way
+      // loadStatusOrders()/loadOffers() already do in orders.html/offers.html. Collections has had
+      // real invoiced orders in the database the whole time; the page just never asked for them.
+      loadCollections();
+      // Disabled 2026-09-13 per user: auto-trigger removed from all modules (orders/offers/collections),
+      // function kept intact to re-enable later per-module if needed.
+      // runUrgentQueueOnLogin();
+    }
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
