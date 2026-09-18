@@ -1524,8 +1524,16 @@ function updateProfileDisplays(){
   setProfileField('packing_es_display', pack ? (pack.name || pack.name_en) : '');
   setProfileField('subcategory_en', chosenVariations.map(v => v.name_en).join(', '));
   setProfileField('subcategory', chosenVariations.map(v => v.name_es).join(', '));
-  setProfileField('name_en', cutName ? cutName.name_en : '');
-  setProfileField('name', cutName ? cutName.name_es : '');
+  // Real bug found live 2026-09-18: falls back to this product's own saved name/full_name when the
+  // Cut Name dropdown can't find a matching catalog row — see editingProductRaw's own comment above
+  // openProductForm. Only trusted while Category/Temperature/Packaging still match what was saved
+  // (the trader hasn't started reassigning them to something else).
+  const rawMatchesSaved = editingProductRaw && cat && temp && pack
+    && editingProductRaw.category_id === cat.id
+    && editingProductRaw.temperature_id === temp.id
+    && editingProductRaw.packaging_id === pack.id;
+  setProfileField('name_en', cutName ? cutName.name_en : (rawMatchesSaved ? (editingProductRaw.name_en || '') : ''));
+  setProfileField('name', cutName ? cutName.name_es : (rawMatchesSaved ? (editingProductRaw.name || '') : ''));
   // Every ingredient, both languages, no exceptions.
   // EN: Category Variation CutName Temperature, Packaging (e.g. "Pork Bone-In Butt Frozen, Box").
   // ES: CutName Category Variation Temperature, Packaging (e.g. "Lomo Cerdo con hueso Congelado, Caja").
@@ -1536,6 +1544,9 @@ function updateProfileDisplays(){
     const esParts = [cutName.name_es, cat.name, ...chosenVariations.map(v => v.name_es), temp.name || temp.name_en].filter(Boolean);
     setProfileField('full_name_en', `${enParts.join(' ')}, ${pack.name_en || pack.name}`);
     setProfileField('full_name_es', `${esParts.join(' ')}, ${pack.name || pack.name_en}`);
+  } else if (rawMatchesSaved && editingProductRaw.full_name_en){
+    setProfileField('full_name_en', editingProductRaw.full_name_en);
+    setProfileField('full_name_es', editingProductRaw.full_name_es || '');
   } else {
     setProfileField('full_name_en', '');
     setProfileField('full_name_es', '');
@@ -1890,6 +1901,13 @@ function btEnhanceSelect(selectEl){
   trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
   document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
   new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  // Real bug found live 2026-09-18: the MutationObserver above only catches <option> nodes being
+  // added/removed — setting selectEl.value programmatically (every form-population path in this
+  // file) changes no DOM structure at all, so the visible label never updated even though the
+  // real underlying value was set correctly. A 'change' listener plus this exposed resync method
+  // (called explicitly by openProductForm after populating the edit form) cover both cases.
+  selectEl.addEventListener('change', sync);
+  selectEl.btSync = sync;
   sync();
 }
 function btEnhanceAllSelects(root){
@@ -4441,8 +4459,18 @@ async function downloadPlantProductFile(fileUrl, filename, btn){
 // each call check, right after its own await, that it's still the most recent one before touching
 // the DOM any further — an abandoned older call just stops instead of clobbering the newer one.
 let openProductFormToken = 0;
+// Real bug found live 2026-09-18, same one already fixed in products.html: updateProfileDisplays()
+// below derives Product Name and Full Name PURELY from the currently selected Cut Name dropdown —
+// if this product's own saved name/name_en has no matching row in the cutNames catalog for its
+// category (confirmed live on real data — a product saved successfully once, whose name simply
+// isn't in the catalog as an exact match), the fields blank out on re-edit even though the real,
+// valid data is already saved. "No tiene suficiente data" on Save is this exact bug: the form's
+// own name/full_name_en/full_name_es fields read as empty while the real values exist underneath.
+// Holds the raw product being edited so updateProfileDisplays can fall back to it.
+let editingProductRaw = null;
 async function openProductForm(product){
   const myToken = ++openProductFormToken;
+  editingProductRaw = product || null;
   document.getElementById('formCard').style.display = 'flex';
   document.getElementById('formTitle').textContent = product ? 'Edit product' : 'New product for this plant';
   const fields = ['prodId','name','name_en','category','subcategory','subcategory_en','temperature_id','packaging_id','full_name_en','full_name_es'];
@@ -4506,6 +4534,13 @@ async function openProductForm(product){
       specPrev.style.display = 'block';
     }
   }
+  // Real bug found live 2026-09-18, same one already fixed in products.html: every .value = above
+  // is set programmatically, which never fires a native 'change' event — the bt-select widget's
+  // visible label only re-synced via a MutationObserver watching for <option> nodes being added/
+  // removed, never for the .value property itself changing. Category/Temperature/Packaging/Cut
+  // Name all showed "—" in the closed dropdown while the correct option was genuinely selected
+  // underneath (visible only by opening the panel and seeing its checkmark). Explicit resync now.
+  document.querySelectorAll('#formCard select[data-bt-enhanced]').forEach(s => { if (s.btSync) s.btSync(); });
   updateVariationDropdownLabel();
   updateProfileDisplays();
   document.getElementById('formMsg').textContent = '';
