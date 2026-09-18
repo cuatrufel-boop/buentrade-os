@@ -261,14 +261,18 @@
   .pkg-tag.sent{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   /* Real ask 2026-09-16: an open offer being negotiated above the customer's available credit
      (over_credit_limit from sent-offers-search) — never blocks the negotiation any more, just
-     signals it can only close once the customer's last invoice is paid. Same outline-pill
-     pattern as .won/.lost/.price/.sent, steady — not blinking, this isn't an escalating emergency
-     like the 30-day overdue rows in collections.html.
-     Real ask 2026-09-18 ("no se ve bien ni me gusta"): recolored from --red to --amber — this is
-     an informational heads-up, not a blocking/dangerous state (the hard credit block itself was
-     already removed), so it now reads as caution rather than alarm, same semantic --amber already
-     carries on .payment-badge.due-soon. */
-  .pkg-tag.credit-hold{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
+     signals it can only close once the customer's last invoice is paid.
+     Real ask 2026-09-18, twice ("no se ve bien ni me gusta" then "over limit no puede ser igual a
+     bid... haz algo bueno"): a same-shape outline pill just recolored read as a cosmetic tweak,
+     not a real distinction — Bid is a live status (blinking, transparent), Over Limit is a
+     standing constraint on the whole row, a different KIND of information. Filled amber chip with
+     its own icon (not just colored text) plus a matching wash on the row itself (same real
+     precedent as dashboard.html's Outstanding table: `background:rgba(196,67,46,.08)` on an
+     over-limit <tr>, adapted to amber here since this isn't a blocking state) — the row reads as
+     flagged at a glance, not just one small pill among others. */
+  .pkg-tag.credit-hold{display:inline-flex;align-items:center;gap:4px;background:rgba(255,200,118,.14);color:var(--amber);border-color:rgba(255,200,118,.5);}
+  .pkg-tag.credit-hold svg{width:11px;height:11px;flex-shrink:0;}
+  tr.over-limit-row{background:rgba(255,200,118,.05);}
   .pkg-asof{font-size:10.5px;color:var(--ink-soft);}
   /* Real ask 2026-09-18 ("titulo de QT ponle Quotation... el logo que da igual QT"): the column
      header (previously blank) now reads "Quotation" — the button itself still just says "QT".
@@ -889,7 +893,7 @@ function renderOffers(){
       ? `<span class="pkg-tag hot">Bid</span>`
       : `<span class="pkg-tag sent">Sent</span>`)
       + (o.over_credit_limit
-        ? `<span class="pkg-tag credit-hold" style="margin-left:5px;" title="${o.customer_name || 'This customer'}'s outstanding balance ($${Number(o.outstanding_balance || 0).toLocaleString()}) plus this offer would exceed their credit limit ($${Number(o.credit_limit || 0).toLocaleString()}). Can close once their last invoice is paid.">Over Limit</span>`
+        ? `<span class="pkg-tag credit-hold" style="margin-left:5px;" title="${o.customer_name || 'This customer'}'s outstanding balance ($${Number(o.outstanding_balance || 0).toLocaleString()}) plus this offer would exceed their credit limit ($${Number(o.credit_limit || 0).toLocaleString()}). Can close once their last invoice is paid."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Over Limit</span>`
         : '');
     const log = o.negotiation_log || [];
     const last = log.length ? log[log.length - 1] : null;
@@ -901,7 +905,7 @@ function renderOffers(){
     }
     const purchaseHtml = `<span${purchaseCls}>$${(o.purchase_price || 0).toFixed(4)}</span>`;
     const saleHtml = `<span${saleCls}>$${(o.sale_per_lb || 0).toFixed(4)}</span>`;
-    return `<tr>
+    return `<tr${o.over_credit_limit ? ' class="over-limit-row"' : ''}>
         <td>${escapeHtml((o.product_spec || o.product_name) || '—')}</td>
         <td class="muted">${escapeHtml(o.plant_name || '—')}</td>
         <td class="num price-link" onclick="openNegotiationView('${o.id}')" title="Open negotiation">${purchaseHtml} → ${saleHtml}</td>
