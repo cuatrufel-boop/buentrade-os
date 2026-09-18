@@ -1865,6 +1865,13 @@ const rqTableSection = (rowsHtml, headCells) => `
 // sections shown at once, each sliced down to just that one product's rows, so a search for e.g.
 // "Boneless Picnic VAC" shows its Ready row, its Expired row, and its Updating row together.
 function rqRenderSweepTables(){
+  // Real ask 2026-09-18: "find product (sin boton de search) ya el boton de find busca" — "Search
+  // this list" (rq_search_trigger, the plain per-tab text filter) had no show/hide logic at all,
+  // so it sat there on every tab including Find Product — confusing right next to a card whose
+  // whole job is already opening its own search palette (rqOpenFindProduct). Hidden only on that
+  // one tab; Ready/Updating/Expired keep it exactly as before.
+  const searchTrigger = document.getElementById('rq_search_trigger');
+  if (searchTrigger) searchTrigger.style.display = rqActiveSweepTab === 'quote' ? 'none' : '';
   const readyList = document.getElementById('rq_ready_results');
   const expiredList = document.getElementById('rq_expired_results');
   const updatingList = document.getElementById('rq_updating_results');
