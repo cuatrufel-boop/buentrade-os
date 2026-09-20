@@ -162,6 +162,12 @@
   .step.actionable:hover .step-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
   .step.actionable.urgent .step-icon{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
   .step.actionable.urgent .step-label{color:#FF9C8A;}
+  /* Real ask 2026-09-20: "debe estar blinking y en rojo... no puede llegar el dia del PU sin estar
+     confirmado" — Release # gets its own always-on urgent treatment (not gated behind blink-now's
+     "one thing blinks per card" rule) once pickup is a day away or has already passed with no
+     release number on file, same red pulse the main timeline step already uses elsewhere. */
+  .u-mini.urgent .u-mini-btn{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  .u-mini.urgent .u-mini-label{color:#FF9C8A;font-weight:700;}
   .step.done .step-icon{background:var(--green);border-color:var(--green);color:#fff;}
   .step.current .step-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
   @keyframes stepPulse{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 4px var(--blue-light);}50%{opacity:.55;transform:scale(1.2);box-shadow:0 0 0 7px rgba(30,106,219,.22);}}
@@ -930,12 +936,20 @@ function fullProductLabel(o){
   const cp = o.catalogProduct;
   return o.product_spec || (cp ? (cp.name_en || cp.name) : o.product_name);
 }
+// Spanish counterpart — real bug found live 2026-09-19/20: the 3 customer-facing stage messages
+// (STAGE_EMAIL_BODY_ES/STAGE_WHATSAPP_ES, all in Spanish) were using fullProductLabel() above,
+// which is English-only. Same fallback chain as fullProductLabel, just the Spanish fields, with
+// fullProductLabel itself as the last-resort fallback so this never shows blank.
+function fullProductLabelEs(o){
+  const cp = o.catalogProduct;
+  return o.product_spec_es || (cp ? cp.name : null) || o.product_name_es || fullProductLabel(o);
+}
 function requestCustomsDocsMessage(o){
   const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
-  return `Hi, for order BT-${btNum(o.order_number)} — ${fullProductLabel(o)}, please send us: ${docsLine}. Thank you.`;
+  return `Hi, for order PO-BT-${btNum(o.order_number)} — ${fullProductLabel(o)}, please send us: ${docsLine}. Thank you.`;
 }
 function requestCustomsDocsSubject(orderNumber){
-  return `Documents needed — Order BT-${btNum(orderNumber)}`;
+  return `Documents needed — Order PO-BT-${btNum(orderNumber)}`;
 }
 // Real ask 2026-09-14: "debe abrir email primero whatsapp opcional despues de mandar email. el
 // email es mejor para que la lea el api despues" — this used to be WhatsApp-only, which the
@@ -1014,19 +1028,8 @@ async function confirmPickupReadyClick(orderNumber){
   const hasCarrier = !!(o.carrier && o.carrier.phone);
   const waPhone = (hasCarrier ? o.carrier.phone : (o.plant.whatsapp || o.plant.phone) || '').replace(/\D/g, '');
 
-  let location = o.pickup_location || null;
-  if (!location){
-    let locations;
-    try { locations = (await callApi('plant-locations-search', { plant_id: o.plant_id })).results || []; }
-    catch (e) { locations = []; }
-    if (locations.length){
-      const pickedId = await showPickupLocationPicker(o.plant_name, locations);
-      if (!pickedId) return; // trader cancelled — nothing sent, nothing saved
-      location = locations.find(l => l.id === pickedId);
-      try { await callApi('shipments-set-pickup-location', { actor: currentActor(), order_number: orderNumber, pickup_location_id: pickedId }); }
-      catch (e) { await btAlert('Could not save the pickup location: ' + e.message); return; }
-    }
-  }
+  const location = await resolvePickupLocationForOrder(o, orderNumber);
+  if (location === undefined) return; // trader cancelled the location picker, or saving it failed
 
   const toEmail = (location && location.email) || o.plant.email || null;
   if (!toEmail){
@@ -1230,8 +1233,9 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     // aplica salga arriba" — FO is the only conditional one of the three (has_freight_order), so
     // it's the one that rises into a small curve when it exists; PO/SO never move.
     const raisedClass = st.raised ? ' raised' : '';
+    const urgentClass = st.urgent ? ' urgent' : '';
     return {
-      html: `<div class="u-mini ${state}${raisedClass}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
+      html: `<div class="u-mini ${state}${raisedClass}${urgentClass}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
       lineDone: st.done,
       actionableNow: state === 'now',
       raised: !!st.raised,
@@ -1255,7 +1259,17 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
   // other real action on this timeline — no new business logic, just surfaced where it belongs.
-  entries.push(miniEntry({ icon: '#', label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')`, raised: true }));
+  // Real ask 2026-09-20, exact dictation: "debe estar blinking y en rojo... no puede llegar el dia
+  // del PU sin estar confirmado" — mirrors the same escalation shipment-alerts-poll now applies
+  // server-side: urgent once pickup is a day away (or already past) with no release number yet.
+  let releaseNumberUrgent = false;
+  if (o.plant_paid_at && !o.release_number && o.pickup_date){
+    const pickup = new Date(String(o.pickup_date).slice(0, 10) + 'T00:00:00');
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+    const daysUntilPickup = Math.round((pickup.getTime() - today0.getTime()) / 86400000);
+    releaseNumberUrgent = daysUntilPickup <= 1;
+  }
+  entries.push(miniEntry({ icon: '#', label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')`, raised: true, urgent: releaseNumberUrgent }));
   if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, waitReason: 'Record the release number first.', onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
   const confirmIdx = entries.length;
   entries.push(mainEntry('pending_pickup'));
@@ -1508,11 +1522,11 @@ function computeAttentionItems(){
       const daysUntil = Math.round((pickup - today) / 86400000);
       if (daysUntil < 0){
         items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)} — ${productName}`,
-          btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. This load is past its pickup date, please advise.`, `BT-${btNum(o.order_number)} — Missed pickup`) });
+          btn: pickupBtns(`Hi, following up on order PO-BT-${btNum(o.order_number)} — ${productName}. This load is past its pickup date, please advise.`, `PO-BT-${btNum(o.order_number)} — Missed pickup`) });
       } else if (daysUntil === 1){
         const carrierName = o.carrier && o.carrier.name ? ` with ${o.carrier.name}` : '';
         items.push({ orderNumber: label, order_number: o.order_number, text: `Pickup tomorrow (${fmtDateStr(o.pickup_date)})${carrierName} — confirm everything is ready — ${productName}`,
-          btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `BT-${btNum(o.order_number)} — Pickup tomorrow`) });
+          btn: pickupBtns(`Hi, following up on order PO-BT-${btNum(o.order_number)} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `PO-BT-${btNum(o.order_number)} — Pickup tomorrow`) });
       }
     }
     // Real correction 2026-09-06: pay-the-plant and ask-for-release# are TWO separate steps, not
@@ -1528,14 +1542,22 @@ function computeAttentionItems(){
           btn: `<button class="wa-btn" onclick="payPlantClick('${o.order_number}')">Confirm Payment Sent</button>` });
       }
     }
-    if (stage === 'pending_pickup' && o.plant_paid_at){
-      items.push({ orderNumber: label, order_number: o.order_number, text: `Get the Release Number from the carrier — ${productName}`,
-        btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. We've confirmed payment — please provide the release number for the carrier's pickup.`, `BT-${btNum(o.order_number)} — Release number`) });
+    if (stage === 'pending_pickup' && o.plant_paid_at && !o.release_number){
+      // Same escalation as the timeline's own Release # icon and shipment-alerts-poll's server
+      // side text — one condition, computed the same way in all three places.
+      let releaseLabelPrefix = '';
+      if (o.pickup_date){
+        const pickup = new Date(String(o.pickup_date).slice(0, 10) + 'T00:00:00');
+        const daysUntilPickup = Math.round((pickup.getTime() - today.getTime()) / 86400000);
+        releaseLabelPrefix = daysUntilPickup < 0 ? '🔴 CRITICAL — ' : daysUntilPickup <= 1 ? '⚠ URGENT — ' : '';
+      }
+      items.push({ orderNumber: label, order_number: o.order_number, text: `${releaseLabelPrefix}Waiting on the Release Number — ${productName}`,
+        btn: `<button class="wa-btn outline" onclick="resendPaymentEmail('${o.order_number}')">Resend Release Number Request</button>` });
     }
     if (stage === 'picked_up' && !(o.pending_pickup_documents && o.pending_pickup_documents.length)){
       const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
       items.push({ orderNumber: label, order_number: o.order_number, text: `Request pickup documents (${docsLine}) — ${productName}`,
-        btn: pickupBtns(`Hi, for order BT-${btNum(o.order_number)} — ${productName}, please send us: ${docsLine}. Thank you.`, `BT-${btNum(o.order_number)} — Pickup documents needed`) });
+        btn: pickupBtns(`Hi, for order PO-BT-${btNum(o.order_number)} — ${productName}, please send us: ${docsLine}. Thank you.`, `PO-BT-${btNum(o.order_number)} — Pickup documents needed`) });
     }
     if (stage === 'picked_up'){
       const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
@@ -1748,7 +1770,14 @@ function renderOrderDocsPanel(o){
       paymentBtn = emailBtn(`payPlantClick('${o.order_number}')`) + waBtn(`confirmPlantPaymentWhatsApp('${o.order_number}')`);
       paymentStatus = 'Not paid';
     } else if (!o.release_number){
-      paymentBtn = docRowBtn(`${DOC_ICON} Record Release #`, `recordReleaseNumber('${o.order_number}')`);
+      // Real ask 2026-09-20: "debemos poder reenviar correo" (the plant rarely answers same-day)
+      // and "la vendedora reenvia a la de pagos y asi la podemos grabar nueva" (once that reply
+      // names the real Payments Contact, save it onto the plant so it stops routing through her).
+      // The save button only shows up while there's genuinely no Payments Contact on file yet —
+      // once one exists, resolvePaymentRecipients already uses it and there's nothing left to save.
+      paymentBtn = docRowBtn(`${DOC_ICON} Record Release #`, `recordReleaseNumber('${o.order_number}')`)
+        + docRowBtn(`↻ Resend`, `resendPaymentEmail('${o.order_number}')`)
+        + (!(o.plant && o.plant.payments_email) ? docRowBtn(`Save Payments Contact`, `savePlantPaymentsContact('${o.order_number}')`) : '');
       paymentStatus = `Paid ${paymentWhen} — release # pending`;
     } else {
       paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn(`${STEP_ICONS.picked_up} Send to Carrier`, `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
@@ -1968,16 +1997,20 @@ async function askPlantWhatsApp(orderNumber){
 // skips the notification when no STAGE_* entry exists for a status, per its own `if (bodyFn &&
 // subjFn)` guard.
 const STAGE_EMAIL_BODY_ES = {
-  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabel(o)} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
-  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabel(o)} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabelEs(o)} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabelEs(o)} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
 };
 const STAGE_WHATSAPP_ES = {
-  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${fullProductLabel(o)} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
-  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga BT-${btNum(o.order_number)} de ${fullProductLabel(o)} fue entregada con éxito.`,
+  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${fullProductLabelEs(o)} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
+  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga SO-BT-${btNum(o.order_number)} de ${fullProductLabelEs(o)} fue entregada con éxito.`,
 };
+// Real fix 2026-09-20: subject used the raw stored order_number (already carries a "BT-" prefix
+// baked in, e.g. "BT-2026-1002") with no document-type prefix — the customer only ever recognizes
+// this shipment by the SO number on the Sales Order they already received, confirmed live against
+// a real order (see project_approved_email_whatsapp_copy_table for the frozen copy this belongs to).
 const STAGE_SUBJECTS_ES = {
-  picked_up: o => `${o.order_number} — Tu carga va en camino`,
-  delivered: o => `${o.order_number} — Carga entregada con Éxito`,
+  picked_up: o => `SO-BT-${btNum(o.order_number)} — Tu carga va en camino`,
+  delivered: o => `SO-BT-${btNum(o.order_number)} — Carga entregada con Éxito`,
 };
 
 // Real correction 2026-09-07, explicit and repeated: every notification that leaves BuenTrade
@@ -2063,15 +2096,58 @@ function payPlantClick(orderNumber){
   window.open(BANK_LOGIN_URL, '_blank');
   confirmPlantPaymentSent(orderNumber);
 }
+
+// Real ask 2026-09-20: "deberia ir a la persona correcta del location no solo a la vendedora de la
+// planta sino a la persona que expide el release" — the release number is issued by whoever runs
+// that specific pickup location, not the plant's general sales contact. Shared with
+// confirmPickupReadyClick (same real-world question: "who do I actually talk to for THIS load's
+// pickup") so the location only ever gets picked/asked once per order and both steps agree on it.
+async function resolvePickupLocationForOrder(o, orderNumber){
+  if (o.pickup_location) return o.pickup_location;
+  let locations;
+  try { locations = (await callApi('plant-locations-search', { plant_id: o.plant_id })).results || []; }
+  catch (e) { locations = []; }
+  if (!locations.length) return null;
+  const pickedId = await showPickupLocationPicker(o.plant_name, locations);
+  if (!pickedId) return undefined; // trader cancelled the picker — distinct from "no locations on file"
+  const location = locations.find(l => l.id === pickedId);
+  try { await callApi('shipments-set-pickup-location', { actor: currentActor(), order_number: orderNumber, pickup_location_id: pickedId }); }
+  catch (e) { await btAlert('Could not save the pickup location: ' + e.message); return undefined; }
+  return location;
+}
+
+// Same email/body every time this order asks the plant for its release number — used by both the
+// first send (with the bank confirmation attached) and the resend (no attachment, just a nudge).
+function paymentReleaseEmailContent(o, orderNumber){
+  const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — Payment & Release Number`;
+  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order PO-BT-${btNum(orderNumber)} — ${fullProductLabel(o)}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
+  return { subject, body };
+}
+
+// Real ask 2026-09-20, exact dictation: "el comprobante de pago debe llegar a una persona que es
+// la que recibe pagos en cada planta con copia a la vendedora. si no tenemos contacto de pagos
+// llega a la vendedora" — Payments Contact is the real recipient when one is on file (CC the
+// plant's general/sales contact, same person the PO itself goes to); when there's no Payments
+// Contact yet, the sales contact becomes the recipient directly (no CC — she already IS the
+// recipient, ccing her to herself would be pointless). Never blocks on a missing contact anymore.
+function resolvePaymentRecipients(o){
+  const hasPaymentsContact = !!(o.plant && o.plant.payments_email);
+  const to = hasPaymentsContact
+    ? collectEmails({ email: o.plant.payments_email, email_cc: null })
+    : (o.plant ? collectEmails(o.plant) : []);
+  const cc = hasPaymentsContact ? (o.plant ? collectEmails(o.plant) : []) : [];
+  return { to, cc };
+}
+
 async function confirmPlantPaymentSent(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  const paymentsEmails = o.plant ? collectEmails({ email: o.plant.payments_email, email_cc: null }) : [];
+
+  const { to: paymentsEmails, cc: salesEmails } = resolvePaymentRecipients(o);
   if (!paymentsEmails.length){
-    await btAlert(`This plant has no Payments Contact email on file — add it in Plants (Profile → Payments Contact) before confirming payment for ${orderNumber}.`);
+    await btAlert(`This plant has no email on file at all (neither Payments Contact nor general contact) — add one in Plants before confirming payment for ${orderNumber}.`);
     return;
   }
-  const salesEmails = o.plant ? collectEmails(o.plant) : [];
 
   await btAlert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
   const file = await pickBankConfirmationFile();
@@ -2081,10 +2157,7 @@ async function confirmPlantPaymentSent(orderNumber){
   try { base64 = await readFileAsBase64(file); }
   catch (e) { await btAlert('No se pudo leer el archivo: ' + e.message); return; }
 
-  // Real ask 2026-09-14: subject renamed to "Payment & Release Number" — the body already asked
-  // for the release number in this same email (see below); the subject now says so too, plainly.
-  const subject = `${orderNumber} — BuenTrade — Payment & Release Number`;
-  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${fullProductLabel(o)}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
+  const { subject, body } = paymentReleaseEmailContent(o, orderNumber);
   try {
     // Real ask 2026-09-14: "un solo boton de whatsapp por pantalla" — this row already has its own
     // separate WhatsApp button (confirmPlantPaymentWhatsApp) right next to Email, so the modal's
@@ -2105,6 +2178,29 @@ async function confirmPlantPaymentSent(orderNumber){
   catch (e) { await btAlert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
   showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
   await loadStatusOrders();
+}
+
+// Real ask 2026-09-20: "en caso de que no este el release se debe puede reenviar ese correo" — no
+// bank file to re-attach (it already went out once with the first send), just the same ask again,
+// same resolved recipient, callable any time after the plant's been marked paid.
+async function resendPaymentEmail(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const { to: paymentsEmails, cc: salesEmails } = resolvePaymentRecipients(o);
+  if (!paymentsEmails.length){
+    await btAlert('This plant has no email on file at all (neither Payments Contact nor general contact) — add one in Plants.');
+    return;
+  }
+  const { subject, body } = paymentReleaseEmailContent(o, orderNumber);
+  try {
+    await sendEmailApi('purchasing', paymentsEmails, subject, body, [], null, salesEmails);
+    showToast('Release number solicitado de nuevo', paymentsEmails.join(', '));
+  } catch (e) {
+    if (e.cancelled) return;
+    const url = gmailComposeUrl(paymentsEmails, subject, body + EMAIL_SIGNATURE);
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`);
+  }
 }
 async function markPlantPaidFallback(orderNumber){
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
@@ -2134,6 +2230,28 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
   catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
   showToast('Pago confirmado', 'Se compartió el comprobante a la planta — ya puedes pedir el release number.');
+  await loadStatusOrders();
+}
+
+// Real ask 2026-09-20, exact dictation: "la vendedora reenvia a la de pagos y asi la podemos grabar
+// nueva (el sistema deberia dar opcion de grabarla como nuevo contact)" — once the trader learns
+// who the real Payments Contact is (the sales contact forwarded the payment email and that person
+// replied), this saves it straight onto the plant's own profile (plants-update already has
+// payments_contact_name/payments_email as real fields) so every future payment for this plant goes
+// there directly instead of through the sales contact again.
+async function savePlantPaymentsContact(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.plant_id) return;
+  const name = prompt(`Payments contact name at ${o.plant_name || 'this plant'}:`, o.plant && o.plant.payments_contact_name || '');
+  if (name === null) return;
+  const email = prompt(`Their email:`, o.plant && o.plant.payments_email || '');
+  if (email === null) return;
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail){ await btAlert('An email is required to save this contact.'); return; }
+  try {
+    await callApi('plants-update', { actor: currentActor(), id: o.plant_id, payments_contact_name: name.trim() || null, payments_email: trimmedEmail });
+  } catch (e) { await btAlert('Could not save the payments contact: ' + e.message); return; }
+  showToast('Payments contact saved', trimmedEmail);
   await loadStatusOrders();
 }
 
@@ -2179,7 +2297,7 @@ async function editPickupDateClick(orderNumber){
   await loadStatusOrders();
 }
 function releaseNumberMessage(o){
-  return `Hi, here's the release number for order BT-${btNum(o.order_number)} — ${fullProductLabel(o)}: ${o.release_number}. Please use it for pickup. Thank you!`;
+  return `Hi, here's the release number for order PO-BT-${btNum(o.order_number)} — ${fullProductLabel(o)}: ${o.release_number}. Please use it for pickup. Thank you!`;
 }
 async function sendReleaseNumberToCarrier(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -2305,7 +2423,7 @@ const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
 const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
-const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
+const FO_TERMS = "This Freight Order is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
 const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
 const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 // Real BuenTrade wire details, provided by the user 2026-09-05 — never invent banking information.
@@ -2780,7 +2898,7 @@ async function exportPO(orderNumber){
 const DOC_TYPES = [
   { key: 'PO', title: 'Purchase Order', exportFn: 'exportPO', shareFn: 'sharePO', waFn: 'waCardPO' },
   { key: 'SO', title: 'Sales Order', exportFn: 'exportSO', shareFn: 'shareSO', waFn: 'waCardSO' },
-  { key: 'FO', title: 'Freight Confirmation', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO' },
+  { key: 'FO', title: 'Freight Order', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO' },
 ];
 
 // Real ask 2026-09-13: "que salga mitad y mitad para ver que los numeros del qt coincidan con
@@ -2980,7 +3098,7 @@ async function sharePO(orderNumber){
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
   const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
-  const body = `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} attached.\n\n`
+  const body = `Hi,\n\nPlease find the Purchase Order PO-BT-${btNum(orderNumber)} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
@@ -3079,7 +3197,7 @@ async function shareSO(orderNumber){
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
   const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}.\n\n`
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta SO-BT-${btNum(orderNumber)}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
@@ -3108,10 +3226,32 @@ async function buildFODocs(orderNumber){
   catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
   const docs = result.documents;
 
+  // Real ask 2026-09-20: "cada cliente tiene una [aduana] asignada... el sistema global tiene que
+  // tomar la aduana asignada a cada cliente y conectarla para que reciba los docs cuando se recoge
+  // la carga" — same lookup shareCustoms already uses (customer's own customs_agency_provider_id,
+  // falling back to the sent_offer's) now also resolves the FO's real delivery destination — the
+  // agency's own name+address — instead of the generic carrier-crossing placeholder or a blank
+  // "Border" field. One resolution here feeds both the PDF (composed.delivery_address) and the
+  // email/WhatsApp subject+body (fo.destination), so they can never show two different addresses.
+  let agencyAddress = null;
+  const foShipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+  let foAgencyId = foShipment && foShipment.customer_id
+    ? (((await callApi('customers-search', { ids: [foShipment.customer_id] })).results || [])[0] || {}).customs_agency_provider_id
+    : null;
+  if (!foAgencyId){
+    const foSentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+    foAgencyId = foSentOffer && foSentOffer.customs_agency_provider_id;
+  }
+  if (foAgencyId){
+    const foAgency = ((await callApi('providers-search', { id: foAgencyId })).results || [])[0];
+    if (foAgency) agencyAddress = [foAgency.name, foAgency.address, foAgency.city, foAgency.country].filter(Boolean).join(', ');
+  }
+
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
+    if (agencyAddress){ composed.delivery_address = agencyAddress; fo.destination = agencyAddress; }
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Order', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
@@ -3179,8 +3319,8 @@ async function shareFO(orderNumber){
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     orderDocsFileCache.delete(orderNumber);
-    const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} attached.\n\n`
+    const subject = `FO-BT-${btNum(orderNumber)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}  ${fmtDatesList(b.dates)}`;
+    const body = `Please find the Freight Order FO-BT-${btNum(orderNumber)} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -3315,9 +3455,9 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
     // URL — WhatsApp always shows the raw link text next to the branded preview card, no way to
     // hide it.
     const signLink = `${APP_ORIGIN}/f/${encodeURIComponent(issueRes.short_code)}`;
-    body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, confírmala aquí: ${signLink}\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    body = `Hola ${contact},\n\nAdjuntamos la factura INV-BT-${btNum(orderNumber)}, confírmala aquí: ${signLink}\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   } else {
-    body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura INV-BT-${btNum(orderNumber)}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   }
   try {
     await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], null, ccEmails);
@@ -3347,7 +3487,7 @@ async function waResendInvoice(orderNumber, fileUrl, filename){
   const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
   const a = document.createElement('a');
   a.href = fileUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-  bcConfirmWaSend(phone, `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!`, filename);
+  bcConfirmWaSend(phone, `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura INV-BT-${btNum(orderNumber)}. ¡Gracias!`, filename);
 }
 
 // Border customs paperwork isn't its own document — the broker just needs the REAL pickup
