@@ -217,12 +217,35 @@ Deno.serve(async (req) => {
           alertsSent++;
         }
       }
-      if (sh.status === "pending_pickup" && sh.plant_paid_at && !sh.release_number_alert_sent_at) {
-        await notify(gmailToken, sh.won_by, `Pedir Release Number — BT-${btNum(sh.order_number)} — ${sh.plant_name}`,
-          `${fullProductLabel(sh)} — ${sh.plant_name}. Pago confirmado — pide el release number para que el transportista pueda recoger la carga.`,
-          sh.order_number);
-        await sql`update shipments set release_number_alert_sent_at = now() where id = ${sh.id}`;
-        alertsSent++;
+      // Real ask 2026-09-20, exact dictation: "TODOS los sensores de la api muy sensibles... no
+      // puede llegar al dia de recogida sin avanzar" — unlike every other alert in this file (which
+      // fires once and stays quiet), this one re-fires every hour for as long as the release number
+      // is still missing, same re-fire shape as docs_ready_alert below, and the wording escalates
+      // as the pickup date gets close: plain reminder while there's time, "URGENTE" the day before
+      // or the day of pickup, "CRITICO" once the pickup date has already passed with no release
+      // number on file yet — this is the one condition the trader must never reach pickup day on
+      // without resolving.
+      if (sh.status === "pending_pickup" && sh.plant_paid_at && !sh.release_number) {
+        const lastSent = sh.release_number_alert_sent_at ? new Date(sh.release_number_alert_sent_at).getTime() : 0;
+        if (Date.now() - lastSent > 60 * 60 * 1000) {
+          let daysUntilPickup: number | null = null;
+          if (sh.pickup_date) {
+            const pickup = new Date(sh.pickup_date + "T00:00:00");
+            daysUntilPickup = Math.round((pickup.getTime() - today.getTime()) / 86400000);
+          }
+          const critical = daysUntilPickup !== null && daysUntilPickup < 0;
+          const urgent = daysUntilPickup !== null && daysUntilPickup <= 1 && !critical;
+          const prefix = critical ? "🔴 CRITICO — " : urgent ? "⚠ URGENTE — " : "";
+          const title = `${prefix}Pedir Release Number — BT-${btNum(sh.order_number)} — ${sh.plant_name}`;
+          const body = critical
+            ? `${fullProductLabel(sh)} — ${sh.plant_name}. Ya paso la fecha de recogida (${sh.pickup_date}) y todavia no hay release number. Resuelve esto ahora.`
+            : urgent
+            ? `${fullProductLabel(sh)} — ${sh.plant_name}. La recogida es muy pronto (${sh.pickup_date}) y todavia no hay release number.`
+            : `${fullProductLabel(sh)} — ${sh.plant_name}. Pago confirmado — pide el release number para que el transportista pueda recoger la carga.`;
+          await notify(gmailToken, sh.won_by, title, body, sh.order_number);
+          await sql`update shipments set release_number_alert_sent_at = now() where id = ${sh.id}`;
+          alertsSent++;
+        }
       }
 
       // Point 6 — right after pickup, request BOL/packing list/label photos (always) + USDA papers
