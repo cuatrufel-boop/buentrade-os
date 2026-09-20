@@ -1233,7 +1233,7 @@ const PREVIEW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const DOC_TYPES = [
   { key: 'PO', color: '#1E6ADB', desc: 'To plant', exportFn: 'exportPO', shareFn: 'sharePO', waFn: 'waCardPO', title: 'Purchase Order' },
   { key: 'SO', color: '#0F8A5F', desc: 'To customer', exportFn: 'exportSO', shareFn: 'shareSO', waFn: 'waCardSO', title: 'Sales Order' },
-  { key: 'FO', color: '#C4432E', desc: 'To carrier', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO', title: 'Freight Confirmation' },
+  { key: 'FO', color: '#C4432E', desc: 'To carrier', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO', title: 'Freight Order' },
 ];
 
 function toggleRowMenu(evt, offerId, orderNumber, hasCustoms, historyCount){
@@ -1475,7 +1475,7 @@ const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 // matching how US trucking rate confirmations are always written).
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
-const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
+const FO_TERMS = "This Freight Order is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
 const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
 const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 
@@ -1854,7 +1854,7 @@ async function sharePO(orderNumber){
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
   const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
-  const body = `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} attached.\n\n`
+  const body = `Hi,\n\nPlease find the Purchase Order PO-BT-${btNum(orderNumber)} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
@@ -1873,7 +1873,7 @@ async function sharePO(orderNumber){
     // one place the trader still has to attach it themselves — the API path above always sends
     // the real PDF when it works.
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} here:\n${url}`));
+      gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Purchase Order PO-BT-${btNum(orderNumber)} here:\n${url}`));
   }
 }
 
@@ -1967,7 +1967,7 @@ async function shareSO(orderNumber){
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
   const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}.\n\n`
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta SO-BT-${btNum(orderNumber)}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
@@ -1980,7 +1980,7 @@ async function shareSO(orderNumber){
   } catch(e){
     if (e.cancelled) return;
     showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-      gmailFallbackLinkHtml(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}:\n${url}`));
+      gmailFallbackLinkHtml(emails, subject, `Hola,\n\nAdjuntamos la Confirmación de Venta SO-BT-${btNum(orderNumber)}:\n${url}`));
   }
 }
 
@@ -1991,10 +1991,32 @@ async function buildFODocs(orderNumber){
   catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
   const docs = result.documents;
 
+  // Real ask 2026-09-20: "cada cliente tiene una [aduana] asignada... el sistema global tiene que
+  // tomar la aduana asignada a cada cliente y conectarla para que reciba los docs cuando se recoge
+  // la carga" — same lookup shareCustoms already uses (customer's own customs_agency_provider_id,
+  // falling back to the sent_offer's) now also resolves the FO's real delivery destination — the
+  // agency's own name+address — instead of the generic carrier-crossing placeholder or a blank
+  // "Border" field. One resolution here feeds both the PDF (composed.delivery_address) and the
+  // email/WhatsApp subject+body (fo.destination), so they can never show two different addresses.
+  let agencyAddress = null;
+  const foShipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+  let foAgencyId = foShipment && foShipment.customer_id
+    ? (((await callApi('customers-search', { ids: [foShipment.customer_id] })).results || [])[0] || {}).customs_agency_provider_id
+    : null;
+  if (!foAgencyId){
+    const foSentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+    foAgencyId = foSentOffer && foSentOffer.customs_agency_provider_id;
+  }
+  if (foAgencyId){
+    const foAgency = ((await callApi('providers-search', { id: foAgencyId })).results || [])[0];
+    if (foAgency) agencyAddress = [foAgency.name, foAgency.address, foAgency.city, foAgency.country].filter(Boolean).join(', ');
+  }
+
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
+    if (agencyAddress){ composed.delivery_address = agencyAddress; fo.destination = agencyAddress; }
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Order', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
@@ -2071,8 +2093,8 @@ async function shareFO(orderNumber){
     if (!emails.length){ await btAlert(`No email on file for the carrier on leg ${b.fo.origin || '?'} → ${b.fo.destination || '?'}.`); continue; }
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
-    const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} attached.\n\n`
+    const subject = `FO-BT-${btNum(orderNumber)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}  ${fmtDatesList(b.dates)}`;
+    const body = `Please find the Freight Order FO-BT-${btNum(orderNumber)} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -2086,7 +2108,7 @@ async function shareFO(orderNumber){
       // "was this still counted as the same user gesture," so every leg in the batch works the
       // same, not just the first one.
       showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
-        gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} here:\n${url}`));
+        gmailFallbackLinkHtml(emails, subject, `Hi,\n\nPlease find the Freight Order FO-BT-${btNum(orderNumber)} here:\n${url}`));
     }
   }
 }
