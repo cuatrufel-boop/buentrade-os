@@ -1744,6 +1744,37 @@ function urgentQueueAdvance(){
 const docsOpenOverride = new Set();
 const orderDocsFileCache = new Map(); // order_number -> [{name, url}]
 
+async function ensureOrderDocsFiles(orderNumber){
+  if (orderDocsFileCache.has(orderNumber)) return;
+  // Real bug found live 2026-09-06: Storage's `search` option matches by PREFIX, not substring —
+  // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
+  // the start of the filename). One list() call per real filename prefix instead.
+  try {
+    // Real bug found live 2026-09-14: filenames are saved as "INV-BT-" + btNum(orderNumber) (see
+    // btNum's own comment — legacy "BT-0018" orders no longer double into "INV-BT-BT-0018"), but
+    // this search prefix still used the raw, un-stripped orderNumber — for those legacy orders it
+    // could never match the real filename, so Documents panel found no Invoice file, hid the
+    // resend/preview button entirely, and "no me deja enviar signature" was really "the file this
+    // was supposed to attach was never found."
+    const prefixes = ['PO-BT-', 'SO-BT-', 'FO-BT-', 'INV-BT-'].map(p => `${p}${btNum(orderNumber)}`);
+    const results = await Promise.all(prefixes.map(prefix =>
+      storageClient.storage.from('order-documents').list('', { search: prefix })
+    ));
+    const files = [];
+    results.forEach(({ data, error }) => {
+      if (error) { console.warn('Could not list documents:', error.message); return; }
+      (data || []).forEach(f => files.push({
+        name: f.name,
+        url: storageClient.storage.from('order-documents').getPublicUrl(f.name).data.publicUrl,
+      }));
+    });
+    orderDocsFileCache.set(orderNumber, files);
+  } catch (e) {
+    console.warn('Could not list documents for', orderNumber, e.message);
+    orderDocsFileCache.set(orderNumber, []);
+  }
+}
+
 async function toggleOrderDocs(orderNumber){
   if (docsOpenOverride.has(orderNumber)){
     docsOpenOverride.delete(orderNumber);
@@ -1751,35 +1782,7 @@ async function toggleOrderDocs(orderNumber){
     return;
   }
   docsOpenOverride.add(orderNumber);
-  if (!orderDocsFileCache.has(orderNumber)){
-    // Real bug found live 2026-09-06: Storage's `search` option matches by PREFIX, not substring —
-    // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
-    // the start of the filename). One list() call per real filename prefix instead.
-    try {
-      // Real bug found live 2026-09-14: filenames are saved as "INV-BT-" + btNum(orderNumber) (see
-      // btNum's own comment — legacy "BT-0018" orders no longer double into "INV-BT-BT-0018"), but
-      // this search prefix still used the raw, un-stripped orderNumber — for those legacy orders it
-      // could never match the real filename, so Documents panel found no Invoice file, hid the
-      // resend/preview button entirely, and "no me deja enviar signature" was really "the file this
-      // was supposed to attach was never found."
-      const prefixes = ['PO-BT-', 'SO-BT-', 'FO-BT-', 'INV-BT-'].map(p => `${p}${btNum(orderNumber)}`);
-      const results = await Promise.all(prefixes.map(prefix =>
-        storageClient.storage.from('order-documents').list('', { search: prefix })
-      ));
-      const files = [];
-      results.forEach(({ data, error }) => {
-        if (error) { console.warn('Could not list documents:', error.message); return; }
-        (data || []).forEach(f => files.push({
-          name: f.name,
-          url: storageClient.storage.from('order-documents').getPublicUrl(f.name).data.publicUrl,
-        }));
-      });
-      orderDocsFileCache.set(orderNumber, files);
-    } catch (e) {
-      console.warn('Could not list documents for', orderNumber, e.message);
-      orderDocsFileCache.set(orderNumber, []);
-    }
-  }
+  await ensureOrderDocsFiles(orderNumber);
   refreshOpenOrderDetail();
 }
 
@@ -2073,14 +2076,17 @@ function renderOrderCardBody(o, attentionOrderNumbers){
 
 // Real ask 2026-09-08: "si tu le das click en un boton te salga grande y puedas ver que estas
 // haciendo" — opens the full detail (everything renderOrderCardBody builds) big, in its own modal.
-function openOrderDetail(orderNumber){
+async function openOrderDetail(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   openOrderNumber = orderNumber;
+  docsOpenOverride.add(orderNumber);
   const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
   document.getElementById('orderDetailOverlay').style.display = 'flex';
+  await ensureOrderDocsFiles(orderNumber);
+  refreshOpenOrderDetail();
 }
 function closeOrderDetail(){
   openOrderNumber = null;
