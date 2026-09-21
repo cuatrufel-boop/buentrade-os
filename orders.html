@@ -1959,7 +1959,7 @@ function renderOrderDocsPanel(o, nextActionLabel){
         + (!(o.plant && o.plant.payments_email) ? docRowBtn(`Save Payments Contact`, `savePlantPaymentsContact('${o.order_number}')`) : '');
       paymentStatus = `Paid ${paymentWhen} — release # pending`;
     } else {
-      paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn(`${STEP_ICONS.picked_up} Send to Carrier`, `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
+      paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn(`${STEP_ICONS.picked_up} Send Release # to Carrier`, `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
       paymentStatus = `Release #: ${escapeHtml(o.release_number)}`;
     }
     // Real ask 2026-09-21: "un solo flujo" — this row's button(s) exactly duplicate whichever one
@@ -1976,8 +1976,12 @@ function renderOrderDocsPanel(o, nextActionLabel){
     const dateRow = (!o.picked_up_at && o.pickup_date)
       ? `<div class="doc-row"><span class="doc-row-label">PU / Delivery Date</span>${docRowBtn('Edit', `editPickupDateClick('${o.order_number}')`)}<span class="doc-row-status">${fmtDateStr(o.pickup_date)}</span></div>`
       : '';
+    // Real bug found live 2026-09-21: pickup docs are a variable-length list (0-N items) — without
+    // doc-row-span they only ever fill the LEFT grid column one at a time, leaving a ragged empty
+    // gap on the right whenever the count (plus the 6 fixed rows above) lands on an odd total.
+    // Full-width rows never have this problem regardless of how many there are.
     const pickupDocsHtml = pickupDocs.length
-      ? pickupDocs.map(d => `<div class="doc-row"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
+      ? pickupDocs.map(d => `<div class="doc-row doc-row-span"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
       : '<div class="doc-row-empty doc-row-span">No pickup documents yet.</div>';
     body = `<div class="docs-panel-grid">
       ${dateRow}
