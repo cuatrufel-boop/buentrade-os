@@ -934,6 +934,10 @@ async function loadStatusOrders(){
 function paymentBadge(order){
   if (!order.payment_due_date) return '';
   const due = new Date(order.payment_due_date + 'T00:00:00');
+  // Real bug found live 2026-09-21: a garbage/unparseable payment_due_date rendered the literal
+  // text "Payment due Invalid Date" instead of hiding — same silent-blank-on-bad-data treatment
+  // as the missing-date case just above, not a string a trader should ever see.
+  if (isNaN(due.getTime())) return '';
   const today = new Date();
   const daysLeft = Math.ceil((due - today) / 86400000);
   let cls = 'ok', text = `Payment due ${fmtDateStr(order.payment_due_date)}`;
@@ -2072,6 +2076,8 @@ function renderOrderCardBody(o, attentionOrderNumbers){
   // blinks on the timeline above) so it can never fire a different action than the timeline
   // itself would — no second copy of "what happens when you click this" to drift out of sync,
   // the same class of bug Plant Payment had with 3 independently-wired copies.
+  // Real ask 2026-09-21: "all caught up eso simplemente si no falta nada escondelo" — nothing
+  // pending means nothing to show here at all, not a placeholder box announcing that.
   const nextActionCardHtml = nextActionEntry
     ? `<div class="load-next-action">
         <div class="load-next-action-icon">${nextActionEntry.icon}</div>
@@ -2081,7 +2087,7 @@ function renderOrderCardBody(o, attentionOrderNumbers){
         </div>
         <button class="wa-btn" onclick="${nextActionEntry.onClickRaw}">${escapeHtml(nextActionEntry.actionTitle || nextActionEntry.label)} →</button>
       </div>`
-    : `<div class="load-next-action done"><span class="payment-badge ok">✓ All caught up — nothing pending on this order</span></div>`;
+    : '';
 
   const pendingDocs = o.pending_pickup_documents || [];
   const pickupDocsBtn = pendingDocs.length
@@ -2089,7 +2095,10 @@ function renderOrderCardBody(o, attentionOrderNumbers){
     : '';
 
   const cp = o.catalogProduct;
-  const productName = cp ? (cp.name_en || cp.name) : o.product_name;
+  // Real ask 2026-09-21: "ham, no mas shorts" — the short catalog name (e.g. "Ham") is never
+  // enough on its own; every operational surface already uses fullProductLabel (product_spec,
+  // the full plant description) instead — see [[feedback_full_product_name_in_operational_messages]].
+  const productName = fullProductLabel(o);
   const productIconHtml = (cp && cp.photo_url)
     ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
     : PRODUCT_PLACEHOLDER_ICON;
@@ -2100,7 +2109,6 @@ function renderOrderCardBody(o, attentionOrderNumbers){
         <div class="load-product-icon">${productIconHtml}</div>
         <div>
           <div class="load-product-name">${escapeHtml(productName)}</div>
-          <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
