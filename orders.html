@@ -1292,7 +1292,16 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   if (o.has_freight_order) entries.push(miniEntry({ icon: '✓', label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, wait: !o.so_sent_at, waitReason: 'Send the SO first.', onClick: `openDocPreview('FO','${o.order_number}')`, raised: true }));
   const docBeforePaymentDone = o.has_freight_order ? !!o.fo_sent_at : !!o.so_sent_at;
   const docBeforePaymentReason = o.has_freight_order ? 'Send the FO first.' : 'Send the SO first.';
-  entries.push(miniEntry({ icon: '$', label: 'Pay Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, wait: !docBeforePaymentDone, waitReason: docBeforePaymentReason, onClick: `payPlantClick('${o.order_number}')` }));
+  // Real bug found live 2026-09-21: this "Pay Plant" milestone chip is a SECOND entry point to
+  // the same action as the "Plant Payment" row inside the Documents panel below — it was still
+  // wired to payPlantClick (the direct-pay flow) unconditionally, so a financing_method='summar'
+  // order clicked here would skip the whole Pay via Summar flow entirely. Same branch as the
+  // Documents panel's Plant Payment row, so both entry points agree.
+  const isSummarFinancedTimeline = o.financing && o.financing.financing_method === 'summar';
+  const payPlantOnClick = isSummarFinancedTimeline
+    ? (o.summar_payment_sent_at ? `recordSummarConfirmation('${o.order_number}')` : `showSummarPaymentBreakdown('${o.order_number}')`)
+    : `payPlantClick('${o.order_number}')`;
+  entries.push(miniEntry({ icon: '$', label: 'Pay Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, wait: !docBeforePaymentDone, waitReason: docBeforePaymentReason, onClick: payPlantOnClick }));
   // Real gap found 2026-09-07: "revisa todo... faltan mas cosas" — recordReleaseNumber/
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
@@ -1576,8 +1585,17 @@ function computeAttentionItems(){
     if (stage === 'pending_pickup' && o.created_at && !o.plant_paid_at){
       const daysSinceWon = (Date.now() - new Date(o.created_at).getTime()) / 86400000;
       if (daysSinceWon >= PLANT_PAYMENT_REMINDER_DAYS_AFTER_WON){
-        items.push({ orderNumber: label, order_number: o.order_number, text: `Pay the plant — ${productName}`,
-          btn: `<button class="wa-btn" onclick="payPlantClick('${o.order_number}')">Confirm Payment Sent</button>` });
+        // Real bug found live 2026-09-21: this urgent-queue reminder is a THIRD entry point to
+        // the same "pay the plant" action (alongside the Documents panel row and the timeline
+        // chip, both already fixed) — was unconditionally wired to payPlantClick (direct-pay),
+        // skipping Pay via Summar entirely for financing_method='summar' orders.
+        const isSummarFinancedItem = o.financing && o.financing.financing_method === 'summar';
+        const payBtnHtml = isSummarFinancedItem
+          ? (o.summar_payment_sent_at
+              ? `<button class="wa-btn" onclick="recordSummarConfirmation('${o.order_number}')">Record Summar's Confirmation</button>`
+              : `<button class="wa-btn" onclick="showSummarPaymentBreakdown('${o.order_number}')">Pay via Summar</button>`)
+          : `<button class="wa-btn" onclick="payPlantClick('${o.order_number}')">Confirm Payment Sent</button>`;
+        items.push({ orderNumber: label, order_number: o.order_number, text: `Pay the plant — ${productName}`, btn: payBtnHtml });
       }
     }
     if (stage === 'pending_pickup' && o.plant_paid_at && !o.release_number){
