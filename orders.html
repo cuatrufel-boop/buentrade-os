@@ -195,7 +195,7 @@
   .docs-panel-heading{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.07em;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:6px;}
   .docs-panel-heading svg{width:14px;height:14px;flex-shrink:0;}
   .docs-panel-grid{margin:14px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;}
-  .doc-row{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);}
+  .doc-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12.5px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);}
   .doc-row-span{grid-column:1 / -1;}
   .doc-row-label{font-weight:600;color:var(--ink);flex-shrink:0;}
   .doc-row-link{color:var(--blue-bright);text-decoration:underline;flex-shrink:0;}
@@ -1968,7 +1968,11 @@ function renderOrderDocsPanel(o, nextActionLabel){
     // same reasoning as PO/SO/FO above. The final "Release #: XXX" state already shows no button
     // once past all three, so nothing to suppress there.
     const paymentActionIsNextAction = ['Pay Plant', 'Release #', 'Send Release #'].includes(nextActionLabel);
-    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${paymentActionIsNextAction ? '' : paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
+    // Real bug found live 2026-09-21 ("se sale del cuadro"): this row can carry up to 3 buttons at
+    // once (Record Release # + Resend + Save Payments Contact) — half a grid column is never
+    // enough room, so its status text got pushed outside the card. Full width, same as the
+    // similarly variable-length pickup-docs rows above.
+    const paymentRow = `<div class="doc-row doc-row-span"><span class="doc-row-label">Plant Payment</span>${paymentActionIsNextAction ? '' : paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
     // Real correction 2026-09-14: "la que me va a pedir el create order es la definitiva esa se
     // puede ir ajustando hasta el final" — the date confirmed at Create Order isn't frozen like
     // PO/SO pricing; pickup schedules genuinely slip, so it stays editable right up until the load
