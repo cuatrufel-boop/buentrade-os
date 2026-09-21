@@ -177,6 +177,24 @@
   .step-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;}
   .step-line.done{background:var(--green);}
   .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+  /* Real ask 2026-09-21: "vista diferente... lo mejor del mercado" — main content + a narrow
+     at-a-glance sidebar, same layout Shopify's order page and Stripe's payment page both use.
+     Single column below 900px — a sidebar squeezed next to a 13-step timeline on a phone-width
+     screen would just break both. */
+  .order-detail-grid{display:grid;grid-template-columns:1fr 280px;gap:28px;align-items:start;}
+  @media (max-width:900px){ .order-detail-grid{grid-template-columns:1fr;} }
+  .order-detail-main{min-width:0;}
+  .order-detail-sidebar{display:flex;flex-direction:column;gap:18px;position:sticky;top:0;}
+  .side-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .side-section-label{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px;}
+  .side-badges{display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
+  .side-route{display:flex;flex-direction:column;gap:6px;}
+  .side-route-node{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);}
+  .side-route-node svg{width:15px;height:15px;flex-shrink:0;color:var(--ink-soft);}
+  .side-route-line{width:1px;height:12px;background:var(--line);margin-left:7px;}
+  .side-fact{display:flex;align-items:center;justify-content:space-between;}
+  .side-fact-label{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;font-weight:700;}
+  .side-fact-value{font-size:13px;font-weight:700;color:var(--ink);}
   /* Real ask 2026-09-21: "un solo flujo" — ONE prominent, real button for whatever's next on this
      order, built from the exact same computed entry that blinks on the timeline above (see
      nextActionEntry) so it can never disagree with it. Gold accent = "this needs you now", same
@@ -2044,33 +2062,55 @@ function renderOrderCardBody(o, attentionOrderNumbers){
     ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
     : PRODUCT_PLACEHOLDER_ICON;
 
+  // Real ask 2026-09-21: "vista diferente... lo mejor del mercado" — same real content as before
+  // (nothing removed, nothing re-derived), laid out the way Shopify's order page / Stripe's
+  // payment page do it: the real work (timeline, next action, documents) in a wide main column,
+  // the at-a-glance facts (status, route, financing) in a narrow sidebar you never have to scroll
+  // past to get to the actual work.
+  const financingRow = o.financing && o.financing.financing_method
+    ? `<div class="side-fact"><span class="side-fact-label">Financing</span><span class="side-fact-value">${o.financing.financing_method === 'summar' ? 'Summar' : 'Direct'}</span></div>`
+    : '';
+  const routeSidebarHtml = `
+    <div class="side-route">
+      <div class="side-route-node">${PLANT_ICON}<span>${escapeHtml(o.plant_name || '—')}</span></div>
+      ${o.carrier && o.carrier.name ? `<div class="side-route-line"></div><div class="side-route-node">${STEP_ICONS.picked_up}<span>${escapeHtml(o.carrier.name)}</span></div>` : ''}
+      <div class="side-route-line"></div>
+      <div class="side-route-node">${CUSTOMER_ICON}<span>${escapeHtml(o.customer_name)}</span></div>
+    </div>`;
+
   return `
-    <div class="load-card-top">
-      <div class="load-product-row">
-        <div class="load-product-icon">${productIconHtml}</div>
-        <div>
-          <div class="load-product-name">${escapeHtml(productName)}</div>
-          <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
+    <div class="order-detail-grid">
+      <div class="order-detail-main">
+        <div class="load-product-row">
+          <div class="load-product-icon">${productIconHtml}</div>
+          <div>
+            <div class="load-product-name">${escapeHtml(productName)}</div>
+            <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
+          </div>
         </div>
+        ${unifiedTimelineHtml}
+        ${nextActionCardHtml}
+        <div class="load-actions">${pickupDocsBtn}</div>
+        ${renderOrderDocsPanel(o, nextActionEntry ? nextActionEntry.label : null)}
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-        ${currentStageBadge(nextLabel, allDone, isUrgent)}
-        ${pendingActionsBadge(pendingCount)}
-        ${pickupReadinessBadge(o)}
-        ${paymentBadge(o)}
+      <div class="order-detail-sidebar">
+        <div class="side-section">
+          <div class="side-section-label">Status</div>
+          <div class="side-badges">
+            ${currentStageBadge(nextLabel, allDone, isUrgent)}
+            ${pendingActionsBadge(pendingCount)}
+            ${pickupReadinessBadge(o)}
+            ${paymentBadge(o)}
+          </div>
+        </div>
+        <div class="side-section">
+          <div class="side-section-label">Route</div>
+          ${routeSidebarHtml}
+        </div>
+        ${financingRow ? `<div class="side-section">${financingRow}</div>` : ''}
+        ${o.sent_offer_id ? `<button type="button" class="btn secondary" style="width:100%;" onclick="openOrderQT('${o.order_number}')">Open QT</button>` : ''}
       </div>
     </div>
-    <div class="load-route">
-      <div class="load-route-node">${PLANT_ICON}<span class="rname">${escapeHtml(o.plant_name || '—')}</span></div>
-      <div class="load-route-arrow">${ARROW_ICON}</div>
-      ${o.carrier && o.carrier.name ? `<div class="load-route-node">${STEP_ICONS.picked_up}<span class="rname">${escapeHtml(o.carrier.name)}</span></div><div class="load-route-arrow">${ARROW_ICON}</div>` : ''}
-      <div class="load-route-node">${CUSTOMER_ICON}<span class="rname">${escapeHtml(o.customer_name)}</span></div>
-      ${o.sent_offer_id ? `<div onclick="openOrderQT('${o.order_number}')" title="Open QT" style="margin-left:auto;cursor:pointer;flex-shrink:0;width:36px;height:36px;border-radius:50%;border:2px solid var(--blue);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:.02em;">QT</div>` : ''}
-    </div>
-    ${unifiedTimelineHtml}
-    ${nextActionCardHtml}
-    <div class="load-actions">${pickupDocsBtn}</div>
-    ${renderOrderDocsPanel(o, nextActionEntry ? nextActionEntry.label : null)}
   `;
 }
 
@@ -2080,6 +2120,11 @@ function openOrderDetail(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   openOrderNumber = orderNumber;
+  // Real ask 2026-09-21: "tener abierta la pagina de docs" — Documents starts expanded every time
+  // the full-page order view opens, instead of behind a collapsed toggle the trader had to
+  // remember to click. The toggle itself (toggleOrderDocs) still works normally afterward if they
+  // want to collapse it back.
+  docsOpenOverride.add(orderNumber);
   const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
