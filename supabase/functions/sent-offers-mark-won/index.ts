@@ -54,6 +54,12 @@ Deno.serve(async (req) => {
       // Defaults to 'direct' so offers.html's own quick "Ganada" button (same endpoint, no
       // negotiation panel / Summar numbers to choose from) keeps working unchanged.
       financing_method = "direct",
+      // Real ask 2026-09-21: the future "Pay via Summar" QT breakdown re-shows the same Summar fee
+      // estimate the trader saw here — snapshotting whatever Payment Days was on screen (trading-
+      // tool.html's quickbar, no default assumed here) so that later screen never recomputes it
+      // with a different number. Explicitly an estimate, never the real fee — the actual days
+      // until the customer pays (and so the real Summar cost) is only known once they actually do.
+      payment_days = null,
     } = body;
 
     if (!["direct", "summar"].includes(financing_method)) {
@@ -134,8 +140,8 @@ Deno.serve(async (req) => {
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "sent_offers", record_id: sent_offer_id, before: offer, after: updatedOffer });
 
       const [purchaseOrder] = await tx`
-        insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status, financing_method)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(finalDeliveryDates)}, 'open', ${financing_method})
+        insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status, financing_method, payment_days)
+        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(finalDeliveryDates)}, 'open', ${financing_method}, ${payment_days})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "purchase_orders", record_id: purchaseOrder.id, after: purchaseOrder });
