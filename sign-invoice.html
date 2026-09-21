@@ -268,7 +268,7 @@ async function uploadOrderPdf(doc, filename){
 // the hash of the exact invoice file they signed) — separate from the invoice document so it can
 // be handed to anyone (legal, the customer, an auditor) without needing to re-derive this from
 // raw DB columns.
-function buildSignatureCertificatePdf(orderNumber, signedByName, signedAtDate, ip, userAgent, pdfHash, consentText){
+function buildSignatureCertificatePdf(orderNumber, signedByName, signedAtDate, ip, userAgent, pdfHash, consentText, signatureDataUrl){
   const doc = pdfDoc();
   pdfHeader(doc, 'Certificate of Signature', orderNumber, CONTACT_EMAIL_SO);
   // pdfKeyValueRows prints each value on one line with no wrap — a full user-agent string runs
@@ -284,7 +284,16 @@ function buildSignatureCertificatePdf(orderNumber, signedByName, signedAtDate, i
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
   doc.text('CONSENT STATEMENT', 40, y + 24);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(15, 31, 51);
-  doc.text(doc.splitTextToSize(consentText, 532), 40, y + 42);
+  const consentLines = doc.splitTextToSize(consentText, 532);
+  doc.text(consentLines, 40, y + 42);
+  // Real bug found live 2026-09-21: "eso sin firma no es evidencia" — this certificate captured
+  // everything about the signing EVENT (who/when/where/what) but never the signature itself, even
+  // though the exact same signatureDataUrl (the canvas drawing) already exists in scope at the
+  // call site for buildInvoicePdf. Without the actual mark the customer drew, this isn't evidence.
+  const sigY = y + 42 + consentLines.length * 13 + 14;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
+  doc.text('SIGNATURE', 40, sigY);
+  if (signatureDataUrl) doc.addImage(signatureDataUrl, 'PNG', 40, sigY + 10, 200, 70);
   pdfFooter(doc, 'en');
   return doc;
 }
@@ -516,7 +525,7 @@ async function submitSignature(){
       const consentText = 'By signing, I confirm receipt of the merchandise described in this invoice and accept the outstanding balance and payment due date indicated.';
       const certDoc = buildSignatureCertificatePdf(
         orderNumber, name, new Date(sh.invoice_signed_at).toLocaleString('en-US'),
-        sh.invoice_signed_ip, sh.invoice_signed_user_agent, pdfHash, consentText,
+        sh.invoice_signed_ip, sh.invoice_signed_user_agent, pdfHash, consentText, signatureDataUrl,
       );
       const certUrl = await uploadOrderPdf(certDoc, `CERT-${orderNumber}.pdf`);
       await callApi('orders-invoice-signature', { action: 'save_certificate_url', order_number: orderNumber, token, certificate_url: certUrl });
