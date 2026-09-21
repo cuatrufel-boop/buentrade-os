@@ -2809,6 +2809,11 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
       carrier_provider_id: carrierChoice ? carrierChoice.carrier_provider_id : null,
       won_idempotency_key: wonIdempotencyKey,
       financing_method: financingMethod,
+      // Real ask 2026-09-21: snapshot of the trader's own Payment Days field at the moment of
+      // Create Order (their real convention: 30-day terms + a 10-day cushion, usually 40) — an
+      // estimate for the future Pay via Summar breakdown, never recomputed with a different number
+      // later. The real Summar cost is only known once the customer actually pays.
+      payment_days: (() => { const el = document.getElementById('payDays'); return el ? Number(el.value) || null : null; })(),
     });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
