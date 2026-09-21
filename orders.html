@@ -1259,9 +1259,14 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       else if (deliveredBlocked && isNext) infoMsg = 'Send the pickup documents to customs first.';
       else if (i <= stageIdx) infoMsg = dateStr ? `${displayLabel}: ${dateStr}` : `${displayLabel} already reached.`;
       else infoMsg = `Complete the earlier steps first.`;
+    } else {
+      // Real ask 2026-09-21: "un solo flujo" — the circle used to fire this SAME real action
+      // itself; now the Next Action card above is the one real place that fires it, so the circle
+      // just points there instead of being a second live trigger for the identical action.
+      infoMsg = `Use the Next Action button above to ${(isPendingPickupConfirm ? `confirm w/ ${confirmTarget}` : 'mark ' + s.label)}.`;
     }
-    const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="btAlert('${infoMsg.replace(/'/g, "\\'")}')"`;
-    const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : infoMsg);
+    const onclickAttr = ` onclick="btAlert('${infoMsg.replace(/'/g, "\\'")}')"`;
+    const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'See the Next Action card above' : infoMsg);
     // Real ask 2026-09-08: "pickup y delivered levantalos tambien como FO para hacer mas espacio"
     // — same raised treatment as FO, same curved connectors on both sides.
     const raised = s.key === 'picked_up' || s.key === 'delivered';
@@ -1288,7 +1293,15 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // instead of doing nothing.
   function miniEntry(st){
     const state = st.done ? 'done' : (st.wait ? 'wait' : 'now');
-    const effectiveOnClick = (state === 'wait' && st.waitReason) ? `btAlert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
+    // Real ask 2026-09-21: "un solo flujo" — a 'now' (currently actionable) circle used to fire
+    // the exact same real action as the new Next Action card above; it now just points there
+    // instead, so there's only ONE live trigger for it. A 'done' circle keeps firing its real
+    // action — that's resend/view, a genuinely different, legitimate capability the Next Action
+    // card doesn't cover (it only ever shows what's CURRENTLY pending, never something already
+    // sent). A 'wait' circle keeps explaining what's blocking it, unchanged.
+    const effectiveOnClick = state === 'now'
+      ? `btAlert('Use the Next Action button above to continue.')`
+      : (state === 'wait' && st.waitReason) ? `btAlert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
     const clickable = !!effectiveOnClick;
     const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
     // Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si
@@ -1804,7 +1817,7 @@ function renderSignatureEvidenceRow(o){
 // posibilidad de compartir por whatsapp o por correo a sus destinatarios" — every generated
 // document (sent already or not) gets its own Email/WhatsApp actions right in this row, reusing
 // the exact same send functions Offers already uses, same preview-before-send modal.
-function renderOrderDocsPanel(o){
+function renderOrderDocsPanel(o, nextActionLabel){
   const isOpen = docsOpenOverride.has(o.order_number);
   const arrow = isOpen ? '▲' : '▼';
   let body = '';
@@ -1833,6 +1846,15 @@ function renderOrderDocsPanel(o){
     const poActions = previewBtn('PO', o.order_number);
     const soActions = previewBtn('SO', o.order_number);
     const foActions = previewBtn('FO', o.order_number);
+    // Real ask 2026-09-21: "un solo flujo" — before a document exists, this button fires the exact
+    // same "generate + send" action the Next Action card above already offers for whichever one of
+    // PO/SO/FO is currently pending; suppressed here only in that exact case so there's one real
+    // trigger, not two. Once a document DOES exist, showing it here again is never suppressed —
+    // that's view/resend, a genuinely different, legitimate capability Next Action doesn't cover
+    // (it only ever shows what's still pending, never something already sent).
+    const poActionsWhenMissing = nextActionLabel === 'PO' ? '' : poActions;
+    const soActionsWhenMissing = nextActionLabel === 'SO' ? '' : soActions;
+    const foActionsWhenMissing = nextActionLabel === 'FO' ? '' : foActions;
     // Invoice can't go through openDocPreview (that always rebuilds a fresh, unsigned PDF from
     // scratch — see the comment on resendInvoiceEmail below for why that's wrong once a real
     // signature/customs weight exists). openInvoicePreview instead previews the actual uploaded
@@ -1850,12 +1872,21 @@ function renderOrderDocsPanel(o){
     // real 3-step chain in one row: confirm payment sent -> record the release number -> send it to
     // the carrier (once there is one to send it to).
     let paymentBtn, paymentStatus;
+    // Real bug found live 2026-09-21: this row never checked the same "PO/SO/FO must be sent
+    // first" gate the timeline's own Pay Plant circle already enforces (docBeforePaymentDone,
+    // computed the same way there) — a trader could pay the plant from here before the paperwork
+    // even went out, something the timeline itself always blocked. Same condition, recomputed
+    // here since this is a separate function/scope from renderUnifiedTimeline.
+    const docBeforePaymentDoneHere = o.has_freight_order ? !!o.fo_sent_at : !!o.so_sent_at;
     // Real ask 2026-09-21: for financing_method='summar' orders, BuenTrade never pays the plant
     // directly — Summar does (see the summarPaymentOverlay block above). This branch replaces the
     // direct Email/WhatsApp pay buttons entirely for these orders, same as confirmed with the
     // user: "en su lugar" the direct-pay buttons never apply when it's Summar.
     const isSummarFinanced = o.financing && o.financing.financing_method === 'summar';
-    if (isSummarFinanced && !o.plant_paid_at){
+    if (!docBeforePaymentDoneHere && !o.plant_paid_at){
+      paymentBtn = '';
+      paymentStatus = `Waiting on ${o.has_freight_order ? 'FO' : 'SO'}`;
+    } else if (isSummarFinanced && !o.plant_paid_at){
       if (!o.summar_payment_sent_at){
         paymentBtn = docRowBtn('Pay via Summar', `showSummarPaymentBreakdown('${o.order_number}')`);
         paymentStatus = 'Not paid — via Summar';
@@ -1884,7 +1915,13 @@ function renderOrderDocsPanel(o){
       paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn(`${STEP_ICONS.picked_up} Send to Carrier`, `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
       paymentStatus = `Release #: ${escapeHtml(o.release_number)}`;
     }
-    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
+    // Real ask 2026-09-21: "un solo flujo" — this row's button(s) exactly duplicate whichever one
+    // of Pay Plant/Release #/Send Release # the Next Action card above is currently showing (this
+    // one row covers all 3 sub-states as the order progresses) — suppressed only while that's true,
+    // same reasoning as PO/SO/FO above. The final "Release #: XXX" state already shows no button
+    // once past all three, so nothing to suppress there.
+    const paymentActionIsNextAction = ['Pay Plant', 'Release #', 'Send Release #'].includes(nextActionLabel);
+    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${paymentActionIsNextAction ? '' : paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
     // Real correction 2026-09-14: "la que me va a pedir el create order es la definitiva esa se
     // puede ir ajustando hasta el final" — the date confirmed at Create Order isn't frozen like
     // PO/SO pricing; pickup schedules genuinely slip, so it stays editable right up until the load
@@ -1894,9 +1931,9 @@ function renderOrderDocsPanel(o){
       : '';
     body = `<div class="docs-panel">
       ${dateRow}
-      ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActions)}
-      ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActions)}
-      ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
+      ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActionsWhenMissing)}
+      ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActionsWhenMissing)}
+      ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActionsWhenMissing) : ''}
       ${paymentRow}
       ${renderTradeDocRow('Invoice', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${renderSignatureEvidenceRow(o)}
@@ -2033,7 +2070,7 @@ function renderOrderCardBody(o, attentionOrderNumbers){
     ${unifiedTimelineHtml}
     ${nextActionCardHtml}
     <div class="load-actions">${pickupDocsBtn}</div>
-    ${renderOrderDocsPanel(o)}
+    ${renderOrderDocsPanel(o, nextActionEntry ? nextActionEntry.label : null)}
   `;
 }
 
