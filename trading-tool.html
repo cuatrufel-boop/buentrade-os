@@ -970,12 +970,16 @@ if (FIREBASE_READY) {
      confirm() that used to gate Create Order here (unstyled, inconsistent with the rest of the
      app). Self-contained (own overlay id) since this page can be embedded standalone or inside
      an iframe. -->
-<div id="ttConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);--ink:#0F1F33;--ink-soft:#64748B;">
-    <div id="ttConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;"></div>
-    <div id="ttConfirmMessage" style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:20px;"></div>
+<div id="ttConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.55);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <!-- Real ask 2026-09-21: "no tiene diseno buentrade" — this used to copy offers.html's white
+       confirm-box verbatim, which reads fine on offers.html's own light theme but was a jarring
+       flat-white card floating over this page's dark glass design. Now reuses the same dark
+       translucent glass recipe as this page's own .email-modal-box (blur + gold border). -->
+  <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);">
+    <div id="ttConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;"></div>
+    <div id="ttConfirmMessage" style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:20px;white-space:pre-line;"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
-      <button onclick="ttConfirmResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="ttConfirmResolve(false)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
       <button id="ttConfirmOkBtn" onclick="ttConfirmResolve(true)" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(15,138,95,.3);"></button>
     </div>
   </div>
@@ -2636,7 +2640,13 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
   const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
   const isFob = us_freight_amount > 0;
   if (!overrideCreditCheck){
-    const ok = await showTTConfirm('Create Order?', `${(negoOffer.product_spec || negoOffer.product_name)} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
+    // Real ask 2026-09-21: "deberia decir cual es el siguiente consecutivo" — display-only preview
+    // via lookups-search (see its own comment); the real number is still assigned transactionally
+    // by next_order_number() when the order is actually created below, never taken from here.
+    let nextOrderPreview = '';
+    try { nextOrderPreview = (await callApi('lookups-search', {})).next_order_number_preview || ''; } catch (e) {}
+    const orderLine = `${(negoOffer.product_spec || negoOffer.product_name)} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`;
+    const ok = await showTTConfirm('Create Order?', nextOrderPreview ? `${orderLine}\n\nNext Order #: ${nextOrderPreview}` : orderLine, '✓ Create Order');
     if (!ok) return;
   }
   // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... es muy delicado" — asked fresh
