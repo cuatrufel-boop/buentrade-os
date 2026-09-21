@@ -517,6 +517,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
+<script src="js/date-picker.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -996,7 +997,7 @@ if (FIREBASE_READY) {
   <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);">
     <div id="ttDateConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;"></div>
     <div id="ttDateConfirmMessage" style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:16px;"></div>
-    <input type="date" id="ttDateConfirmInput" style="width:100%;padding:10px 12px;border:1.5px solid rgba(255,255,255,.22);border-radius:8px;font-size:14px;font-family:inherit;background:rgba(255,255,255,.05);color:#fff;margin-bottom:8px;">
+    <input type="date" id="ttDateConfirmInput" placeholder="dd/mm/yyyy" style="width:100%;padding:10px 12px;border:1.5px solid rgba(255,255,255,.22);border-radius:8px;font-size:14px;font-family:inherit;background:rgba(255,255,255,.05);color:#fff;margin-bottom:8px;">
     <div id="ttDateConfirmError" style="font-size:12px;color:#FF9C8A;min-height:16px;margin-bottom:8px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
       <button onclick="ttDateConfirmResolve(null)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
@@ -1110,6 +1111,7 @@ function showTTDateConfirm(isFob, defaultDate){
   document.getElementById('ttDateConfirmMessage').textContent = isFob
     ? 'This is the real, final pick-up date BuenTrade\'s carrier will pick up on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.'
     : 'This is the real, final delivery date the plant will self-deliver on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.';
+  btDpAttach('ttDateConfirmInput');
   const input = document.getElementById('ttDateConfirmInput');
   input.value = defaultDate || '';
   document.getElementById('ttDateConfirmError').textContent = '';
