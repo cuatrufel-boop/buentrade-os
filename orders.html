@@ -2248,9 +2248,9 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
         // facing mail from 'offers' (see FROM_ADDRESSES: "customers deal with Offers"); this one
         // had drifted to the wrong department.
         await sendEmailApi('offers', emails, subjFn(o), bodyFn(o, contact), [], { phone, message: waFn(o, contact) });
-        showToast('Cliente notificado', emails.join(', '));
+        showToast('Customer notified', emails.join(', '));
       } catch (e){
-        if (!e.cancelled) await btAlert('No se pudo enviar la notificación: ' + e.message);
+        if (!e.cancelled) await btAlert('Could not send the notification: ' + e.message);
       }
     }
   }
@@ -2455,8 +2455,8 @@ async function confirmPlantPaymentSent(orderNumber){
     return;
   }
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { await btAlert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
-  showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
+  catch (e) { await btAlert('The email was sent, but the payment could not be marked: ' + e.message); }
+  showToast('Payment confirmed', 'The confirmation was sent to the plant — you can now request the release number.');
   await loadStatusOrders();
 }
 
@@ -2474,7 +2474,7 @@ async function resendPaymentEmail(orderNumber){
   const { subject, body } = paymentReleaseEmailContent(o, orderNumber);
   try {
     await sendEmailApi('purchasing', paymentsEmails, subject, body, [], null, salesEmails);
-    showToast('Release number solicitado de nuevo', paymentsEmails.join(', '));
+    showToast('Release number requested again', paymentsEmails.join(', '));
   } catch (e) {
     if (e.cancelled) return;
     const url = gmailComposeUrl(paymentsEmails, subject, body + EMAIL_SIGNATURE);
@@ -2484,8 +2484,8 @@ async function resendPaymentEmail(orderNumber){
 }
 async function markPlantPaidFallback(orderNumber){
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
-  showToast('Pago marcado', 'Ya puedes pedir el release number.');
+  catch (e) { await btAlert('Could not mark the payment: ' + e.message); return; }
+  showToast('Payment marked', 'You can now request the release number.');
   await loadStatusOrders();
 }
 
@@ -2508,8 +2508,8 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
   const waMessagePay = `Hi, I'm sharing the payment confirmation for this order here. Please confirm receipt and send me the release number so we can arrange pickup. Thank you!`;
   bcConfirmWaSend(waPhone, waMessagePay, file.name);
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
-  showToast('Pago confirmado', 'Se compartió el comprobante a la planta — ya puedes pedir el release number.');
+  catch (e) { await btAlert('Could not mark the payment: ' + e.message); return; }
+  showToast('Payment confirmed', 'The confirmation was shared with the plant — you can now request the release number.');
   await loadStatusOrders();
 }
 
@@ -3648,7 +3648,7 @@ async function runPendingWonDocConfirm(){
 // confirms the PDF is attached, same treatment now used everywhere in the system.
 function shareDocAndOpenWhatsApp(doc, filename, phone, message){
   doc.save(filename);
-  if (!phone){ showToast('Sin WhatsApp en archivo', 'Adjunta el PDF manualmente.', true); return; }
+  if (!phone){ showToast('No WhatsApp on file', 'Attach the PDF manually.', true); return; }
   bcConfirmWaSend(phone, message, filename);
 }
 
@@ -3742,7 +3742,7 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
   }
   try {
     await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], null, ccEmails);
-    showToast('Factura enviada', emails.join(', '));
+    showToast('Invoice sent', emails.join(', '));
     await markDocSent(orderNumber, 'invoice');
     await loadStatusOrders();
   } catch(e){
@@ -3802,7 +3802,7 @@ async function shareCustoms(orderNumber){
   if (!emails.length){ await btAlert('This customs agency has no email on file.'); return; }
 
   const pending = shipment.pending_pickup_documents || [];
-  if (!pending.length){ await btAlert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
+  if (!pending.length){ await btAlert('No pickup documents have been received yet for this order (BOL/packing list/photos/USDA). They arrive by email from the plant/carrier after pickup.'); return; }
 
   const attachments = [];
   for (const doc of pending){
@@ -3818,7 +3818,7 @@ async function shareCustoms(orderNumber){
       attachments.push({ filename: doc.filename, content: base64 });
     } catch(e){ /* one file failing to fetch never blocks the others */ }
   }
-  if (!attachments.length){ await btAlert('No se pudieron cargar los documentos recibidos.'); return; }
+  if (!attachments.length){ await btAlert('Could not load the received documents.'); return; }
 
   const customerName = shipment.customer_name || '';
   const subject = `${customerName} — BT-${btNum(orderNumber)} — BuenTrade`;
@@ -3828,7 +3828,7 @@ async function shareCustoms(orderNumber){
   const waMessageCustoms = `Orden BT-${btNum(orderNumber)}\nHi BT-${btNum(orderNumber)}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
   try {
     await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
-    showToast('Documentos reenviados a aduana', emails.join(', '));
+    showToast('Documents resent to customs', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
     await markDocSent(orderNumber, 'customs');
     await loadStatusOrders();
@@ -3846,9 +3846,9 @@ async function shareCustoms(orderNumber){
 }
 async function markCustomsSentFallback(orderNumber, documentIds){
   try { await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: documentIds }); }
-  catch (e) { await btAlert('No se pudo marcar los documentos: ' + e.message); return; }
+  catch (e) { await btAlert('Could not mark the documents: ' + e.message); return; }
   await markDocSent(orderNumber, 'customs');
-  showToast('Documentos marcados como enviados a aduana', '');
+  showToast('Documents marked as sent to customs', '');
   await loadStatusOrders();
 }
 </script>
