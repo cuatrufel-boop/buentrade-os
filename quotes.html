@@ -2264,7 +2264,7 @@ async function qSendConfirmedPlantOffer(productId, plantId, channel){
   const others = confirmed.filter(p => p.id !== plantId);
   let plantFilter = [plantId];
   if (others.length){
-    const wantsAll = await rqConfirm(`${others.map(p => p.name).join(', ')} también ${others.length > 1 ? 'están confirmadas' : 'está confirmada'} para este producto. ¿Mandar las dos juntas en una sola cotización?`);
+    const wantsAll = await rqConfirm(`${others.map(p => p.name).join(', ')} ${others.length > 1 ? 'are' : 'is'} also confirmed for this product. Send them together in one quote?`);
     if (wantsAll) plantFilter = confirmed.map(p => p.id);
   }
   // Real ask 2026-09-04, explicit ("cuando ya lo vas a mandar a offer tambien mandas el correo a
@@ -2274,7 +2274,7 @@ async function qSendConfirmedPlantOffer(productId, plantId, channel){
   const sendingPlant = rqSelectedPlants.find(p => p.id === plantId);
   const wasStale = sendingPlant && !!sendingPlant.rqPriceDate && (rqPriceAgeDays(sendingPlant.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS;
   if (wasStale && (sendingPlant.email || sendingPlant.whatsapp || sendingPlant.phone)){
-    if (await rqConfirm(`Update expired product? ¿Pedirle a ${sendingPlant.name} un precio actualizado también?`)){
+    if (await rqConfirm(`Update expired product? Ask ${sendingPlant.name} for an updated price too?`)){
       rqUpdatePlantPrice(plantId);
     }
   }
@@ -3611,14 +3611,14 @@ async function rqCloseCalculator(id){
   // rqHandleStaleOrMissingPrices pass too: that loop only ever opens/closes a calculator for a
   // plant that already has p.rqPrice set, so this check never fires there.
   if (p.rqPrice == null){
-    if (!(await rqConfirm(`No has puesto un precio de compra para ${p.name}. ¿Cerrar de todas formas sin guardar nada?`))) return;
+    if (!(await rqConfirm(`You haven't entered a purchase price for ${p.name}. Close anyway without saving anything?`))) return;
   } else if (!p.rqLastCalc){
     // Real bug reported live 2026-09-04 ("confirmo QT y no saca precio de venta"): closing here
     // with no Selling price ever computed used to just close silently, same blind spot as the
     // missing-purchase-price case above. Root cause not yet confirmed (Weight defaults to 40,000 lb
     // always — TARGET_WEIGHT in trading-tool.html — so that was NOT it, checked and ruled out) — this
     // only makes the failure visible instead of guessing why; investigate further before assuming.
-    if (!(await rqConfirm(`No se calculó un precio de venta para ${p.name} — revisa el Selling Price en la calculadora. ¿Cerrar de todas formas sin confirmar nada?`))) return;
+    if (!(await rqConfirm(`No selling price was calculated for ${p.name} — check the Selling Price in the calculator. Close anyway without confirming anything?`))) return;
   }
   // Real fix 2026-09-02, explicit ask repeated many times ("en quotes bien, en pending nada") —
   // see rqPendingCalcCache's own declaration for the full story. Stashed here, the one real close
@@ -4566,7 +4566,7 @@ async function rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds){
     return false;
   }
   if (unconfirmed.length){
-    if (!(await rqConfirm(`${unconfirmed.map(p => p.name).join(', ')} todavía no tiene el precio de venta confirmado — no se va a incluir en este envío. ¿Mandar solo con las plantas ya confirmadas?`))) return false;
+    if (!(await rqConfirm(`${unconfirmed.map(p => p.name).join(', ')} still ${unconfirmed.length > 1 ? "don't" : "doesn't"} have a confirmed selling price — won't be included in this send. Send with only the already-confirmed plants?`))) return false;
   }
   return true;
 }
