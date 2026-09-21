@@ -440,6 +440,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
+<script src="js/date-picker.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -723,6 +724,8 @@ function rqDefaultDates(){
   const to = new Date();
   const from = new Date(Date.now() - 30 * 86400000);
   const fmt = d => d.toISOString().slice(0, 10);
+  btDpAttach('f_from');
+  btDpAttach('f_to');
   document.getElementById('f_from').value = fmt(from);
   document.getElementById('f_to').value = fmt(to);
 }
@@ -1409,6 +1412,7 @@ function showDateConfirm(isFob, defaultDate){
   document.getElementById('dateConfirmMessage').textContent = isFob
     ? 'This is the real, final pick-up date BuenTrade\'s carrier will pick up on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.'
     : 'This is the real, final delivery date the plant will self-deliver on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.';
+  btDpAttach('dateConfirmInput');
   const input = document.getElementById('dateConfirmInput');
   input.value = defaultDate || '';
   document.getElementById('dateConfirmError').textContent = '';
