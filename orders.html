@@ -188,19 +188,23 @@
   .load-next-action-eyebrow{font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;}
   .load-next-action-label{font-size:15px;font-weight:700;color:var(--ink);}
   .load-next-action.done{background:transparent;border-style:dashed;justify-content:center;padding:16px;}
-  .docs-panel-toggle{cursor:pointer;font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:14px;padding-top:12px;border-top:1px solid var(--line);user-select:none;}
-  .docs-panel-toggle svg{width:14px;height:14px;flex-shrink:0;}
-  .docs-panel-toggle:hover{color:var(--ink);}
-  .docs-panel{margin-top:8px;display:flex;flex-direction:column;gap:2px;}
-  .doc-row{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line);}
-  .doc-row:last-child{border-bottom:none;}
-  .doc-row-label{font-weight:600;color:var(--ink);min-width:120px;flex-shrink:0;}
+  /* Real ask 2026-09-21: "despliegue de docs quitalo dejalos mostrando... siempre algo bonito
+     centrado bien organizados" — no more collapse toggle (always rendered, see
+     renderOrderDocsPanel), and the rows move from one long stacked list into a centered 2-column
+     grid of cards; same .doc-row content/actions inside, just a different container. */
+  .docs-panel-heading{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.07em;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:6px;}
+  .docs-panel-heading svg{width:14px;height:14px;flex-shrink:0;}
+  .docs-panel-grid{margin:14px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;}
+  .doc-row{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);}
+  .doc-row-span{grid-column:1 / -1;}
+  .doc-row-label{font-weight:600;color:var(--ink);flex-shrink:0;}
   .doc-row-link{color:var(--blue-bright);text-decoration:underline;flex-shrink:0;}
   .doc-row-btn{padding:4px 9px !important;font-size:11px !important;flex-shrink:0;}
   .doc-row-btn svg{width:13px;height:13px;flex-shrink:0;}
   .doc-row-status{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
   .doc-row-status.sent{color:#5FE097;}
-  .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:6px 0;}
+  .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:11px 14px;text-align:center;}
+  @media (max-width:680px){ .docs-panel-grid{grid-template-columns:1fr;} }
   .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
@@ -1783,7 +1787,6 @@ function urgentQueueAdvance(){
 // order has more than one freight leg (see buildFODocs) — so this checks what actually exists in
 // Storage rather than guessing a filename, never risking a dead link. One real list() call per
 // order, only made the first time its panel is opened (not on every render), then cached.
-const docsOpenOverride = new Set();
 const orderDocsFileCache = new Map(); // order_number -> [{name, url}]
 // Real ask 2026-09-21: "dame una opcion agrupada horizontal" — which of the 4 timeline phase tabs
 // a trader has manually clicked into, per order, so it doesn't snap back to the default (current)
@@ -1826,17 +1829,6 @@ async function ensureOrderDocsFiles(orderNumber){
   }
 }
 
-async function toggleOrderDocs(orderNumber){
-  if (docsOpenOverride.has(orderNumber)){
-    docsOpenOverride.delete(orderNumber);
-    refreshOpenOrderDetail();
-    return;
-  }
-  docsOpenOverride.add(orderNumber);
-  await ensureOrderDocsFiles(orderNumber);
-  refreshOpenOrderDetail();
-}
-
 // Real correction 2026-09-07: "quitar el boton de view en docs y poner el nombre con link" — the
 // document's own name is now the link to open it, instead of the name plus a separate "View" link.
 function renderTradeDocRow(label, sentAt, matchedFiles, actionsHtml, actionsWhenMissing){
@@ -1871,11 +1863,12 @@ function renderSignatureEvidenceRow(o){
 // posibilidad de compartir por whatsapp o por correo a sus destinatarios" — every generated
 // document (sent already or not) gets its own Email/WhatsApp actions right in this row, reusing
 // the exact same send functions Offers already uses, same preview-before-send modal.
+// Real ask 2026-09-21: "despliegue de docs quitalo dejalos mostrando" — no more collapse/expand,
+// this panel always renders; "siempre algo bonito centrado bien organizados" — same real rows,
+// same actions, just laid out as a centered 2-column grid instead of one long stacked list.
 function renderOrderDocsPanel(o, nextActionLabel){
-  const isOpen = docsOpenOverride.has(o.order_number);
-  const arrow = isOpen ? '▲' : '▼';
-  let body = '';
-  if (isOpen){
+  let body;
+  {
     const files = orderDocsFileCache.get(o.order_number) || [];
     const findFiles = prefix => files.filter(f => f.name.startsWith(prefix));
     const pickupDocs = o.pickup_documents || [];
@@ -1983,7 +1976,10 @@ function renderOrderDocsPanel(o, nextActionLabel){
     const dateRow = (!o.picked_up_at && o.pickup_date)
       ? `<div class="doc-row"><span class="doc-row-label">PU / Delivery Date</span>${docRowBtn('Edit', `editPickupDateClick('${o.order_number}')`)}<span class="doc-row-status">${fmtDateStr(o.pickup_date)}</span></div>`
       : '';
-    body = `<div class="docs-panel">
+    const pickupDocsHtml = pickupDocs.length
+      ? pickupDocs.map(d => `<div class="doc-row"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
+      : '<div class="doc-row-empty doc-row-span">No pickup documents yet.</div>';
+    body = `<div class="docs-panel-grid">
       ${dateRow}
       ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActionsWhenMissing)}
       ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActionsWhenMissing)}
@@ -1991,12 +1987,10 @@ function renderOrderDocsPanel(o, nextActionLabel){
       ${paymentRow}
       ${renderTradeDocRow('Invoice', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${renderSignatureEvidenceRow(o)}
-      ${pickupDocs.length
-        ? pickupDocs.map(d => `<div class="doc-row"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
-        : '<div class="doc-row-empty">No pickup documents yet.</div>'}
+      ${pickupDocsHtml}
     </div>`;
   }
-  return `<div class="docs-panel-toggle" onclick="toggleOrderDocs('${o.order_number}')" style="display:flex;align-items:center;gap:6px;">${DOC_ICON} Documents ${arrow}</div>${body}`;
+  return `<div class="docs-panel-heading">${DOC_ICON} Documents</div>${body}`;
 }
 
 // Real ask 2026-09-08: "renglones visibles con cada consecutivo de orden en lugar de eso tan
@@ -2135,7 +2129,6 @@ async function openOrderDetail(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   openOrderNumber = orderNumber;
-  docsOpenOverride.add(orderNumber);
   const attentionOrderNumbers = new Set(computeAttentionItems().map(it => it.order_number));
   document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
@@ -3380,7 +3373,7 @@ async function sharePO(orderNumber){
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ await btAlert('Upload error: ' + e.message); return; }
   // Real bug found live 2026-09-11: this cache is only ever populated once per order (see
-  // toggleOrderDocs) — without invalidating it here, the Documents panel keeps showing "Not
+  // ensureOrderDocsFiles) — without invalidating it here, the Documents panel keeps showing "Not
   // generated" forever in this session even though the file above just landed in Storage.
   orderDocsFileCache.delete(orderNumber);
   const po = built.po;
