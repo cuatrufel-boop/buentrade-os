@@ -1005,6 +1005,49 @@ if (FIREBASE_READY) {
   </div>
 </div>
 
+<!-- Real ask 2026-09-21: "el sistema nos pregunta como la queremos comprar si directa o por
+     factoring" — step 1 of the Direct-vs-Summar roadmap (see purchase_orders.financing_method
+     migration). Shown right after the "Create Order?" confirm, before the order is actually
+     created. Reads the SAME numbers already rendered in #summarCard (Profit Without/After Summar)
+     instead of recomputing anything, so this can never drift from what the trader already saw on
+     screen. Only records the choice for now — PO/SO/FO/Invoice/bank-details generation downstream
+     is untouched regardless of which one is picked; those are separate, later steps. -->
+<div id="ttFinancingChoiceOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.55);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">How is this purchase financed?</div>
+    <div style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:18px;">Choose how BuenTrade pays the plant for this order.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.18);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Direct</div>
+        <div id="ttFinChoiceDirectProfit" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:#fff;"></div>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(232,181,76,.4);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:#E8B54C;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Summar</div>
+        <div id="ttFinChoiceSummarProfit" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:#fff;"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
+      <button onclick="ttFinancingChoiceResolve(null)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="ttFinancingChoiceResolve('direct')" class="wa-btn" style="padding:8px 14px;font-size:12.5px;">Pay Direct</button>
+      <button onclick="ttFinancingChoiceResolve('summar')" class="wa-btn" style="padding:8px 14px;font-size:12.5px;">Pay via Summar</button>
+    </div>
+  </div>
+</div>
+<script>
+let ttFinancingChoiceResolveFn = null;
+function showTTFinancingChoice(){
+  document.getElementById('ttFinChoiceDirectProfit').textContent = document.getElementById('summarProfitBefore').textContent;
+  document.getElementById('ttFinChoiceSummarProfit').textContent = document.getElementById('summarProfitAfter').textContent;
+  document.getElementById('ttFinancingChoiceOverlay').style.display = 'flex';
+  return new Promise(resolve => { ttFinancingChoiceResolveFn = resolve; });
+}
+function ttFinancingChoiceResolve(choice){
+  document.getElementById('ttFinancingChoiceOverlay').style.display = 'none';
+  if (ttFinancingChoiceResolveFn) ttFinancingChoiceResolveFn(choice);
+  ttFinancingChoiceResolveFn = null;
+}
+</script>
+
 <!-- Collections module (2026-09-08): "si el cliente me da un bid por una carga y no tiene cupo
      debemos poder enviar un mensaje... o la otra opcion que liberes el cupo" — real action, not
      just a warning, at the exact moment a new deal would exceed a customer's credit_limit. -->
@@ -1092,6 +1135,17 @@ function ttDateConfirmResolve(val){
 // confirmed before Create Order proceeds, same required-screen treatment as the PU/delivery date
 // above (showTTDateConfirm) — never a dismissable suggestion, never left "TBD" for a later step to
 // maybe get around to. Resolves { carrier_provider_id, rate } or null on Cancel.
+// Real bug found live 2026-09-21 (while testing an unrelated feature): this file calls
+// escapeHtml() below but never defines it — every other file in the app does (orders.html,
+// offers.html, quotes.html, etc.), copied verbatim from there. Missing here, this throws
+// "ReferenceError: escapeHtml is not defined" the moment the carrier list has at least one real
+// row (4 real carriers exist in production) — an uncaught rejection inside showTTCarrierConfirm's
+// promise that silently kills the ENTIRE Create Order flow with no error shown to the trader,
+// for any FOB offer whose freight rate wasn't already resolved via the dropdown. Real, severe,
+// pre-existing — not introduced by anything built today.
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
 let ttCarrierModalResolveFn = null;
 async function showTTCarrierConfirm(defaultRate){
   let carriers = [];
@@ -2634,7 +2688,7 @@ async function negoSendToCustomer(channel){
 // Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
 // right now in the calculator (not the original quoted snapshot), and additionally pings the
 // customs agency on file — offers.html's quick "Ganada" doesn't need that since nothing changed.
-async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, carrierChoice){
+async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, carrierChoice, financingMethod){
   if (!negoOffer) return;
   const freightEl = document.getElementById('freight');
   const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
@@ -2648,6 +2702,13 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
     const orderLine = `${(negoOffer.product_spec || negoOffer.product_name)} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`;
     const ok = await showTTConfirm('Create Order?', nextOrderPreview ? `${orderLine}\n\nNext Order #: ${nextOrderPreview}` : orderLine, '✓ Create Order');
     if (!ok) return;
+  }
+  // Real ask 2026-09-21: "el sistema nos pregunta como la queremos comprar si directa o por
+  // factoring" — asked once, right after Create Order is confirmed; threaded through the
+  // credit-override retry below same as confirmedDeliveryDate/carrierChoice, never re-asked.
+  if (!financingMethod){
+    financingMethod = await showTTFinancingChoice();
+    if (!financingMethod) return; // trader cancelled — nothing created
   }
   // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... es muy delicado" — asked fresh
   // every time, never inherited silently from whatever the quote happened to say when it was
@@ -2696,12 +2757,13 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
       us_freight_rate_id_override: pickedRateId,
       carrier_provider_id: carrierChoice ? carrierChoice.carrier_provider_id : null,
       won_idempotency_key: wonIdempotencyKey,
+      financing_method: financingMethod,
     });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
       const choice = await showCreditLimitOverlay(e.data.message);
       document.getElementById('negoMsg').textContent = '';
-      if (choice === 'override') return negoSaveDefinitive(true, confirmedDeliveryDate, carrierChoice);
+      if (choice === 'override') return negoSaveDefinitive(true, confirmedDeliveryDate, carrierChoice, financingMethod);
       if (choice === 'collect'){ window.open('collections.html', '_blank'); return; }
       if (choice === 'financials'){
         let customerEmail = null;
@@ -2798,8 +2860,8 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
       <input type="number" id="ttCarrierModalRate" autocomplete="off" step="0.01" min="0">
     </div>
     <div class="email-modal-actions">
-      <button onclick="ttCarrierModalResolve(null)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
-      <button onclick="ttCarrierModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Confirm carrier</button>
+      <button onclick="ttCarrierModalResolve(null)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="ttCarrierModalConfirm()" class="wa-btn" style="padding:9px 16px;font-size:13px;">Confirm carrier</button>
     </div>
   </div>
 </div>
