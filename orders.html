@@ -379,11 +379,15 @@
      docs panel) moves in here, opened on demand per order, instead of always rendering for every
      order at once. Same solid modal-box convention as collections.html's #customerProfileBox
      (solid bg, not translucent — a modal needs full legibility over the dark overlay). */
-  #orderDetailOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6200;align-items:center;justify-content:center;padding:20px;}
-  /* Real ask 2026-09-13: "mejorar la de view... ponle bordes de otro color, algo bonito,
-     creatividad" — the flat hairline border on the order detail modal becomes a soft glowing
-     gradient ring (brand blue-bright into amber, BuenTrade's two accent colors). */
-  #orderDetailBox{position:relative;background:#0F2B52;border-radius:16px;padding:26px 28px;max-width:1040px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 32px -6px rgba(90,170,255,.4);border:1.5px solid transparent;background-image:linear-gradient(#0F2B52,#0F2B52),linear-gradient(135deg,var(--blue-bright) 0%,rgba(232,181,76,.85) 55%,var(--blue) 100%);background-origin:border-box;background-clip:padding-box,border-box;}
+  /* Real ask 2026-09-21: "una sola pagina en vez de esa ventana emergente" — was a centered,
+     max-width:1040px floating card (a modal-on-modal when a further action like Pay via Summar
+     opened on top of it); now a genuine full-screen page, same positioning + background recipe as
+     this file's own .tt-overlay (ttOverlay/docPreviewOverlay) — one real full-page pattern reused,
+     not a new one invented. Kept as its own id (not the .tt-overlay class) only so its z-index can
+     stay below ttOverlay/docPreviewOverlay (7000) — a QT or doc preview opened from inside this
+     page still layers on top of it, same stacking order as before.  */
+  #orderDetailOverlay{display:none;position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:6200;flex-direction:column;}
+  #orderDetailBox{flex:1;min-height:0;overflow-y:auto;padding:22px clamp(16px, 4vw, 48px) 48px;max-width:1040px;width:100%;margin:0 auto;box-sizing:border-box;}
   /* Real ask 2026-09-16: "SEARCH unificado diseno buentrade" — glass-pill search shipped on
      Products/Quotes/Plants/Offers (see plants.html's own comment on this exact block), scoped
      "st-" for this page. Real ask 2026-09-18 ("new plant tiene diseno buentrade hazlo en...
@@ -670,12 +674,15 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<!-- Real ask 2026-09-21: same full-page head as ttOverlay/docPreviewOverlay below (centered
+     title, close button pinned right) — reused, not a new header built for this one page. -->
 <div id="orderDetailOverlay">
+  <div class="tt-overlay-head">
+    <div></div>
+    <div class="tt-overlay-title" id="orderDetailTitle" style="text-align:center;"></div>
+    <button class="tt-overlay-close" onclick="closeOrderDetail()" title="Close" style="justify-self:end;">✕ Close</button>
+  </div>
   <div id="orderDetailBox">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-      <h2 id="orderDetailTitle" style="margin:0;"></h2>
-      <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
-    </div>
     <div id="orderDetailBody"></div>
   </div>
 </div>
