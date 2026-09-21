@@ -2185,7 +2185,10 @@ async function sendPaymentToSummar(orderNumber){
   let built;
   try { built = await buildSODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
   const so = built.so;
-  const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
+  // Real bug found live 2026-09-21 testing this exact function: this used to read the _es fields
+  // first (product_spec_es), same as shareSO's own Spanish customer-facing send — wrong here,
+  // Summar is a US company and this whole email is in English (see the approved copy above).
+  const soProductName = so.product_spec || so.product_name || '';
   const salePrice = Number(so.total_sale) || 0;
   const wireAmount = salePrice * 0.20;
   const filename = `SO-BT-${btNum(orderNumber)}.pdf`;
