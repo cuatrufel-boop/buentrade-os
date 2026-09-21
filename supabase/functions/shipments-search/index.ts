@@ -58,6 +58,15 @@ Deno.serve(async (req) => {
           select po.docs_on from purchase_orders po where po.order_number = sh.order_number limit 1
         ) as docs_on,
         (
+          -- Real ask 2026-09-21: the "Pay via Summar" QT breakdown needs how this specific order's
+          -- purchase was financed, and (when it's Summar) the Payment Days estimate that fee was
+          -- computed with at Create Order time — never re-derived, see the payment_days migration.
+          select row_to_json(fin) from (
+            select po.financing_method, po.payment_days, po.total_cost, po.purchase_price
+            from purchase_orders po where po.order_number = sh.order_number limit 1
+          ) fin
+        ) as financing,
+        (
           -- Real ask 2026-09-12: "la que lo trae desde el pricing ese es el location que debe
           -- traer a través de todo el proceso hasta cerrar" — Case 1 (a real ship-from city was on
           -- the price) is never stored separately; it's resolved live via the SAME rate the offer
