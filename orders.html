@@ -268,6 +268,19 @@
      renderUnifiedTimeline()'s renderMapRow() — same entries/blinkIdx/travelerLineIdx, only the
      grouping/connectors changed. */
   .utimeline-lanes{display:flex;flex-direction:column;gap:10px;}
+  /* Real ask 2026-09-21: "agrupado horizontal... entre menos tenga que bajar mejor" — the 13
+     milestones group into 4 real business phases (Documentación/Pago y liberación/Logística/
+     Cierre), shown as a segmented-control tab bar; only the active phase's row of stops renders,
+     so the card never grows past one row no matter how many milestones an order has. Reuses each
+     entry's own already-computed e.html (real onclick, blink-now, urgent — all untouched) inside
+     whichever phase row is active, so this is purely a grouping/display change, not new logic. */
+  .phase-tabs{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:4px;gap:3px;margin:14px 0 0;}
+  .phase-tab{flex:1;text-align:center;padding:9px 6px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:background .15s,color .15s;user-select:none;}
+  .phase-tab:hover{color:var(--ink);}
+  .phase-tab.active{background:rgba(232,181,76,.15);color:#E8B54C;}
+  .phase-tab.tdone:not(.active){color:#5FE097;}
+  .phase-tab-count{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;margin-top:2px;opacity:.75;}
+  .phase-row{justify-content:center;}
   .utimeline-lane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px 10px;}
   .utimeline-lane .utimeline{justify-content:flex-start;margin-bottom:0;}
   .uring-wrap{display:flex;align-items:center;gap:16px;padding:2px 4px 4px;}
@@ -1445,10 +1458,34 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // treatment regardless of state; sizing now comes purely from .blink-now (the single
   // leftmost-actionable entry, still computed above), styled bigger in the CSS for
   // .lane-map-row .blink-now. No other class injected here.
-  function renderMapRow(){
-    return entries.map((e, i) => {
+  // Real ask 2026-09-21: "dame una opcion agrupada horizontal" — the fixed push order above
+  // (PO/SO/[FO], Pay Plant/Release #/[Send Release #], Confirm PU/Pick up/Customs docs/Sent to
+  // customs/Delivered, Invoice/Signature) already IS 4 contiguous business phases; grouping just
+  // reads that same order, no new sequence invented.
+  const PHASE_DEFS = [
+    { name: 'Documentación', labels: ['PO', 'SO', 'FO'] },
+    { name: 'Pago y liberación', labels: ['Pay Plant', 'Release #', 'Send Release #'] },
+    { name: 'Logística', labels: ['Confirm PU', 'Pick up', 'Customs docs', 'Sent to customs', 'Delivered'] },
+    { name: 'Cierre', labels: ['Invoice', 'Signature'] },
+  ];
+  const phaseSlices = PHASE_DEFS.map(def => entries.map((e, i) => i).filter(i => def.labels.includes(entries[i].label)));
+  const defaultPhaseIdx = blinkIdx >= 0 ? phaseSlices.findIndex(idxs => idxs.includes(blinkIdx)) : PHASE_DEFS.length - 1;
+  const activePhaseIdx = timelinePhaseOverride.has(o.order_number) ? timelinePhaseOverride.get(o.order_number) : Math.max(0, defaultPhaseIdx);
+
+  function renderPhaseTabs(){
+    return PHASE_DEFS.map((def, idx) => {
+      const idxs = phaseSlices[idx];
+      const done = idxs.filter(i => entries[i].lineDone).length;
+      const total = idxs.length;
+      const cls = (idx === activePhaseIdx ? ' active' : '') + (done === total && total > 0 ? ' tdone' : '');
+      return `<div class="phase-tab${cls}" onclick="selectTimelinePhase('${o.order_number}',${idx})">${escapeHtml(def.name)}<span class="phase-tab-count">${done}/${total}</span></div>`;
+    }).join('');
+  }
+  function renderPhaseRow(idxs){
+    return idxs.map((i, localI) => {
+      const e = entries[i];
       const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-      const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
+      const line = localI < idxs.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
       const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
       return entryHtml + line;
     }).join('');
@@ -1468,7 +1505,8 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
           <div class="uring-sub">${nextLabel ? `Next: ${escapeHtml(nextLabel)}` : 'All caught up'}</div>
         </div>
       </div>
-      <div class="utimeline lane-map-row">${renderMapRow()}</div>
+      <div class="phase-tabs">${renderPhaseTabs()}</div>
+      <div class="utimeline lane-map-row phase-row">${renderPhaseRow(phaseSlices[activePhaseIdx])}</div>
     </div>
   `;
 
@@ -1743,6 +1781,15 @@ function urgentQueueAdvance(){
 // order, only made the first time its panel is opened (not on every render), then cached.
 const docsOpenOverride = new Set();
 const orderDocsFileCache = new Map(); // order_number -> [{name, url}]
+// Real ask 2026-09-21: "dame una opcion agrupada horizontal" — which of the 4 timeline phase tabs
+// a trader has manually clicked into, per order, so it doesn't snap back to the default (current)
+// phase on every re-render. Defaults (no entry here) to whichever phase actually has the pending
+// action — see renderUnifiedTimeline's defaultPhaseIdx.
+const timelinePhaseOverride = new Map();
+function selectTimelinePhase(orderNumber, phaseIdx){
+  timelinePhaseOverride.set(orderNumber, phaseIdx);
+  refreshOpenOrderDetail();
+}
 
 async function ensureOrderDocsFiles(orderNumber){
   if (orderDocsFileCache.has(orderNumber)) return;
