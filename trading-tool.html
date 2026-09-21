@@ -47,9 +47,7 @@
   .email-modal-box h3{margin:0 0 14px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
   .email-modal-field{margin-bottom:12px;}
   .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
-  .email-modal-field input,.email-modal-field textarea,.email-modal-field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
-  .email-modal-field select{cursor:pointer;}
-  .email-modal-field select option{background:#0F1F33;color:#fff;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
   .email-modal-field textarea{min-height:110px;resize:vertical;}
   .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
   .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
@@ -1137,32 +1135,80 @@ function ttDateConfirmResolve(val){
 // confirmed before Create Order proceeds, same required-screen treatment as the PU/delivery date
 // above (showTTDateConfirm) — never a dismissable suggestion, never left "TBD" for a later step to
 // maybe get around to. Resolves { carrier_provider_id, rate } or null on Cancel.
-// Real bug found live 2026-09-21 (while testing an unrelated feature): this file calls
-// escapeHtml() below but never defines it — every other file in the app does (orders.html,
-// offers.html, quotes.html, etc.), copied verbatim from there. Missing here, this throws
-// "ReferenceError: escapeHtml is not defined" the moment the carrier list has at least one real
-// row (4 real carriers exist in production) — an uncaught rejection inside showTTCarrierConfirm's
-// promise that silently kills the ENTIRE Create Order flow with no error shown to the trader,
-// for any FOB offer whose freight rate wasn't already resolved via the dropdown. Real, severe,
-// pre-existing — not introduced by anything built today.
-function escapeHtml(str){
-  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
+// Real bug found live 2026-09-21 (while testing an unrelated feature): this used to call an
+// escapeHtml() that was never defined anywhere in this file — a ReferenceError thrown the moment
+// the carrier list had at least one real row (4 real carriers exist in production), silently
+// killing the ENTIRE Create Order flow for any FOB offer whose freight rate wasn't already
+// resolved via the dropdown, with no error shown to the trader. Fixed by calling ttEscapeHtml
+// (already defined below, used by the freight rate dropdown) instead of a second copy.
+//
+// Real ask 2026-09-21 ("el dropdown de carrier no es diseno buentrade"): a native <select> can't
+// be themed — its open OPTION LIST is drawn by the OS, not the page, so no CSS here can ever
+// reach it (confirmed live: still a plain white/gray system list even with option{background}
+// set). Rebuilt as the same real custom dropdown the freight rate picker above already uses
+// (.rq-ddown-btn/.rq-ddown-panel/.rq-ddown-option, see ttFreightDdownHtml) instead of fighting
+// the browser — one real dark dropdown component, not two different-looking pickers on one page.
 let ttCarrierModalResolveFn = null;
+let ttCarrierDdownOpen = false;
+let ttCarrierDdownRect = null;
+let ttCarrierList = [];
+let ttCarrierSelectedId = '';
+function ttCarrierDdownHtml(){
+  const selected = ttCarrierList.find(c => c.id === ttCarrierSelectedId);
+  const nameText = selected ? selected.name : (ttCarrierList.length ? 'Select a carrier' : 'No carriers on file');
+  let panelStyle = '';
+  if (ttCarrierDdownOpen && ttCarrierDdownRect){
+    const panelWidth = Math.min(320, window.innerWidth - 24);
+    const left = Math.min(ttCarrierDdownRect.left, window.innerWidth - panelWidth - 12);
+    panelStyle = `top:${Math.round(ttCarrierDdownRect.bottom + 6)}px;left:${Math.round(Math.max(12, left))}px;`;
+  }
+  const optionsHtml = ttCarrierList.length
+    ? ttCarrierList.map(c => `<div class="rq-ddown-option${ttCarrierSelectedId === c.id ? ' selected' : ''}" onclick="ttPickCarrier('${c.id}')"><span class="rq-ddown-option-name">${ttEscapeHtml(c.name)}</span></div>`).join('')
+    : `<div class="rq-ddown-empty">No carriers on file — add one in Carriers first.</div>`;
+  return `
+    <div class="rq-ddown">
+      <button type="button" class="rq-ddown-btn${ttCarrierSelectedId ? ' has-value' : ''}" aria-expanded="${ttCarrierDdownOpen}" onclick="ttToggleCarrierDdown()">
+        <span class="rq-ddown-btn-label">${ttEscapeHtml(nameText)}</span>
+        ${ttDdownChevronSvg}
+      </button>
+      ${ttCarrierDdownOpen ? `<div class="rq-ddown-panel" style="${panelStyle}">${optionsHtml}</div>` : ''}
+    </div>`;
+}
+function ttRenderCarrierDdown(){
+  const el = document.getElementById('ttCarrierDdownWrap');
+  if (el) el.innerHTML = ttCarrierDdownHtml();
+}
+function ttToggleCarrierDdown(){
+  ttCarrierDdownOpen = !ttCarrierDdownOpen;
+  if (ttCarrierDdownOpen){
+    const btn = document.querySelector('#ttCarrierDdownWrap .rq-ddown-btn');
+    ttCarrierDdownRect = btn ? btn.getBoundingClientRect() : null;
+  }
+  ttRenderCarrierDdown();
+}
+function ttPickCarrier(id){
+  ttCarrierSelectedId = id;
+  ttCarrierDdownOpen = false;
+  ttRenderCarrierDdown();
+}
+document.addEventListener('click', (e) => {
+  if (ttCarrierDdownOpen && !(e.target.closest && e.target.closest('#ttCarrierDdownWrap'))){
+    ttCarrierDdownOpen = false;
+    ttRenderCarrierDdown();
+  }
+}, true);
 async function showTTCarrierConfirm(defaultRate){
-  let carriers = [];
-  try { carriers = (await callApi('providers-search', { role: 'carrier', limit: 200 })).results || []; } catch (e) {}
-  const select = document.getElementById('ttCarrierModalSelect');
-  select.innerHTML = carriers.length
-    ? carriers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
-    : `<option value="">No carriers on file — add one in Carriers first</option>`;
+  ttCarrierList = [];
+  try { ttCarrierList = (await callApi('providers-search', { role: 'carrier', limit: 200 })).results || []; } catch (e) {}
+  ttCarrierSelectedId = ttCarrierList.length ? ttCarrierList[0].id : '';
+  ttCarrierDdownOpen = false;
+  ttRenderCarrierDdown();
   document.getElementById('ttCarrierModalRate').value = defaultRate || '';
   document.getElementById('ttCarrierModalOverlay').style.display = 'flex';
   return new Promise(resolve => { ttCarrierModalResolveFn = resolve; });
 }
 function ttCarrierModalConfirm(){
-  const select = document.getElementById('ttCarrierModalSelect');
-  const carrierId = select.value;
+  const carrierId = ttCarrierSelectedId;
   const rate = Number(document.getElementById('ttCarrierModalRate').value);
   if (!carrierId){ return; } // no carriers on file — Cancel is the only real way out of this screen
   if (!rate || rate <= 0){ return; }
@@ -1172,6 +1218,7 @@ function ttCarrierModalConfirm(){
   if (resolve) resolve({ carrier_provider_id: carrierId, rate });
 }
 function ttCarrierModalResolve(val){
+  ttCarrierDdownOpen = false;
   document.getElementById('ttCarrierModalOverlay').style.display = 'none';
   if (ttCarrierModalResolveFn) ttCarrierModalResolveFn(val);
   ttCarrierModalResolveFn = null;
@@ -2856,7 +2903,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
     <h3>Select the carrier</h3>
     <div class="email-modal-from" id="ttCarrierModalIntro">This is a FOB load — a carrier and its rate must be fixed before the order can be created.</div>
     <div class="email-modal-field"><label>Carrier</label>
-      <select id="ttCarrierModalSelect" autocomplete="off"></select>
+      <div id="ttCarrierDdownWrap"></div>
     </div>
     <div class="email-modal-field"><label>US Freight Rate (USD)</label>
       <input type="number" id="ttCarrierModalRate" autocomplete="off" step="0.01" min="0">
