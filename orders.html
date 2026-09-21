@@ -182,6 +182,29 @@
      Single column below 900px — a sidebar squeezed next to a 13-step timeline on a phone-width
      screen would just break both. */
   .order-detail-grid{display:grid;grid-template-columns:1fr 280px;gap:28px;align-items:start;}
+  /* Real ask 2026-09-21 ("no se queria algo amplio... apretado"): a real vertical step list, one
+     row per step, unlimited height instead of a fixed-width row of small circles competing with
+     the sidebar for space. Same Stripe/Linear activity-feed shape used for any long real process. */
+  .vtimeline{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0;}
+  .vtimeline-summary{display:flex;align-items:center;gap:16px;padding-bottom:16px;margin-bottom:4px;border-bottom:1px solid var(--line);}
+  .vtimeline-summary .uring{position:relative;width:52px;height:52px;flex-shrink:0;}
+  .vtimeline-summary .uring svg{width:52px;height:52px;}
+  .vtimeline-summary .uring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--ink);}
+  .vtimeline-summary .uring-h{font-size:14px;font-weight:700;color:var(--ink);}
+  .vtimeline-summary .uring-sub{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .vstep{display:flex;align-items:center;gap:14px;padding:10px 0;}
+  .vstep-rail{display:flex;flex-direction:column;align-items:center;align-self:stretch;flex-shrink:0;}
+  .vstep-dot{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--line);color:var(--ink-soft);background:var(--bg);flex-shrink:0;}
+  .vstep-dot svg{width:16px;height:16px;}
+  .vstep-line{width:2px;flex:1;min-height:14px;background:var(--line);margin:2px 0;}
+  .vstep.done .vstep-dot{border-color:var(--green);color:var(--green);background:rgba(15,138,95,.12);}
+  .vstep.done .vstep-line{background:var(--green);}
+  .vstep.current .vstep-dot{border-color:#E8B54C;color:#E8B54C;background:rgba(232,181,76,.15);box-shadow:0 0 0 4px rgba(232,181,76,.15);}
+  .vstep-label{flex:1;font-size:14px;font-weight:600;color:var(--ink);}
+  .vstep.wait .vstep-label{color:var(--ink-soft);font-weight:500;}
+  .vstep.current .vstep-label{color:#E8B54C;font-weight:700;}
+  .vstep-date{font-size:12px;color:var(--ink-soft);flex-shrink:0;}
+  .vstep-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#E8B54C;background:rgba(232,181,76,.15);border:1px solid rgba(232,181,76,.4);border-radius:20px;padding:3px 10px;flex-shrink:0;}
   @media (max-width:900px){ .order-detail-grid{grid-template-columns:1fr;} }
   .order-detail-main{min-width:0;}
   .order-detail-sidebar{display:flex;flex-direction:column;gap:18px;position:sticky;top:0;}
@@ -1296,6 +1319,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       // Payment (3 independently-computed copies of the same decision).
       onClickRaw: realOnClick || null,
       actionTitle: isNext ? `Mark ${s.label}` : (isPendingPickupConfirm ? `Confirm w/ ${confirmTarget}` : ''),
+      date: dateStr,
       lineDone: i < stageIdx,
       actionableNow: isNext && !deliveredBlocked,
       raised,
@@ -1330,8 +1354,15 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     return {
       html: `<div class="u-mini ${state}${raisedClass}${urgentClass}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
       // Real ask 2026-09-21: see mainEntry's own onClickRaw comment — same reasoning, same field.
-      onClickRaw: state === 'now' ? (st.onClick || null) : null,
+      // Real bug found live 2026-09-21: the new vertical step list (renderVerticalSteps) reads
+      // this same field for its click handler on EVERY row, not just the current one — restricting
+      // it to 'now' only silently dropped the real "click a done PO/SO/FO to view/resend it"
+      // capability the old horizontal circles had baked into their own html. blinkIdx is always
+      // exactly the one 'now' entry, so Next Action (which only ever reads entries[blinkIdx]) is
+      // unaffected by also exposing this for 'done'.
+      onClickRaw: (state === 'now' || state === 'done') ? (st.onClick || null) : null,
       actionTitle: state === 'now' ? st.label : '',
+      date: dateStr,
       lineDone: st.done,
       actionableNow: state === 'now',
       raised: !!st.raised,
@@ -1463,17 +1494,37 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // treatment regardless of state; sizing now comes purely from .blink-now (the single
   // leftmost-actionable entry, still computed above), styled bigger in the CSS for
   // .lane-map-row .blink-now. No other class injected here.
-  function renderMapRow(){
+  // Real ask 2026-09-21: "no se queria algo amplio... apretado... eso no es un rediseno" — the
+  // horizontal row of 13 small circles needed real width to breathe; once a sidebar took width
+  // away, it had nowhere to go but cramped. A vertical step list (Stripe/Linear activity-feed
+  // pattern) never runs out of room — it just grows down — same real data (entries, blinkIdx,
+  // onClickRaw, gating) as before, only how each one is laid out changes.
+  function renderVerticalSteps(){
     return entries.map((e, i) => {
-      const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-      const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
-      const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
-      return entryHtml + line;
+      const isCurrent = i === blinkIdx;
+      const cls = e.lineDone ? 'done' : (isCurrent ? 'current' : 'wait');
+      const rightHtml = e.lineDone
+        ? `<span class="vstep-date">${e.date || ''}</span>`
+        : isCurrent
+        ? `<span class="vstep-tag">Next</span>`
+        : '';
+      // Real ask 2026-09-21: "un solo flujo" still holds here — a done step keeps its real
+      // view/resend action (onClickRaw, exposed for 'done' too — see miniEntry's own comment on
+      // that), the exact same one the old horizontal circles fired; the current step is NOT
+      // clickable here on purpose, same reasoning as before — it only ever fires from the Next
+      // Action card above, never a second live trigger for it.
+      const clickable = e.lineDone && e.onClickRaw;
+      const rowAttrs = clickable ? ` onclick="${e.onClickRaw}" style="cursor:pointer;" title="${escapeHtml(e.actionTitle || 'View / resend')}"` : '';
+      return `<div class="vstep ${cls}"${rowAttrs}>
+        <div class="vstep-rail"><div class="vstep-dot">${e.icon}</div>${i < entries.length - 1 ? '<div class="vstep-line"></div>' : ''}</div>
+        <div class="vstep-label">${escapeHtml(e.label)}</div>
+        ${rightHtml}
+      </div>`;
     }).join('');
   }
   const lanesHtml = `
-    <div class="utimeline-lane lane-map">
-      <div class="uring-wrap">
+    <div class="vtimeline">
+      <div class="vtimeline-summary">
         <div class="uring">
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="${RING_R}" fill="none" stroke="var(--line)" stroke-width="7"/>
@@ -1486,7 +1537,7 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
           <div class="uring-sub">${nextLabel ? `Next: ${escapeHtml(nextLabel)}` : 'All caught up'}</div>
         </div>
       </div>
-      <div class="utimeline lane-map-row">${renderMapRow()}</div>
+      <div class="vtimeline-steps">${renderVerticalSteps()}</div>
     </div>
   `;
 
