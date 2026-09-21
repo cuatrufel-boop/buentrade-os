@@ -49,7 +49,16 @@ Deno.serve(async (req) => {
       // entry points (trading-tool.html's Create Order, offers.html's quick "Ganada") now always
       // ask the trader first and always pass this.
       confirmed_delivery_date = null,
+      // Real ask 2026-09-21: "el sistema nos pregunta como la queremos comprar si directa o por
+      // factoring" — trading-tool.html's Create Order flow asks this right before calling here.
+      // Defaults to 'direct' so offers.html's own quick "Ganada" button (same endpoint, no
+      // negotiation panel / Summar numbers to choose from) keeps working unchanged.
+      financing_method = "direct",
     } = body;
+
+    if (!["direct", "summar"].includes(financing_method)) {
+      return jsonResponse({ error: "invalid financing_method", valid_values: ["direct", "summar"] }, 400);
+    }
 
     const [offer] = await sql`select * from sent_offers where id = ${sent_offer_id}`;
     if (!offer) return jsonResponse({ error: "unknown sent_offer_id" }, 404);
@@ -125,8 +134,8 @@ Deno.serve(async (req) => {
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "sent_offers", record_id: sent_offer_id, before: offer, after: updatedOffer });
 
       const [purchaseOrder] = await tx`
-        insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(finalDeliveryDates)}, 'open')
+        insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status, financing_method)
+        values (${orderNumber}, ${sent_offer_id}, ${offer.plant_id}, ${offer.plant_name}, ${offer.product_id}, ${offer.product_name}, ${offer.product_spec}, ${finalPurchasePrice}, ${finalWeight}, ${finalTotalCost}, ${offer.docs_on}, ${tx.json(finalDeliveryDates)}, 'open', ${financing_method})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "purchase_orders", record_id: purchaseOrder.id, after: purchaseOrder });
