@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BuenTrade Trading OS — Market Flash Admin</title>
+<title>BuenTrade Trading OS — Market Flash</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
 <link rel="shortcut icon" href="/icons/favicon.ico">
@@ -64,6 +64,10 @@
   .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
   .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
   .tt-overlay-body{flex:1;min-height:0;overflow-y:auto;padding:20px;}
+  /* Embed mode: same page — just hides the header/nav chrome that's redundant when this page is
+     loaded inside an <iframe> from Quotes' Market Flash tab. Same pattern as trading-tool.html. */
+  html.embed-mode header{display:none;}
+  html.embed-mode main{padding-top:14px;}
 </style>
 <!-- ============ LOGIN GATE (same Firebase project/login as every other screen) ============ -->
 <style>
@@ -110,6 +114,12 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+// Optional embed flag (?embed=1) — used when this page is loaded inside Quotes' Market Flash
+// tab. Same pattern as trading-tool.html. Login still applies (LOCAL persistence carries the
+// trader's session across same-origin pages), only the header/nav chrome is hidden.
+const __qp = new URLSearchParams(location.search);
+if (__qp.get('embed') === '1') document.documentElement.classList.add('embed-mode');
 
 function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
 
@@ -168,7 +178,6 @@ auth.onAuthStateChanged(user => {
     <a href="providers.html" class="nav-pill">Logistics</a>
     <a href="plants.html" class="nav-pill">Plants</a>
     <a href="products.html" class="nav-pill">Products</a>
-    <a href="market-flash-admin.html" class="nav-pill active">Market Flash Admin</a>
     <a href="quotes.html" class="nav-pill">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
@@ -181,7 +190,7 @@ auth.onAuthStateChanged(user => {
 
   <!-- ============ LOAD MARKET FLASH — paste one cut per line, trend at the end ============ -->
   <div style="display:flex;align-items:center;gap:10px;margin:28px 0 14px;">
-    <h1 style="margin:0;">Market Flash Admin</h1>
+    <h1 style="margin:0;">Market Flash</h1>
     <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openMfPanel()">📋 Load Market Flash</button>
   </div>
 

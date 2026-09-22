@@ -996,7 +996,6 @@ auth.onAuthStateChanged(user => {
     <a href="providers.html" class="nav-pill">Logistics</a>
     <a href="plants.html" class="nav-pill">Plants</a>
     <a href="products.html" class="nav-pill">Products</a>
-    <a href="market-flash-admin.html" class="nav-pill">Market Flash Admin</a>
     <a href="quotes.html" class="nav-pill active">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
@@ -1012,6 +1011,11 @@ auth.onAuthStateChanged(user => {
     <button type="button" class="tab-btn active" id="qTabBtn_request" onclick="setQuoteTab('request')">Quotes<span id="qPendingCount" class="tab-count" style="display:none;"></span></button>
     <button type="button" class="tab-btn" id="qTabBtn_coverage" onclick="setQuoteTab('coverage')">Product Coverage</button>
     <button type="button" class="tab-btn" id="qTabBtn_quotingtool" onclick="setQuoteTab('quotingtool')">Quoting Tool</button>
+    <!-- Real ask 2026-09-22 ("ya no caben más pestañas arriba, méteme Market Flash como pestaña en
+         Quotes"): moved off the top nav (was crowding it as an 11th page) into a 4th tab here,
+         same embedded-iframe pattern as Quoting Tool right above — Quotes is where the trader
+         actually uses these signals, so it's also the most natural place to load them. -->
+    <button type="button" class="tab-btn" id="qTabBtn_marketflash" onclick="setQuoteTab('marketflash')">Market Flash</button>
   </div>
 
   <div id="qPanel_request">
@@ -1186,6 +1190,10 @@ auth.onAuthStateChanged(user => {
 
   <div id="qPanel_quotingtool" style="display:none;">
     <iframe id="qQuotingToolFrame" style="width:100%;height:85vh;border:none;border-radius:12px;background:#fff;" title="Quoting Tool"></iframe>
+  </div>
+
+  <div id="qPanel_marketflash" style="display:none;">
+    <iframe id="qMarketFlashFrame" style="width:100%;height:85vh;border:none;border-radius:12px;background:#0A2547;" title="Market Flash"></iframe>
   </div>
 </div>
 </div>
@@ -1485,9 +1493,11 @@ function setQuoteTab(tab){
   document.getElementById('qTabBtn_request').classList.toggle('active', tab === 'request');
   document.getElementById('qTabBtn_coverage').classList.toggle('active', tab === 'coverage');
   document.getElementById('qTabBtn_quotingtool').classList.toggle('active', tab === 'quotingtool');
+  document.getElementById('qTabBtn_marketflash').classList.toggle('active', tab === 'marketflash');
   document.getElementById('qPanel_request').style.display = tab === 'request' ? 'block' : 'none';
   document.getElementById('qPanel_coverage').style.display = tab === 'coverage' ? 'block' : 'none';
   document.getElementById('qPanel_quotingtool').style.display = tab === 'quotingtool' ? 'block' : 'none';
+  document.getElementById('qPanel_marketflash').style.display = tab === 'marketflash' ? 'block' : 'none';
   if (tab === 'request') renderRqPlants();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
   // survives leaving the tab (e.g. to load prices in plants.html) and coming back would keep
@@ -1499,6 +1509,12 @@ function setQuoteTab(tab){
   if (tab === 'quotingtool'){
     const frame = document.getElementById('qQuotingToolFrame');
     if (!frame.src) frame.src = 'trading-tool.html?embed=1&v=' + Date.now();
+  }
+  // Same lazy-load-once pattern as Quoting Tool above — market-flash-admin.html?embed=1 hides its
+  // own header/nav (added the same day, mirroring trading-tool.html's own embed-mode CSS class).
+  if (tab === 'marketflash'){
+    const frame = document.getElementById('qMarketFlashFrame');
+    if (!frame.src) frame.src = 'market-flash-admin.html?embed=1&v=' + Date.now();
   }
 }
 
