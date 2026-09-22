@@ -504,6 +504,20 @@ function mfBadgeInfo(meaningType){
   return { cls: 'species', text: 'General market' };
 }
 
+// Real addition 2026-09-22 ("cuando escojo un producto no escojo proteina y viceversa"): a row is
+// always exactly one of product/protein/market — never both at once, because a specific product
+// already belongs to a protein (its own category_id) — but once picked, the protein dropdown
+// disappears entirely, which reads as "protein never got answered." This makes the implied protein
+// explicit next to a product pick (derived from the product's own category, never a second manual
+// choice), and marks a protein-only pick as deliberately not tied to one exact product, so neither
+// side of the row ever looks blank or skipped.
+function mfProductProteinLabel(productId){
+  const p = mfProducts.find(x => x.id === productId);
+  if (!p || !p.category_id) return null;
+  const cat = mfCategories.find(c => c.id === p.category_id);
+  return cat ? (cat.name_en || cat.name) : null;
+}
+
 function renderMfReview(){
   const resolvedCount = mfRows.filter(mfIsResolved).length;
   document.getElementById('mfSummary').textContent = `${resolvedCount} of ${mfRows.length} ready to apply.`;
@@ -511,12 +525,15 @@ function renderMfReview(){
     if (r.known){
       const bits = [`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`];
       const badge = mfBadgeInfo(r.meaning_type);
+      const protein = r.meaning_type === 'product' ? mfProductProteinLabel(r.meaning_id) : null;
       return `
         <div class="teach-row">
           <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:#3FCB7E;font-size:11.5px;font-weight:400;">✓ already known</span></div>
           <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
             <span class="mf-badge ${badge.cls}">${badge.text}</span>
-            ${escapeHtml(r.meaning_label || '')} — ${bits.join(' · ')}
+            ${escapeHtml(r.meaning_label || '')}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
+            ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
+            — ${bits.join(' · ')}
           </div>
         </div>`;
     }
@@ -528,12 +545,14 @@ function renderMfReview(){
       // the pick and re-renders the row back to its editable state.
       const label = r.meaning_type === 'market' ? 'General market info' : escapeHtml(r.meaning_label || '');
       const badge = mfBadgeInfo(r.meaning_type);
+      const protein = r.meaning_type === 'product' ? mfProductProteinLabel(r.meaning_id) : null;
       return `
         <div class="teach-row">
           <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:var(--blue-bright);font-size:11.5px;font-weight:400;">just picked</span> <a href="#" onclick="mfUndoPick(${i});return false;" style="color:var(--ink-soft);font-size:11.5px;text-decoration:underline;margin-left:6px;">change</a></div>
           <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
             <span class="mf-badge ${badge.cls}">${badge.text}</span>
-            ${label}
+            ${label}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
+            ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
           </div>
         </div>`;
     }
