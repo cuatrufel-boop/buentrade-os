@@ -288,6 +288,7 @@ const mfFileInput = document.getElementById('mfFileInput');
 const mfDropZoneDefaultHtml = mfDropZone.innerHTML;
 mfDropZone.addEventListener('click', () => mfFileInput.click());
 mfFileInput.addEventListener('change', () => { if (mfFileInput.files[0]) handleMfPdfFile(mfFileInput.files[0]); });
+mfDropZone.addEventListener('dragenter', (e) => { e.preventDefault(); mfDropZone.style.borderColor = 'var(--blue-bright)'; });
 mfDropZone.addEventListener('dragover', (e) => { e.preventDefault(); mfDropZone.style.borderColor = 'var(--blue-bright)'; });
 mfDropZone.addEventListener('dragleave', () => { mfDropZone.style.borderColor = 'var(--line)'; });
 mfDropZone.addEventListener('drop', (e) => {
@@ -296,6 +297,12 @@ mfDropZone.addEventListener('drop', (e) => {
   const file = e.dataTransfer.files[0];
   if (file) handleMfPdfFile(file);
 });
+// Without a page-wide guard, releasing the drag even slightly outside the small drop-zone box —
+// very easy to do — hits Chrome's default action for an unhandled drop: navigate the tab away to
+// open the PDF directly. That reads as the drag just bouncing/doing nothing. This catches it
+// anywhere in the document, not only inside the drop zone itself.
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => { if (!mfDropZone.contains(e.target)) e.preventDefault(); });
 
 async function handleMfPdfFile(file){
   const errEl = document.getElementById('mfInputErr');
