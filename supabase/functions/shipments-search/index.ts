@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
       select
         sh.*,
         o.product_id, o.product_name, o.product_name_es, o.product_spec, o.product_spec_es,
-        o.plant_id, o.plant_name, o.customer_name,
+        o.plant_id, o.plant_name, o.customer_name, o.sale_per_lb,
         p.name as carrier_name, p.phone as carrier_phone, p.email as carrier_email,
         cu.contact_name as customer_contact_name, cu.whatsapp as customer_whatsapp, cu.phone as customer_phone,
         cu.email as customer_email, cu.email_cc as customer_email_cc,
@@ -57,6 +57,15 @@ Deno.serve(async (req) => {
         (
           select po.docs_on from purchase_orders po where po.order_number = sh.order_number limit 1
         ) as docs_on,
+        (
+          -- Real ask 2026-09-21: the "Pay via Summar" QT breakdown needs how this specific order's
+          -- purchase was financed, and (when it's Summar) the Payment Days estimate that fee was
+          -- computed with at Create Order time — never re-derived, see the payment_days migration.
+          select row_to_json(fin) from (
+            select po.financing_method, po.payment_days, po.total_cost, po.purchase_price
+            from purchase_orders po where po.order_number = sh.order_number limit 1
+          ) fin
+        ) as financing,
         (
           -- Real ask 2026-09-12: "la que lo trae desde el pricing ese es el location que debe
           -- traer a través de todo el proceso hasta cerrar" — Case 1 (a real ship-from city was on

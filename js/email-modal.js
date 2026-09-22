@@ -196,6 +196,57 @@ function emailModalSendWhatsApp(){
   emailModalDone();
 }
 
+// Real addition 2026-09-22 ("carga cerrada, avisar a otros clientes"): a candidate with a
+// WhatsApp/phone number but no email has no path through bcOpenEmailModal at all (that modal
+// always needs a To/email address). Same "review, edit, or skip before anything sends" rule as
+// every other outbound message in the app — this is the WhatsApp-only twin, same shared classes
+// (.email-modal-overlay/.email-modal-box/.email-modal-field/.email-modal-actions) so it looks like
+// the rest of this exact modal family instead of a new, invented look. Resolves { cancelled: true }
+// | { sent: true } — same two-outcome contract as bcOpenEmailModal, so callers can log a real send
+// the same way for both channels.
+let bcWaOnlyModalResolve = null;
+function bcEnsureWaOnlyModal(){
+  if (document.getElementById('waOnlyModalOverlay')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+<div id="waOnlyModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box">
+    <h3 id="waOnlyModalTitle">Review before sending</h3>
+    <div class="email-modal-field"><label>WhatsApp — <span id="waOnlyModalPhone"></span></label>
+      <textarea id="waOnlyModalBody" autocomplete="off"></textarea>
+    </div>
+    <div class="email-modal-actions">
+      <button id="waOnlyModalSkipBtn" onclick="waOnlyModalCancel()" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Skip</button>
+      <button id="waOnlyModalSendBtn" onclick="waOnlyModalConfirm()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">💬 Open WhatsApp</button>
+    </div>
+  </div>
+</div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+// opts: { title, phone, message }
+function bcOpenWaOnlyModal(opts){
+  opts = opts || {};
+  bcEnsureWaOnlyModal();
+  document.getElementById('waOnlyModalTitle').textContent = opts.title || 'Review before sending';
+  document.getElementById('waOnlyModalPhone').textContent = opts.phone || '';
+  document.getElementById('waOnlyModalBody').value = opts.message || '';
+  document.getElementById('waOnlyModalOverlay').style.display = 'flex';
+  return new Promise(resolve => { bcWaOnlyModalResolve = resolve; });
+}
+function waOnlyModalCancel(){
+  document.getElementById('waOnlyModalOverlay').style.display = 'none';
+  if (bcWaOnlyModalResolve) bcWaOnlyModalResolve({ cancelled: true });
+  bcWaOnlyModalResolve = null;
+}
+function waOnlyModalConfirm(){
+  const phone = document.getElementById('waOnlyModalPhone').textContent;
+  const message = document.getElementById('waOnlyModalBody').value;
+  document.getElementById('waOnlyModalOverlay').style.display = 'none';
+  bcConfirmWaSend(phone, message, null);
+  if (bcWaOnlyModalResolve) bcWaOnlyModalResolve({ sent: true });
+  bcWaOnlyModalResolve = null;
+}
+
 // Real ask 2026-09-13: "no manda atachment" — WhatsApp has no way to auto-attach a file to a
 // wa.me link (a real platform limit, nothing any code can work around). A toast that fades in a
 // couple seconds isn't enough — the trader clicked past it and reached an empty chat with no PDF.

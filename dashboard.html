@@ -230,6 +230,13 @@ auth.onAuthStateChanged(user => {
   <h1>Top 5 Traders</h1>
   <div class="tbl-wrap"><table id="tblTopTraders"><thead><tr><th>Trader</th><th>Orders Won</th><th>Total Sales</th></tr></thead><tbody></tbody></table></div>
 
+  <!-- Real addition 2026-09-22 ("alerta de cadencia próxima") — internal-only triage list, never
+       shown to the customer. Based on OUR OWN sales history with them, not their real total buying
+       cycle — see dashboard-summary's own comment on why this is fine here but was removed from the
+       customer-facing signal. -->
+  <h1>Customers Possibly Due <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by their stated cadence vs. our own sales history, not a certainty</span></h1>
+  <div class="tbl-wrap"><table id="tblCadenceDue"><thead><tr><th>Customer</th><th>Product</th><th>Stated Cadence</th><th>Days Since Our Last Sale</th></tr></thead><tbody></tbody></table></div>
+
   <h1>Accounts Receivable</h1>
   <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Customer</th><th>Outstanding</th><th>Credit Limit</th><th>Overdue</th></tr></thead><tbody></tbody></table></div>
 
@@ -291,6 +298,7 @@ async function loadAll(){
     renderTopProductsRevenue(summary.top_products_by_revenue);
     renderTopProductsQty(summary.top_products_by_quantity);
     renderTopTraders(summary.top_traders);
+    renderCadenceDue(summary.cadence_due);
     renderOutstanding(summary.outstanding_by_customer);
     renderPendingPlantPayments(summary.pending_plant_payments, summary.pending_plant_payments_total);
     renderShipments(shipments.results);
@@ -362,6 +370,15 @@ function renderTopTraders(rows){
   const tbody = document.querySelector('#tblTopTraders tbody');
   if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No won offers yet.</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.trader)}</td><td>${r.order_count}</td><td>${money(r.total_sales)}</td></tr>`).join('');
+}
+
+function renderCadenceDue(rows){
+  const tbody = document.querySelector('#tblCadenceDue tbody');
+  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing flagged right now.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => {
+    const cadence = `Every ${r.frequency_days} day${r.frequency_days === 1 ? '' : 's'}` + (r.loads_per_cycle != null ? ` · ${r.loads_per_cycle} load${r.loads_per_cycle === 1 ? '' : 's'}/cycle` : '');
+    return `<tr><td>${escapeHtml(r.trade_name)}</td><td>${escapeHtml(r.product_name || '')}</td><td>${escapeHtml(cadence)}</td><td>${r.days_since_our_last_sale}</td></tr>`;
+  }).join('');
 }
 
 // Real ask 2026-09-16: "en que momento me avisa" — the red "Cupo" tag on offers.html is passive

@@ -987,6 +987,10 @@ auth.onAuthStateChanged(user => {
             <button type="button" class="btn-add-inline" onclick="addNewCutName()" title="Add a new cut name">+</button>
             <button type="button" class="btn-add-inline" onclick="manageCutNames()" title="Remove a cut name" style="font-size:15px;">🗑</button>
           </div>
+          <!-- Plain text, never a <select> option — an <option> renders as a selectable item (with
+               its own checkmark when the native dropdown opens), which makes an informational
+               message look like a pickable value. Real bug seen live 2026-09-19. -->
+          <div id="cutNameEmptyHint" style="display:none;font-size:12px;color:var(--ink-soft);margin-top:5px;">No cut names for this category yet — use the + button to add the first one.</div>
         </div>
         <!-- A compact dropdown, not a wall of checkboxes — a real product can carry more than one
            variation qualifier at once (Boneless AND Strap Off on the same loin), which one
@@ -1566,10 +1570,23 @@ let cutNames = [];
 async function loadCutNames(category_id){
   const catId = category_id !== undefined ? category_id : (document.getElementById('category').value || null);
   const sel = document.getElementById('cut_name_id');
-  if (!catId){ cutNames = []; sel.innerHTML = '<option value="">— Select a category first —</option>'; return; }
+  const hint = document.getElementById('cutNameEmptyHint');
+  if (!catId){
+    cutNames = [];
+    sel.innerHTML = '<option value="">—</option>';
+    hint.textContent = 'Select a category first.';
+    hint.style.display = 'block';
+    return;
+  }
   const res = await callApi('cut-names-search', { category_id: catId });
   cutNames = res.results || [];
   sel.innerHTML = '<option value="">—</option>' + cutNames.map(c => `<option value="${c.id}">${escapeHtml(c.name_en)} / ${escapeHtml(c.name_es)}</option>`).join('');
+  if (cutNames.length){
+    hint.style.display = 'none';
+  } else {
+    hint.textContent = 'No cut names for this category yet — use the + button to add the first one.';
+    hint.style.display = 'block';
+  }
 }
 
 // A visible "+" button next to the select, not buried as the last option inside the dropdown
@@ -1637,13 +1654,13 @@ async function deleteCutNameFromCatalog(id){
 function renderVariationCheckboxes(){
   const wrap = document.getElementById('variationCheckboxes');
   const checkedIds = new Set(checkedVariations().map(v => v.id));
-  wrap.innerHTML = variations.map(v => `
+  wrap.innerHTML = variations.length ? variations.map(v => `
     <label class="variation-check-row">
       <input type="checkbox" id="variation_check_${v.id}" ${checkedIds.has(v.id) ? 'checked' : ''} onchange="updateVariationDropdownLabel();updateProfileDisplays()">
       <svg class="var-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
       <span class="var-check-label">${escapeHtml(v.name_en)} / ${escapeHtml(v.name_es)}</span>
     </label>
-  `).join('');
+  `).join('') : '<div style="font-size:12.5px;color:var(--ink-soft);padding:4px 0;">No variations for this category yet — use the + button to add one.</div>';
   updateVariationDropdownLabel();
 }
 

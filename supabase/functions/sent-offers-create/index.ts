@@ -74,6 +74,20 @@ Deno.serve(async (req) => {
     if (!VALID_CHANNELS.includes(channel)) return jsonResponse({ error: "invalid channel", valid_channels: VALID_CHANNELS }, 400);
     if (!product_id && !product_name) return jsonResponse({ error: "product_id or product_name is required" }, 400);
 
+    // Real ask 2026-09-20: "una quote no se puede pasar a offer si no tiene todos los costos" —
+    // quotes.html's own rqHandleStaleOrMissingPrices already blocks this in the UI, but that is a
+    // client-side check only; this endpoint itself had no server-side floor, confirmed live by 15
+    // real rows in production with purchase_price/sale_per_lb null (created by direct API calls
+    // that never went through the UI). A real offer cannot exist without knowing both what the
+    // plant charges and what the customer is being asked to pay — hard block, no override, same
+    // as every other required-field check on this endpoint.
+    if (purchase_price == null || Number(purchase_price) <= 0) {
+      return jsonResponse({ error: "missing_plant_cost", message: "Cannot create an offer with no real plant cost (purchase_price) on file. Get a real price from the plant before quoting." }, 400);
+    }
+    if (sale_per_lb == null || Number(sale_per_lb) <= 0) {
+      return jsonResponse({ error: "missing_sale_price", message: "Cannot create an offer with no sale price (sale_per_lb) set." }, 400);
+    }
+
     // A double-click on Send (or a retried network request) replays the exact same key — return
     // the offer already created instead of logging the send twice.
     if (idempotency_key) {

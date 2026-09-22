@@ -251,46 +251,63 @@ export async function computeProductPriceSignal(
 // won, see sent-offers-mark-won) — never sent_offers, which also holds quotes that never closed.
 const PRICE_FAVORABLE_THRESHOLD_PCT = -2;
 
+// Shared with price-history-search's own save_market_note/read — a bit more than the bulletin's
+// own bi-weekly cadence, so a note never keeps showing well past when the next one should replace it.
+export const MARKET_NOTE_FRESHNESS_DAYS = 21;
+
 export async function computeCustomerProductSignal(
   sql: any,
   customerId: string,
   productId: string,
-): Promise<{ message: string | null; overCreditLimit: boolean } | null> {
-  const [cp] = await sql`select frequency_days, last_known_order_date from customer_products where customer_id = ${customerId} and product_id = ${productId}`;
-  const [{ last_order_date: realLastOrderDate }] = await sql`
-    select max(d.delivery_date) as last_order_date
-    from sales_orders so, lateral (select (jsonb_array_elements_text(so.delivery_dates))::date as delivery_date) d
-    where so.customer_id = ${customerId} and so.product_id = ${productId}
-  `;
-  // A real order in the live system always wins over the historical/manual fallback — never the
-  // other way, so a real sale immediately becomes the anchor instead of a stale import date.
-  const last_order_date = realLastOrderDate ?? cp?.last_known_order_date ?? null;
-
-  // Real correction 2026-09-16: frequency_days is only ever "how often BUENTRADE sold them this,"
-  // never the customer's real total buying cycle — a customer this app never sells to for 400+
-  // days may just be buying it from someone else the whole time, not "overdue." Saying "le toca"
-  // claims certainty about the customer's real need that this data can't support. This states only
-  // the two real facts (our own cadence with them, days since our own last sale) and never implies
-  // they're due — no "le toca," no urgency language, no cutoff that pretends to know their total
-  // demand.
-  const parts: string[] = [];
-  if (cp?.frequency_days != null && last_order_date) {
-    const daysSince = Math.floor((Date.now() - new Date(last_order_date).getTime()) / 86400000);
-    if (daysSince >= Number(cp.frequency_days)) {
-      parts.push(`Used to order every ${cp.frequency_days} days — last order from us was ${daysSince} days ago.`);
-    }
-  }
+): Promise<{
+  cadence: { frequencyDays: number; loadsPerCycle: number | null } | null;
+  priceTrend: { pctChange: number } | null;
+  marketNote: {
+    trendPct: number | null; note: string | null;
+    mxBenchmarkPriceUsdKg: number | null; mxBenchmarkRegion: string | null;
+  } | null;
+  overCreditLimit: boolean;
+} | null> {
+  // Real correction 2026-09-22: this used to compare frequency_days (what the customer told us
+  // they buy overall, "compro 3 cargas por semana") against days since OUR OWN last sale to them
+  // ("le toca" framing) — but a customer who buys from several traders can easily go 40 days
+  // without ordering from BUENTRADE while still buying every 7 days in the market. Measuring their
+  // real cadence against our own sales record was comparing two unrelated things. This now returns
+  // only the cadence itself, exactly as the customer stated it — no "overdue," no comparison
+  // against our last sale, no cutoff. Never fetches sales_orders/last_known_order_date any more —
+  // neither is used for anything here.
+  const [cp] = await sql`select frequency_days, loads_per_cycle from customer_products where customer_id = ${customerId} and product_id = ${productId}`;
+  const cadence = cp?.frequency_days != null
+    ? { frequencyDays: Number(cp.frequency_days), loadsPerCycle: cp.loads_per_cycle != null ? Number(cp.loads_per_cycle) : null }
+    : null;
 
   const priceSignal = await computeProductPriceSignal(sql, productId);
-  if (priceSignal?.trend && priceSignal.trend.pctChange <= PRICE_FAVORABLE_THRESHOLD_PCT) {
-    parts.push(`Price ${Math.abs(Math.round(priceSignal.trend.pctChange))}% better than the last 30-day average.`);
-  }
+  const priceTrend = (priceSignal?.trend && priceSignal.trend.pctChange <= PRICE_FAVORABLE_THRESHOLD_PCT)
+    ? { pctChange: priceSignal.trend.pctChange }
+    : null;
+
+  // Real addition 2026-09-22: the trader's own product_market_notes entry (from the industry
+  // bulletin), only while still fresh — same table/window price-history-search's save_market_note
+  // reads from, so a quote and the product's own price-history panel never disagree.
+  const [marketNoteRow] = await sql`
+    select trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region from product_market_notes
+    where product_id = ${productId} and note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+    order by note_date desc, created_at desc
+    limit 1
+  `;
+  const marketNote = marketNoteRow
+    ? {
+        trendPct: marketNoteRow.trend_pct != null ? Number(marketNoteRow.trend_pct) : null, note: marketNoteRow.note ?? null,
+        mxBenchmarkPriceUsdKg: marketNoteRow.mx_benchmark_price_usd_kg != null ? Number(marketNoteRow.mx_benchmark_price_usd_kg) : null,
+        mxBenchmarkRegion: marketNoteRow.mx_benchmark_region ?? null,
+      }
+    : null;
 
   const exposure = await computeCustomerExposure(sql, customerId);
   const overCreditLimit = !!(exposure && exposure.outstanding > exposure.creditLimit);
 
-  if (!parts.length && !overCreditLimit) return null;
-  return { message: parts.length ? parts.join(" ") : null, overCreditLimit };
+  if (!cadence && !priceTrend && !marketNote && !overCreditLimit) return null;
+  return { cadence, priceTrend, marketNote, overCreditLimit };
 }
 
 // Collections module (2026-09-08). The one real moment a shipment becomes fully settled — used by

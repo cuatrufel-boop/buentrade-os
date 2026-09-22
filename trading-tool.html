@@ -54,6 +54,16 @@
   .email-modal-chip{background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 0 24px;}
 
+  /* Real ask 2026-09-21: "la barra de scroll corta, no encaja" — the browser's plain gray
+     scrollbar has no room to breathe against the last card when the window is narrower than
+     .wrap's 1140px cap, and clashes with the dark theme. Same thin translucent recipe
+     quotes.html already uses for its dark-panel scrollbars (.rq-palette-results). */
+  html{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent;}
+  html::-webkit-scrollbar{width:9px;}
+  html::-webkit-scrollbar-track{background:transparent;}
+  html::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:5px;}
+  html::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.34);}
+
   header{
     background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
     color:#fff; padding:20px 32px 20px; position:relative; overflow:hidden;
@@ -88,7 +98,7 @@
     background:linear-gradient(90deg, transparent, #E8B54C 25%, #E8B54C 75%, transparent);
     opacity:.55;
   }
-  .qb-group{display:flex; flex-direction:column; align-items:center; gap:6px; padding:2px 14px;}
+  .qb-group{display:flex; flex-direction:column; align-items:center; gap:6px; padding:2px 10px; flex-shrink:0;}
   .qb-group-label{
     font-size:8.5px; color:rgba(255,255,255,.6); font-family:'Inter',sans-serif;
     text-transform:uppercase; letter-spacing:.12em; font-weight:700;
@@ -101,7 +111,7 @@
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
   .wa-btn svg{fill:currentColor;}
-  .quickbar .qb-item{display:flex; flex-direction:column; gap:4px; align-items:stretch; width:104px; flex-shrink:0;}
+  .quickbar .qb-item{display:flex; flex-direction:column; gap:4px; align-items:stretch; width:92px; flex-shrink:0;}
   .quickbar label{font-size:8px; color:rgba(255,255,255,.6); font-family:'Inter',sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.03em; text-align:center; white-space:nowrap;}
   .quickbar .inputwrap{
     background:rgba(255,255,255,.035); justify-content:center; width:100%;
@@ -507,6 +517,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
+<script src="js/date-picker.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -677,34 +688,25 @@ if (FIREBASE_READY) {
        negotiation hot in Offers. -->
 
   <div class="quickbar" style="align-items:center;">
-    <!-- Negotiation actions: same bar, same background, same corners as the fields — no separate
-         card to visually mismatch. Only shown when opened from an existing offer (see negoInit).
-         Plant/Customer sit as tall side columns, vertically centered against the whole bar;
-         Create Order sits under the data fields instead of above them. Contacting the plant again
-         on an offer already out to a customer IS the bid, no separate "log a bid" step, that
-         contact itself is what flags this negotiation hot in Offers. Grid, not flex-wrap: with three
-     flex children, wrapping re-centers whichever group drops to its own line instead of keeping it
-     pinned to its edge — a 3-column grid keeps Plant/Customer pinned left/right and Create Order's
-     group centered regardless of width.
-     Real bug found live 2026-09-12 ("centrar arriba los dashboards"): a display:none grid item is
-     removed from grid auto-placement entirely, not just hidden — so whenever negoQbLeft/negoQbRight
-     are at their default display:none (every plain price-check outside an active negotiation, e.g.
-     quotes.html's Confirm Price calculator), the middle group was the ONLY real grid item and
-     auto-placed into column 1, leaving column 3 empty and the whole bar reading left-aligned
-     instead of centered. Explicit grid-column on all three children fixes placement regardless of
-     which siblings are hidden. -->
-<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;width:100%;gap:12px;">
-<div id="negoQbLeft" style="display:none;grid-column:1;align-items:center;gap:10px;justify-self:start;">
+    <!-- Real ask 2026-09-21: "todo en un solo renglon y centrado, angosta" + "create order debe
+         estar en la mitad" — single-row 3-column grid (mirrors the old negoQbLeft/auto/negoQbRight
+         layout, just with Terms/Finance Cost distributed left/right instead of stacked in the
+         middle) so Create Order sits in the true mathematical center regardless of how much sits
+         on either side. negoQbLeft/negoQbRight are always toggled together (see negoInit) so a
+         hidden Plant/Customer group never unbalances the two sides. -->
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;width:100%;overflow-x:auto;">
+
+    <div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:nowrap;gap:8px;min-width:0;">
+<div id="negoQbLeft" style="display:none;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Plant</span>
-        <button onclick="negoSendToPlant('email')" title="Email Plant" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:0 15px;height:36px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
-          Email
+        <button onclick="negoSendToPlant('email')" title="Email Plant" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:8px;width:32px;height:32px;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
         </button>
-        <button class="wa-btn" onclick="negoSendToPlant('whatsapp')" title="WhatsApp Plant" style="height:36px;display:inline-flex;align-items:center;gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp</button>
+        <button class="wa-btn" onclick="negoSendToPlant('whatsapp')" title="WhatsApp Plant" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
       </div>
 
-    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;grid-column:2;">
-    <div style="display:flex;align-items:center;flex-wrap:wrap;justify-content:center;">
+    <div class="qb-divider"></div>
+
     <div class="qb-group">
       <div class="qb-group-label">Terms</div>
       <div class="qb-group-row">
@@ -719,17 +721,13 @@ if (FIREBASE_READY) {
       </div>
     </div>
 
-    <div class="qb-divider"></div>
-
     <!-- Real ask 2026-09-14: "no agrandes este campo solo ponlo en la mitad entre terms y finance"
          — moved out of the row below (where it stretched across, alone on its own line) to sit
          inline right here, same compact height as every other control on this row. -->
-    <button id="createShareInvoiceBtn" class="wa-btn" onclick="createAndShareInvoice()" title="Creates and sends the customer invoice" style="display:none;height:36px;padding:0 14px;font-size:12.5px;align-items:center;gap:6px;white-space:nowrap;">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Create &amp; Share Invoice
+    <button id="createShareInvoiceBtn" class="wa-btn" onclick="createAndShareInvoice()" title="Creates and sends the customer invoice" style="display:none;height:32px;padding:0 12px;font-size:11.5px;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Invoice
     </button>
-
-    <div class="qb-divider"></div>
 
     <div id="qbMxFxWrap" style="display:contents;">
     <div class="qb-group">
@@ -742,9 +740,12 @@ if (FIREBASE_READY) {
         </div>
       </div>
     </div>
-
-    <div class="qb-divider"></div>
     </div>
+    </div>
+
+    <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="display:none;height:32px;padding:0 16px;font-size:12.5px;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;">✓ Create Order</button>
+
+    <div style="display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:8px;min-width:0;">
 
     <div class="qb-group">
       <div class="qb-group-label">Finance Cost</div>
@@ -759,24 +760,24 @@ if (FIREBASE_READY) {
         </div>
       </div>
     </div>
-      </div>
 
-    <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="display:none;height:36px;padding:0 18px;font-size:12.5px;align-items:center;gap:6px;">✓ Create Order</button>
-    <!-- Real ask 2026-09-14: "no agrandes este campo solo ponlo en la mitad entre terms y finance"
-         — the button itself now lives inline in the row above, between the Terms and Finance Cost
-         groups; this is just its status text, still shown below the whole row same as before. -->
-    <div id="invoiceMsg" style="font-size:12px;color:var(--ink-soft);text-align:center;width:100%;"></div>
-    </div>
+    <div class="qb-divider"></div>
 
-<div id="negoQbRight" style="display:none;grid-column:3;align-items:center;gap:10px;justify-self:end;">
-        <button class="wa-btn" onclick="negoSendToCustomer('whatsapp')" title="WhatsApp Customer" style="height:36px;display:inline-flex;align-items:center;gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg>WhatsApp</button>
-        <button onclick="negoSendToCustomer('email')" title="Email Customer" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:0 15px;height:36px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
-          Email
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+<div id="negoQbRight" style="display:none;align-items:center;gap:8px;flex-shrink:0;">
+        <button class="wa-btn" onclick="negoSendToCustomer('whatsapp')" title="WhatsApp Customer" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
+        <button onclick="negoSendToCustomer('email')" title="Email Customer" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:8px;width:32px;height:32px;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
         </button>
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Customer</span>
       </div>
-  </div>
+    </div>
+
+    </div>
+    <!-- Real ask 2026-09-14: "no agrandes este campo solo ponlo en la mitad entre terms y finance"
+         — the button itself lives inline in the row above; this is just its status text, an empty
+         div takes 0 height until JS sets real text (see createAndShareInvoice), so it doesn't add
+         a second row to the bar by default. -->
+    <div id="invoiceMsg" style="font-size:12px;color:var(--ink-soft);text-align:center;width:100%;"></div>
   </div>
 
   <div class="grid">
@@ -945,19 +946,42 @@ if (FIREBASE_READY) {
 
   </div>
 
+  <!-- ================= SUMMAR IMPACT (real ask 2026-09-20) — reads Profitability's own output
+       above, never changes it. Only shown once a real offer exists (negoOffer), same gate as the
+       negotiation bar itself. Moved outside the 3-column grid, full width, per the user's own
+       visual preference: Direct Costs stays where it always was. ================= -->
+  <div class="card" id="summarCard" style="display:none;margin:12px 18px 0;">
+    <div class="card-head"><h2>Factoring Costs</h2></div>
+    <div class="card-body">
+      <div class="kpi hero" style="text-align:center;"><span class="k-label">Profit After Summar</span><span class="k-val" id="summarProfitAfter">$0</span></div>
+      <div class="totals-mini" style="grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;">
+        <div class="t"><span>Profit Without Summar</span><b id="summarProfitBefore">$0</b></div>
+        <div class="t"><span>SO Value</span><b id="summarSOValue">$0</b></div>
+        <div class="t"><span>Transit (fixed)</span><b id="summarFeeTransit">0.234%</b></div>
+        <div class="t"><span>Base 30 days (fixed)</span><b id="summarFeeBase">1.20%</b></div>
+        <div class="t"><span>Extra days</span><b id="summarFeeExtra">0%</b></div>
+        <div class="t"><span>Summar Fee</span><b id="summarFeeAmount">$0</b></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Same styled confirm modal look as offers.html's markWon() — replaces the raw browser
      confirm() that used to gate Create Order here (unstyled, inconsistent with the rest of the
      app). Self-contained (own overlay id) since this page can be embedded standalone or inside
      an iframe. -->
-<div id="ttConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);--ink:#0F1F33;--ink-soft:#64748B;">
-    <div id="ttConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;"></div>
-    <div id="ttConfirmMessage" style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:20px;"></div>
+<div id="ttConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.55);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <!-- Real ask 2026-09-21: "no tiene diseno buentrade" — this used to copy offers.html's white
+       confirm-box verbatim, which reads fine on offers.html's own light theme but was a jarring
+       flat-white card floating over this page's dark glass design. Now reuses the same dark
+       translucent glass recipe as this page's own .email-modal-box (blur + gold border). -->
+  <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);">
+    <div id="ttConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;"></div>
+    <div id="ttConfirmMessage" style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:20px;white-space:pre-line;"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
-      <button onclick="ttConfirmResolve(false)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
-      <button id="ttConfirmOkBtn" onclick="ttConfirmResolve(true)" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(15,138,95,.3);"></button>
+      <button onclick="ttConfirmResolve(false)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button id="ttConfirmOkBtn" class="wa-btn" onclick="ttConfirmResolve(true)" style="padding:8px 18px;font-size:13px;"></button>
     </div>
   </div>
 </div>
@@ -969,31 +993,74 @@ if (FIREBASE_READY) {
      every time, before the order is created — PU Date when the load is FOB (BuenTrade's carrier
      picks up), Delivery Date when it's DAP (plant self-delivers, e.g. Seaboard) — same styled-modal
      convention as ttConfirmOverlay above, not a raw prompt(). -->
-<div id="ttDateConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);--ink:#0F1F33;--ink-soft:#64748B;">
-    <div id="ttDateConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;"></div>
-    <div id="ttDateConfirmMessage" style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:16px;"></div>
-    <input type="date" id="ttDateConfirmInput" style="width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;color:var(--ink);margin-bottom:8px;">
-    <div id="ttDateConfirmError" style="font-size:12px;color:#C4432E;min-height:16px;margin-bottom:8px;"></div>
+<div id="ttDateConfirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.55);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);">
+    <div id="ttDateConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;"></div>
+    <div id="ttDateConfirmMessage" style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:16px;"></div>
+    <input type="date" id="ttDateConfirmInput" placeholder="dd/mm/yyyy" style="width:100%;padding:10px 12px;border:1.5px solid rgba(255,255,255,.22);border-radius:8px;font-size:14px;font-family:inherit;background:rgba(255,255,255,.05);color:#fff;margin-bottom:8px;">
+    <div id="ttDateConfirmError" style="font-size:12px;color:#FF9C8A;min-height:16px;margin-bottom:8px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
-      <button onclick="ttDateConfirmResolve(null)" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
-      <button onclick="ttDateConfirmSubmit()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(15,138,95,.3);">Confirm & Create Order</button>
+      <button onclick="ttDateConfirmResolve(null)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button class="wa-btn" onclick="ttDateConfirmSubmit()" style="padding:8px 18px;font-size:13px;">Confirm &amp; Create Order</button>
     </div>
   </div>
 </div>
 
+<!-- Real ask 2026-09-21: "el sistema nos pregunta como la queremos comprar si directa o por
+     factoring" — step 1 of the Direct-vs-Summar roadmap (see purchase_orders.financing_method
+     migration). Shown right after the "Create Order?" confirm, before the order is actually
+     created. Reads the SAME numbers already rendered in #summarCard (Profit Without/After Summar)
+     instead of recomputing anything, so this can never drift from what the trader already saw on
+     screen. Only records the choice for now — PO/SO/FO/Invoice/bank-details generation downstream
+     is untouched regardless of which one is picked; those are separate, later steps. -->
+<div id="ttFinancingChoiceOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.55);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;animation:ttMenuPop .16s cubic-bezier(.2,.9,.3,1.2);">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">How is this purchase financed?</div>
+    <div style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:18px;">Choose how BuenTrade pays the plant for this order.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.18);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Direct</div>
+        <div id="ttFinChoiceDirectProfit" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:#fff;"></div>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(232,181,76,.4);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:#E8B54C;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Summar</div>
+        <div id="ttFinChoiceSummarProfit" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:#fff;"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
+      <button onclick="ttFinancingChoiceResolve(null)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="ttFinancingChoiceResolve('direct')" class="wa-btn" style="padding:8px 14px;font-size:12.5px;">Pay Direct</button>
+      <button onclick="ttFinancingChoiceResolve('summar')" class="wa-btn" style="padding:8px 14px;font-size:12.5px;">Pay via Summar</button>
+    </div>
+  </div>
+</div>
+<script>
+let ttFinancingChoiceResolveFn = null;
+function showTTFinancingChoice(){
+  document.getElementById('ttFinChoiceDirectProfit').textContent = document.getElementById('summarProfitBefore').textContent;
+  document.getElementById('ttFinChoiceSummarProfit').textContent = document.getElementById('summarProfitAfter').textContent;
+  document.getElementById('ttFinancingChoiceOverlay').style.display = 'flex';
+  return new Promise(resolve => { ttFinancingChoiceResolveFn = resolve; });
+}
+function ttFinancingChoiceResolve(choice){
+  document.getElementById('ttFinancingChoiceOverlay').style.display = 'none';
+  if (ttFinancingChoiceResolveFn) ttFinancingChoiceResolveFn(choice);
+  ttFinancingChoiceResolveFn = null;
+}
+</script>
+
 <!-- Collections module (2026-09-08): "si el cliente me da un bid por una carga y no tiene cupo
      debemos poder enviar un mensaje... o la otra opcion que liberes el cupo" — real action, not
      just a warning, at the exact moment a new deal would exceed a customer's credit_limit. -->
-<div id="creditLimitOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:500;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(15,31,51,.35);padding:24px 26px;max-width:420px;width:100%;--ink:#0F1F33;--ink-soft:#64748B;">
-    <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;">Credit Limit Exceeded</div>
-    <div id="creditLimitMessage" style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:20px;"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
-      <button onclick="creditLimitResolve('cancel')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Cancel</button>
-      <button onclick="creditLimitResolve('collect')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Collect Pending Debt</button>
-      <button onclick="creditLimitResolve('financials')" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Request Financial Statements</button>
-      <button onclick="creditLimitResolve('override')" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;">Create Anyway</button>
+<div id="creditLimitOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,12,26,.55);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;box-shadow:0 24px 60px rgba(4,12,26,.55);padding:24px 26px;max-width:420px;width:100%;">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">Credit Limit Exceeded</div>
+    <div id="creditLimitMessage" style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:20px;"></div>
+    <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
+      <button onclick="creditLimitResolve('cancel')" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="creditLimitResolve('collect')" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Collect Pending Debt</button>
+      <button onclick="creditLimitResolve('financials')" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">Request Financial Statements</button>
+      <button class="wa-btn" onclick="creditLimitResolve('override')" style="padding:8px 16px;font-size:12.5px;">Create Anyway</button>
     </div>
   </div>
 </div>
@@ -1044,6 +1111,7 @@ function showTTDateConfirm(isFob, defaultDate){
   document.getElementById('ttDateConfirmMessage').textContent = isFob
     ? 'This is the real, final pick-up date BuenTrade\'s carrier will pick up on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.'
     : 'This is the real, final delivery date the plant will self-deliver on — the system cannot calculate this, confirm the actual agreed date before the order and its documents are created.';
+  btDpAttach('ttDateConfirmInput');
   const input = document.getElementById('ttDateConfirmInput');
   input.value = defaultDate || '';
   document.getElementById('ttDateConfirmError').textContent = '';
@@ -1069,21 +1137,80 @@ function ttDateConfirmResolve(val){
 // confirmed before Create Order proceeds, same required-screen treatment as the PU/delivery date
 // above (showTTDateConfirm) — never a dismissable suggestion, never left "TBD" for a later step to
 // maybe get around to. Resolves { carrier_provider_id, rate } or null on Cancel.
+// Real bug found live 2026-09-21 (while testing an unrelated feature): this used to call an
+// escapeHtml() that was never defined anywhere in this file — a ReferenceError thrown the moment
+// the carrier list had at least one real row (4 real carriers exist in production), silently
+// killing the ENTIRE Create Order flow for any FOB offer whose freight rate wasn't already
+// resolved via the dropdown, with no error shown to the trader. Fixed by calling ttEscapeHtml
+// (already defined below, used by the freight rate dropdown) instead of a second copy.
+//
+// Real ask 2026-09-21 ("el dropdown de carrier no es diseno buentrade"): a native <select> can't
+// be themed — its open OPTION LIST is drawn by the OS, not the page, so no CSS here can ever
+// reach it (confirmed live: still a plain white/gray system list even with option{background}
+// set). Rebuilt as the same real custom dropdown the freight rate picker above already uses
+// (.rq-ddown-btn/.rq-ddown-panel/.rq-ddown-option, see ttFreightDdownHtml) instead of fighting
+// the browser — one real dark dropdown component, not two different-looking pickers on one page.
 let ttCarrierModalResolveFn = null;
+let ttCarrierDdownOpen = false;
+let ttCarrierDdownRect = null;
+let ttCarrierList = [];
+let ttCarrierSelectedId = '';
+function ttCarrierDdownHtml(){
+  const selected = ttCarrierList.find(c => c.id === ttCarrierSelectedId);
+  const nameText = selected ? selected.name : (ttCarrierList.length ? 'Select a carrier' : 'No carriers on file');
+  let panelStyle = '';
+  if (ttCarrierDdownOpen && ttCarrierDdownRect){
+    const panelWidth = Math.min(320, window.innerWidth - 24);
+    const left = Math.min(ttCarrierDdownRect.left, window.innerWidth - panelWidth - 12);
+    panelStyle = `top:${Math.round(ttCarrierDdownRect.bottom + 6)}px;left:${Math.round(Math.max(12, left))}px;`;
+  }
+  const optionsHtml = ttCarrierList.length
+    ? ttCarrierList.map(c => `<div class="rq-ddown-option${ttCarrierSelectedId === c.id ? ' selected' : ''}" onclick="ttPickCarrier('${c.id}')"><span class="rq-ddown-option-name">${ttEscapeHtml(c.name)}</span></div>`).join('')
+    : `<div class="rq-ddown-empty">No carriers on file — add one in Carriers first.</div>`;
+  return `
+    <div class="rq-ddown">
+      <button type="button" class="rq-ddown-btn${ttCarrierSelectedId ? ' has-value' : ''}" aria-expanded="${ttCarrierDdownOpen}" onclick="ttToggleCarrierDdown()">
+        <span class="rq-ddown-btn-label">${ttEscapeHtml(nameText)}</span>
+        ${ttDdownChevronSvg}
+      </button>
+      ${ttCarrierDdownOpen ? `<div class="rq-ddown-panel" style="${panelStyle}">${optionsHtml}</div>` : ''}
+    </div>`;
+}
+function ttRenderCarrierDdown(){
+  const el = document.getElementById('ttCarrierDdownWrap');
+  if (el) el.innerHTML = ttCarrierDdownHtml();
+}
+function ttToggleCarrierDdown(){
+  ttCarrierDdownOpen = !ttCarrierDdownOpen;
+  if (ttCarrierDdownOpen){
+    const btn = document.querySelector('#ttCarrierDdownWrap .rq-ddown-btn');
+    ttCarrierDdownRect = btn ? btn.getBoundingClientRect() : null;
+  }
+  ttRenderCarrierDdown();
+}
+function ttPickCarrier(id){
+  ttCarrierSelectedId = id;
+  ttCarrierDdownOpen = false;
+  ttRenderCarrierDdown();
+}
+document.addEventListener('click', (e) => {
+  if (ttCarrierDdownOpen && !(e.target.closest && e.target.closest('#ttCarrierDdownWrap'))){
+    ttCarrierDdownOpen = false;
+    ttRenderCarrierDdown();
+  }
+}, true);
 async function showTTCarrierConfirm(defaultRate){
-  let carriers = [];
-  try { carriers = (await callApi('providers-search', { role: 'carrier', limit: 200 })).results || []; } catch (e) {}
-  const select = document.getElementById('ttCarrierModalSelect');
-  select.innerHTML = carriers.length
-    ? carriers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
-    : `<option value="">No carriers on file — add one in Carriers first</option>`;
+  ttCarrierList = [];
+  try { ttCarrierList = (await callApi('providers-search', { role: 'carrier', limit: 200 })).results || []; } catch (e) {}
+  ttCarrierSelectedId = ttCarrierList.length ? ttCarrierList[0].id : '';
+  ttCarrierDdownOpen = false;
+  ttRenderCarrierDdown();
   document.getElementById('ttCarrierModalRate').value = defaultRate || '';
   document.getElementById('ttCarrierModalOverlay').style.display = 'flex';
   return new Promise(resolve => { ttCarrierModalResolveFn = resolve; });
 }
 function ttCarrierModalConfirm(){
-  const select = document.getElementById('ttCarrierModalSelect');
-  const carrierId = select.value;
+  const carrierId = ttCarrierSelectedId;
   const rate = Number(document.getElementById('ttCarrierModalRate').value);
   if (!carrierId){ return; } // no carriers on file — Cancel is the only real way out of this screen
   if (!rate || rate <= 0){ return; }
@@ -1093,6 +1220,7 @@ function ttCarrierModalConfirm(){
   if (resolve) resolve({ carrier_provider_id: carrierId, rate });
 }
 function ttCarrierModalResolve(val){
+  ttCarrierDdownOpen = false;
   document.getElementById('ttCarrierModalOverlay').style.display = 'none';
   if (ttCarrierModalResolveFn) ttCarrierModalResolveFn(val);
   ttCarrierModalResolveFn = null;
@@ -1587,8 +1715,68 @@ function calc(){
   window.__calc = {
     totalWeight, totalWeightKg, totalCostUSD, totalSaleBorder,
     totalSaleMx: products.reduce((s,p)=>s+(p.weight/LB_PER_KG)*p.sellMx,0),
-    directCostsBorder, directCostsMx, inp
+    directCostsBorder, directCostsMx, inp, profitBorder, grossBaseBorder
   };
+  // Real ask 2026-09-20: Summar impact card reads these same already-computed values below —
+  // never re-derives or changes them. See updateSummarImpactCard().
+  if (typeof updateSummarImpactCard === 'function') updateSummarImpactCard();
+}
+
+// Real Summar Financial LLC factoring terms (signed agreement, 2026-09-19), confirmed word by
+// word with the user 2026-09-20. Kept as data here, not buried inline in the formula below, so a
+// future rate change (or a different factoring company) only means editing these three numbers.
+const SUMMAR_RATES = {
+  transitFeePct: 0.234,   // P.O. Financing Fee, fixed — every US load's transit to the border is
+                          // 2 days, weekend at most, never reaching the contract's next 5-day
+                          // bracket, so this is always exactly one bracket, confirmed by the user.
+  factoringBaseFeePct: 1.20, // Factoring Fee, flat for the first 30 days after delivery.
+  extraDayFeePct: 0.0417,    // Factoring Fee, per day beyond 30 (contract says 0.04%/day; this
+                             // matches the existing "Finance Rate" field's own default exactly).
+};
+
+// Real ask 2026-09-20: a separate, additive card next to Profitability — reads its output
+// (profitBorder, totalSaleBorder) and Payment Days, never changes them. Only shown once a real
+// offer exists (negoOffer), same gate as the negotiation bar (negoQbLeft/negoQbRight) — never
+// visible on a bare price check with no offer, and never sent to the customer in any quote/PDF.
+function updateSummarImpactCard(){
+  const card = document.getElementById('summarCard');
+  // Real bug caught live 2026-09-20, before it ever shipped: calc() itself runs once at the top
+  // level of this script (line ~1796) BEFORE `let negoOffer` further down is initialized — reading
+  // negoOffer directly at that point threw "Cannot access 'negoOffer' before initialization" and
+  // crashed the ENTIRE page's script, not just this card. try/catch treats that one-time TDZ moment
+  // as "no offer yet" (correct — there genuinely isn't one this early); every later real call (user
+  // typing, calc() re-running) reads the real value normally.
+  // negoOffer is the one real signal an actual sent_offer is behind this screen (set by negoInit,
+  // gated on a real ?offerId=) — never embed=1 alone, which quotes.html's own pre-send "View
+  // Quote" calculator also uses (real numbers, but no committed customer offer yet, exactly where
+  // this card must stay hidden). See negoInit's own trailing calc() call for why this now updates
+  // correctly once negoOffer's async load actually finishes.
+  let hasOffer = false;
+  try { hasOffer = !!negoOffer && !isReadOnlyEmbed(); } catch (e) { hasOffer = false; }
+  if (!hasOffer || !window.__calc){ if (card) card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  // Real bug caught live 2026-09-20 (screenshots, real numbers): profitBorder already has the
+  // OLD "Finance Cost" (the flat payDays*financeRate approximation) subtracted from it — using it
+  // here double-counted two different financing costs on the same number (the old generic one
+  // AND Summar's real one). grossBaseBorder is Sale − Product Cost − Direct Costs, with NO
+  // financing assumption of any kind baked in yet — Summar's fee is the only one subtracted below.
+  const { totalSaleBorder, grossBaseBorder, inp } = window.__calc;
+  const extraDays = Math.max(0, (inp.payDays || 0) - 30);
+  const extraFeePct = extraDays * SUMMAR_RATES.extraDayFeePct;
+  const totalFeePct = SUMMAR_RATES.transitFeePct + SUMMAR_RATES.factoringBaseFeePct + extraFeePct;
+  const summarFee = totalSaleBorder * (totalFeePct / 100);
+  const profitAfter = grossBaseBorder - summarFee;
+
+  document.getElementById('summarProfitBefore').textContent = fmt$(grossBaseBorder);
+  document.getElementById('summarSOValue').textContent = fmt$(totalSaleBorder);
+  document.getElementById('summarFeeAmount').textContent = fmt$(summarFee);
+  document.getElementById('summarFeeTransit').textContent = SUMMAR_RATES.transitFeePct.toFixed(3) + '%';
+  document.getElementById('summarFeeBase').textContent = SUMMAR_RATES.factoringBaseFeePct.toFixed(2) + '%';
+  document.getElementById('summarFeeExtra').textContent = extraFeePct.toFixed(3) + '%';
+  const afterEl = document.getElementById('summarProfitAfter');
+  afterEl.textContent = fmt$(profitAfter);
+  afterEl.className = 'k-val' + (profitAfter < 0 ? ' neg' : '');
 }
 
 document.addEventListener('focusin', function(e){
@@ -2024,6 +2212,13 @@ async function negoInit(){
     document.getElementById('negoQbRight').style.display = 'flex';
     document.getElementById('negoCreateOrderBtn').style.display = 'inline-flex';
   }
+  // Real race condition caught live 2026-09-20: the page's very first calc() (triggered
+  // synchronously by the URL's own cost/sell query params, before this async function ever
+  // resolves) runs while negoOffer is still null, so updateSummarImpactCard() correctly hid the
+  // card at that moment — but nothing ever called calc() again afterward, so it stayed hidden
+  // forever even once negoOffer (above) was genuinely set. One more calc() here, now that
+  // negoOffer is real, refreshes every output including the Summar card with the real value.
+  if (typeof calc === 'function') calc();
 }
 
 // ===== Real Costs (Won offers only) — reconciles quoted vs. actual freight/extra costs right
@@ -2226,12 +2421,12 @@ async function createAndShareInvoice(){
 
   const contact = customer && customer.contact_name ? negoFirstName(customer.contact_name) : '';
   const subject = `INV-BT-${btNum(orderNumber)} — INVOICE`;
-  const body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden BT-${btNum(orderNumber)}, firma aquí: ${signLink} para su confirmación.\n\n`
+  const body = `Hola ${contact},\n\nAdjuntamos la factura INV-BT-${btNum(orderNumber)}, firma aquí: ${signLink} para su confirmación.\n\n`
     + `Gracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   const waPhone = customer && (customer.payments_contact_whatsapp || customer.payments_contact_phone || customer.whatsapp || customer.phone);
   // Real ask 2026-09-15: exact copy from the user — no "firma"/"link" wording, the WhatsApp card
   // preview (see sign-invoice.html's Open Graph tags) already says "Confirmar" on its own.
-  const waMessage = `Hola${contact ? ' ' + contact : ''}! Esta es la factura de la orden ${orderNumber}. Confírmala en cuanto puedas. ${signLink} Un Abrazo & Saludos!`;
+  const waMessage = `Hola${contact ? ' ' + contact : ''}! Esta es la factura INV-BT-${btNum(orderNumber)}. Confírmala en cuanto puedas. ${signLink} Un Abrazo & Saludos!`;
 
   msgEl.textContent = '';
   // Real ask 2026-09-12: same preview-before-send screen PO/SO/FO already have — this used to
@@ -2498,7 +2693,67 @@ async function negoSendToPlant(channel){
 // Real ask 2026-09-16: same combined necesidad signal quotes.html shows per matched customer,
 // here for the one customer+product this negotiation is already about. Silent when
 // customer-product-signal has nothing real to say — no placeholder, no invented reason.
+// Real correction 2026-09-22: computeCustomerProductSignal now returns structured cadence/
+// priceTrend data instead of one pre-built sentence (see quotes.html's own rqSignalTextEn, same
+// idea, duplicated here since this is a separate page with its own script scope) — no more "last
+// order from us" framing, cadence is shown exactly as the customer stated it.
+function negoSignalTextEn(signal){
+  const parts = [];
+  if (signal.cadence){
+    const bits = [`Every ${signal.cadence.frequencyDays} day${signal.cadence.frequencyDays === 1 ? '' : 's'}`];
+    if (signal.cadence.loadsPerCycle != null) bits.push(`${signal.cadence.loadsPerCycle} load${signal.cadence.loadsPerCycle === 1 ? '' : 's'}/cycle`);
+    parts.push(bits.join(', ') + '.');
+  }
+  if (signal.priceTrend) parts.push(`Price ${Math.abs(Math.round(signal.priceTrend.pctChange))}% better than the last 30-day average.`);
+  if (signal.marketNote) parts.push(signal.marketNote.note ? `Market note: ${signal.marketNote.note}` : `Market note: ${signal.marketNote.trendPct > 0 ? '+' : ''}${Math.round(signal.marketNote.trendPct)}% trend.`);
+  return parts.join(' ');
+}
+
+// Spanish, customer-facing twin of negoSignalTextEn — same idea as quotes.html's rqSignalLineEs,
+// duplicated here on purpose (separate page/script scope), same underlying structured data.
+function negoSignalLineEs(signal){
+  if (!signal) return '';
+  const parts = [];
+  if (signal.cadence){
+    const days = signal.cadence.frequencyDays;
+    const loads = signal.cadence.loadsPerCycle;
+    let line = `Sabemos que comprás este producto cada ${days} día${days === 1 ? '' : 's'}`;
+    if (loads != null) line += `, ${loads} carga${loads === 1 ? '' : 's'} por vez`;
+    parts.push(line + '.');
+  }
+  if (signal.priceTrend) parts.push(`Este precio está ${Math.abs(Math.round(signal.priceTrend.pctChange))}% mejor que el promedio del último mes.`);
+  if (signal.marketNote && signal.marketNote.note) parts.push(`Según el último reporte de mercado: ${signal.marketNote.note}`);
+  else if (signal.marketNote && signal.marketNote.trendPct != null){
+    const pct = Math.abs(Math.round(signal.marketNote.trendPct));
+    const dir = signal.marketNote.trendPct < 0 ? 'a la baja' : 'al alza';
+    parts.push(`Según el último reporte de mercado, este corte viene con una tendencia ${dir} de ${pct}%.`);
+  }
+  return parts.join(' ');
+}
+
+// Real addition 2026-09-22 ("comparación con precio de mercado mexicano, SOLO cuando favorece a
+// BuenTrade") — same math as quotes.html's rqMxBenchmarkLineEs, using negoCurrentSale() as the
+// real price being negotiated right now (not an abstract number). Silent when BuenTrade doesn't
+// actually win the comparison.
+const NEGO_USD_KG_TO_USD_LB = 2.20462;
+function negoMxBenchmarkLineEs(signal){
+  const mx = signal && signal.marketNote;
+  if (!mx || mx.mxBenchmarkPriceUsdKg == null) return '';
+  const price = negoCurrentSale();
+  if (!price) return '';
+  const benchmarkPerLb = mx.mxBenchmarkPriceUsdKg / NEGO_USD_KG_TO_USD_LB;
+  if (price >= benchmarkPerLb) return '';
+  const pctBetter = Math.round((1 - price / benchmarkPerLb) * 100);
+  const region = mx.mxBenchmarkRegion ? ` en ${mx.mxBenchmarkRegion}` : '';
+  return `Referencia de mercado${region}: $${benchmarkPerLb.toFixed(4)} USD/lb — tu precio con nosotros te sale ${pctBetter}% mejor.`;
+}
+
+// Holds whatever negoRenderSignal last found, so negoSendToCustomer can reuse it instead of
+// re-fetching on every send click. Reset to null at every exit path below (including "nothing
+// real to say") so a stale signal from a previous offer/product never leaks into a new one.
+let negoLastSignal = null;
 async function negoRenderSignal(){
+  negoLastSignal = null;
   const el = document.getElementById('negoSignal');
   if (!el) return;
   el.innerHTML = '';
@@ -2507,8 +2762,9 @@ async function negoRenderSignal(){
   try { signals = (await callApi('customer-product-signal', { customer_id: negoOffer.customer_id, product_ids: [negoOffer.product_id] })).signals || []; } catch (e) { return; }
   const signal = signals[0];
   if (!signal) return;
+  negoLastSignal = signal;
   const parts = [];
-  if (signal.message) parts.push(`<span class="tt-signal-badge price">${negoEscapeHtml(signal.message)}</span>`);
+  if (signal.cadence || signal.priceTrend || signal.marketNote) parts.push(`<span class="tt-signal-badge price">${negoEscapeHtml(negoSignalTextEn(signal))}</span>`);
   if (signal.overCreditLimit) parts.push(`<span class="tt-signal-badge credit-hold">No credit available today</span>`);
   el.innerHTML = parts.join(' ');
 }
@@ -2522,7 +2778,15 @@ async function negoSendToCustomer(channel){
   // — negoOffer.over_credit_limit already comes straight from sent-offers-search (loaded when this
   // negotiation opened), the same computeCustomerExposure check, never recomputed differently here.
   const creditHoldLine = negoOffer.over_credit_limit ? '\n\nCarga sujeta a pago de la última factura.' : '';
-  const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.${creditHoldLine}`;
+  // Real addition 2026-09-22: same cadence/price-trend/bulletin-note/MX-benchmark line quotes.html
+  // already sends — this negotiation-send path never had it. Reuses whatever negoRenderSignal's own
+  // fetch already found (negoLastSignal), so this doesn't refetch on every send click.
+  let signalBlock = '';
+  if (negoLastSignal){
+    const parts = [negoSignalLineEs(negoLastSignal), negoMxBenchmarkLineEs(negoLastSignal)].filter(Boolean);
+    if (parts.length) signalBlock = '\n\n' + parts.join(' ');
+  }
+  const body = `Hola ${contact},\n\nLe confirmamos ${price.toFixed(4)} USD/lb frontera.${signalBlock}${creditHoldLine}`;
   if (channel === 'email'){
     if (!negoCustomer.email){ document.getElementById('negoMsg').textContent = 'This customer has no email on file.'; return; }
     // Same follow-up gap as negoSendToPlant above — waInfo was never passed here either.
@@ -2544,14 +2808,27 @@ async function negoSendToCustomer(channel){
 // Mirrors offers.html's markWon() exactly, but sourced from whatever the trader is looking at
 // right now in the calculator (not the original quoted snapshot), and additionally pings the
 // customs agency on file — offers.html's quick "Ganada" doesn't need that since nothing changed.
-async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, carrierChoice){
+async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, carrierChoice, financingMethod){
   if (!negoOffer) return;
   const freightEl = document.getElementById('freight');
   const us_freight_amount = freightEl ? Number(freightEl.value) || 0 : (negoOffer.us_freight_amount || 0);
   const isFob = us_freight_amount > 0;
   if (!overrideCreditCheck){
-    const ok = await showTTConfirm('Create Order?', `${(negoOffer.product_spec || negoOffer.product_name)} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`, '✓ Create Order');
+    // Real ask 2026-09-21: "deberia decir cual es el siguiente consecutivo" — display-only preview
+    // via lookups-search (see its own comment); the real number is still assigned transactionally
+    // by next_order_number() when the order is actually created below, never taken from here.
+    let nextOrderPreview = '';
+    try { nextOrderPreview = (await callApi('lookups-search', {})).next_order_number_preview || ''; } catch (e) {}
+    const orderLine = `${(negoOffer.product_spec || negoOffer.product_name)} — ${negoOffer.plant_name} — ${negoOffer.customer_name}`;
+    const ok = await showTTConfirm('Create Order?', nextOrderPreview ? `${orderLine}\n\nNext Order #: ${nextOrderPreview}` : orderLine, '✓ Create Order');
     if (!ok) return;
+  }
+  // Real ask 2026-09-21: "el sistema nos pregunta como la queremos comprar si directa o por
+  // factoring" — asked once, right after Create Order is confirmed; threaded through the
+  // credit-override retry below same as confirmedDeliveryDate/carrierChoice, never re-asked.
+  if (!financingMethod){
+    financingMethod = await showTTFinancingChoice();
+    if (!financingMethod) return; // trader cancelled — nothing created
   }
   // Real ask 2026-09-14: "esa fecha no la puedo dejar al sistema... es muy delicado" — asked fresh
   // every time, never inherited silently from whatever the quote happened to say when it was
@@ -2600,12 +2877,18 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
       us_freight_rate_id_override: pickedRateId,
       carrier_provider_id: carrierChoice ? carrierChoice.carrier_provider_id : null,
       won_idempotency_key: wonIdempotencyKey,
+      financing_method: financingMethod,
+      // Real ask 2026-09-21: snapshot of the trader's own Payment Days field at the moment of
+      // Create Order (their real convention: 30-day terms + a 10-day cushion, usually 40) — an
+      // estimate for the future Pay via Summar breakdown, never recomputed with a different number
+      // later. The real Summar cost is only known once the customer actually pays.
+      payment_days: (() => { const el = document.getElementById('payDays'); return el ? Number(el.value) || null : null; })(),
     });
   } catch (e) {
     if (e.data && e.data.error === 'credit_limit_exceeded'){
       const choice = await showCreditLimitOverlay(e.data.message);
       document.getElementById('negoMsg').textContent = '';
-      if (choice === 'override') return negoSaveDefinitive(true, confirmedDeliveryDate, carrierChoice);
+      if (choice === 'override') return negoSaveDefinitive(true, confirmedDeliveryDate, carrierChoice, financingMethod);
       if (choice === 'collect'){ window.open('collections.html', '_blank'); return; }
       if (choice === 'financials'){
         let customerEmail = null;
@@ -2696,14 +2979,14 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
     <h3>Select the carrier</h3>
     <div class="email-modal-from" id="ttCarrierModalIntro">This is a FOB load — a carrier and its rate must be fixed before the order can be created.</div>
     <div class="email-modal-field"><label>Carrier</label>
-      <select id="ttCarrierModalSelect" autocomplete="off"></select>
+      <div id="ttCarrierDdownWrap"></div>
     </div>
     <div class="email-modal-field"><label>US Freight Rate (USD)</label>
       <input type="number" id="ttCarrierModalRate" autocomplete="off" step="0.01" min="0">
     </div>
     <div class="email-modal-actions">
-      <button onclick="ttCarrierModalResolve(null)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
-      <button onclick="ttCarrierModalConfirm()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Confirm carrier</button>
+      <button onclick="ttCarrierModalResolve(null)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>
+      <button onclick="ttCarrierModalConfirm()" class="wa-btn" style="padding:9px 16px;font-size:13px;">Confirm carrier</button>
     </div>
   </div>
 </div>

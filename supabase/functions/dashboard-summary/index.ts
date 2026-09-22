@@ -52,6 +52,36 @@ Deno.serve(async (req) => {
       select status, count(*)::int as count from shipments group by status
     `;
 
+    // Real addition 2026-09-22 ("alerta de cadencia próxima" — internal only, never shown to the
+    // customer): a trader-facing triage list, not a claim to anyone. cadence (frequency_days) is
+    // what the customer told us they buy overall; the only date this can compare it against is our
+    // OWN last real sale to them (sales_orders, same fallback to customer_products.
+    // last_known_order_date used elsewhere) — a customer buying from other traders too can look
+    // "overdue" here while actually still on schedule with someone else. That's fine for an
+    // internal "who's worth calling first" prioritization; it would NOT be fine to say to the
+    // customer (see customer-product-signal's own correction the same day, which removed exactly
+    // this comparison from the customer-facing message for that reason).
+    const cadenceDue = await sql`
+      select
+        cp.customer_id, c.trade_name, cp.product_id, p.full_name_en as product_name,
+        cp.frequency_days, cp.loads_per_cycle,
+        coalesce(so_last.last_order_date, cp.last_known_order_date) as last_order_date,
+        (current_date - coalesce(so_last.last_order_date, cp.last_known_order_date)::date)::int as days_since_our_last_sale
+      from customer_products cp
+      join customers c on c.id = cp.customer_id
+      join products p on p.id = cp.product_id
+      left join lateral (
+        select max(d.delivery_date) as last_order_date
+        from sales_orders so, lateral (select (jsonb_array_elements_text(so.delivery_dates))::date as delivery_date) d
+        where so.customer_id = cp.customer_id and so.product_id = cp.product_id
+      ) so_last on true
+      where cp.frequency_days is not null
+        and coalesce(so_last.last_order_date, cp.last_known_order_date) is not null
+        and (current_date - coalesce(so_last.last_order_date, cp.last_known_order_date)::date) >= cp.frequency_days
+      order by (current_date - coalesce(so_last.last_order_date, cp.last_known_order_date)::date) - cp.frequency_days desc
+      limit 20
+    `;
+
     // Real ask 2026-09-08: "todos los pagos a plantas deben ser in advance" — there's no real
     // "payables aging" the way Collections has for receivables (a payment should never sit unpaid
     // for days by policy — the sequential gate in orders.html already blocks confirming pickup
@@ -183,6 +213,7 @@ Deno.serve(async (req) => {
       top_products_by_revenue: topProductsByRevenue,
       top_products_by_quantity: topProductsByQuantity,
       top_traders: topTraders,
+      cadence_due: cadenceDue,
     });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);

@@ -87,10 +87,10 @@
      prompt() for the real weight. z-index above everything else in this file since it's the most
      active screen whenever it's open. */
   .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:7000;display:none;flex-direction:column;}
-  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-head{display:grid;grid-template-columns:1fr minmax(0,auto) 1fr;align-items:center;gap:14px;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
-  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
-  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-close{font-family:inherit;font-size:11px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer;border:1px solid var(--blue);background:transparent;color:var(--blue-bright);display:flex;align-items:center;gap:5px;transition:background .12s;flex-shrink:0;white-space:nowrap;}
+  .tt-overlay-close:hover{background:var(--blue-light);}
   .tt-overlay-body{flex:1;min-height:0;position:relative;}
   .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   /* Real preview screen for PO/SO/FO — same tt-overlay shell the Trading Tool iframe already uses
@@ -162,6 +162,12 @@
   .step.actionable:hover .step-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
   .step.actionable.urgent .step-icon{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
   .step.actionable.urgent .step-label{color:#FF9C8A;}
+  /* Real ask 2026-09-20: "debe estar blinking y en rojo... no puede llegar el dia del PU sin estar
+     confirmado" — Release # gets its own always-on urgent treatment (not gated behind blink-now's
+     "one thing blinks per card" rule) once pickup is a day away or has already passed with no
+     release number on file, same red pulse the main timeline step already uses elsewhere. */
+  .u-mini.urgent .u-mini-btn{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  .u-mini.urgent .u-mini-label{color:#FF9C8A;font-weight:700;}
   .step.done .step-icon{background:var(--green);border-color:var(--green);color:#fff;}
   .step.current .step-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
   @keyframes stepPulse{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 4px var(--blue-light);}50%{opacity:.55;transform:scale(1.2);box-shadow:0 0 0 7px rgba(30,106,219,.22);}}
@@ -171,19 +177,34 @@
   .step-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;}
   .step-line.done{background:var(--green);}
   .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
-  .docs-panel-toggle{cursor:pointer;font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:14px;padding-top:12px;border-top:1px solid var(--line);user-select:none;}
-  .docs-panel-toggle svg{width:14px;height:14px;flex-shrink:0;}
-  .docs-panel-toggle:hover{color:var(--ink);}
-  .docs-panel{margin-top:8px;display:flex;flex-direction:column;gap:2px;}
-  .doc-row{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line);}
-  .doc-row:last-child{border-bottom:none;}
-  .doc-row-label{font-weight:600;color:var(--ink);min-width:120px;flex-shrink:0;}
+  /* Real ask 2026-09-21: "un solo flujo" — ONE prominent, real button for whatever's next on this
+     order, built from the exact same computed entry that blinks on the timeline above (see
+     nextActionEntry) so it can never disagree with it. Gold accent = "this needs you now", same
+     semantic the rest of this file already uses for pending/urgent state. */
+  .load-next-action{display:flex;align-items:center;gap:14px;background:rgba(232,181,76,.08);border:1.5px solid rgba(232,181,76,.45);border-radius:12px;padding:14px 18px;margin:14px 0;}
+  .load-next-action-icon{width:40px;height:40px;border-radius:50%;background:rgba(232,181,76,.15);border:2px solid #E8B54C;color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .load-next-action-icon svg{width:18px;height:18px;}
+  .load-next-action-text{flex:1;min-width:0;}
+  .load-next-action-eyebrow{font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;}
+  .load-next-action-label{font-size:15px;font-weight:700;color:var(--ink);}
+  .load-next-action.done{background:transparent;border-style:dashed;justify-content:center;padding:16px;}
+  /* Real ask 2026-09-21: "despliegue de docs quitalo dejalos mostrando... siempre algo bonito
+     centrado bien organizados" — no more collapse toggle (always rendered, see
+     renderOrderDocsPanel), and the rows move from one long stacked list into a centered 2-column
+     grid of cards; same .doc-row content/actions inside, just a different container. */
+  .docs-panel-heading{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.07em;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:6px;}
+  .docs-panel-heading svg{width:14px;height:14px;flex-shrink:0;}
+  .docs-panel-grid{margin:14px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;}
+  .doc-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12.5px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);}
+  .doc-row-span{grid-column:1 / -1;}
+  .doc-row-label{font-weight:600;color:var(--ink);flex-shrink:0;}
   .doc-row-link{color:var(--blue-bright);text-decoration:underline;flex-shrink:0;}
   .doc-row-btn{padding:4px 9px !important;font-size:11px !important;flex-shrink:0;}
   .doc-row-btn svg{width:13px;height:13px;flex-shrink:0;}
   .doc-row-status{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
   .doc-row-status.sent{color:#5FE097;}
-  .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:6px 0;}
+  .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:11px 14px;text-align:center;}
+  @media (max-width:680px){ .docs-panel-grid{grid-template-columns:1fr;} }
   .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
   .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
   .wa-btn:active{background:rgba(29,168,81,.28);}
@@ -251,6 +272,19 @@
      renderUnifiedTimeline()'s renderMapRow() — same entries/blinkIdx/travelerLineIdx, only the
      grouping/connectors changed. */
   .utimeline-lanes{display:flex;flex-direction:column;gap:10px;}
+  /* Real ask 2026-09-21: "agrupado horizontal... entre menos tenga que bajar mejor" — the 13
+     milestones group into 4 real business phases (Documentación/Pago y liberación/Logística/
+     Cierre), shown as a segmented-control tab bar; only the active phase's row of stops renders,
+     so the card never grows past one row no matter how many milestones an order has. Reuses each
+     entry's own already-computed e.html (real onclick, blink-now, urgent — all untouched) inside
+     whichever phase row is active, so this is purely a grouping/display change, not new logic. */
+  .phase-tabs{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:4px;gap:3px;margin:14px 0 0;}
+  .phase-tab{flex:1;text-align:center;padding:9px 6px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:background .15s,color .15s;user-select:none;}
+  .phase-tab:hover{color:var(--ink);}
+  .phase-tab.active{background:rgba(232,181,76,.15);color:#E8B54C;}
+  .phase-tab.tdone:not(.active){color:#5FE097;}
+  .phase-tab-count{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;margin-top:2px;opacity:.75;}
+  .phase-row{justify-content:center;}
   .utimeline-lane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px 10px;}
   .utimeline-lane .utimeline{justify-content:flex-start;margin-bottom:0;}
   .uring-wrap{display:flex;align-items:center;gap:16px;padding:2px 4px 4px;}
@@ -373,11 +407,15 @@
      docs panel) moves in here, opened on demand per order, instead of always rendering for every
      order at once. Same solid modal-box convention as collections.html's #customerProfileBox
      (solid bg, not translucent — a modal needs full legibility over the dark overlay). */
-  #orderDetailOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6200;align-items:center;justify-content:center;padding:20px;}
-  /* Real ask 2026-09-13: "mejorar la de view... ponle bordes de otro color, algo bonito,
-     creatividad" — the flat hairline border on the order detail modal becomes a soft glowing
-     gradient ring (brand blue-bright into amber, BuenTrade's two accent colors). */
-  #orderDetailBox{position:relative;background:#0F2B52;border-radius:16px;padding:26px 28px;max-width:1040px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 32px -6px rgba(90,170,255,.4);border:1.5px solid transparent;background-image:linear-gradient(#0F2B52,#0F2B52),linear-gradient(135deg,var(--blue-bright) 0%,rgba(232,181,76,.85) 55%,var(--blue) 100%);background-origin:border-box;background-clip:padding-box,border-box;}
+  /* Real ask 2026-09-21: "una sola pagina en vez de esa ventana emergente" — was a centered,
+     max-width:1040px floating card (a modal-on-modal when a further action like Pay via Summar
+     opened on top of it); now a genuine full-screen page, same positioning + background recipe as
+     this file's own .tt-overlay (ttOverlay/docPreviewOverlay) — one real full-page pattern reused,
+     not a new one invented. Kept as its own id (not the .tt-overlay class) only so its z-index can
+     stay below ttOverlay/docPreviewOverlay (7000) — a QT or doc preview opened from inside this
+     page still layers on top of it, same stacking order as before.  */
+  #orderDetailOverlay{display:none;position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:6200;flex-direction:column;}
+  #orderDetailBox{flex:1;min-height:0;overflow-y:auto;padding:22px clamp(16px, 4vw, 48px) 48px;max-width:1040px;width:100%;margin:0 auto;box-sizing:border-box;}
   /* Real ask 2026-09-16: "SEARCH unificado diseno buentrade" — glass-pill search shipped on
      Products/Quotes/Plants/Offers (see plants.html's own comment on this exact block), scoped
      "st-" for this page. Real ask 2026-09-18 ("new plant tiene diseno buentrade hazlo en...
@@ -431,6 +469,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
+<script src="js/date-picker.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -580,6 +619,41 @@ auth.onAuthStateChanged(user => {
      never just the trader's own typed claim. -->
 <input type="file" id="bankConfirmationInput" accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
 
+<!-- Real ask 2026-09-21, confirmed word by word against the signed Summar Factoring Proposal
+     (9/18/2026) and directly by the user: when financing_method is 'summar', Summar — not
+     BuenTrade — pays the plant the full cost of the load, using their own 80% P.O. Financing
+     advance (calculated on the SALE price per the signed proposal, not the purchase cost) plus
+     the 20% BuenTrade wires them here. BuenTrade → Summar → Planta, never BuenTrade → Planta
+     directly for these orders. Same dark modal classes every other modal in this file already
+     uses (.email-modal-box/.email-modal-overlay) — no new component. -->
+<div id="summarPaymentOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:460px;">
+    <h3>Pay via Summar</h3>
+    <div class="email-modal-from" id="summarPaymentIntro"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;">
+      <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.18);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Sale Price</div>
+        <div id="summarPaySalePrice" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:var(--ink);"></div>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(232,181,76,.4);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:#E8B54C;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Wire to Summar (20%)</div>
+        <div id="summarPayAmount" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:var(--ink);"></div>
+      </div>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.7;color:var(--ink-soft);">
+      <b style="color:var(--ink);">Summar Financial, LLC</b><br>
+      Bank of America — 701 Brickell Ave., Miami, FL 33131<br>
+      Account #: 0036 6939 6990<br>
+      ABA: 026009593 (wire) / 063000047 (ACH) — SWIFT: BOFAUS3N
+    </div>
+    <div class="email-modal-actions">
+      <button class="btn secondary" onclick="closeSummarPaymentOverlay()">Cancel</button>
+      <button class="btn secondary" onclick="window.open(BANK_LOGIN_URL,'_blank')">Open Grove Bank →</button>
+      <button class="wa-btn" onclick="sendPaymentToSummar(summarPaymentOrderNumber)">Send Payment to Summar</button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <h1>Orders</h1>
 
@@ -628,31 +702,36 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<!-- Real ask 2026-09-21: same full-page head as ttOverlay/docPreviewOverlay below (centered
+     title, close button pinned right) — reused, not a new header built for this one page. -->
 <div id="orderDetailOverlay">
+  <div class="tt-overlay-head">
+    <div></div>
+    <div class="tt-overlay-title" id="orderDetailTitle" style="text-align:center;"></div>
+    <button class="tt-overlay-close" onclick="closeOrderDetail()" title="Close" style="justify-self:end;">✕ Close</button>
+  </div>
   <div id="orderDetailBox">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-      <h2 id="orderDetailTitle" style="margin:0;"></h2>
-      <button class="btn small" onclick="closeOrderDetail()">✕ Close</button>
-    </div>
     <div id="orderDetailBody"></div>
   </div>
 </div>
 
 <div id="ttOverlay" class="tt-overlay">
   <div class="tt-overlay-head">
-    <div class="tt-overlay-title" id="ttOverlayTitle"></div>
-    <button class="tt-overlay-close" onclick="closeTTOverlay()" title="Close">✕</button>
+    <div></div>
+    <div class="tt-overlay-title" id="ttOverlayTitle" style="text-align:center;"></div>
+    <button class="tt-overlay-close" onclick="closeTTOverlay()" title="Close" style="justify-self:end;">✕ Close</button>
   </div>
   <div class="tt-overlay-body" id="ttOverlayBody"></div>
 </div>
 
 <div id="docPreviewOverlay" class="tt-overlay">
   <div class="tt-overlay-head">
-    <div>
+    <div></div>
+    <div style="text-align:center;">
       <div class="tt-overlay-title" id="docPreviewTitle"></div>
       <div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;" id="docPreviewSub"></div>
     </div>
-    <button class="tt-overlay-close" onclick="closeDocPreview()" title="Close">✕</button>
+    <button class="tt-overlay-close" onclick="closeDocPreview()" title="Close" style="justify-self:end;">✕ Close</button>
   </div>
   <div class="tt-overlay-body" style="display:flex;flex-direction:column;">
     <div id="docPreviewCompare" style="display:none;flex-shrink:0;padding:10px 20px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.12);"></div>
@@ -859,6 +938,10 @@ async function loadStatusOrders(){
 function paymentBadge(order){
   if (!order.payment_due_date) return '';
   const due = new Date(order.payment_due_date + 'T00:00:00');
+  // Real bug found live 2026-09-21: a garbage/unparseable payment_due_date rendered the literal
+  // text "Payment due Invalid Date" instead of hiding — same silent-blank-on-bad-data treatment
+  // as the missing-date case just above, not a string a trader should ever see.
+  if (isNaN(due.getTime())) return '';
   const today = new Date();
   const daysLeft = Math.ceil((due - today) / 86400000);
   let cls = 'ok', text = `Payment due ${fmtDateStr(order.payment_due_date)}`;
@@ -930,12 +1013,20 @@ function fullProductLabel(o){
   const cp = o.catalogProduct;
   return o.product_spec || (cp ? (cp.name_en || cp.name) : o.product_name);
 }
+// Spanish counterpart — real bug found live 2026-09-19/20: the 3 customer-facing stage messages
+// (STAGE_EMAIL_BODY_ES/STAGE_WHATSAPP_ES, all in Spanish) were using fullProductLabel() above,
+// which is English-only. Same fallback chain as fullProductLabel, just the Spanish fields, with
+// fullProductLabel itself as the last-resort fallback so this never shows blank.
+function fullProductLabelEs(o){
+  const cp = o.catalogProduct;
+  return o.product_spec_es || (cp ? cp.name : null) || o.product_name_es || fullProductLabel(o);
+}
 function requestCustomsDocsMessage(o){
   const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
-  return `Hi, for order BT-${btNum(o.order_number)} — ${fullProductLabel(o)}, please send us: ${docsLine}. Thank you.`;
+  return `Hi, for order PO-BT-${btNum(o.order_number)} — ${fullProductLabel(o)}, please send us: ${docsLine}. Thank you.`;
 }
 function requestCustomsDocsSubject(orderNumber){
-  return `Documents needed — Order BT-${btNum(orderNumber)}`;
+  return `Documents needed — Order PO-BT-${btNum(orderNumber)}`;
 }
 // Real ask 2026-09-14: "debe abrir email primero whatsapp opcional despues de mandar email. el
 // email es mejor para que la lea el api despues" — this used to be WhatsApp-only, which the
@@ -1014,19 +1105,8 @@ async function confirmPickupReadyClick(orderNumber){
   const hasCarrier = !!(o.carrier && o.carrier.phone);
   const waPhone = (hasCarrier ? o.carrier.phone : (o.plant.whatsapp || o.plant.phone) || '').replace(/\D/g, '');
 
-  let location = o.pickup_location || null;
-  if (!location){
-    let locations;
-    try { locations = (await callApi('plant-locations-search', { plant_id: o.plant_id })).results || []; }
-    catch (e) { locations = []; }
-    if (locations.length){
-      const pickedId = await showPickupLocationPicker(o.plant_name, locations);
-      if (!pickedId) return; // trader cancelled — nothing sent, nothing saved
-      location = locations.find(l => l.id === pickedId);
-      try { await callApi('shipments-set-pickup-location', { actor: currentActor(), order_number: orderNumber, pickup_location_id: pickedId }); }
-      catch (e) { await btAlert('Could not save the pickup location: ' + e.message); return; }
-    }
-  }
+  const location = await resolvePickupLocationForOrder(o, orderNumber);
+  if (location === undefined) return; // trader cancelled the location picker, or saving it failed
 
   const toEmail = (location && location.email) || o.plant.email || null;
   if (!toEmail){
@@ -1059,11 +1139,88 @@ async function confirmPickupReadyClick(orderNumber){
 // Real ask 2026-09-07: "todos deben ser linkeables con una accion" — Signature has no real
 // trader-side action (only the customer signs remotely), but it still needs to respond to a click
 // instead of sitting there dead. Reports the real status instead of doing nothing.
+// Real addition 2026-09-22 ("cuando el cliente firma, mandar un gracias + info de mercado si hay
+// algo real"): the customer signs on their own, remotely, on sign-invoice.html — no trader is
+// present at that moment, so this can't fire automatically right then. Instead the "Firma Cliente"
+// milestone becomes the trigger the trader clicks whenever they're back in the app; already-signed
+// now opens the real thank-you flow instead of just reporting the date.
 async function signatureInfoClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  if (o.invoice_signed_at) await btAlert(`Signed by the customer on ${fmtDateStr(String(o.invoice_signed_at).slice(0, 10))}.`);
+  if (o.invoice_signed_at) await sendSignatureThankYou(orderNumber);
   else await btAlert('Waiting for the customer to sign — they sign remotely once they receive the Invoice. No action needed from you.');
+}
+
+// Same Spanish-line idea as quotes.html's rqSignalLineEs / trading-tool.html's negoSignalTextEn —
+// duplicated here on purpose (separate page, separate script scope), same underlying structured
+// data from computeCustomerProductSignal. Never invents a reason: with no cadence and no favorable
+// price trend, this returns '' and the message stays a plain, genuine thank-you.
+function ordSignalLineEs(signal){
+  if (!signal) return '';
+  const parts = [];
+  if (signal.cadence){
+    const days = signal.cadence.frequencyDays;
+    const loads = signal.cadence.loadsPerCycle;
+    let line = `Sabemos que comprás este producto cada ${days} día${days === 1 ? '' : 's'}`;
+    if (loads != null) line += `, ${loads} carga${loads === 1 ? '' : 's'} por vez`;
+    parts.push(line + '.');
+  }
+  if (signal.priceTrend) parts.push(`Este precio está ${Math.abs(Math.round(signal.priceTrend.pctChange))}% mejor que el promedio del último mes.`);
+  if (signal.marketNote){
+    if (signal.marketNote.note) parts.push(`Según el último reporte de mercado: ${signal.marketNote.note}`);
+    else if (signal.marketNote.trendPct != null){
+      const pct = Math.abs(Math.round(signal.marketNote.trendPct));
+      const dir = signal.marketNote.trendPct < 0 ? 'a la baja' : 'al alza';
+      parts.push(`Según el último reporte de mercado, este corte viene con una tendencia ${dir} de ${pct}%.`);
+    }
+  }
+  return parts.join(' ');
+}
+
+// Real addition 2026-09-22 ("comparación con precio de mercado mexicano, SOLO cuando favorece a
+// BuenTrade") — same math as quotes.html's rqMxBenchmarkLineEs/trading-tool.html's
+// negoMxBenchmarkLineEs, using the REAL price this customer actually paid on this closed order
+// (o.sale_per_lb, from sent_offers via shipments-search — added to that query the same day this
+// was built). A genuine "you got a good deal" reinforcement on an already-closed sale, not a sales
+// pitch — silent whenever the price doesn't actually beat the reference.
+const ORD_USD_KG_TO_USD_LB = 2.20462;
+function ordMxBenchmarkLineEs(signal, salePerLb){
+  const mx = signal && signal.marketNote;
+  if (!mx || mx.mxBenchmarkPriceUsdKg == null || !salePerLb) return '';
+  const benchmarkPerLb = mx.mxBenchmarkPriceUsdKg / ORD_USD_KG_TO_USD_LB;
+  if (salePerLb >= benchmarkPerLb) return '';
+  const pctBetter = Math.round((1 - salePerLb / benchmarkPerLb) * 100);
+  const region = mx.mxBenchmarkRegion ? ` en ${mx.mxBenchmarkRegion}` : '';
+  return `Referencia de mercado${region}: $${benchmarkPerLb.toFixed(4)} USD/lb — tu precio con nosotros te salió ${pctBetter}% mejor.`;
+}
+
+async function sendSignatureThankYou(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const email = o.customer && o.customer.email;
+  const phone = o.customer && (o.customer.whatsapp || o.customer.phone);
+  if (!email && !phone){ await btAlert('This customer has no email or WhatsApp on file.'); return; }
+
+  let signalLine = '';
+  if (o.customer_id && o.product_id){
+    try {
+      const signals = (await callApi('customer-product-signal', { customer_id: o.customer_id, product_ids: [o.product_id] })).signals || [];
+      const signal = signals.find(s => s.cadence || s.priceTrend || s.marketNote);
+      const parts = [ordSignalLineEs(signal), ordMxBenchmarkLineEs(signal, Number(o.sale_per_lb) || 0)].filter(Boolean);
+      signalLine = parts.join(' ');
+    } catch (e) {}
+  }
+  const message = `Muchas gracias por la confianza.` + (signalLine ? `\n\n${signalLine}` : '');
+
+  if (email){
+    const waInfo = phone ? { phone: phone.replace(/\D/g, ''), message } : null;
+    await bcOpenEmailModal({
+      title: `Gracias — ${orderNumber}`, fromAlias: 'offers', fromDisplay: FROM_DISPLAY.offers,
+      to: [email], subject: `Gracias — ${orderNumber}`, text: message, waInfo,
+    });
+  } else {
+    await bcOpenWaOnlyModal({ title: `Gracias — ${orderNumber}`, phone: phone.replace(/\D/g, ''), message });
+  }
 }
 async function openInvoiceQT(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -1200,14 +1357,25 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
       else if (deliveredBlocked && isNext) infoMsg = 'Send the pickup documents to customs first.';
       else if (i <= stageIdx) infoMsg = dateStr ? `${displayLabel}: ${dateStr}` : `${displayLabel} already reached.`;
       else infoMsg = `Complete the earlier steps first.`;
+    } else {
+      // Real ask 2026-09-21: "un solo flujo" — the circle used to fire this SAME real action
+      // itself; now the Next Action card above is the one real place that fires it, so the circle
+      // just points there instead of being a second live trigger for the identical action.
+      infoMsg = `Use the Next Action button above to ${(isPendingPickupConfirm ? `confirm w/ ${confirmTarget}` : 'mark ' + s.label)}.`;
     }
-    const onclickAttr = realOnClick ? ` onclick="${realOnClick}"` : ` onclick="btAlert('${infoMsg.replace(/'/g, "\\'")}')"`;
-    const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'Click to mark ' + s.label : infoMsg);
+    const onclickAttr = ` onclick="btAlert('${infoMsg.replace(/'/g, "\\'")}')"`;
+    const titleAttr = isPendingPickupConfirm ? `Click to confirm w/ ${confirmTarget}` : (isNext ? 'See the Next Action card above' : infoMsg);
     // Real ask 2026-09-08: "pickup y delivered levantalos tambien como FO para hacer mas espacio"
     // — same raised treatment as FO, same curved connectors on both sides.
     const raised = s.key === 'picked_up' || s.key === 'delivered';
     return {
       html: `<div class="u-main ${cls}${actionableClass}${raised ? ' raised' : ''}{{BLINK}}"${onclickAttr} title="${titleAttr}"><div class="u-main-icon">${STEP_ICONS[s.key]}</div><div class="u-main-label">${displayLabel}</div>${dateHtml}</div>`,
+      // Real ask 2026-09-21: "un solo flujo" — the prominent Next Action card (renderOrderCardBody)
+      // reads this same onClickRaw/actionTitle instead of re-deriving its own copy, so it can never
+      // drift from what this circle itself does — exactly the class of bug found live with Plant
+      // Payment (3 independently-computed copies of the same decision).
+      onClickRaw: realOnClick || null,
+      actionTitle: isNext ? `Mark ${s.label}` : (isPendingPickupConfirm ? `Confirm w/ ${confirmTarget}` : ''),
       lineDone: i < stageIdx,
       actionableNow: isNext && !deliveredBlocked,
       raised,
@@ -1223,15 +1391,27 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // instead of doing nothing.
   function miniEntry(st){
     const state = st.done ? 'done' : (st.wait ? 'wait' : 'now');
-    const effectiveOnClick = (state === 'wait' && st.waitReason) ? `btAlert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
+    // Real ask 2026-09-21: "un solo flujo" — a 'now' (currently actionable) circle used to fire
+    // the exact same real action as the new Next Action card above; it now just points there
+    // instead, so there's only ONE live trigger for it. A 'done' circle keeps firing its real
+    // action — that's resend/view, a genuinely different, legitimate capability the Next Action
+    // card doesn't cover (it only ever shows what's CURRENTLY pending, never something already
+    // sent). A 'wait' circle keeps explaining what's blocking it, unchanged.
+    const effectiveOnClick = state === 'now'
+      ? `btAlert('Use the Next Action button above to continue.')`
+      : (state === 'wait' && st.waitReason) ? `btAlert('${st.waitReason.replace(/'/g, "\\'")}')` : st.onClick;
     const clickable = !!effectiveOnClick;
     const dateStr = st.date ? fmtDateStr(String(st.date).slice(0, 10)) : '';
     // Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si
     // aplica salga arriba" — FO is the only conditional one of the three (has_freight_order), so
     // it's the one that rises into a small curve when it exists; PO/SO never move.
     const raisedClass = st.raised ? ' raised' : '';
+    const urgentClass = st.urgent ? ' urgent' : '';
     return {
-      html: `<div class="u-mini ${state}${raisedClass}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
+      html: `<div class="u-mini ${state}${raisedClass}${urgentClass}{{BLINK}}"><button type="button" class="u-mini-btn" ${clickable ? `onclick="${effectiveOnClick}"` : 'disabled'} title="${escapeHtml(st.label)}">${st.icon}</button><div class="u-mini-label">${escapeHtml(st.label)}</div>${dateStr ? `<div class="u-mini-date">${dateStr}</div>` : ''}</div>`,
+      // Real ask 2026-09-21: see mainEntry's own onClickRaw comment — same reasoning, same field.
+      onClickRaw: state === 'now' ? (st.onClick || null) : null,
+      actionTitle: state === 'now' ? st.label : '',
       lineDone: st.done,
       actionableNow: state === 'now',
       raised: !!st.raised,
@@ -1250,12 +1430,31 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   if (o.has_freight_order) entries.push(miniEntry({ icon: '✓', label: 'FO', done: !!o.fo_sent_at, date: o.fo_sent_at, wait: !o.so_sent_at, waitReason: 'Send the SO first.', onClick: `openDocPreview('FO','${o.order_number}')`, raised: true }));
   const docBeforePaymentDone = o.has_freight_order ? !!o.fo_sent_at : !!o.so_sent_at;
   const docBeforePaymentReason = o.has_freight_order ? 'Send the FO first.' : 'Send the SO first.';
-  entries.push(miniEntry({ icon: '$', label: 'Pay Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, wait: !docBeforePaymentDone, waitReason: docBeforePaymentReason, onClick: `payPlantClick('${o.order_number}')` }));
+  // Real bug found live 2026-09-21: this "Pay Plant" milestone chip is a SECOND entry point to
+  // the same action as the "Plant Payment" row inside the Documents panel below — it was still
+  // wired to payPlantClick (the direct-pay flow) unconditionally, so a financing_method='summar'
+  // order clicked here would skip the whole Pay via Summar flow entirely. Same branch as the
+  // Documents panel's Plant Payment row, so both entry points agree.
+  const isSummarFinancedTimeline = o.financing && o.financing.financing_method === 'summar';
+  const payPlantOnClick = isSummarFinancedTimeline
+    ? (o.summar_payment_sent_at ? `recordSummarConfirmation('${o.order_number}')` : `showSummarPaymentBreakdown('${o.order_number}')`)
+    : `payPlantClick('${o.order_number}')`;
+  entries.push(miniEntry({ icon: '$', label: 'Pay Plant', done: !!o.plant_paid_at, date: o.plant_paid_at, wait: !docBeforePaymentDone, waitReason: docBeforePaymentReason, onClick: payPlantOnClick }));
   // Real gap found 2026-09-07: "revisa todo... faltan mas cosas" — recordReleaseNumber/
   // sendReleaseNumberToCarrier only lived inside the collapsed Documentos panel, invisible on the
   // main flow this whole rebuild exists to show at a glance. Two real milestones now, same as every
   // other real action on this timeline — no new business logic, just surfaced where it belongs.
-  entries.push(miniEntry({ icon: '#', label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')`, raised: true }));
+  // Real ask 2026-09-20, exact dictation: "debe estar blinking y en rojo... no puede llegar el dia
+  // del PU sin estar confirmado" — mirrors the same escalation shipment-alerts-poll now applies
+  // server-side: urgent once pickup is a day away (or already past) with no release number yet.
+  let releaseNumberUrgent = false;
+  if (o.plant_paid_at && !o.release_number && o.pickup_date){
+    const pickup = new Date(String(o.pickup_date).slice(0, 10) + 'T00:00:00');
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+    const daysUntilPickup = Math.round((pickup.getTime() - today0.getTime()) / 86400000);
+    releaseNumberUrgent = daysUntilPickup <= 1;
+  }
+  entries.push(miniEntry({ icon: '#', label: 'Release #', done: !!o.release_number, date: null, wait: !o.plant_paid_at, waitReason: 'Confirm the plant payment first.', onClick: `recordReleaseNumber('${o.order_number}')`, raised: true, urgent: releaseNumberUrgent }));
   if (o.carrier && o.carrier.phone) entries.push(miniEntry({ icon: STEP_ICONS.picked_up, label: 'Send Release #', done: !!o.release_number_sent_at, date: o.release_number_sent_at, wait: !o.release_number, waitReason: 'Record the release number first.', onClick: `sendReleaseNumberToCarrier('${o.order_number}')` }));
   const confirmIdx = entries.length;
   entries.push(mainEntry('pending_pickup'));
@@ -1344,10 +1543,34 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
   // treatment regardless of state; sizing now comes purely from .blink-now (the single
   // leftmost-actionable entry, still computed above), styled bigger in the CSS for
   // .lane-map-row .blink-now. No other class injected here.
-  function renderMapRow(){
-    return entries.map((e, i) => {
+  // Real ask 2026-09-21: "dame una opcion agrupada horizontal" — the fixed push order above
+  // (PO/SO/[FO], Pay Plant/Release #/[Send Release #], Confirm PU/Pick up/Customs docs/Sent to
+  // customs/Delivered, Invoice/Signature) already IS 4 contiguous business phases; grouping just
+  // reads that same order, no new sequence invented.
+  const PHASE_DEFS = [
+    { name: 'Documentation', labels: ['PO', 'SO', 'FO'] },
+    { name: 'Payment & Release', labels: ['Pay Plant', 'Release #', 'Send Release #'] },
+    { name: 'Logistics', labels: ['Confirm PU', 'Pick up', 'Customs docs', 'Sent to customs', 'Delivered'] },
+    { name: 'Closing', labels: ['Invoice', 'Signature'] },
+  ];
+  const phaseSlices = PHASE_DEFS.map(def => entries.map((e, i) => i).filter(i => def.labels.includes(entries[i].label)));
+  const defaultPhaseIdx = blinkIdx >= 0 ? phaseSlices.findIndex(idxs => idxs.includes(blinkIdx)) : PHASE_DEFS.length - 1;
+  const activePhaseIdx = timelinePhaseOverride.has(o.order_number) ? timelinePhaseOverride.get(o.order_number) : Math.max(0, defaultPhaseIdx);
+
+  function renderPhaseTabs(){
+    return PHASE_DEFS.map((def, idx) => {
+      const idxs = phaseSlices[idx];
+      const done = idxs.filter(i => entries[i].lineDone).length;
+      const total = idxs.length;
+      const cls = (idx === activePhaseIdx ? ' active' : '') + (done === total && total > 0 ? ' tdone' : '');
+      return `<div class="phase-tab${cls}" onclick="selectTimelinePhase('${o.order_number}',${idx})">${escapeHtml(def.name)}<span class="phase-tab-count">${done}/${total}</span></div>`;
+    }).join('');
+  }
+  function renderPhaseRow(idxs){
+    return idxs.map((i, localI) => {
+      const e = entries[i];
       const travelerHtml = i === travelerLineIdx ? (travelerType === 'walker' ? WALKER_RIDE_SVG : TRUCK_RIDE_SVG) : '';
-      const line = i < entries.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
+      const line = localI < idxs.length - 1 ? `<div class="u-line ${e.lineDone ? 'done' : ''}">${e.lineExtra || ''}${travelerHtml}</div>` : '';
       const entryHtml = e.html.replace('{{BLINK}}', i === blinkIdx ? ' blink-now' : '');
       return entryHtml + line;
     }).join('');
@@ -1367,7 +1590,8 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
           <div class="uring-sub">${nextLabel ? `Next: ${escapeHtml(nextLabel)}` : 'All caught up'}</div>
         </div>
       </div>
-      <div class="utimeline lane-map-row">${renderMapRow()}</div>
+      <div class="phase-tabs">${renderPhaseTabs()}</div>
+      <div class="utimeline lane-map-row phase-row">${renderPhaseRow(phaseSlices[activePhaseIdx])}</div>
     </div>
   `;
 
@@ -1401,6 +1625,10 @@ function renderUnifiedTimeline(o, attentionOrderNumbers){
     // "Confirm PU" up top while this same timeline said "Next: PO, 0 of 14 done". Both now read off
     // this one entries/blinkIdx computation, so they can't disagree again.
     nextLabel,
+    // Real ask 2026-09-21: "un solo flujo" — the single actionable entry (same one that blinks on
+    // the timeline), exposed whole so renderOrderCardBody can build ONE prominent Next Action card
+    // from it instead of the trader having to find the right small circle to click.
+    nextActionEntry: blinkIdx >= 0 ? entries[blinkIdx] : null,
     allDone: doneSteps === totalSteps,
     pendingCount: totalSteps - doneSteps,
     isUrgent: attentionOrderNumbers.has(o.order_number),
@@ -1508,11 +1736,11 @@ function computeAttentionItems(){
       const daysUntil = Math.round((pickup - today) / 86400000);
       if (daysUntil < 0){
         items.push({ orderNumber: label, order_number: o.order_number, text: `⚠ Missed pickup — was ${fmtDateStr(o.pickup_date)} — ${productName}`,
-          btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. This load is past its pickup date, please advise.`, `BT-${btNum(o.order_number)} — Missed pickup`) });
+          btn: pickupBtns(`Hi, following up on order PO-BT-${btNum(o.order_number)} — ${productName}. This load is past its pickup date, please advise.`, `PO-BT-${btNum(o.order_number)} — Missed pickup`) });
       } else if (daysUntil === 1){
         const carrierName = o.carrier && o.carrier.name ? ` with ${o.carrier.name}` : '';
         items.push({ orderNumber: label, order_number: o.order_number, text: `Pickup tomorrow (${fmtDateStr(o.pickup_date)})${carrierName} — confirm everything is ready — ${productName}`,
-          btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `BT-${btNum(o.order_number)} — Pickup tomorrow`) });
+          btn: pickupBtns(`Hi, following up on order PO-BT-${btNum(o.order_number)} — ${productName}. Can you confirm everything is ready for tomorrow's pickup?`, `PO-BT-${btNum(o.order_number)} — Pickup tomorrow`) });
       }
     }
     // Real correction 2026-09-06: pay-the-plant and ask-for-release# are TWO separate steps, not
@@ -1524,18 +1752,35 @@ function computeAttentionItems(){
     if (stage === 'pending_pickup' && o.created_at && !o.plant_paid_at){
       const daysSinceWon = (Date.now() - new Date(o.created_at).getTime()) / 86400000;
       if (daysSinceWon >= PLANT_PAYMENT_REMINDER_DAYS_AFTER_WON){
-        items.push({ orderNumber: label, order_number: o.order_number, text: `Pay the plant — ${productName}`,
-          btn: `<button class="wa-btn" onclick="payPlantClick('${o.order_number}')">Confirm Payment Sent</button>` });
+        // Real bug found live 2026-09-21: this urgent-queue reminder is a THIRD entry point to
+        // the same "pay the plant" action (alongside the Documents panel row and the timeline
+        // chip, both already fixed) — was unconditionally wired to payPlantClick (direct-pay),
+        // skipping Pay via Summar entirely for financing_method='summar' orders.
+        const isSummarFinancedItem = o.financing && o.financing.financing_method === 'summar';
+        const payBtnHtml = isSummarFinancedItem
+          ? (o.summar_payment_sent_at
+              ? `<button class="wa-btn" onclick="recordSummarConfirmation('${o.order_number}')">Record Summar's Confirmation</button>`
+              : `<button class="wa-btn" onclick="showSummarPaymentBreakdown('${o.order_number}')">Pay via Summar</button>`)
+          : `<button class="wa-btn" onclick="payPlantClick('${o.order_number}')">Confirm Payment Sent</button>`;
+        items.push({ orderNumber: label, order_number: o.order_number, text: `Pay the plant — ${productName}`, btn: payBtnHtml });
       }
     }
-    if (stage === 'pending_pickup' && o.plant_paid_at){
-      items.push({ orderNumber: label, order_number: o.order_number, text: `Get the Release Number from the carrier — ${productName}`,
-        btn: pickupBtns(`Hi, following up on order BT-${btNum(o.order_number)} — ${productName}. We've confirmed payment — please provide the release number for the carrier's pickup.`, `BT-${btNum(o.order_number)} — Release number`) });
+    if (stage === 'pending_pickup' && o.plant_paid_at && !o.release_number){
+      // Same escalation as the timeline's own Release # icon and shipment-alerts-poll's server
+      // side text — one condition, computed the same way in all three places.
+      let releaseLabelPrefix = '';
+      if (o.pickup_date){
+        const pickup = new Date(String(o.pickup_date).slice(0, 10) + 'T00:00:00');
+        const daysUntilPickup = Math.round((pickup.getTime() - today.getTime()) / 86400000);
+        releaseLabelPrefix = daysUntilPickup < 0 ? '🔴 CRITICAL — ' : daysUntilPickup <= 1 ? '⚠ URGENT — ' : '';
+      }
+      items.push({ orderNumber: label, order_number: o.order_number, text: `${releaseLabelPrefix}Waiting on the Release Number — ${productName}`,
+        btn: `<button class="wa-btn outline" onclick="resendPaymentEmail('${o.order_number}')">Resend Release Number Request</button>` });
     }
     if (stage === 'picked_up' && !(o.pending_pickup_documents && o.pending_pickup_documents.length)){
       const docsLine = o.docs_on ? 'label photos, Bill of Lading, packing list, and USDA papers' : 'label photos, Bill of Lading, and packing list';
       items.push({ orderNumber: label, order_number: o.order_number, text: `Request pickup documents (${docsLine}) — ${productName}`,
-        btn: pickupBtns(`Hi, for order BT-${btNum(o.order_number)} — ${productName}, please send us: ${docsLine}. Thank you.`, `BT-${btNum(o.order_number)} — Pickup documents needed`) });
+        btn: pickupBtns(`Hi, for order PO-BT-${btNum(o.order_number)} — ${productName}, please send us: ${docsLine}. Thank you.`, `PO-BT-${btNum(o.order_number)} — Pickup documents needed`) });
     }
     if (stage === 'picked_up'){
       const fromDate = o.picked_up_at ? String(o.picked_up_at).slice(0, 10) : o.pickup_date;
@@ -1619,46 +1864,46 @@ function urgentQueueAdvance(){
 // order has more than one freight leg (see buildFODocs) — so this checks what actually exists in
 // Storage rather than guessing a filename, never risking a dead link. One real list() call per
 // order, only made the first time its panel is opened (not on every render), then cached.
-const docsOpenOverride = new Set();
 const orderDocsFileCache = new Map(); // order_number -> [{name, url}]
-
-async function toggleOrderDocs(orderNumber){
-  if (docsOpenOverride.has(orderNumber)){
-    docsOpenOverride.delete(orderNumber);
-    refreshOpenOrderDetail();
-    return;
-  }
-  docsOpenOverride.add(orderNumber);
-  if (!orderDocsFileCache.has(orderNumber)){
-    // Real bug found live 2026-09-06: Storage's `search` option matches by PREFIX, not substring —
-    // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
-    // the start of the filename). One list() call per real filename prefix instead.
-    try {
-      // Real bug found live 2026-09-14: filenames are saved as "INV-BT-" + btNum(orderNumber) (see
-      // btNum's own comment — legacy "BT-0018" orders no longer double into "INV-BT-BT-0018"), but
-      // this search prefix still used the raw, un-stripped orderNumber — for those legacy orders it
-      // could never match the real filename, so Documents panel found no Invoice file, hid the
-      // resend/preview button entirely, and "no me deja enviar signature" was really "the file this
-      // was supposed to attach was never found."
-      const prefixes = ['PO-BT-', 'SO-BT-', 'FO-BT-', 'INV-BT-'].map(p => `${p}${btNum(orderNumber)}`);
-      const results = await Promise.all(prefixes.map(prefix =>
-        storageClient.storage.from('order-documents').list('', { search: prefix })
-      ));
-      const files = [];
-      results.forEach(({ data, error }) => {
-        if (error) { console.warn('Could not list documents:', error.message); return; }
-        (data || []).forEach(f => files.push({
-          name: f.name,
-          url: storageClient.storage.from('order-documents').getPublicUrl(f.name).data.publicUrl,
-        }));
-      });
-      orderDocsFileCache.set(orderNumber, files);
-    } catch (e) {
-      console.warn('Could not list documents for', orderNumber, e.message);
-      orderDocsFileCache.set(orderNumber, []);
-    }
-  }
+// Real ask 2026-09-21: "dame una opcion agrupada horizontal" — which of the 4 timeline phase tabs
+// a trader has manually clicked into, per order, so it doesn't snap back to the default (current)
+// phase on every re-render. Defaults (no entry here) to whichever phase actually has the pending
+// action — see renderUnifiedTimeline's defaultPhaseIdx.
+const timelinePhaseOverride = new Map();
+function selectTimelinePhase(orderNumber, phaseIdx){
+  timelinePhaseOverride.set(orderNumber, phaseIdx);
   refreshOpenOrderDetail();
+}
+
+async function ensureOrderDocsFiles(orderNumber){
+  if (orderDocsFileCache.has(orderNumber)) return;
+  // Real bug found live 2026-09-06: Storage's `search` option matches by PREFIX, not substring —
+  // searching the bare order_number never matched "PO-BT-0013.pdf" (the order number isn't at
+  // the start of the filename). One list() call per real filename prefix instead.
+  try {
+    // Real bug found live 2026-09-14: filenames are saved as "INV-BT-" + btNum(orderNumber) (see
+    // btNum's own comment — legacy "BT-0018" orders no longer double into "INV-BT-BT-0018"), but
+    // this search prefix still used the raw, un-stripped orderNumber — for those legacy orders it
+    // could never match the real filename, so Documents panel found no Invoice file, hid the
+    // resend/preview button entirely, and "no me deja enviar signature" was really "the file this
+    // was supposed to attach was never found."
+    const prefixes = ['PO-BT-', 'SO-BT-', 'FO-BT-', 'INV-BT-'].map(p => `${p}${btNum(orderNumber)}`);
+    const results = await Promise.all(prefixes.map(prefix =>
+      storageClient.storage.from('order-documents').list('', { search: prefix })
+    ));
+    const files = [];
+    results.forEach(({ data, error }) => {
+      if (error) { console.warn('Could not list documents:', error.message); return; }
+      (data || []).forEach(f => files.push({
+        name: f.name,
+        url: storageClient.storage.from('order-documents').getPublicUrl(f.name).data.publicUrl,
+      }));
+    });
+    orderDocsFileCache.set(orderNumber, files);
+  } catch (e) {
+    console.warn('Could not list documents for', orderNumber, e.message);
+    orderDocsFileCache.set(orderNumber, []);
+  }
 }
 
 // Real correction 2026-09-07: "quitar el boton de view en docs y poner el nombre con link" — the
@@ -1695,11 +1940,12 @@ function renderSignatureEvidenceRow(o){
 // posibilidad de compartir por whatsapp o por correo a sus destinatarios" — every generated
 // document (sent already or not) gets its own Email/WhatsApp actions right in this row, reusing
 // the exact same send functions Offers already uses, same preview-before-send modal.
-function renderOrderDocsPanel(o){
-  const isOpen = docsOpenOverride.has(o.order_number);
-  const arrow = isOpen ? '▲' : '▼';
-  let body = '';
-  if (isOpen){
+// Real ask 2026-09-21: "despliegue de docs quitalo dejalos mostrando" — no more collapse/expand,
+// this panel always renders; "siempre algo bonito centrado bien organizados" — same real rows,
+// same actions, just laid out as a centered 2-column grid instead of one long stacked list.
+function renderOrderDocsPanel(o, nextActionLabel){
+  let body;
+  {
     const files = orderDocsFileCache.get(o.order_number) || [];
     const findFiles = prefix => files.filter(f => f.name.startsWith(prefix));
     const pickupDocs = o.pickup_documents || [];
@@ -1724,6 +1970,15 @@ function renderOrderDocsPanel(o){
     const poActions = previewBtn('PO', o.order_number);
     const soActions = previewBtn('SO', o.order_number);
     const foActions = previewBtn('FO', o.order_number);
+    // Real ask 2026-09-21: "un solo flujo" — before a document exists, this button fires the exact
+    // same "generate + send" action the Next Action card above already offers for whichever one of
+    // PO/SO/FO is currently pending; suppressed here only in that exact case so there's one real
+    // trigger, not two. Once a document DOES exist, showing it here again is never suppressed —
+    // that's view/resend, a genuinely different, legitimate capability Next Action doesn't cover
+    // (it only ever shows what's still pending, never something already sent).
+    const poActionsWhenMissing = nextActionLabel === 'PO' ? '' : poActions;
+    const soActionsWhenMissing = nextActionLabel === 'SO' ? '' : soActions;
+    const foActionsWhenMissing = nextActionLabel === 'FO' ? '' : foActions;
     // Invoice can't go through openDocPreview (that always rebuilds a fresh, unsigned PDF from
     // scratch — see the comment on resendInvoiceEmail below for why that's wrong once a real
     // signature/customs weight exists). openInvoicePreview instead previews the actual uploaded
@@ -1741,20 +1996,60 @@ function renderOrderDocsPanel(o){
     // real 3-step chain in one row: confirm payment sent -> record the release number -> send it to
     // the carrier (once there is one to send it to).
     let paymentBtn, paymentStatus;
-    if (!o.plant_paid_at){
+    // Real bug found live 2026-09-21: this row never checked the same "PO/SO/FO must be sent
+    // first" gate the timeline's own Pay Plant circle already enforces (docBeforePaymentDone,
+    // computed the same way there) — a trader could pay the plant from here before the paperwork
+    // even went out, something the timeline itself always blocked. Same condition, recomputed
+    // here since this is a separate function/scope from renderUnifiedTimeline.
+    const docBeforePaymentDoneHere = o.has_freight_order ? !!o.fo_sent_at : !!o.so_sent_at;
+    // Real ask 2026-09-21: for financing_method='summar' orders, BuenTrade never pays the plant
+    // directly — Summar does (see the summarPaymentOverlay block above). This branch replaces the
+    // direct Email/WhatsApp pay buttons entirely for these orders, same as confirmed with the
+    // user: "en su lugar" the direct-pay buttons never apply when it's Summar.
+    const isSummarFinanced = o.financing && o.financing.financing_method === 'summar';
+    if (!docBeforePaymentDoneHere && !o.plant_paid_at){
+      paymentBtn = '';
+      paymentStatus = `Waiting on ${o.has_freight_order ? 'FO' : 'SO'}`;
+    } else if (isSummarFinanced && !o.plant_paid_at){
+      if (!o.summar_payment_sent_at){
+        paymentBtn = docRowBtn('Pay via Summar', `showSummarPaymentBreakdown('${o.order_number}')`);
+        paymentStatus = 'Not paid — via Summar';
+      } else {
+        paymentBtn = docRowBtn('Record Summar’s Confirmation', `recordSummarConfirmation('${o.order_number}')`)
+          + docRowBtn('Pay via Summar', `showSummarPaymentBreakdown('${o.order_number}')`);
+        paymentStatus = 'Sent to Summar — awaiting their confirmation';
+      }
+    } else if (!o.plant_paid_at){
       // Real ask 2026-09-07: "y payment plant? debo poder mandar por los dos medios tambien" —
       // same Email/WhatsApp icon pair as every other row now, not a single text button. Both pick
       // the same bank-confirmation file and both mark plant_paid_at once sent.
       paymentBtn = emailBtn(`payPlantClick('${o.order_number}')`) + waBtn(`confirmPlantPaymentWhatsApp('${o.order_number}')`);
       paymentStatus = 'Not paid';
     } else if (!o.release_number){
-      paymentBtn = docRowBtn(`${DOC_ICON} Record Release #`, `recordReleaseNumber('${o.order_number}')`);
+      // Real ask 2026-09-20: "debemos poder reenviar correo" (the plant rarely answers same-day)
+      // and "la vendedora reenvia a la de pagos y asi la podemos grabar nueva" (once that reply
+      // names the real Payments Contact, save it onto the plant so it stops routing through her).
+      // The save button only shows up while there's genuinely no Payments Contact on file yet —
+      // once one exists, resolvePaymentRecipients already uses it and there's nothing left to save.
+      paymentBtn = docRowBtn(`${DOC_ICON} Record Release #`, `recordReleaseNumber('${o.order_number}')`)
+        + docRowBtn(`↻ Resend`, `resendPaymentEmail('${o.order_number}')`)
+        + (!(o.plant && o.plant.payments_email) ? docRowBtn(`Save Payments Contact`, `savePlantPaymentsContact('${o.order_number}')`) : '');
       paymentStatus = `Paid ${paymentWhen} — release # pending`;
     } else {
-      paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn(`${STEP_ICONS.picked_up} Send to Carrier`, `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
+      paymentBtn = (o.carrier && o.carrier.phone) ? docRowBtn(`${STEP_ICONS.picked_up} Send Release # to Carrier`, `sendReleaseNumberToCarrier('${o.order_number}')`) : '';
       paymentStatus = `Release #: ${escapeHtml(o.release_number)}`;
     }
-    const paymentRow = `<div class="doc-row"><span class="doc-row-label">Plant Payment</span>${paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
+    // Real ask 2026-09-21: "un solo flujo" — this row's button(s) exactly duplicate whichever one
+    // of Pay Plant/Release #/Send Release # the Next Action card above is currently showing (this
+    // one row covers all 3 sub-states as the order progresses) — suppressed only while that's true,
+    // same reasoning as PO/SO/FO above. The final "Release #: XXX" state already shows no button
+    // once past all three, so nothing to suppress there.
+    const paymentActionIsNextAction = ['Pay Plant', 'Release #', 'Send Release #'].includes(nextActionLabel);
+    // Real bug found live 2026-09-21 ("se sale del cuadro"): this row can carry up to 3 buttons at
+    // once (Record Release # + Resend + Save Payments Contact) — half a grid column is never
+    // enough room, so its status text got pushed outside the card. Full width, same as the
+    // similarly variable-length pickup-docs rows above.
+    const paymentRow = `<div class="doc-row doc-row-span"><span class="doc-row-label">Plant Payment</span>${paymentActionIsNextAction ? '' : paymentBtn}<span class="doc-row-status${o.plant_paid_at ? ' sent' : ''}">${paymentStatus}</span></div>`;
     // Real correction 2026-09-14: "la que me va a pedir el create order es la definitiva esa se
     // puede ir ajustando hasta el final" — the date confirmed at Create Order isn't frozen like
     // PO/SO pricing; pickup schedules genuinely slip, so it stays editable right up until the load
@@ -1762,20 +2057,25 @@ function renderOrderDocsPanel(o){
     const dateRow = (!o.picked_up_at && o.pickup_date)
       ? `<div class="doc-row"><span class="doc-row-label">PU / Delivery Date</span>${docRowBtn('Edit', `editPickupDateClick('${o.order_number}')`)}<span class="doc-row-status">${fmtDateStr(o.pickup_date)}</span></div>`
       : '';
-    body = `<div class="docs-panel">
+    // Real bug found live 2026-09-21: pickup docs are a variable-length list (0-N items) — without
+    // doc-row-span they only ever fill the LEFT grid column one at a time, leaving a ragged empty
+    // gap on the right whenever the count (plus the 6 fixed rows above) lands on an odd total.
+    // Full-width rows never have this problem regardless of how many there are.
+    const pickupDocsHtml = pickupDocs.length
+      ? pickupDocs.map(d => `<div class="doc-row doc-row-span"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
+      : '<div class="doc-row-empty doc-row-span">No pickup documents yet.</div>';
+    body = `<div class="docs-panel-grid">
       ${dateRow}
-      ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActions)}
-      ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActions)}
-      ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActions) : ''}
+      ${renderTradeDocRow('PO (Plant)', o.po_sent_at, poFiles, poActions, poActionsWhenMissing)}
+      ${renderTradeDocRow('SO (Customer)', o.so_sent_at, soFiles, soActions, soActionsWhenMissing)}
+      ${o.has_freight_order ? renderTradeDocRow('FO (Carrier)', o.fo_sent_at, foFiles, foActions, foActionsWhenMissing) : ''}
       ${paymentRow}
       ${renderTradeDocRow('Invoice', o.invoice_sent_at, invoiceFiles, invoiceActions)}
       ${renderSignatureEvidenceRow(o)}
-      ${pickupDocs.length
-        ? pickupDocs.map(d => `<div class="doc-row"><a href="${escapeHtml(d.storage_url)}" target="_blank" rel="noopener" class="doc-row-label doc-row-link">${escapeHtml(d.filename)}</a><span class="doc-row-status${d.forwarded_to_customs_at ? ' sent' : ''}">${d.forwarded_to_customs_at ? 'Sent to Customs' : 'Received, pending customs'}</span></div>`).join('')
-        : '<div class="doc-row-empty">No pickup documents yet.</div>'}
+      ${pickupDocsHtml}
     </div>`;
   }
-  return `<div class="docs-panel-toggle" onclick="toggleOrderDocs('${o.order_number}')" style="display:flex;align-items:center;gap:6px;">${DOC_ICON} Documents ${arrow}</div>${body}`;
+  return `<div class="docs-panel-heading">${DOC_ICON} Documents</div>${body}`;
 }
 
 // Real ask 2026-09-08: "renglones visibles con cada consecutivo de orden en lugar de eso tan
@@ -1849,7 +2149,24 @@ function renderOrderRow(o, attentionOrderNumbers){
 // The exact content that used to render inline for every order at once — unchanged, just extracted
 // so it can be built for one order on demand (openOrderDetail) instead of all of them always.
 function renderOrderCardBody(o, attentionOrderNumbers){
-  const { html: unifiedTimelineHtml, nextLabel, allDone, pendingCount, isUrgent } = renderUnifiedTimeline(o, attentionOrderNumbers);
+  const { html: unifiedTimelineHtml, nextLabel, nextActionEntry, allDone, pendingCount, isUrgent } = renderUnifiedTimeline(o, attentionOrderNumbers);
+  // Real ask 2026-09-21: "un solo flujo... una sola pagina" — ONE prominent, real button for
+  // whatever's next, built directly from nextActionEntry (the exact same computed entry that
+  // blinks on the timeline above) so it can never fire a different action than the timeline
+  // itself would — no second copy of "what happens when you click this" to drift out of sync,
+  // the same class of bug Plant Payment had with 3 independently-wired copies.
+  // Real ask 2026-09-21: "all caught up eso simplemente si no falta nada escondelo" — nothing
+  // pending means nothing to show here at all, not a placeholder box announcing that.
+  const nextActionCardHtml = nextActionEntry
+    ? `<div class="load-next-action">
+        <div class="load-next-action-icon">${nextActionEntry.icon}</div>
+        <div class="load-next-action-text">
+          <div class="load-next-action-eyebrow">Next Action</div>
+          <div class="load-next-action-label">${escapeHtml(nextActionEntry.label)}</div>
+        </div>
+        <button class="wa-btn" onclick="${nextActionEntry.onClickRaw}">${escapeHtml(nextActionEntry.actionTitle || nextActionEntry.label)} →</button>
+      </div>`
+    : '';
 
   const pendingDocs = o.pending_pickup_documents || [];
   const pickupDocsBtn = pendingDocs.length
@@ -1857,7 +2174,10 @@ function renderOrderCardBody(o, attentionOrderNumbers){
     : '';
 
   const cp = o.catalogProduct;
-  const productName = cp ? (cp.name_en || cp.name) : o.product_name;
+  // Real ask 2026-09-21: "ham, no mas shorts" — the short catalog name (e.g. "Ham") is never
+  // enough on its own; every operational surface already uses fullProductLabel (product_spec,
+  // the full plant description) instead — see [[feedback_full_product_name_in_operational_messages]].
+  const productName = fullProductLabel(o);
   const productIconHtml = (cp && cp.photo_url)
     ? `<img src="${escapeHtml(cp.photo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`
     : PRODUCT_PLACEHOLDER_ICON;
@@ -1868,13 +2188,9 @@ function renderOrderCardBody(o, attentionOrderNumbers){
         <div class="load-product-icon">${productIconHtml}</div>
         <div>
           <div class="load-product-name">${escapeHtml(productName)}</div>
-          <div class="load-product-spec">${escapeHtml(o.product_spec || '')}</div>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-        ${currentStageBadge(nextLabel, allDone, isUrgent)}
-        ${pendingActionsBadge(pendingCount)}
-        ${pickupReadinessBadge(o)}
         ${paymentBadge(o)}
       </div>
     </div>
@@ -1886,14 +2202,15 @@ function renderOrderCardBody(o, attentionOrderNumbers){
       ${o.sent_offer_id ? `<div onclick="openOrderQT('${o.order_number}')" title="Open QT" style="margin-left:auto;cursor:pointer;flex-shrink:0;width:36px;height:36px;border-radius:50%;border:2px solid var(--blue);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:.02em;">QT</div>` : ''}
     </div>
     ${unifiedTimelineHtml}
+    ${nextActionCardHtml}
     <div class="load-actions">${pickupDocsBtn}</div>
-    ${renderOrderDocsPanel(o)}
+    ${renderOrderDocsPanel(o, nextActionEntry ? nextActionEntry.label : null)}
   `;
 }
 
 // Real ask 2026-09-08: "si tu le das click en un boton te salga grande y puedas ver que estas
 // haciendo" — opens the full detail (everything renderOrderCardBody builds) big, in its own modal.
-function openOrderDetail(orderNumber){
+async function openOrderDetail(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   openOrderNumber = orderNumber;
@@ -1901,6 +2218,8 @@ function openOrderDetail(orderNumber){
   document.getElementById('orderDetailTitle').innerHTML = `<span class="order-num" style="font-size:18px;">${escapeHtml(o.order_number)}</span>`;
   document.getElementById('orderDetailBody').innerHTML = renderOrderCardBody(o, attentionOrderNumbers);
   document.getElementById('orderDetailOverlay').style.display = 'flex';
+  await ensureOrderDocsFiles(orderNumber);
+  refreshOpenOrderDetail();
 }
 function closeOrderDetail(){
   openOrderNumber = null;
@@ -1968,16 +2287,20 @@ async function askPlantWhatsApp(orderNumber){
 // skips the notification when no STAGE_* entry exists for a status, per its own `if (bodyFn &&
 // subjFn)` guard.
 const STAGE_EMAIL_BODY_ES = {
-  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabel(o)} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
-  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabel(o)} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  picked_up: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabelEs(o)} ya fue recogida en planta y se encuentra en camino.\n\nTe mantendremos informado sobre cualquier actualización durante el tránsito. Si necesitas algo mientras tanto, quedamos atentos.\n\n¡Gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
+  delivered: (o, contact) => `Hola ${contact},\n\n🚚 Te confirmamos que tu carga de ${fullProductLabelEs(o)} fue entregada con éxito.\n\nUn Abrazo y gracias por tu confianza!\n\nSaludos,\nBuentrade Team`,
 };
 const STAGE_WHATSAPP_ES = {
-  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${fullProductLabel(o)} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
-  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga BT-${btNum(o.order_number)} de ${fullProductLabel(o)} fue entregada con éxito.`,
+  picked_up: (o, contact) => `Hola ${contact}! 🚚 Tu carga de ${fullProductLabelEs(o)} ya fue recogida en planta y va en camino. Cualquier cosa me avisas — ¡Abrazo!`,
+  delivered: (o, contact) => `Hola ${contact}! ✅ Tu carga SO-BT-${btNum(o.order_number)} de ${fullProductLabelEs(o)} fue entregada con éxito.`,
 };
+// Real fix 2026-09-20: subject used the raw stored order_number (already carries a "BT-" prefix
+// baked in, e.g. "BT-2026-1002") with no document-type prefix — the customer only ever recognizes
+// this shipment by the SO number on the Sales Order they already received, confirmed live against
+// a real order (see project_approved_email_whatsapp_copy_table for the frozen copy this belongs to).
 const STAGE_SUBJECTS_ES = {
-  picked_up: o => `${o.order_number} — Tu carga va en camino`,
-  delivered: o => `${o.order_number} — Carga entregada con Éxito`,
+  picked_up: o => `SO-BT-${btNum(o.order_number)} — Tu carga va en camino`,
+  delivered: o => `SO-BT-${btNum(o.order_number)} — Carga entregada con Éxito`,
 };
 
 // Real correction 2026-09-07, explicit and repeated: every notification that leaves BuenTrade
@@ -2010,9 +2333,9 @@ async function advanceLoadStatus(orderNumber, newStatus, notes){
         // facing mail from 'offers' (see FROM_ADDRESSES: "customers deal with Offers"); this one
         // had drifted to the wrong department.
         await sendEmailApi('offers', emails, subjFn(o), bodyFn(o, contact), [], { phone, message: waFn(o, contact) });
-        showToast('Cliente notificado', emails.join(', '));
+        showToast('Customer notified', emails.join(', '));
       } catch (e){
-        if (!e.cancelled) await btAlert('No se pudo enviar la notificación: ' + e.message);
+        if (!e.cancelled) await btAlert('Could not send the notification: ' + e.message);
       }
     }
   }
@@ -2063,17 +2386,135 @@ function payPlantClick(orderNumber){
   window.open(BANK_LOGIN_URL, '_blank');
   confirmPlantPaymentSent(orderNumber);
 }
+
+// Real ask 2026-09-21, confirmed word by word against the signed Summar Factoring Proposal
+// (9/18/2026) and directly by the user: for financing_method='summar' orders, Summar — not
+// BuenTrade — pays the plant the full cost of the load, using their own 80% P.O. Financing
+// advance (calculated on the SALE price per the signed proposal's own terms, not the purchase
+// cost — confirmed explicitly, the document text alone doesn't spell out the reconciliation)
+// plus the 20% BuenTrade wires them here. BuenTrade -> Summar -> Planta, never BuenTrade ->
+// Planta directly for these orders.
+const SUMMAR_EMAIL = 'marango@summar.com';
+let summarPaymentOrderNumber = null;
+
+function showSummarPaymentBreakdown(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const salePrice = Number(o.sale_amount) || 0;
+  const wireAmount = salePrice * 0.20;
+  summarPaymentOrderNumber = orderNumber;
+  document.getElementById('summarPaymentIntro').textContent = `${orderNumber} — ${fullProductLabel(o)} — ${o.plant_name}`;
+  document.getElementById('summarPaySalePrice').textContent = '$' + salePrice.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  document.getElementById('summarPayAmount').textContent = '$' + wireAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  document.getElementById('summarPaymentOverlay').style.display = 'flex';
+}
+function closeSummarPaymentOverlay(){
+  document.getElementById('summarPaymentOverlay').style.display = 'none';
+  summarPaymentOrderNumber = null;
+}
+
+// Sends the SO + wire notification to Summar (marango@summar.com), asking them to confirm once
+// they've paid the plant — same preview-before-send send path as every other document in this
+// file, same SO PDF buildSODoc already builds for shareSO. Copy approved by the user 2026-09-21.
+async function sendPaymentToSummar(orderNumber){
+  if (!orderNumber) return;
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  let built;
+  try { built = await buildSODoc(orderNumber); } catch(e){ await btAlert(e.message); return; }
+  const so = built.so;
+  // Real bug found live 2026-09-21 testing this exact function: this used to read the _es fields
+  // first (product_spec_es), same as shareSO's own Spanish customer-facing send — wrong here,
+  // Summar is a US company and this whole email is in English (see the approved copy above).
+  const soProductName = so.product_spec || so.product_name || '';
+  const salePrice = Number(so.total_sale) || 0;
+  const wireAmount = salePrice * 0.20;
+  const filename = `SO-BT-${btNum(orderNumber)}.pdf`;
+  const subject = `Payment Sent — Order BT-${btNum(orderNumber)} — ${o.plant_name} / ${soProductName}`;
+  const body = `Hello,\n\nWe have sent the payment for the above order via wire transfer to the account on file.\n\n`
+    + `Order: BT-${btNum(orderNumber)}\n`
+    + `Plant: ${o.plant_name}\n`
+    + `Product: ${soProductName}\n`
+    + `Amount: $${wireAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}\n\n`
+    + `Please find the Sales Order attached for reference. Once the plant has been paid, please send us confirmation (payment receipt or equivalent) so we can request the release number from the plant.\n\nThank you,\nBuenTrade`;
+  try {
+    await sendEmailApi('purchasing', [SUMMAR_EMAIL], subject, body, [pdfAttachment(built.doc, filename)], null);
+    showToast('Sent to Summar', SUMMAR_EMAIL);
+    await markDocSent(orderNumber, 'summar_payment');
+    closeSummarPaymentOverlay();
+    await loadStatusOrders();
+  } catch(e) {
+    if (e.cancelled) return;
+    const url = gmailComposeUrl([SUMMAR_EMAIL], subject, body + EMAIL_SIGNATURE);
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" onclick="markDocSent('${orderNumber}','summar_payment')" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`);
+  }
+}
+
+// Once Summar replies confirming they paid the plant, the trader records it here — reuses
+// shipments-mark-plant-paid UNCHANGED (plant_paid_at already means "the plant has been paid,"
+// regardless of who paid them), so the existing Release Number step activates exactly like it
+// already does for direct-pay orders, with zero changes to that code path.
+async function recordSummarConfirmation(orderNumber){
+  try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
+  catch (e) { await btAlert('Could not record the confirmation: ' + e.message); return; }
+  showToast('Summar payment confirmed', 'You can now request the Release Number.');
+  await loadStatusOrders();
+}
+
+// Real ask 2026-09-20: "deberia ir a la persona correcta del location no solo a la vendedora de la
+// planta sino a la persona que expide el release" — the release number is issued by whoever runs
+// that specific pickup location, not the plant's general sales contact. Shared with
+// confirmPickupReadyClick (same real-world question: "who do I actually talk to for THIS load's
+// pickup") so the location only ever gets picked/asked once per order and both steps agree on it.
+async function resolvePickupLocationForOrder(o, orderNumber){
+  if (o.pickup_location) return o.pickup_location;
+  let locations;
+  try { locations = (await callApi('plant-locations-search', { plant_id: o.plant_id })).results || []; }
+  catch (e) { locations = []; }
+  if (!locations.length) return null;
+  const pickedId = await showPickupLocationPicker(o.plant_name, locations);
+  if (!pickedId) return undefined; // trader cancelled the picker — distinct from "no locations on file"
+  const location = locations.find(l => l.id === pickedId);
+  try { await callApi('shipments-set-pickup-location', { actor: currentActor(), order_number: orderNumber, pickup_location_id: pickedId }); }
+  catch (e) { await btAlert('Could not save the pickup location: ' + e.message); return undefined; }
+  return location;
+}
+
+// Same email/body every time this order asks the plant for its release number — used by both the
+// first send (with the bank confirmation attached) and the resend (no attachment, just a nudge).
+function paymentReleaseEmailContent(o, orderNumber){
+  const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — Payment & Release Number`;
+  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order PO-BT-${btNum(orderNumber)} — ${fullProductLabel(o)}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
+  return { subject, body };
+}
+
+// Real ask 2026-09-20, exact dictation: "el comprobante de pago debe llegar a una persona que es
+// la que recibe pagos en cada planta con copia a la vendedora. si no tenemos contacto de pagos
+// llega a la vendedora" — Payments Contact is the real recipient when one is on file (CC the
+// plant's general/sales contact, same person the PO itself goes to); when there's no Payments
+// Contact yet, the sales contact becomes the recipient directly (no CC — she already IS the
+// recipient, ccing her to herself would be pointless). Never blocks on a missing contact anymore.
+function resolvePaymentRecipients(o){
+  const hasPaymentsContact = !!(o.plant && o.plant.payments_email);
+  const to = hasPaymentsContact
+    ? collectEmails({ email: o.plant.payments_email, email_cc: null })
+    : (o.plant ? collectEmails(o.plant) : []);
+  const cc = hasPaymentsContact ? (o.plant ? collectEmails(o.plant) : []) : [];
+  return { to, cc };
+}
+
 async function confirmPlantPaymentSent(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  const paymentsEmails = o.plant ? collectEmails({ email: o.plant.payments_email, email_cc: null }) : [];
+
+  const { to: paymentsEmails, cc: salesEmails } = resolvePaymentRecipients(o);
   if (!paymentsEmails.length){
-    await btAlert(`This plant has no Payments Contact email on file — add it in Plants (Profile → Payments Contact) before confirming payment for ${orderNumber}.`);
+    await btAlert(`This plant has no email on file at all (neither Payments Contact nor general contact) — add one in Plants before confirming payment for ${orderNumber}.`);
     return;
   }
-  const salesEmails = o.plant ? collectEmails(o.plant) : [];
 
-  await btAlert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
+  await btAlert('Select the bank payment confirmation (PDF or image) to attach.');
   const file = await pickBankConfirmationFile();
   if (!file) return; // cancelled — no bank confirmation selected, nothing sent
 
@@ -2081,10 +2522,7 @@ async function confirmPlantPaymentSent(orderNumber){
   try { base64 = await readFileAsBase64(file); }
   catch (e) { await btAlert('No se pudo leer el archivo: ' + e.message); return; }
 
-  // Real ask 2026-09-14: subject renamed to "Payment & Release Number" — the body already asked
-  // for the release number in this same email (see below); the subject now says so too, plainly.
-  const subject = `${orderNumber} — BuenTrade — Payment & Release Number`;
-  const body = `Hi,\n\nPlease find attached the bank confirmation for the payment of order ${orderNumber} — ${fullProductLabel(o)}.\n\nPlease provide the RELEASE NUMBER so our carrier can pick up the load.\n\nThank you.`;
+  const { subject, body } = paymentReleaseEmailContent(o, orderNumber);
   try {
     // Real ask 2026-09-14: "un solo boton de whatsapp por pantalla" — this row already has its own
     // separate WhatsApp button (confirmPlantPaymentWhatsApp) right next to Email, so the modal's
@@ -2102,14 +2540,37 @@ async function confirmPlantPaymentSent(orderNumber){
     return;
   }
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { await btAlert('El correo se envió, pero no se pudo marcar el pago: ' + e.message); }
-  showToast('Pago confirmado', 'Se envió el comprobante a la planta — ya puedes pedir el release number.');
+  catch (e) { await btAlert('The email was sent, but the payment could not be marked: ' + e.message); }
+  showToast('Payment confirmed', 'The confirmation was sent to the plant — you can now request the release number.');
   await loadStatusOrders();
+}
+
+// Real ask 2026-09-20: "en caso de que no este el release se debe puede reenviar ese correo" — no
+// bank file to re-attach (it already went out once with the first send), just the same ask again,
+// same resolved recipient, callable any time after the plant's been marked paid.
+async function resendPaymentEmail(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o) return;
+  const { to: paymentsEmails, cc: salesEmails } = resolvePaymentRecipients(o);
+  if (!paymentsEmails.length){
+    await btAlert('This plant has no email on file at all (neither Payments Contact nor general contact) — add one in Plants.');
+    return;
+  }
+  const { subject, body } = paymentReleaseEmailContent(o, orderNumber);
+  try {
+    await sendEmailApi('purchasing', paymentsEmails, subject, body, [], null, salesEmails);
+    showToast('Release number requested again', paymentsEmails.join(', '));
+  } catch (e) {
+    if (e.cancelled) return;
+    const url = gmailComposeUrl(paymentsEmails, subject, body + EMAIL_SIGNATURE);
+    showToast('Automatic send failed', e.message + ' — click to finish it in Gmail:', true,
+      `<br><a href="${escapeHtml(url)}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:underline;font-weight:700;">Open in Gmail →</a>`);
+  }
 }
 async function markPlantPaidFallback(orderNumber){
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
-  showToast('Pago marcado', 'Ya puedes pedir el release number.');
+  catch (e) { await btAlert('Could not mark the payment: ' + e.message); return; }
+  showToast('Payment marked', 'You can now request the release number.');
   await loadStatusOrders();
 }
 
@@ -2123,7 +2584,7 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
   const waPhone = o.plant && (o.plant.payments_whatsapp || o.plant.whatsapp || o.plant.phone);
   if (!waPhone){ await btAlert('No WhatsApp/phone on file for this plant.'); return; }
   window.open(BANK_LOGIN_URL, '_blank');
-  await btAlert('Selecciona el comprobante de pago del banco (PDF o imagen) para adjuntarlo.');
+  await btAlert('Select the bank payment confirmation (PDF or image) to attach.');
   const file = await pickBankConfirmationFile();
   if (!file) return;
   const url = URL.createObjectURL(file);
@@ -2132,8 +2593,30 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
   const waMessagePay = `Hi, I'm sharing the payment confirmation for this order here. Please confirm receipt and send me the release number so we can arrange pickup. Thank you!`;
   bcConfirmWaSend(waPhone, waMessagePay, file.name);
   try { await callApi('shipments-mark-plant-paid', { actor: currentActor(), order_number: orderNumber }); }
-  catch (e) { await btAlert('No se pudo marcar el pago: ' + e.message); return; }
-  showToast('Pago confirmado', 'Se compartió el comprobante a la planta — ya puedes pedir el release number.');
+  catch (e) { await btAlert('Could not mark the payment: ' + e.message); return; }
+  showToast('Payment confirmed', 'The confirmation was shared with the plant — you can now request the release number.');
+  await loadStatusOrders();
+}
+
+// Real ask 2026-09-20, exact dictation: "la vendedora reenvia a la de pagos y asi la podemos grabar
+// nueva (el sistema deberia dar opcion de grabarla como nuevo contact)" — once the trader learns
+// who the real Payments Contact is (the sales contact forwarded the payment email and that person
+// replied), this saves it straight onto the plant's own profile (plants-update already has
+// payments_contact_name/payments_email as real fields) so every future payment for this plant goes
+// there directly instead of through the sales contact again.
+async function savePlantPaymentsContact(orderNumber){
+  const o = findStatusOrder(orderNumber);
+  if (!o || !o.plant_id) return;
+  const name = prompt(`Payments contact name at ${o.plant_name || 'this plant'}:`, o.plant && o.plant.payments_contact_name || '');
+  if (name === null) return;
+  const email = prompt(`Their email:`, o.plant && o.plant.payments_email || '');
+  if (email === null) return;
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail){ await btAlert('An email is required to save this contact.'); return; }
+  try {
+    await callApi('plants-update', { actor: currentActor(), id: o.plant_id, payments_contact_name: name.trim() || null, payments_email: trimmedEmail });
+  } catch (e) { await btAlert('Could not save the payments contact: ' + e.message); return; }
+  showToast('Payments contact saved', trimmedEmail);
   await loadStatusOrders();
 }
 
@@ -2169,6 +2652,7 @@ async function editPickupDateClick(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   document.getElementById('editPickupDateModalOrderNum').textContent = orderNumber;
+  btDpAttach('editPickupDateModalInput');
   document.getElementById('editPickupDateModalInput').value = o.pickup_date || '';
   document.getElementById('editPickupDateModalOverlay').style.display = 'flex';
   const value = await new Promise(resolve => { editPickupDateModalResolveFn = resolve; });
@@ -2179,7 +2663,7 @@ async function editPickupDateClick(orderNumber){
   await loadStatusOrders();
 }
 function releaseNumberMessage(o){
-  return `Hi, here's the release number for order BT-${btNum(o.order_number)} — ${fullProductLabel(o)}: ${o.release_number}. Please use it for pickup. Thank you!`;
+  return `Hi, here's the release number for order PO-BT-${btNum(o.order_number)} — ${fullProductLabel(o)}: ${o.release_number}. Please use it for pickup. Thank you!`;
 }
 async function sendReleaseNumberToCarrier(orderNumber){
   const o = findStatusOrder(orderNumber);
@@ -2305,7 +2789,7 @@ const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
 const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
-const FO_TERMS = "This Freight Confirmation is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
+const FO_TERMS = "This Freight Order is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
 const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
 const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 // Real BuenTrade wire details, provided by the user 2026-09-05 — never invent banking information.
@@ -2780,7 +3264,7 @@ async function exportPO(orderNumber){
 const DOC_TYPES = [
   { key: 'PO', title: 'Purchase Order', exportFn: 'exportPO', shareFn: 'sharePO', waFn: 'waCardPO' },
   { key: 'SO', title: 'Sales Order', exportFn: 'exportSO', shareFn: 'shareSO', waFn: 'waCardSO' },
-  { key: 'FO', title: 'Freight Confirmation', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO' },
+  { key: 'FO', title: 'Freight Order', exportFn: 'exportFO', shareFn: 'shareFO', waFn: 'waCardFO' },
 ];
 
 // Real ask 2026-09-13: "que salga mitad y mitad para ver que los numeros del qt coincidan con
@@ -2974,13 +3458,13 @@ async function sharePO(orderNumber){
   let url;
   try { url = await uploadOrderPdf(built.doc, filename); } catch(e){ await btAlert('Upload error: ' + e.message); return; }
   // Real bug found live 2026-09-11: this cache is only ever populated once per order (see
-  // toggleOrderDocs) — without invalidating it here, the Documents panel keeps showing "Not
+  // ensureOrderDocsFiles) — without invalidating it here, the Documents panel keeps showing "Not
   // generated" forever in this session even though the file above just landed in Storage.
   orderDocsFileCache.delete(orderNumber);
   const po = built.po;
   const poProductName = po.product_spec || po.product_name || '';
   const subject = `PO-BT-${btNum(orderNumber)} — BuenTrade — ${poProductName}`;
-  const body = `Hi,\n\nPlease find the Purchase Order for order BT-${btNum(orderNumber)} attached.\n\n`
+  const body = `Hi,\n\nPlease find the Purchase Order PO-BT-${btNum(orderNumber)} attached.\n\n`
     + `Product: ${poProductName}\n`
     + `Quantity: ${(po.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Unit Cost: $${(po.purchase_price || 0).toFixed(4)}\n`
@@ -3079,7 +3563,7 @@ async function shareSO(orderNumber){
   const so = built.so;
   const soProductName = so.product_spec_es || so.product_name_es || so.product_name || '';
   const subject = `SO-BT-${btNum(orderNumber)} — Orden de Venta — ${soProductName}`;
-  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta de la orden BT-${btNum(orderNumber)}.\n\n`
+  const body = `Hola,\n\nAdjuntamos la Confirmación de Venta SO-BT-${btNum(orderNumber)}.\n\n`
     + `Producto: ${soProductName}\n`
     + `Cantidad: ${(so.weight || 0).toLocaleString('en-US')} lbs\n`
     + `Precio: $${(so.sale_price || 0).toFixed(4)} USD/lb\n`
@@ -3108,10 +3592,32 @@ async function buildFODocs(orderNumber){
   catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
   const docs = result.documents;
 
+  // Real ask 2026-09-20: "cada cliente tiene una [aduana] asignada... el sistema global tiene que
+  // tomar la aduana asignada a cada cliente y conectarla para que reciba los docs cuando se recoge
+  // la carga" — same lookup shareCustoms already uses (customer's own customs_agency_provider_id,
+  // falling back to the sent_offer's) now also resolves the FO's real delivery destination — the
+  // agency's own name+address — instead of the generic carrier-crossing placeholder or a blank
+  // "Border" field. One resolution here feeds both the PDF (composed.delivery_address) and the
+  // email/WhatsApp subject+body (fo.destination), so they can never show two different addresses.
+  let agencyAddress = null;
+  const foShipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+  let foAgencyId = foShipment && foShipment.customer_id
+    ? (((await callApi('customers-search', { ids: [foShipment.customer_id] })).results || [])[0] || {}).customs_agency_provider_id
+    : null;
+  if (!foAgencyId){
+    const foSentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
+    foAgencyId = foSentOffer && foSentOffer.customs_agency_provider_id;
+  }
+  if (foAgencyId){
+    const foAgency = ((await callApi('providers-search', { id: foAgencyId })).results || [])[0];
+    if (foAgency) agencyAddress = [foAgency.name, foAgency.address, foAgency.city, foAgency.country].filter(Boolean).join(', ');
+  }
+
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
+    if (agencyAddress){ composed.delivery_address = agencyAddress; fo.destination = agencyAddress; }
     const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Confirmation', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
+    pdfHeader(doc, 'Freight Order', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
 
     pdfInfoBlock(doc, 40, 168, 'CARRIER', [
       carrier ? carrier.name : 'TBD — not yet booked',
@@ -3179,8 +3685,8 @@ async function shareFO(orderNumber){
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     orderDocsFileCache.delete(orderNumber);
-    const subject = `FO-BT-${btNum(orderNumber)} — ${fmtDatesList(b.dates)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}`;
-    const body = `Hi,\n\nPlease find the Freight Confirmation for order BT-${btNum(orderNumber)} attached.\n\n`
+    const subject = `FO-BT-${btNum(orderNumber)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}  ${fmtDatesList(b.dates)}`;
+    const body = `Please find the Freight Order FO-BT-${btNum(orderNumber)} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`
       + `Agreed Rate: $${(b.fo.quoted_rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -3227,7 +3733,7 @@ async function runPendingWonDocConfirm(){
 // confirms the PDF is attached, same treatment now used everywhere in the system.
 function shareDocAndOpenWhatsApp(doc, filename, phone, message){
   doc.save(filename);
-  if (!phone){ showToast('Sin WhatsApp en archivo', 'Adjunta el PDF manualmente.', true); return; }
+  if (!phone){ showToast('No WhatsApp on file', 'Attach the PDF manually.', true); return; }
   bcConfirmWaSend(phone, message, filename);
 }
 
@@ -3315,13 +3821,13 @@ async function resendInvoiceEmail(orderNumber, fileUrl, filename){
     // URL — WhatsApp always shows the raw link text next to the branded preview card, no way to
     // hide it.
     const signLink = `${APP_ORIGIN}/f/${encodeURIComponent(issueRes.short_code)}`;
-    body = `Hola ${contact},\n\nAdjuntamos la factura correspondiente a la orden ${orderNumber}, confírmala aquí: ${signLink}\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    body = `Hola ${contact},\n\nAdjuntamos la factura INV-BT-${btNum(orderNumber)}, confírmala aquí: ${signLink}\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   } else {
-    body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura de la orden ${orderNumber}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
+    body = `Hola ${contact},\n\nAdjuntamos nuevamente la factura INV-BT-${btNum(orderNumber)}.\n\nGracias por tu preferencia y confianza.\n\nSaludos,\nBuentrade Team`;
   }
   try {
     await sendEmailApi('offers', emails, subject, body, [{ filename, content: base64 }], null, ccEmails);
-    showToast('Factura enviada', emails.join(', '));
+    showToast('Invoice sent', emails.join(', '));
     await markDocSent(orderNumber, 'invoice');
     await loadStatusOrders();
   } catch(e){
@@ -3347,7 +3853,7 @@ async function waResendInvoice(orderNumber, fileUrl, filename){
   const contact = (customer && customer.contact_name) ? customer.contact_name.split(' ')[0] : '';
   const a = document.createElement('a');
   a.href = fileUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-  bcConfirmWaSend(phone, `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura de la orden ${orderNumber}. ¡Gracias!`, filename);
+  bcConfirmWaSend(phone, `Hola${contact ? ' ' + contact : ''}! Te mando de nuevo la factura INV-BT-${btNum(orderNumber)}. ¡Gracias!`, filename);
 }
 
 // Border customs paperwork isn't its own document — the broker just needs the REAL pickup
@@ -3381,7 +3887,7 @@ async function shareCustoms(orderNumber){
   if (!emails.length){ await btAlert('This customs agency has no email on file.'); return; }
 
   const pending = shipment.pending_pickup_documents || [];
-  if (!pending.length){ await btAlert('No hay documentos de recogida recibidos todavía para esta orden (BOL/packing list/fotos/USDA). Llegan por correo de la planta/transportista después de la recogida.'); return; }
+  if (!pending.length){ await btAlert('No pickup documents have been received yet for this order (BOL/packing list/photos/USDA). They arrive by email from the plant/carrier after pickup.'); return; }
 
   const attachments = [];
   for (const doc of pending){
@@ -3397,7 +3903,7 @@ async function shareCustoms(orderNumber){
       attachments.push({ filename: doc.filename, content: base64 });
     } catch(e){ /* one file failing to fetch never blocks the others */ }
   }
-  if (!attachments.length){ await btAlert('No se pudieron cargar los documentos recibidos.'); return; }
+  if (!attachments.length){ await btAlert('Could not load the received documents.'); return; }
 
   const customerName = shipment.customer_name || '';
   const subject = `${customerName} — BT-${btNum(orderNumber)} — BuenTrade`;
@@ -3407,7 +3913,7 @@ async function shareCustoms(orderNumber){
   const waMessageCustoms = `Orden BT-${btNum(orderNumber)}\nHi BT-${btNum(orderNumber)}. I'm sending you the documents here as well. Please confirm you have received them and that everything is in order on your end. We'll proceed accordingly. Thank you!`;
   try {
     await sendEmailApi('logistics', emails, subject, body, attachments, { phone: waPhoneCustoms, message: waMessageCustoms });
-    showToast('Documentos reenviados a aduana', emails.join(', '));
+    showToast('Documents resent to customs', emails.join(', '));
     await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: pending.map(d => d.id) });
     await markDocSent(orderNumber, 'customs');
     await loadStatusOrders();
@@ -3425,9 +3931,9 @@ async function shareCustoms(orderNumber){
 }
 async function markCustomsSentFallback(orderNumber, documentIds){
   try { await callApi('shipment-pickup-documents-mark-forwarded', { actor: currentActor(), document_ids: documentIds }); }
-  catch (e) { await btAlert('No se pudo marcar los documentos: ' + e.message); return; }
+  catch (e) { await btAlert('Could not mark the documents: ' + e.message); return; }
   await markDocSent(orderNumber, 'customs');
-  showToast('Documentos marcados como enviados a aduana', '');
+  showToast('Documents marked as sent to customs', '');
   await loadStatusOrders();
 }
 </script>
