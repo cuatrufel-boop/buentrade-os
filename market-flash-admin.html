@@ -449,11 +449,23 @@ function openMfPanel(){
   document.getElementById('mfCardTitle').textContent = 'Load Market Flash';
   mfRows = [];
 }
+// Real correction 2026-09-22 ("claro que si escogi muhcos los otros los deje en blanco" — Apply
+// All then said nothing was ready): Cancel and "Back to paste" wiped mfRows with zero warning,
+// even when several rows had real, unsaved picks sitting in it — one accidental click on either
+// silently threw away everything picked so far, with no way to tell it had happened until Apply
+// All came back empty. Both now confirm first whenever there's real unsaved work to lose.
+function mfUnsavedPickCount(){
+  return mfRows.filter(mfIsResolved).length;
+}
 function closeMfPanel(){
+  const n = mfUnsavedPickCount();
+  if (n > 0 && !confirm(`You picked ${n} line${n === 1 ? '' : 's'} that ${n === 1 ? "hasn't" : "haven't"} been applied yet. Closing now discards ${n === 1 ? 'it' : 'them'} — continue?`)) return;
   document.getElementById('mfCard').style.display = 'none';
   mfRows = [];
 }
 function backToMfPaste(){
+  const n = mfUnsavedPickCount();
+  if (n > 0 && !confirm(`You picked ${n} line${n === 1 ? '' : 's'} that ${n === 1 ? "hasn't" : "haven't"} been applied yet. Going back to paste discards ${n === 1 ? 'it' : 'them'} — continue?`)) return;
   mfRows = [];
   document.getElementById('mfReviewStep').style.display = 'none';
   document.getElementById('mfPasteStep').style.display = 'block';
