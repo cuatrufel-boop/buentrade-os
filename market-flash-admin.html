@@ -537,46 +537,47 @@ function renderMfReview(){
           </div>
         </div>`;
     }
-    if (r.meaning_type){
-      // Resolved in THIS session (not yet known before). Real correction 2026-09-22 ("si escojo
-      // el producto lo selecciona y no selecciona proteina y al revés"): picking any of the three
-      // options used to permanently replace this row with a static summary — the input controls
-      // were gone, so there was no way back if the trader picked the wrong one. "Change" clears
-      // the pick and re-renders the row back to its editable state.
-      const label = r.meaning_type === 'market' ? 'General market info' : escapeHtml(r.meaning_label || '');
-      const badge = mfBadgeInfo(r.meaning_type);
-      const protein = r.meaning_type === 'product' ? mfProductProteinLabel(r.meaning_id) : null;
-      return `
-        <div class="teach-row">
-          <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:var(--blue-bright);font-size:11.5px;font-weight:400;">just picked</span> <a href="#" onclick="mfUndoPick(${i});return false;" style="color:var(--ink-soft);font-size:11.5px;text-decoration:underline;margin-left:6px;">change</a></div>
-          <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
-            <span class="mf-badge ${badge.cls}">${badge.text}</span>
-            ${label}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
-            ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
-          </div>
-        </div>`;
-    }
+    // Real correction 2026-09-22 ("escojo producto y se cierra... se cierra la opcion de proteina",
+    // said 7 times): picking any of the three options used to collapse the row into a static
+    // summary — the product search and protein dropdown disappeared entirely, which read as the
+    // other option being unavailable/lost, not just "not chosen." Both controls now stay visible
+    // and live for every unresolved-this-session row, whether or not something's picked yet — the
+    // current pick is shown as a status line above them (with the implied protein alongside a
+    // product pick), and the trader can switch by directly using either control again, no separate
+    // "change" step needed.
     const bits = [];
     if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
+    const hasPick = !!r.meaning_type;
+    const badge = hasPick ? mfBadgeInfo(r.meaning_type) : null;
+    const protein = (hasPick && r.meaning_type === 'product') ? mfProductProteinLabel(r.meaning_id) : null;
+    const pickLabel = !hasPick ? '' : (r.meaning_type === 'market' ? 'General market info' : escapeHtml(r.meaning_label || ''));
+    const statusLine = !hasPick
+      ? `<div style="color:var(--ink-soft);font-size:12.5px;margin:3px 0 10px;">${bits.join(' · ') || '(no extra data)'} — never seen before</div>`
+      : `<div style="font-size:12.5px;margin:3px 0 10px;">
+          <span class="mf-badge ${badge.cls}">${badge.text}</span>
+          ${pickLabel}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
+          ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
+        </div>`;
+    const productValue = r.meaning_type === 'product' ? escapeHtml(r.meaning_label || '') : '';
     return `
       <div class="teach-row" data-idx="${i}">
         <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)}</div>
-        <div style="color:var(--ink-soft);font-size:12.5px;margin:3px 0 10px;">${bits.join(' · ') || '(no extra data)'} — never seen before</div>
+        ${statusLine}
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
           <div style="flex:1;min-width:220px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Is this product:</label>
-            <input type="text" id="mf_prod_${i}" autocomplete="off" placeholder="Search product…" oninput="mfFilterProduct(${i}, this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <input type="text" id="mf_prod_${i}" autocomplete="off" placeholder="Search product…" value="${productValue}" oninput="mfFilterProduct(${i}, this.value)" style="width:100%;padding:6px 8px;border:1.5px solid ${r.meaning_type === 'product' ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
             <div id="mf_prod_results_${i}" style="max-height:120px;overflow-y:auto;"></div>
           </div>
           <div>
             <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Or this protein overall:</label>
-            <select onchange="mfPickSpecies(${i}, this.value)" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <select onchange="mfPickSpecies(${i}, this.value)" style="padding:6px 8px;border:1.5px solid ${r.meaning_type === 'species' ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
               <option value="">—</option>
-              ${mfCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name_en || c.name)}</option>`).join('')}
+              ${mfCategories.map(c => `<option value="${c.id}" ${r.meaning_type === 'species' && r.meaning_id === c.id ? 'selected' : ''}>${escapeHtml(c.name_en || c.name)}</option>`).join('')}
             </select>
           </div>
           <div>
-            <button type="button" class="btn ghost" onclick="mfPickMarket(${i})">Neither a product nor a protein — general market info</button>
+            <button type="button" class="btn ${r.meaning_type === 'market' ? '' : 'ghost'}" onclick="mfPickMarket(${i})">Neither a product nor a protein — general market info</button>
           </div>
         </div>
       </div>`;
@@ -661,15 +662,6 @@ function mfPickMarket(i){
   mfRows[i].meaning_label = null;
   renderMfReview();
 }
-function mfUndoPick(i){
-  mfRows[i].meaning_type = null;
-  mfRows[i].meaning_id = null;
-  mfRows[i].meaning_text = null;
-  mfRows[i].meaning_subtext = null;
-  mfRows[i].meaning_label = null;
-  renderMfReview();
-}
-
 // Apply All — the ONE point where anything is written, same as plants.html's applyPriceList:
 // fires one teach_term call per resolved row in parallel, refreshes Active Bullets, and only
 // closes the panel once nothing is left unresolved (unresolved rows stay in the review step).
