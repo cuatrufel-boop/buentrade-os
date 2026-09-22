@@ -510,11 +510,15 @@ function renderMfReview(){
         </div>`;
     }
     if (r.meaning_type){
-      // Resolved in THIS session (not yet known before) — show the pick, still editable via the same controls.
+      // Resolved in THIS session (not yet known before). Real correction 2026-09-22 ("si escojo
+      // el producto lo selecciona y no selecciona proteina y al revés"): picking any of the three
+      // options used to permanently replace this row with a static summary — the input controls
+      // were gone, so there was no way back if the trader picked the wrong one. "Cambiar" clears
+      // the pick and re-renders the row back to its editable state.
       const label = r.meaning_type === 'market' ? 'Info de mercado general' : escapeHtml(r.meaning_label || '');
       return `
         <div class="teach-row">
-          <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:var(--blue-bright);font-size:11.5px;font-weight:400;">recién elegido</span></div>
+          <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:var(--blue-bright);font-size:11.5px;font-weight:400;">recién elegido</span> <a href="#" onclick="mfUndoPick(${i});return false;" style="color:var(--ink-soft);font-size:11.5px;text-decoration:underline;margin-left:6px;">cambiar</a></div>
           <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
             <span class="mf-badge ${r.meaning_type === 'product' ? 'product' : 'species'}">${r.meaning_type === 'product' ? 'Producto' : r.meaning_type === 'species' ? 'Proteína' : 'Mercado general'}</span>
             ${label}
@@ -573,6 +577,12 @@ function mfPickSpecies(i, categoryId){
 }
 function mfPickMarket(i){
   mfRows[i].meaning_type = 'market';
+  mfRows[i].meaning_id = null;
+  mfRows[i].meaning_label = null;
+  renderMfReview();
+}
+function mfUndoPick(i){
+  mfRows[i].meaning_type = null;
   mfRows[i].meaning_id = null;
   mfRows[i].meaning_label = null;
   renderMfReview();
