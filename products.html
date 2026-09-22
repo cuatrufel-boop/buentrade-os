@@ -378,7 +378,7 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
-    if (!btAuthLoaded) { btAuthLoaded = true; loadLookups(); loadProducts(); }
+    if (!btAuthLoaded) { btAuthLoaded = true; loadLookups(); loadProducts(); loadPendingSuggestionsCount(); }
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
@@ -526,6 +526,12 @@ auth.onAuthStateChanged(user => {
       <input id="searchBox" type="text" placeholder="Search" oninput="renderProducts()" class="pd-search-input">
     </div>
     <button class="btn" onclick="openForm()">+ Add Product</button>
+    <!-- Real addition 2026-09-22 ("el sistema debe recibir el boletin, no el trader escribiendo de
+         cero"): whoever reads the bulletin (a Claude session today) stages suggestions via
+         create_suggestion; this is the trader's one review stop for all of them, across every
+         product, instead of hunting per-product. Count badge only shows once there's really
+         something pending — same "never a placeholder, only real state" rule as everything else. -->
+    <button class="btn secondary" id="reviewSuggestionsBtn" onclick="openSuggestionsPanel()" style="display:none;">Review bulletin suggestions (<span id="reviewSuggestionsCount">0</span>)</button>
     <!-- Real rebuild 2026-09-11 ("me dijiste que global y sigo encontrando dropdowns asi"):
          color-scheme:dark doesn't make Chrome draw the native <select> popup dark — same real
          custom dropdown as plants.html's .pl-cat-dropdown, not the CSS hack. -->
@@ -612,6 +618,20 @@ auth.onAuthStateChanged(user => {
     <div id="managePackagingList"></div>
     <div class="email-modal-actions">
       <button onclick="document.getElementById('managePackagingModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Real addition 2026-09-22 ("el sistema debe recibir el boletin"): review-one-at-a-time list of
+     everything staged from the bulletin — the trader confirms/corrects which real product each row
+     is (never a blind auto-apply) and approves or rejects, instead of typing anything from scratch. -->
+<div id="suggestionsModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:560px;max-height:75vh;overflow-y:auto;">
+    <h3>Review bulletin suggestions</h3>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">Confirm which real product each one is before it applies — nothing here is customer-facing yet.</div>
+    <div id="suggestionsList"></div>
+    <div class="email-modal-actions">
+      <button onclick="closeSuggestionsPanel()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
     </div>
   </div>
 </div>
@@ -1460,7 +1480,106 @@ async function togglePriceHistory(productId){
   let data;
   try { data = await callApi('price-history-search', { product_id: productId }); }
   catch (e) { panel.innerHTML = `<div class="prod-name-es">Error: ${escapeHtml(e.message)}</div>`; return; }
-  renderPriceHistoryPanel(productId, data.results || [], data.trend || null, data.market_note || null);
+  renderPriceHistoryPanel(productId, data.results || [], data.trend || null, data.market_note || null, data.pending_suggestion || null);
+}
+
+// Real addition 2026-09-22 ("el sistema debe recibir el boletin, no el trader escribiendo de
+// cero"): the primary path now — someone reads the bulletin (a Claude session today, staging rows
+// via price-history-search's create_suggestion) and the trader's whole job here is confirming
+// which real product each row is, then approving or rejecting. Never applies a guess silently.
+let pendingSuggestions = [];
+let suggestionPicks = {}; // suggestion id -> { productId, productName }
+
+async function loadPendingSuggestionsCount(){
+  let data;
+  try { data = await callApi('price-history-search', { list_suggestions: true }); }
+  catch (e) { return; }
+  pendingSuggestions = data.suggestions || [];
+  const btn = document.getElementById('reviewSuggestionsBtn');
+  const countEl = document.getElementById('reviewSuggestionsCount');
+  countEl.textContent = pendingSuggestions.length;
+  btn.style.display = pendingSuggestions.length ? '' : 'none';
+}
+
+function openSuggestionsPanel(){
+  suggestionPicks = {};
+  pendingSuggestions.forEach(s => {
+    if (s.suggested_product_id) suggestionPicks[s.id] = { productId: s.suggested_product_id, productName: s.suggested_product_name };
+  });
+  renderSuggestionsList();
+  document.getElementById('suggestionsModalOverlay').style.display = 'flex';
+}
+function closeSuggestionsPanel(){
+  document.getElementById('suggestionsModalOverlay').style.display = 'none';
+}
+
+function renderSuggestionsList(){
+  const wrap = document.getElementById('suggestionsList');
+  if (!pendingSuggestions.length){ wrap.innerHTML = '<div class="prod-name-es">Nothing pending — all reviewed.</div>'; return; }
+  wrap.innerHTML = pendingSuggestions.map(s => {
+    const pick = suggestionPicks[s.id];
+    const bits = [];
+    if (s.trend_pct != null) bits.push(`${s.trend_pct > 0 ? '+' : ''}${s.trend_pct}%`);
+    if (s.note) bits.push(escapeHtml(s.note));
+    if (s.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${s.mx_benchmark_price_usd_kg}/kg (${escapeHtml(s.mx_benchmark_region || '—')})`);
+    return `
+      <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <div style="font-weight:600;font-size:13px;">${escapeHtml(s.raw_cut_name)}</div>
+        <div class="prod-name-es" style="margin:4px 0 8px;">${bits.join(' · ') || '(no data)'}</div>
+        <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Which real product is this?</label>
+        <input type="text" id="sg_pick_${s.id}" autocomplete="off" placeholder="Search your catalog…"
+          value="${pick ? escapeHtml(pick.productName || '') : ''}"
+          oninput="filterSuggestionPicker('${s.id}', this.value)"
+          style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;">
+        <div id="sg_pick_results_${s.id}" style="max-height:120px;overflow-y:auto;"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button type="button" onclick="approveSuggestionRow('${s.id}')" ${pick ? '' : 'disabled'} style="padding:6px 14px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;opacity:${pick ? '1' : '.5'};">Approve</button>
+          <button type="button" onclick="rejectSuggestionRow('${s.id}')" style="padding:6px 14px;background:transparent;color:var(--ink-soft);border:1px solid var(--line);border-radius:6px;font-size:12.5px;cursor:pointer;">Reject</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function filterSuggestionPicker(suggestionId, query){
+  const resultsEl = document.getElementById('sg_pick_results_' + suggestionId);
+  const q = query.trim().toLowerCase();
+  if (!q){ resultsEl.innerHTML = ''; return; }
+  const matches = products.filter(p => (p.full_name_en || p.name_en || p.name || '').toLowerCase().includes(q)).slice(0, 8);
+  resultsEl.innerHTML = matches.map(p => {
+    const label = p.full_name_en || p.name_en || p.name;
+    return `<div onclick="pickSuggestionProduct('${suggestionId}','${p.id}', ${JSON.stringify(label).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">${escapeHtml(label)}</div>`;
+  }).join('') || '<div class="prod-name-es" style="padding:4px 8px;">No matches.</div>';
+}
+
+function pickSuggestionProduct(suggestionId, productId, productName){
+  suggestionPicks[suggestionId] = { productId, productName };
+  document.getElementById('sg_pick_' + suggestionId).value = productName;
+  document.getElementById('sg_pick_results_' + suggestionId).innerHTML = '';
+  renderSuggestionsList();
+}
+
+async function approveSuggestionRow(id){
+  const pick = suggestionPicks[id];
+  if (!pick) return;
+  try {
+    await callApi('price-history-search', { approve_suggestion: { id, confirmed_product_id: pick.productId, actor: currentActor() } });
+  } catch (e) { await btAlert('Error: ' + e.message); return; }
+  pendingSuggestions = pendingSuggestions.filter(s => s.id !== id);
+  delete suggestionPicks[id];
+  renderSuggestionsList();
+  document.getElementById('reviewSuggestionsCount').textContent = pendingSuggestions.length;
+  document.getElementById('reviewSuggestionsBtn').style.display = pendingSuggestions.length ? '' : 'none';
+}
+
+async function rejectSuggestionRow(id){
+  try {
+    await callApi('price-history-search', { reject_suggestion: { id, actor: currentActor() } });
+  } catch (e) { await btAlert('Error: ' + e.message); return; }
+  pendingSuggestions = pendingSuggestions.filter(s => s.id !== id);
+  delete suggestionPicks[id];
+  renderSuggestionsList();
+  document.getElementById('reviewSuggestionsCount').textContent = pendingSuggestions.length;
+  document.getElementById('reviewSuggestionsBtn').style.display = pendingSuggestions.length ? '' : 'none';
 }
 
 // Real addition 2026-09-22 ("boletín de la industria, por producto específico"): the trader picks
@@ -1519,44 +1638,87 @@ function pricePreviousLineHtml(signal){
 // to 200 real rows, already sorted newest first), this just displays the most recent 5.
 const PRICE_HISTORY_DISPLAY_COUNT = 5;
 
-// Real addition 2026-09-22: the trader's current market-note entry (if any, still fresh) plus the
-// form to add a new one — shown regardless of whether this product has any plant price on file
-// yet, so a bulletin note can be captured even for a product still waiting on its first price.
-function marketNoteSectionHtml(productId, marketNote){
+// Real correction 2026-09-22 ("un trader no tiene tiempo para escribir cosas de mercado... el
+// sistema debe recibir el boletin"): the blank type-from-scratch form is no longer the default —
+// a pending suggestion for THIS product (if any) shows front and center, one-click approve/reject,
+// same review as the global "Review bulletin suggestions" panel but scoped to here since the
+// trader is already looking at this exact product. Manual entry still exists (edge cases, one-off
+// corrections) but starts collapsed behind a plain link, never the first thing shown.
+function marketNoteSectionHtml(productId, marketNote, pendingSuggestion){
   const current = marketNote
     ? `<div class="prod-name-es" style="margin-bottom:6px;">Current (as of ${new Date(marketNote.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}): ${marketNote.trend_pct != null ? `${marketNote.trend_pct > 0 ? '+' : ''}${marketNote.trend_pct}% · ` : ''}${escapeHtml(marketNote.note || '')}${marketNote.mx_benchmark_price_usd_kg != null ? ` · MX ref: $${marketNote.mx_benchmark_price_usd_kg}/kg (${escapeHtml(marketNote.mx_benchmark_region || '—')})` : ''}</div>`
     : `<div class="prod-name-es" style="margin-bottom:6px;">No market note on file.</div>`;
+
+  const suggestionBits = pendingSuggestion ? [
+    pendingSuggestion.trend_pct != null ? `${pendingSuggestion.trend_pct > 0 ? '+' : ''}${pendingSuggestion.trend_pct}%` : null,
+    pendingSuggestion.note ? escapeHtml(pendingSuggestion.note) : null,
+    pendingSuggestion.mx_benchmark_price_usd_kg != null ? `MX ref: $${pendingSuggestion.mx_benchmark_price_usd_kg}/kg (${escapeHtml(pendingSuggestion.mx_benchmark_region || '—')})` : null,
+  ].filter(Boolean).join(' · ') : '';
+  const suggestionCard = pendingSuggestion ? `
+    <div style="border:1.5px solid var(--blue);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+      <div style="font-weight:600;font-size:12.5px;margin-bottom:4px;">From the bulletin (${escapeHtml(pendingSuggestion.raw_cut_name)}):</div>
+      <div class="prod-name-es" style="margin-bottom:8px;">${suggestionBits || '(no data)'}</div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" onclick="approveMarketNoteSuggestion('${productId}','${pendingSuggestion.id}')" style="padding:6px 14px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">Approve — this is ${escapeHtml(products.find(p => p.id === productId) ? (products.find(p => p.id === productId).full_name_en || products.find(p => p.id === productId).name_en || '') : 'this product')}</button>
+        <button type="button" onclick="rejectMarketNoteSuggestion('${productId}','${pendingSuggestion.id}')" style="padding:6px 14px;background:transparent;color:var(--ink-soft);border:1px solid var(--line);border-radius:6px;font-size:12.5px;cursor:pointer;">Reject</button>
+      </div>
+    </div>` : '';
+
   return `
     <div style="padding:10px 4px;border-top:1px solid var(--line);margin-top:10px;">
       <div style="font-weight:600;font-size:12.5px;margin-bottom:6px;">Industry bulletin — market note for this product</div>
+      ${suggestionCard}
       ${current}
-      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px;">
-        <div>
-          <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Trend %</label>
-          <input type="number" step="0.1" id="mn_trend_${productId}" placeholder="e.g. -9.5" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+      <a href="#" onclick="document.getElementById('mn_manual_${productId}').style.display='block';this.style.display='none';return false;" style="font-size:12px;color:var(--blue-bright);text-decoration:none;">+ Add manually</a>
+      <div id="mn_manual_${productId}" style="display:none;margin-top:8px;">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Trend %</label>
+            <input type="number" step="0.1" id="mn_trend_${productId}" placeholder="e.g. -9.5" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Note (optional, your own words)</label>
+            <input type="text" id="mn_note_${productId}" placeholder="e.g. USDA forecasts softening into October" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+          </div>
         </div>
-        <div style="flex:1;min-width:200px;">
-          <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Note (optional, your own words)</label>
-          <input type="text" id="mn_note_${productId}" placeholder="e.g. USDA forecasts softening into October" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">MX ref. price (USD/kg)</label>
+            <input type="number" step="0.01" id="mn_mxprice_${productId}" placeholder="e.g. 4.64" style="width:100px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">MX region</label>
+            <input type="text" id="mn_mxregion_${productId}" placeholder="e.g. Nuevo León" style="width:140px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+          </div>
+          <button type="button" id="mn_save_${productId}" onclick="saveMarketNote('${productId}')" style="padding:7px 14px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">Save market note</button>
         </div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <div>
-          <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">MX ref. price (USD/kg)</label>
-          <input type="number" step="0.01" id="mn_mxprice_${productId}" placeholder="e.g. 4.64" style="width:100px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
-        </div>
-        <div>
-          <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">MX region</label>
-          <input type="text" id="mn_mxregion_${productId}" placeholder="e.g. Nuevo León" style="width:140px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
-        </div>
-        <button type="button" id="mn_save_${productId}" onclick="saveMarketNote('${productId}')" style="padding:7px 14px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">Save market note</button>
       </div>
     </div>`;
 }
 
-function renderPriceHistoryPanel(productId, rows, signal, marketNote){
+// Same approve/reject as the global panel, scoped to this one product — productId here IS the
+// confirmed match (the trader is already looking at this exact product's own page), so no picker
+// needed. Re-opens the price history panel after so the card disappears and "Current" updates.
+async function approveMarketNoteSuggestion(productId, suggestionId){
+  try {
+    await callApi('price-history-search', { approve_suggestion: { id: suggestionId, confirmed_product_id: productId, actor: currentActor() } });
+  } catch (e) { await btAlert('Error: ' + e.message); return; }
+  document.getElementById('price_history_row_' + productId).style.display = 'none';
+  await togglePriceHistory(productId);
+  loadPendingSuggestionsCount();
+}
+async function rejectMarketNoteSuggestion(productId, suggestionId){
+  try {
+    await callApi('price-history-search', { reject_suggestion: { id: suggestionId, actor: currentActor() } });
+  } catch (e) { await btAlert('Error: ' + e.message); return; }
+  document.getElementById('price_history_row_' + productId).style.display = 'none';
+  await togglePriceHistory(productId);
+  loadPendingSuggestionsCount();
+}
+
+function renderPriceHistoryPanel(productId, rows, signal, marketNote, pendingSuggestion){
   const panel = document.getElementById('price_history_panel_' + productId);
-  const noteSection = marketNoteSectionHtml(productId, marketNote);
+  const noteSection = marketNoteSectionHtml(productId, marketNote, pendingSuggestion);
   if (!rows.length){
     panel.innerHTML = `<div style="padding:10px 4px;" class="prod-name-es">No price recorded for this product since price history started (2026-09-16).</div>${noteSection}`;
     return;
