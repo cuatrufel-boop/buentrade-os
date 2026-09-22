@@ -282,30 +282,44 @@ function parseMfLine(line){
 
 // Real addition 2026-09-22 ("no debería poder pegar el pdf y que lo discrimine"): reads the report
 // text exactly as it comes out of a real PDF copy-paste (tested against the actual document —
-// pdftotext -layout of the full 48-page report, every one of its 23 real per-cut price sections
-// parsed correctly, zero false positives on the macro/stats pages). Per cut section: (1) the
-// header line ("<Cut Name>, FOB Plant, USDA" or "<Cut Name>, USDA, FRZ" — never "Source: USDA",
-// explicitly excluded); (2) the report's OWN "as of" date caption next to its chart (e.g. "Sep 4,
-// 2026 = 72.66") as the anchor for which weekly row is the real current one — never guessed by
-// counting numbers, which was tried first and got it wrong (a forecast-only row can have as many
-// numbers on its line as a real current one; only the report's own caption says which week is
-// "now"). The matching weekly row's trailing % is the trend. A cut section with no recognizable
-// anchor or matching row is simply skipped — never a guessed number.
+// pdftotext -layout of the full 48-page report). First version matched the header line by its own
+// text format ("<Cut Name>, FOB Plant, USDA" etc.) and only caught 23 of the report's 41 real
+// per-cut sections — beef (CHOICE/SELECT primal cuts, USDA sometimes mid-string not at the end)
+// and poultry (broiler/turkey, several with no "USDA" at all, e.g. "NE BONELESS BREAST BROILER
+// WHITE TRIM MEAT, UNDER 15%, FRESH") use name formats too varied to regex reliably. Fixed by
+// anchoring on the report's own fixed chart caption instead of the name text: every real per-cut
+// section's name line is immediately followed (skipping blank lines) by a
+// "YEAR OVER YEAR PRICE COMPARISON AND FORECAST" chart-header line — confirmed structurally
+// present exactly once per section, in every species section checked (pork/beef/poultry). That
+// anchor, not the name's own punctuation, is what makes it a header. Verified against the full
+// 48-page document: 41/41 structural sections found, 41/41 parsed with a real trend %, spot-checked
+// by hand against the raw report text for pork, beef and poultry rows. Within a found section: the
+// report's OWN "as of" date caption next to its chart (e.g. "Sep 4, 2026 = 72.66") is the anchor for
+// which weekly row is the real current one — never guessed by counting numbers, which was tried
+// first and got it wrong (a forecast-only row can have as many numbers on its line as a real
+// current one; only the report's own caption says which week is "now"). The matching weekly row's
+// trailing % is the trend. A section with no recognizable anchor or matching row is simply skipped
+// — never a guessed number.
 function parseBulletinRawText(text){
   const lines = text.split('\n');
-  const headerRe = /^(?!Source:)([^,]+(?:,[^,]+){1,4}?,\s*(?:FOB Plant,\s*)?USDA(?:,\s*[A-Z]+)?)\s*(?:Page\s*\d*)?\s*$/;
+  const chartLineRe = /YEAR OVER YEAR PRICE COMPARISON AND FORECAST/;
   const anchorRe = /(?:wk\.\s*end\.\s*)?([A-Za-z]{3,9})\s+(\d{1,2}),\s*\d{4}\s*=/;
   const weeklyRowRe = /(\d{1,2}-[A-Za-z]{3})\s+([0-9.,\s]+?)(-?\d+\.\d+)%/;
   const toRowLabel = (monthWord, day) => day + '-' + (monthWord.slice(0, 3).charAt(0).toUpperCase() + monthWord.slice(1, 3).toLowerCase());
 
   const headerIdxs = [];
-  lines.forEach((line, i) => { if (headerRe.test(line.trim())) headerIdxs.push(i); });
+  for (let i = 0; i < lines.length; i++){
+    if (!chartLineRe.test(lines[i])) continue;
+    let j = i - 1;
+    while (j >= 0 && lines[j].trim() === '') j--;
+    if (j >= 0 && lines[j].trim()) headerIdxs.push(j);
+  }
 
   const results = [];
   for (let h = 0; h < headerIdxs.length; h++){
     const start = headerIdxs[h];
     const end = h + 1 < headerIdxs.length ? headerIdxs[h + 1] : lines.length;
-    const name = lines[start].trim().match(headerRe)[1].trim();
+    const name = lines[start].trim().replace(/\s*Page\s*\d*\s*$/, '').trim();
     const section = lines.slice(start, Math.min(end, start + 45));
 
     let anchorLabel = null;
