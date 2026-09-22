@@ -14,16 +14,28 @@
 // price history, exactly where the market note belongs. save_market_note is mutually exclusive
 // with the default read.
 //
-// Real correction 2026-09-22, same day ("un trader no tiene tiempo para escribir cosas de mercado
-// ... el sistema debe recibir el boletin"): save_market_note (trader types from scratch) stays for
-// one-off manual edits, but is no longer the primary path. The primary path is now
-// product_market_note_suggestions — rows staged by whoever actually reads the bulletin (today: a
-// Claude session reading the real PDF and matching cut names against the real catalog; the
-// suggestion is a guess, never applied blind) — and three new actions: list_suggestions (all
-// pending, for the "review bulletin suggestions" panel), approve_suggestion (trader confirms —
-// creates/updates the real product_market_notes row), reject_suggestion. The default read below
-// also now returns this product's own pending suggestion (if any), so the per-product panel can
-// show "review this" instead of a blank form to type into.
+// Real correction 2026-09-22, same day ("no quiero editar producto por producto... esto tiene que
+// ir conectado a who buy this, ningún trader va a ir a alimentar productos nunca" / "Market Flash,
+// no boletín" / "reconozca matches con producto, proteína y mercado, hasta que aprende"): the whole
+// per-product manual-entry idea is gone. The real, permanent flow is:
+//
+//   1. process_market_flash_lines — trader pastes Market Flash text in ONE new screen (not
+//      Products). For each line, checks market_flash_term_aliases first (same proven "learn the
+//      language" shape as plant_term_aliases): a term it already knows auto-applies with zero
+//      interaction, forever. A term it's never seen stays unresolved (never guessed).
+//   2. teach_term — the ONLY moment a trader is ever asked anything, and only for a genuinely new
+//      term: is this a specific PRODUCT, a whole PROTEIN/species category, or general MARKET info
+//      with no association at all? Whichever it is, this both applies the data now AND remembers
+//      the term forever in market_flash_term_aliases — next Market Flash never asks again.
+//   3. list_market_flash — the one screen showing everything: every active note (product- or
+//      category-scoped), joined with which real customers are linked to that product/category
+//      (customer_products) — so the trader sees the who-buys-this connection right there, never a
+//      bare product ID with no context.
+//
+// product_market_notes.product_id is nullable now — a note is either product-scoped or
+// category_id-scoped (species-wide), never both (DB check constraint). save_market_note/
+// create_suggestion/approve_suggestion/reject_suggestion below are kept only as the underlying
+// primitives teach_term itself calls — never called directly by the UI any more.
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse, MARKET_NOTE_FRESHNESS_DAYS } from "../_shared/matching.ts";
 
@@ -35,16 +47,126 @@ Deno.serve(async (req) => {
     const body = await req.json();
 
     if (body.save_market_note) {
-      const { product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.save_market_note;
-      if (!product_id) return jsonResponse({ error: "save_market_note requires product_id" }, 400);
+      const { product_id, category_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.save_market_note;
+      if (!product_id && !category_id) return jsonResponse({ error: "save_market_note requires product_id or category_id" }, 400);
+      if (product_id && category_id) return jsonResponse({ error: "save_market_note takes product_id or category_id, never both" }, 400);
       if (trend_pct == null && !note && mx_benchmark_price_usd_kg == null) {
         return jsonResponse({ error: "save_market_note requires trend_pct, note, and/or mx_benchmark_price_usd_kg" }, 400);
       }
       await sql`
-        insert into product_market_notes (product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by)
-        values (${product_id}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})
+        insert into product_market_notes (product_id, category_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by)
+        values (${product_id ?? null}, ${category_id ?? null}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})
       `;
       return jsonResponse({ saved: true });
+    }
+
+    // Real addition 2026-09-22 ("hasta que aprende"): the ONE screen where a trader pastes Market
+    // Flash text — never per-product. Each line checks market_flash_term_aliases FIRST (case-
+    // insensitive exact match on the term); a term already taught applies with zero interaction,
+    // forever. A term never seen before is queued as a suggestion, waiting for teach_term — never
+    // guessed, never silently dropped.
+    if (body.process_market_flash_lines) {
+      const { lines, actor } = body.process_market_flash_lines;
+      if (!Array.isArray(lines) || !lines.length) return jsonResponse({ error: "process_market_flash_lines requires a non-empty lines array" }, 400);
+      let applied = 0, queued = 0;
+      for (const line of lines) {
+        const rawCutName = line?.raw_cut_name;
+        const trendPct = line?.trend_pct;
+        if (!rawCutName) continue;
+        const [alias] = await sql`select meaning_type, meaning_id from market_flash_term_aliases where lower(term) = lower(${rawCutName})`;
+        if (alias) {
+          if (alias.meaning_type === "product") {
+            await sql`insert into product_market_notes (product_id, trend_pct, created_by) values (${alias.meaning_id}, ${trendPct ?? null}, ${actor ?? null})`;
+          } else if (alias.meaning_type === "species") {
+            await sql`insert into product_market_notes (category_id, trend_pct, created_by) values (${alias.meaning_id}, ${trendPct ?? null}, ${actor ?? null})`;
+          }
+          // meaning_type === "market": already known to be general/unassociated — nothing to apply, never asked again.
+          applied++;
+        } else {
+          await sql`insert into product_market_note_suggestions (raw_cut_name, trend_pct, created_by) values (${rawCutName}, ${trendPct ?? null}, ${actor ?? null})`;
+          queued++;
+        }
+      }
+      return jsonResponse({ applied, queued });
+    }
+
+    // Real addition 2026-09-22: the ONLY moment a trader is ever asked anything about a Market
+    // Flash term, and only once per unique term, ever. meaning_type: 'product' (meaning_id = a real
+    // product), 'species' (meaning_id = a real category/protein), or 'market' (no association at
+    // all — genuinely general market info, meaning_id stays null). Remembers the term in
+    // market_flash_term_aliases (so it never asks again), applies the data now if there's any real
+    // data to apply, and resolves every pending suggestion that used this exact raw term.
+    if (body.teach_term) {
+      const { raw_cut_name, meaning_type, meaning_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.teach_term;
+      if (!raw_cut_name || !meaning_type) return jsonResponse({ error: "teach_term requires raw_cut_name and meaning_type" }, 400);
+      if (!["product", "species", "market"].includes(meaning_type)) return jsonResponse({ error: "meaning_type must be product, species, or market" }, 400);
+      if (meaning_type !== "market" && !meaning_id) return jsonResponse({ error: "meaning_id is required for product/species" }, 400);
+
+      await sql`
+        insert into market_flash_term_aliases (term, meaning_type, meaning_id, created_by)
+        values (${raw_cut_name}, ${meaning_type}, ${meaning_id ?? null}, ${actor ?? null})
+        on conflict (term) do update set meaning_type = excluded.meaning_type, meaning_id = excluded.meaning_id
+      `;
+
+      const hasData = trend_pct != null || !!note || mx_benchmark_price_usd_kg != null;
+      if (hasData && meaning_type === "product") {
+        await sql`insert into product_market_notes (product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by) values (${meaning_id}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})`;
+      } else if (hasData && meaning_type === "species") {
+        await sql`insert into product_market_notes (category_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by) values (${meaning_id}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})`;
+      }
+
+      await sql`update product_market_note_suggestions set status = 'approved', reviewed_by = ${actor ?? null}, reviewed_at = now() where raw_cut_name = ${raw_cut_name} and status = 'pending'`;
+      return jsonResponse({ taught: true });
+    }
+
+    // Real addition 2026-09-22 ("una pestaña donde queden las bullets... conectando con producto
+    // correcto con proteína correcta con cliente correcto"): the one visibility screen — every
+    // active note (product- or species-scoped), joined with the REAL customers linked to that
+    // product/category (customer_products), so "who this applies to" is never a guess or a
+    // separate lookup. Plus whatever's still waiting to be taught, plus every term already learned
+    // (so the trader can see/undo what the system knows, same as Plants' "Recognized Words").
+    if (body.list_market_flash) {
+      const productNotes = await sql`
+        select pmn.id, pmn.product_id, pmn.trend_pct, pmn.note, pmn.note_date,
+          pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region, p.full_name_en as product_name,
+          coalesce((
+            select array_agg(c.trade_name order by c.trade_name)
+            from customer_products cp join customers c on c.id = cp.customer_id
+            where cp.product_id = pmn.product_id
+          ), '{}') as customer_names
+        from product_market_notes pmn
+        join products p on p.id = pmn.product_id
+        where pmn.product_id is not null and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+        order by pmn.note_date desc
+      `;
+      const categoryNotes = await sql`
+        select pmn.id, pmn.category_id, pmn.trend_pct, pmn.note, pmn.note_date,
+          pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region, cat.name_en as category_name,
+          coalesce((
+            select array_agg(distinct c.trade_name order by c.trade_name)
+            from customer_products cp
+            join customers c on c.id = cp.customer_id
+            join products p2 on p2.id = cp.product_id
+            where p2.category_id = pmn.category_id
+          ), '{}') as customer_names
+        from product_market_notes pmn
+        join categories cat on cat.id = pmn.category_id
+        where pmn.category_id is not null and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+        order by pmn.note_date desc
+      `;
+      const pending = await sql`
+        select id, bulletin_date, raw_cut_name, trend_pct, note, created_at
+        from product_market_note_suggestions where status = 'pending' order by bulletin_date desc, created_at desc
+      `;
+      const aliases = await sql`
+        select a.id, a.term, a.meaning_type, a.meaning_id, a.created_at,
+          case when a.meaning_type = 'product' then p.full_name_en when a.meaning_type = 'species' then cat.name_en else null end as meaning_label
+        from market_flash_term_aliases a
+        left join products p on a.meaning_type = 'product' and p.id = a.meaning_id
+        left join categories cat on a.meaning_type = 'species' and cat.id = a.meaning_id
+        order by a.created_at desc
+      `;
+      return jsonResponse({ product_notes: productNotes, category_notes: categoryNotes, pending, aliases });
     }
 
     // Real addition 2026-09-22: stage a suggestion — whoever read the bulletin (a Claude session
@@ -117,24 +239,27 @@ Deno.serve(async (req) => {
 
     const trend = await computeProductPriceSignal(sql, product_id);
 
-    const [marketNote] = await sql`
+    // Real correction 2026-09-22 ("nunca ir a mano a un producto"): read-only here now — no more
+    // per-product edit/teach UI, that all happens once in the Market Flash screen. Product-specific
+    // note wins; falls back to this product's own category-wide note, same coalesce as
+    // computeCustomerProductSignal, so what's shown here never disagrees with what a quote sends.
+    const [marketNoteRow] = await sql`
       select trend_pct, note, note_date, mx_benchmark_price_usd_kg, mx_benchmark_region from product_market_notes
       where product_id = ${product_id} and note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
       order by note_date desc, created_at desc
       limit 1
     `;
-
-    // This product's own pending suggestion (if any) — lets the per-product panel show a
-    // review-this card instead of (or alongside) a blank manual-entry form.
-    const [pendingSuggestion] = await sql`
-      select id, bulletin_date, raw_cut_name, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region
-      from product_market_note_suggestions
-      where suggested_product_id = ${product_id} and status = 'pending'
-      order by bulletin_date desc, created_at desc
+    const marketNote = marketNoteRow ?? (await sql`
+      select pmn.trend_pct, pmn.note, pmn.note_date, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
+      from product_market_notes pmn
+      join products p on p.category_id = pmn.category_id
+      where p.id = ${product_id} and pmn.category_id is not null
+        and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+      order by pmn.note_date desc, pmn.created_at desc
       limit 1
-    `;
+    `)[0];
 
-    return jsonResponse({ results, trend, market_note: marketNote ?? null, pending_suggestion: pendingSuggestion ?? null });
+    return jsonResponse({ results, trend, market_note: marketNote ?? null });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }

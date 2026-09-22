@@ -286,20 +286,31 @@ export async function computeCustomerProductSignal(
     ? { pctChange: priceSignal.trend.pctChange }
     : null;
 
-  // Real addition 2026-09-22: the trader's own product_market_notes entry (from the industry
-  // bulletin), only while still fresh — same table/window price-history-search's save_market_note
-  // reads from, so a quote and the product's own price-history panel never disagree.
+  // Real addition 2026-09-22, extended same day ("no es solo por producto, hay proteina y
+  // mercado"): product-specific note wins when one exists; otherwise falls back to the species/
+  // category-wide note for this exact product's own category (e.g. no note on "Pork Medium
+  // Spareribs" itself, but there IS one for "Pork" overall) — coalesce, never both, never a
+  // standalone broadcast unrelated to the product actually being quoted.
   const [marketNoteRow] = await sql`
     select trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region from product_market_notes
     where product_id = ${productId} and note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
     order by note_date desc, created_at desc
     limit 1
   `;
-  const marketNote = marketNoteRow
+  const marketNoteRowFinal = marketNoteRow ?? (await sql`
+    select pmn.trend_pct, pmn.note, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
+    from product_market_notes pmn
+    join products p on p.category_id = pmn.category_id
+    where p.id = ${productId} and pmn.category_id is not null
+      and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+    order by pmn.note_date desc, pmn.created_at desc
+    limit 1
+  `)[0];
+  const marketNote = marketNoteRowFinal
     ? {
-        trendPct: marketNoteRow.trend_pct != null ? Number(marketNoteRow.trend_pct) : null, note: marketNoteRow.note ?? null,
-        mxBenchmarkPriceUsdKg: marketNoteRow.mx_benchmark_price_usd_kg != null ? Number(marketNoteRow.mx_benchmark_price_usd_kg) : null,
-        mxBenchmarkRegion: marketNoteRow.mx_benchmark_region ?? null,
+        trendPct: marketNoteRowFinal.trend_pct != null ? Number(marketNoteRowFinal.trend_pct) : null, note: marketNoteRowFinal.note ?? null,
+        mxBenchmarkPriceUsdKg: marketNoteRowFinal.mx_benchmark_price_usd_kg != null ? Number(marketNoteRowFinal.mx_benchmark_price_usd_kg) : null,
+        mxBenchmarkRegion: marketNoteRowFinal.mx_benchmark_region ?? null,
       }
     : null;
 

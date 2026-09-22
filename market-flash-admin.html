@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuenTrade Trading OS — Market Flash Admin</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+<link rel="shortcut icon" href="/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+<!-- Real correction 2026-09-22: "market-flash.html" was already a real, live public-facing page
+     (the BuenTrade Market Flash newsletter, Home/About/Services/Market Flash/Contact nav) — almost
+     overwritten by mistake before this got renamed. This is the INTERNAL trader tool (same dark
+     Trading OS theme as every other internal screen), a distinct thing from that public page. -->
+<style>
+  :root{
+    --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF;
+    --blue-light:rgba(90,170,255,.14); --bg:#0A2547; --card:rgba(255,255,255,.08);
+    --line:rgba(255,255,255,.18); --ink:#FFFFFF; --ink-soft:rgba(255,255,255,.55);
+    --green:#0F8A5F; --red:#C4432E; --amber:#FFC876; --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,
+      linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;
+  }
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
+  .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
+  .brand-word span{color:var(--blue-bright);}
+  main{max-width:1180px;margin:0 auto;padding:0 24px 60px;}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:19px;margin:28px 0 14px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);font-weight:700;padding:0 10px 8px;}
+  th:first-child{text-align:left;}
+  td{padding:11px 10px;border-top:1px solid var(--line);font-size:13.5px;vertical-align:middle;text-align:center;}
+  td:first-child{text-align:left;}
+  .tbl-wrap{overflow-x:auto;border-radius:12px;background:var(--card);border:1px solid var(--line);margin-bottom:20px;padding:8px 10px;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:600;font-size:12px;font-family:inherit;cursor:pointer;margin-right:6px;}
+  .btn:disabled{background:rgba(255,255,255,.08);color:var(--ink-soft);cursor:default;}
+  .btn.secondary{background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);}
+  .btn.ghost{background:transparent;color:var(--ink-soft);border:1px solid var(--line);}
+  .empty{padding:30px;text-align:center;color:var(--ink-soft);}
+  .err{background:rgba(196,67,46,.14);border:1px solid rgba(196,67,46,.4);color:#FF9C8A;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:20px;}
+  .mf-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid;margin-right:4px;}
+  .mf-badge.product{color:#3FCB7E;border-color:rgba(63,203,126,.4);}
+  .mf-badge.species{color:var(--amber);border-color:rgba(255,200,118,.4);}
+  .teach-row{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+</style>
+<!-- ============ LOGIN GATE (same Firebase project/login as every other screen) ============ -->
+<style>
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-field input:focus{outline:none;border-color:#1B6FC9;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Trading OS</div>
+    </div>
+    <form id="formSignIn" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit">Sign In</button>
+    </form>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-note">Accounts are created from the Trading Tool. Same login works here.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+function showAuthMsg(text){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg err';
+}
+
+function doSignIn(e){
+  e.preventDefault();
+  const email = document.getElementById('siEmail').value;
+  const pass = document.getElementById('siPass').value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(!cred.user.emailVerified){
+        showAuthMsg('Please verify your email first.');
+        auth.signOut();
+      }
+    })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+
+function logout(){ auth.signOut(); }
+
+let btAuthLoaded = false;
+auth.onAuthStateChanged(user => {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (user && user.emailVerified) {
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    document.getElementById('userBadge').textContent = user.email;
+    if (!btAuthLoaded) { btAuthLoaded = true; loadMarketFlash(); }
+  } else {
+    gate.style.display = 'flex';
+    app.style.display = 'none';
+  }
+});
+</script>
+<!-- ============ END LOGIN GATE ============ -->
+
+<div id="appContent" style="display:none;">
+<header>
+  <div class="top-row">
+    <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
+    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
+      <span id="userBadge" style="font-size:12px;color:rgba(255,255,255,.85);font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;text-align:center;"></span>
+    </div>
+  </div>
+  <nav class="nav-row">
+    <a href="dashboard.html" class="nav-pill">Dashboard</a>
+    <a href="customers.html" class="nav-pill">Clients</a>
+    <a href="providers.html" class="nav-pill">Logistics</a>
+    <a href="plants.html" class="nav-pill">Plants</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="market-flash-admin.html" class="nav-pill active">Market Flash Admin</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="offers.html" class="nav-pill">Offers</a>
+    <a href="orders.html" class="nav-pill">Orders</a>
+    <a href="collections.html" class="nav-pill">Collections</a>
+    <a href="payments.html" class="nav-pill">Payments</a>
+  </nav>
+</header>
+<main>
+  <div id="errBox"></div>
+
+  <!-- ============ LOAD MARKET FLASH — paste one cut per line, trend at the end ============ -->
+  <h1>Load Market Flash</h1>
+  <div class="card">
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">Pegá una línea por corte, tal como lo copiaste — el % de tendencia al final. Ej: <span style="font-family:monospace;">Spareribs MED -9.5</span>. Ningún trader edita productos — todo pasa por acá.</div>
+    <textarea id="mfInput" rows="8" style="width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03);color:#fff;"></textarea>
+    <div id="mfInputErr" style="display:none;color:#FF9C8A;font-size:12.5px;margin-top:6px;"></div>
+    <div style="margin-top:10px;"><button class="btn" onclick="processMarketFlash()">Process</button></div>
+  </div>
+
+  <!-- ============ NEEDS TEACHING — the only place anything is ever asked, once per term ever ============ -->
+  <h1>Needs Teaching <span id="mfPendingCount" style="color:var(--ink-soft);font-weight:400;font-size:15px;"></span></h1>
+  <div id="mfPendingWrap" class="card"><div class="empty">Loading…</div></div>
+
+  <!-- ============ ACTIVE BULLETS — the whole picture: what's live, connected to which product/protein, and which customers it reaches ============ -->
+  <h1>Active Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— what's currently reaching customers, and who</span></h1>
+  <div class="tbl-wrap"><table id="tblMfActive"><thead><tr><th>Connected to</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+</main>
+</div><!-- /appContent -->
+
+<script>
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function showErr(msg){ document.getElementById('errBox').innerHTML = `<div class="err">${escapeHtml(msg)}</div>`; }
+
+let mfCategories = [];
+let mfProducts = [];
+
+async function loadMarketFlash(){
+  document.getElementById('errBox').innerHTML = '';
+  try {
+    const [lookups, productsRes, mf] = await Promise.all([
+      callApi('lookups-search', {}),
+      callApi('products-search', {}),
+      callApi('price-history-search', { list_market_flash: true }),
+    ]);
+    mfCategories = lookups.categories || [];
+    mfProducts = productsRes.results || [];
+    renderMfPending(mf.pending || []);
+    renderMfActive(mf.product_notes || [], mf.category_notes || []);
+  } catch (e) {
+    showErr('Error loading: ' + e.message);
+  }
+}
+
+// Same "one line per item, real value at the end" shape as plants.html's Load Prices parser.
+function parseMfLine(line){
+  const m = line.trim().match(/^(.+?)\s+([+-]?\d+(?:\.\d+)?)\s*%?\s*$/);
+  if (!m) return null;
+  return { raw_cut_name: m[1].trim(), trend_pct: Number(m[2]) };
+}
+
+async function processMarketFlash(){
+  const text = document.getElementById('mfInput').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const parsed = lines.map(parseMfLine).filter(Boolean);
+  const errEl = document.getElementById('mfInputErr');
+  if (!parsed.length){
+    errEl.textContent = 'No pude reconocer ninguna línea — nombre del corte, después el % al final (ej. "Spareribs MED -9.5").';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  let result;
+  try { result = await callApi('price-history-search', { process_market_flash_lines: { lines: parsed, actor: currentActor() } }); }
+  catch (e) { showErr('Error: ' + e.message); return; }
+  document.getElementById('mfInput').value = '';
+  await loadMarketFlash();
+  alert(`${result.applied} corte${result.applied === 1 ? '' : 's'} ya conocido${result.applied === 1 ? '' : 's'}, aplicado${result.applied === 1 ? '' : 's'} solo${result.applied === 1 ? '' : 's'}. ${result.queued} nuevo${result.queued === 1 ? '' : 's'}, esperando que le enseñes qué es (abajo).`);
+}
+
+function renderMfPending(pending){
+  document.getElementById('mfPendingCount').textContent = pending.length ? `(${pending.length})` : '';
+  const wrap = document.getElementById('mfPendingWrap');
+  if (!pending.length){ wrap.innerHTML = '<div class="empty">Nada esperando — todo lo que llegó ya se reconoció solo.</div>'; return; }
+  wrap.innerHTML = pending.map(p => {
+    const bits = [];
+    if (p.trend_pct != null) bits.push(`${p.trend_pct > 0 ? '+' : ''}${p.trend_pct}%`);
+    if (p.note) bits.push(escapeHtml(p.note));
+    return `
+      <div class="teach-row" data-term="${escapeHtml(p.raw_cut_name)}">
+        <div style="font-weight:600;font-size:13px;">${escapeHtml(p.raw_cut_name)}</div>
+        <div style="color:var(--ink-soft);font-size:12.5px;margin:3px 0 10px;">${bits.join(' · ') || '(sin datos extra)'}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:1;min-width:220px;">
+            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Es este producto:</label>
+            <input type="text" id="mf_prod_${p.id}" autocomplete="off" placeholder="Buscar producto…" oninput="mfFilterProduct('${p.id}', this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <div id="mf_prod_results_${p.id}" style="max-height:120px;overflow-y:auto;"></div>
+            <button type="button" id="mf_prod_btn_${p.id}" disabled style="margin-top:4px;padding:5px 12px;font-size:12px;background:var(--blue);color:#fff;border:none;border-radius:6px;cursor:pointer;opacity:.5;" onclick="mfTeachProduct('${p.id}')">Confirmar producto</button>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">O es esta proteína en general:</label>
+            <select id="mf_species_${p.id}" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+              <option value="">—</option>
+              ${mfCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name_en || c.name)}</option>`).join('')}
+            </select>
+            <button type="button" style="margin-top:4px;padding:5px 12px;font-size:12px;background:var(--amber);color:#0A2547;border:none;border-radius:6px;cursor:pointer;font-weight:700;" onclick="mfTeachSpecies('${p.id}')">Confirmar proteína</button>
+          </div>
+          <div>
+            <button type="button" class="btn ghost" onclick="mfTeachMarket('${p.id}')">No es ni producto ni proteína — info de mercado general</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+let mfPickedProduct = {}; // pending id -> { productId, name }
+
+function mfFilterProduct(id, query){
+  const resultsEl = document.getElementById('mf_prod_results_' + id);
+  const q = query.trim().toLowerCase();
+  if (!q){ resultsEl.innerHTML = ''; return; }
+  const matches = mfProducts.filter(p => (p.full_name_en || '').toLowerCase().includes(q)).slice(0, 8);
+  resultsEl.innerHTML = matches.map(p =>
+    `<div onclick="mfPickProduct('${id}','${p.id}', ${JSON.stringify(p.full_name_en).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''">${escapeHtml(p.full_name_en)}</div>`
+  ).join('') || '<div style="padding:4px 8px;color:var(--ink-soft);font-size:12px;">Sin resultados.</div>';
+}
+function mfPickProduct(id, productId, name){
+  mfPickedProduct[id] = { productId, name };
+  document.getElementById('mf_prod_' + id).value = name;
+  document.getElementById('mf_prod_results_' + id).innerHTML = '';
+  const btn = document.getElementById('mf_prod_btn_' + id);
+  btn.disabled = false; btn.style.opacity = '1';
+}
+
+async function mfTeachProduct(id){
+  const pick = mfPickedProduct[id];
+  if (!pick) return;
+  await mfTeach(id, 'product', pick.productId);
+}
+async function mfTeachSpecies(id){
+  const sel = document.getElementById('mf_species_' + id);
+  if (!sel.value){ alert('Elegí una proteína primero.'); return; }
+  await mfTeach(id, 'species', sel.value);
+}
+async function mfTeachMarket(id){
+  await mfTeach(id, 'market', null);
+}
+
+async function mfTeach(id, meaningType, meaningId){
+  const el = document.querySelector(`#mf_prod_${id}`) || document.querySelector(`#mf_species_${id}`);
+  const rawCutName = el && el.closest('.teach-row').dataset.term;
+  if (!rawCutName){ alert('Error interno: no encontré el término.'); return; }
+  try {
+    await callApi('price-history-search', { teach_term: { raw_cut_name: rawCutName, meaning_type: meaningType, meaning_id: meaningId, actor: currentActor() } });
+  } catch (e) { showErr('Error: ' + e.message); return; }
+  delete mfPickedProduct[id];
+  await loadMarketFlash();
+}
+
+function renderMfActive(productNotes, categoryNotes){
+  const tbody = document.querySelector('#tblMfActive tbody');
+  const rows = [
+    ...productNotes.map(n => ({ ...n, kind: 'product', label: n.product_name })),
+    ...categoryNotes.map(n => ({ ...n, kind: 'species', label: n.category_name })),
+  ].sort((a, b) => new Date(b.note_date) - new Date(a.note_date));
+  if (!rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nada activo todavía.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => {
+    const bits = [];
+    if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
+    if (r.note) bits.push(escapeHtml(r.note));
+    if (r.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${r.mx_benchmark_price_usd_kg}/kg`);
+    const asOf = new Date(r.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const customers = (r.customer_names || []).length ? escapeHtml(r.customer_names.join(', ')) : '<span style="color:var(--ink-soft);">Ningún cliente vinculado todavía</span>';
+    return `<tr>
+      <td><span class="mf-badge ${r.kind}">${r.kind === 'product' ? 'Producto' : 'Proteína'}</span> ${escapeHtml(r.label || '—')}</td>
+      <td>${bits.join(' · ') || '—'}</td>
+      <td>${asOf}</td>
+      <td>${customers}</td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
