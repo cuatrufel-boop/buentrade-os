@@ -269,7 +269,7 @@ async function loadMarketFlash(){
     ]);
     mfCategories = lookups.categories || [];
     mfProducts = productsRes.results || [];
-    renderMfActive(mf.product_notes || [], mf.category_notes || []);
+    renderMfActive(mf.product_notes || [], mf.category_notes || [], mf.family_notes || []);
   } catch (e) {
     showErr('Error loading: ' + e.message);
   }
@@ -494,17 +494,28 @@ function mfIsResolved(row){
   return row.known || !!row.meaning_type;
 }
 
+// One place for the badge class + label text per meaning_type, so "product family" (a real
+// addition alongside the original product/species/market three) never drifts out of sync between
+// the "already known" and "just picked" rows below.
+function mfBadgeInfo(meaningType){
+  if (meaningType === 'product') return { cls: 'product', text: 'Product' };
+  if (meaningType === 'product_family') return { cls: 'product', text: 'Product (family)' };
+  if (meaningType === 'species') return { cls: 'species', text: 'Protein' };
+  return { cls: 'species', text: 'General market' };
+}
+
 function renderMfReview(){
   const resolvedCount = mfRows.filter(mfIsResolved).length;
   document.getElementById('mfSummary').textContent = `${resolvedCount} of ${mfRows.length} ready to apply.`;
   document.getElementById('mfReviewRows').innerHTML = mfRows.map((r, i) => {
     if (r.known){
       const bits = [`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`];
+      const badge = mfBadgeInfo(r.meaning_type);
       return `
         <div class="teach-row">
           <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:#3FCB7E;font-size:11.5px;font-weight:400;">✓ already known</span></div>
           <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
-            <span class="mf-badge ${r.meaning_type === 'product' ? 'product' : 'species'}">${r.meaning_type === 'product' ? 'Product' : r.meaning_type === 'species' ? 'Protein' : 'General market'}</span>
+            <span class="mf-badge ${badge.cls}">${badge.text}</span>
             ${escapeHtml(r.meaning_label || '')} — ${bits.join(' · ')}
           </div>
         </div>`;
@@ -516,11 +527,12 @@ function renderMfReview(){
       // were gone, so there was no way back if the trader picked the wrong one. "Change" clears
       // the pick and re-renders the row back to its editable state.
       const label = r.meaning_type === 'market' ? 'General market info' : escapeHtml(r.meaning_label || '');
+      const badge = mfBadgeInfo(r.meaning_type);
       return `
         <div class="teach-row">
           <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:var(--blue-bright);font-size:11.5px;font-weight:400;">just picked</span> <a href="#" onclick="mfUndoPick(${i});return false;" style="color:var(--ink-soft);font-size:11.5px;text-decoration:underline;margin-left:6px;">change</a></div>
           <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
-            <span class="mf-badge ${r.meaning_type === 'product' ? 'product' : 'species'}">${r.meaning_type === 'product' ? 'Product' : r.meaning_type === 'species' ? 'Protein' : 'General market'}</span>
+            <span class="mf-badge ${badge.cls}">${badge.text}</span>
             ${label}
           </div>
         </div>`;
@@ -552,19 +564,52 @@ function renderMfReview(){
   }).join('');
 }
 
+// Real addition 2026-09-22 ("si no especifica que llegue a todos si especifica que lo asocie con
+// el correcto y solo llegue a los que compran ese especifico"): the bulletin's cut name almost
+// never specifies packaging or temperature, but the catalog often splits that one real cut into
+// several SKUs (e.g. 6 real "Picnic" rows — Bone-In/Boneless x Fresh/Frozen x Combo/Box/VAC/Poly).
+// When 2+ of the current matches share the same clean name_en within one category, a family option
+// is offered above the individual rows — picking it reaches every real buyer of every variant, not
+// just whichever one row got picked. The individual exact rows stay available right below it for
+// when the bulletin line IS specific enough to name one.
 function mfFilterProduct(i, query){
   const resultsEl = document.getElementById('mf_prod_results_' + i);
   const q = query.trim().toLowerCase();
   if (!q){ resultsEl.innerHTML = ''; return; }
   const matches = mfProducts.filter(p => (p.full_name_en || '').toLowerCase().includes(q)).slice(0, 8);
-  resultsEl.innerHTML = matches.map(p =>
+
+  const familyKeys = new Set();
+  const familyOptions = [];
+  matches.forEach(p => {
+    if (!p.name_en || !p.category_id) return;
+    const key = p.category_id + '|' + p.name_en;
+    if (familyKeys.has(key)) return;
+    const allInFamily = mfProducts.filter(x => x.category_id === p.category_id && x.name_en === p.name_en);
+    if (allInFamily.length < 2) return;
+    familyKeys.add(key);
+    const cat = mfCategories.find(c => c.id === p.category_id);
+    familyOptions.push({ categoryId: p.category_id, nameEn: p.name_en, categoryName: cat ? (cat.name_en || cat.name) : '', count: allInFamily.length });
+  });
+  const familyHtml = familyOptions.map(f =>
+    `<div onclick="mfPickProductFamily(${i},'${f.categoryId}', ${JSON.stringify(f.nameEn).replace(/"/g, '&quot;')}, ${JSON.stringify(f.categoryName).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;background:rgba(90,170,255,.08);border:1px solid rgba(90,170,255,.3);margin-bottom:3px;" onmouseover="this.style.background='rgba(90,170,255,.18)'" onmouseout="this.style.background='rgba(90,170,255,.08)'">All "${escapeHtml(f.nameEn)}" variants (${f.count} products) — ${escapeHtml(f.categoryName)}</div>`
+  ).join('');
+  const rowsHtml = matches.map(p =>
     `<div onclick="mfPickProduct(${i},'${p.id}', ${JSON.stringify(p.full_name_en).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''">${escapeHtml(p.full_name_en)}</div>`
-  ).join('') || '<div style="padding:4px 8px;color:var(--ink-soft);font-size:12px;">No results.</div>';
+  ).join('');
+  resultsEl.innerHTML = (familyHtml + rowsHtml) || '<div style="padding:4px 8px;color:var(--ink-soft);font-size:12px;">No results.</div>';
 }
 function mfPickProduct(i, productId, name){
   mfRows[i].meaning_type = 'product';
   mfRows[i].meaning_id = productId;
+  mfRows[i].meaning_text = null;
   mfRows[i].meaning_label = name;
+  renderMfReview();
+}
+function mfPickProductFamily(i, categoryId, nameEn, categoryName){
+  mfRows[i].meaning_type = 'product_family';
+  mfRows[i].meaning_id = categoryId;
+  mfRows[i].meaning_text = nameEn;
+  mfRows[i].meaning_label = categoryName + ' — ' + nameEn + ' (all variants)';
   renderMfReview();
 }
 function mfPickSpecies(i, categoryId){
@@ -572,18 +617,21 @@ function mfPickSpecies(i, categoryId){
   const cat = mfCategories.find(c => c.id === categoryId);
   mfRows[i].meaning_type = 'species';
   mfRows[i].meaning_id = categoryId;
+  mfRows[i].meaning_text = null;
   mfRows[i].meaning_label = cat ? (cat.name_en || cat.name) : '';
   renderMfReview();
 }
 function mfPickMarket(i){
   mfRows[i].meaning_type = 'market';
   mfRows[i].meaning_id = null;
+  mfRows[i].meaning_text = null;
   mfRows[i].meaning_label = null;
   renderMfReview();
 }
 function mfUndoPick(i){
   mfRows[i].meaning_type = null;
   mfRows[i].meaning_id = null;
+  mfRows[i].meaning_text = null;
   mfRows[i].meaning_label = null;
   renderMfReview();
 }
@@ -599,7 +647,7 @@ async function applyMfAll(){
   const results = await Promise.allSettled(toApply.map(row => callApi('price-history-search', {
     teach_term: {
       raw_cut_name: row.raw_cut_name, meaning_type: row.meaning_type, meaning_id: row.meaning_id,
-      trend_pct: row.trend_pct, actor: currentActor(),
+      meaning_text: row.meaning_text ?? null, trend_pct: row.trend_pct, actor: currentActor(),
     },
   })));
   btn.disabled = false; btn.textContent = 'Apply All';
@@ -616,10 +664,11 @@ async function applyMfAll(){
   }
 }
 
-function renderMfActive(productNotes, categoryNotes){
+function renderMfActive(productNotes, categoryNotes, familyNotes){
   const tbody = document.querySelector('#tblMfActive tbody');
   const rows = [
     ...productNotes.map(n => ({ ...n, kind: 'product', label: n.product_name })),
+    ...(familyNotes || []).map(n => ({ ...n, kind: 'product_family', label: `${n.category_name} — ${n.product_name_en} (all variants)` })),
     ...categoryNotes.map(n => ({ ...n, kind: 'species', label: n.category_name })),
   ].sort((a, b) => new Date(b.note_date) - new Date(a.note_date));
   if (!rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing active yet.</td></tr>'; return; }
@@ -630,8 +679,9 @@ function renderMfActive(productNotes, categoryNotes){
     if (r.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${r.mx_benchmark_price_usd_kg}/kg`);
     const asOf = new Date(r.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const customers = (r.customer_names || []).length ? escapeHtml(r.customer_names.join(', ')) : '<span style="color:var(--ink-soft);">No customer linked yet</span>';
+    const badge = mfBadgeInfo(r.kind);
     return `<tr>
-      <td><span class="mf-badge ${r.kind}">${r.kind === 'product' ? 'Product' : 'Protein'}</span> ${escapeHtml(r.label || '—')}</td>
+      <td><span class="mf-badge ${badge.cls}">${badge.text}</span> ${escapeHtml(r.label || '—')}</td>
       <td>${bits.join(' · ') || '—'}</td>
       <td>${asOf}</td>
       <td>${customers}</td>

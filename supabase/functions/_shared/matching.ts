@@ -291,17 +291,33 @@ export async function computeCustomerProductSignal(
   // category-wide note for this exact product's own category (e.g. no note on "Pork Medium
   // Spareribs" itself, but there IS one for "Pork" overall) — coalesce, never both, never a
   // standalone broadcast unrelated to the product actually being quoted.
+  //
+  // Real addition 2026-09-22 ("si no especifica que llegue a todos si especifica que lo asocie con
+  // el correcto"): a THIRD tier sits between those two — a family note (product_name_en set,
+  // scoped to this product's own category + its own clean name_en, e.g. "Picnic") reaches every
+  // real SKU sharing that name regardless of packaging/temperature, without broadcasting to the
+  // whole category the way a species-wide note would. Precedence: product-specific, then family,
+  // then category-wide — most specific real match always wins.
   const [marketNoteRow] = await sql`
     select trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region from product_market_notes
     where product_id = ${productId} and note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
     order by note_date desc, created_at desc
     limit 1
   `;
-  const marketNoteRowFinal = marketNoteRow ?? (await sql`
+  const familyNoteRow = marketNoteRow ? null : (await sql`
+    select pmn.trend_pct, pmn.note, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
+    from product_market_notes pmn
+    join products p on p.category_id = pmn.category_id and p.name_en = pmn.product_name_en
+    where p.id = ${productId} and pmn.product_name_en is not null
+      and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+    order by pmn.note_date desc, pmn.created_at desc
+    limit 1
+  `)[0];
+  const marketNoteRowFinal = marketNoteRow ?? familyNoteRow ?? (await sql`
     select pmn.trend_pct, pmn.note, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
     from product_market_notes pmn
     join products p on p.category_id = pmn.category_id
-    where p.id = ${productId} and pmn.category_id is not null
+    where p.id = ${productId} and pmn.category_id is not null and pmn.product_name_en is null
       and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
     order by pmn.note_date desc, pmn.created_at desc
     limit 1

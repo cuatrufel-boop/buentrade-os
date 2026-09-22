@@ -73,11 +73,17 @@ Deno.serve(async (req) => {
       const terms = lines.map((l: any) => l?.raw_cut_name).filter(Boolean);
       const aliasRows = terms.length
         ? await sql`
-            select a.term, a.meaning_type, a.meaning_id,
-              case when a.meaning_type = 'product' then p.full_name_en when a.meaning_type = 'species' then cat.name_en else null end as meaning_label
+            select a.term, a.meaning_type, a.meaning_id, a.meaning_text,
+              case
+                when a.meaning_type = 'product' then p.full_name_en
+                when a.meaning_type = 'species' then cat.name_en
+                when a.meaning_type = 'product_family' then famcat.name_en || ' — ' || a.meaning_text || ' (all variants)'
+                else null
+              end as meaning_label
             from market_flash_term_aliases a
             left join products p on a.meaning_type = 'product' and p.id = a.meaning_id
             left join categories cat on a.meaning_type = 'species' and cat.id = a.meaning_id
+            left join categories famcat on a.meaning_type = 'product_family' and famcat.id = a.meaning_id
             where lower(a.term) = any(${terms.map((t: string) => t.toLowerCase())})
           `
         : [];
@@ -87,7 +93,8 @@ Deno.serve(async (req) => {
         return {
           raw_cut_name: l?.raw_cut_name, trend_pct: l?.trend_pct ?? null,
           known: !!alias,
-          meaning_type: alias?.meaning_type ?? null, meaning_id: alias?.meaning_id ?? null, meaning_label: alias?.meaning_label ?? null,
+          meaning_type: alias?.meaning_type ?? null, meaning_id: alias?.meaning_id ?? null,
+          meaning_text: alias?.meaning_text ?? null, meaning_label: alias?.meaning_label ?? null,
         };
       });
       return jsonResponse({ rows });
@@ -102,15 +109,19 @@ Deno.serve(async (req) => {
     // a fresh product_market_notes row — the alias only remembers the meaning, never the changing
     // data, so a known term still needs this call every time to record today's actual %.
     if (body.teach_term) {
-      const { raw_cut_name, meaning_type, meaning_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.teach_term;
+      const { raw_cut_name, meaning_type, meaning_id, meaning_text, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.teach_term;
       if (!raw_cut_name || !meaning_type) return jsonResponse({ error: "teach_term requires raw_cut_name and meaning_type" }, 400);
-      if (!["product", "species", "market"].includes(meaning_type)) return jsonResponse({ error: "meaning_type must be product, species, or market" }, 400);
-      if (meaning_type !== "market" && !meaning_id) return jsonResponse({ error: "meaning_id is required for product/species" }, 400);
+      if (!["product", "species", "product_family", "market"].includes(meaning_type)) return jsonResponse({ error: "meaning_type must be product, species, product_family, or market" }, 400);
+      if (meaning_type !== "market" && !meaning_id) return jsonResponse({ error: "meaning_id is required for product/species/product_family" }, 400);
+      // product_family: meaning_id is the category_id (scopes the family so it never crosses
+      // categories), meaning_text is the shared products.name_en that groups the real SKUs (e.g.
+      // "Picnic" — 6 real Bone-In/Boneless x Fresh/Frozen x Combo/Box/VAC/Poly rows).
+      if (meaning_type === "product_family" && !meaning_text) return jsonResponse({ error: "meaning_text (the shared product name) is required for product_family" }, 400);
 
       await sql`
-        insert into market_flash_term_aliases (term, meaning_type, meaning_id, created_by)
-        values (${raw_cut_name}, ${meaning_type}, ${meaning_id ?? null}, ${actor ?? null})
-        on conflict (term) do update set meaning_type = excluded.meaning_type, meaning_id = excluded.meaning_id
+        insert into market_flash_term_aliases (term, meaning_type, meaning_id, meaning_text, created_by)
+        values (${raw_cut_name}, ${meaning_type}, ${meaning_id ?? null}, ${meaning_type === "product_family" ? meaning_text : null}, ${actor ?? null})
+        on conflict (term) do update set meaning_type = excluded.meaning_type, meaning_id = excluded.meaning_id, meaning_text = excluded.meaning_text
       `;
 
       const hasData = trend_pct != null || !!note || mx_benchmark_price_usd_kg != null;
@@ -118,6 +129,8 @@ Deno.serve(async (req) => {
         await sql`insert into product_market_notes (product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by) values (${meaning_id}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})`;
       } else if (hasData && meaning_type === "species") {
         await sql`insert into product_market_notes (category_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by) values (${meaning_id}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})`;
+      } else if (hasData && meaning_type === "product_family") {
+        await sql`insert into product_market_notes (category_id, product_name_en, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by) values (${meaning_id}, ${meaning_text}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})`;
       }
       return jsonResponse({ taught: true });
     }
@@ -153,20 +166,47 @@ Deno.serve(async (req) => {
           ), '{}') as customer_names
         from product_market_notes pmn
         join categories cat on cat.id = pmn.category_id
-        where pmn.category_id is not null and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+        where pmn.category_id is not null and pmn.product_name_en is null
+          and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+        order by pmn.note_date desc
+      `;
+      // Real addition 2026-09-22 ("si no especifica que llegue a todos"): a family note reaches
+      // every real customer of every product sharing this exact name_en within this category — the
+      // 6 real Picnic SKUs (Bone-In/Boneless x Fresh/Frozen x Combo/Box/VAC/Poly) all count as one
+      // audience, never just the one row a trader might otherwise have had to pick arbitrarily.
+      const familyNotes = await sql`
+        select pmn.id, pmn.category_id, pmn.product_name_en, pmn.trend_pct, pmn.note, pmn.note_date,
+          pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region, cat.name_en as category_name,
+          coalesce((
+            select array_agg(distinct c.trade_name order by c.trade_name)
+            from customer_products cp
+            join customers c on c.id = cp.customer_id
+            join products p2 on p2.id = cp.product_id
+            where p2.category_id = pmn.category_id and p2.name_en = pmn.product_name_en
+          ), '{}') as customer_names
+        from product_market_notes pmn
+        join categories cat on cat.id = pmn.category_id
+        where pmn.product_name_en is not null
+          and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
         order by pmn.note_date desc
       `;
       // Every term already learned, so the trader can see/undo what the system knows — same idea
       // as Plants' "Recognized Words" screen.
       const aliases = await sql`
-        select a.id, a.term, a.meaning_type, a.meaning_id, a.created_at,
-          case when a.meaning_type = 'product' then p.full_name_en when a.meaning_type = 'species' then cat.name_en else null end as meaning_label
+        select a.id, a.term, a.meaning_type, a.meaning_id, a.meaning_text, a.created_at,
+          case
+            when a.meaning_type = 'product' then p.full_name_en
+            when a.meaning_type = 'species' then cat.name_en
+            when a.meaning_type = 'product_family' then famcat.name_en || ' — ' || a.meaning_text || ' (all variants)'
+            else null
+          end as meaning_label
         from market_flash_term_aliases a
         left join products p on a.meaning_type = 'product' and p.id = a.meaning_id
         left join categories cat on a.meaning_type = 'species' and cat.id = a.meaning_id
+        left join categories famcat on a.meaning_type = 'product_family' and famcat.id = a.meaning_id
         order by a.created_at desc
       `;
-      return jsonResponse({ product_notes: productNotes, category_notes: categoryNotes, aliases });
+      return jsonResponse({ product_notes: productNotes, category_notes: categoryNotes, family_notes: familyNotes, aliases });
     }
 
     const { product_id } = body;
@@ -193,11 +233,22 @@ Deno.serve(async (req) => {
       order by note_date desc, created_at desc
       limit 1
     `;
-    const marketNote = marketNoteRow ?? (await sql`
+    // Same 3-tier precedence as computeCustomerProductSignal (product-specific, then family, then
+    // category-wide) so this read-only display never disagrees with what a quote actually sends.
+    const familyNoteRow = marketNoteRow ? null : (await sql`
+      select pmn.trend_pct, pmn.note, pmn.note_date, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
+      from product_market_notes pmn
+      join products p on p.category_id = pmn.category_id and p.name_en = pmn.product_name_en
+      where p.id = ${product_id} and pmn.product_name_en is not null
+        and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
+      order by pmn.note_date desc, pmn.created_at desc
+      limit 1
+    `)[0];
+    const marketNote = marketNoteRow ?? familyNoteRow ?? (await sql`
       select pmn.trend_pct, pmn.note, pmn.note_date, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
       from product_market_notes pmn
       join products p on p.category_id = pmn.category_id
-      where p.id = ${product_id} and pmn.category_id is not null
+      where p.id = ${product_id} and pmn.category_id is not null and pmn.product_name_en is null
         and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
       order by pmn.note_date desc, pmn.created_at desc
       limit 1
