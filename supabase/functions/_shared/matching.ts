@@ -298,6 +298,13 @@ export async function computeCustomerProductSignal(
   // real SKU sharing that name regardless of packaging/temperature, without broadcasting to the
   // whole category the way a species-wide note would. Precedence: product-specific, then family,
   // then category-wide — most specific real match always wins.
+  //
+  // Real correction 2026-09-22 ("mucho cuidado... no se puede equivocar"): name_en alone is NOT a
+  // safe family boundary — confirmed live that it also groups genuinely different grades under one
+  // name ("Trim" spans 42% and 72% fat content, "Spareribs" spans Light/Medium/#2, "Bellies" spans
+  // several real weight ranges). products.subcategory_en is what actually carries that distinction,
+  // so the family match now requires it to match too (both null counts as a match, via IS NOT
+  // DISTINCT FROM) — a family only ever collapses packaging + temperature, never grade/size.
   const [marketNoteRow] = await sql`
     select trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region from product_market_notes
     where product_id = ${productId} and note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
@@ -308,6 +315,7 @@ export async function computeCustomerProductSignal(
     select pmn.trend_pct, pmn.note, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
     from product_market_notes pmn
     join products p on p.category_id = pmn.category_id and p.name_en = pmn.product_name_en
+      and p.subcategory_en is not distinct from pmn.product_subcategory_en
     where p.id = ${productId} and pmn.product_name_en is not null
       and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
     order by pmn.note_date desc, pmn.created_at desc
