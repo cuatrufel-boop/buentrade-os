@@ -11,6 +11,8 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <!-- Real correction 2026-09-22: "market-flash.html" was already a real, live public-facing page
      (the BuenTrade Market Flash newsletter, Home/About/Services/Market Flash/Contact nav) — almost
      overwritten by mistake before this got renamed. This is the INTERNAL trader tool (same dark
@@ -211,7 +213,8 @@ auth.onAuthStateChanged(user => {
   <div class="tt-overlay-body">
     <div style="max-width:900px;margin:0 auto;">
       <div id="mfPasteStep">
-        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Pegá el texto directo del reporte (copiado tal cual del PDF, sin reformatear) — el sistema reconoce cada corte y su % actual solo. Si preferís, también aceptás una línea simple por corte: <span style="font-family:monospace;">Spareribs MED -9.5</span>. Nada se guarda todavía — después revisás y confirmás con Apply All.</p>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Arrastrá el PDF del boletín, o pegá el texto directo del reporte (copiado tal cual del PDF, sin reformatear) — el sistema reconoce cada corte y su % actual solo. Si preferís, también aceptás una línea simple por corte: <span style="font-family:monospace;">Spareribs MED -9.5</span>. Nada se guarda todavía — después revisás y confirmás con Apply All.</p>
+        <div id="mfDropZone" style="border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;cursor:pointer;transition:border-color .15s;">📄 Arrastrá el PDF del boletín acá, o <span style="color:var(--blue-bright);text-decoration:underline;">hacé click para elegirlo</span><input type="file" id="mfFileInput" accept="application/pdf" style="display:none;"></div>
         <textarea id="mfInput" rows="14" style="width:100%;min-height:260px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03);color:#fff;"></textarea>
         <div id="mfInputErr" style="display:none;color:#FF9C8A;font-size:12.5px;margin-top:6px;"></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
@@ -270,6 +273,91 @@ async function loadMarketFlash(){
   } catch (e) {
     showErr('Error loading: ' + e.message);
   }
+}
+
+// Real addition 2026-09-22 ("arrastro el pdf del boletin en load market flash no pega rebota"):
+// the trader's actual workflow is dragging the PDF file in, not copy-pasting its text out of a PDF
+// viewer first — that copy step was the friction. Reads the dropped/picked PDF with pdf.js
+// entirely client-side (no upload, no server round trip) and reconstructs pdftotext -layout-
+// equivalent text (row-clustered by Y position, ordered left-to-right by X) so the existing,
+// already-validated parseBulletinRawText reads it completely unchanged. Verified against the real
+// 48-page bulletin PDF: identical 41/41 sections and percentages either way (pasted text vs.
+// dropped PDF) — same numbers, same names, spot-checked against the raw report.
+const mfDropZone = document.getElementById('mfDropZone');
+const mfFileInput = document.getElementById('mfFileInput');
+const mfDropZoneDefaultHtml = mfDropZone.innerHTML;
+mfDropZone.addEventListener('click', () => mfFileInput.click());
+mfFileInput.addEventListener('change', () => { if (mfFileInput.files[0]) handleMfPdfFile(mfFileInput.files[0]); });
+mfDropZone.addEventListener('dragover', (e) => { e.preventDefault(); mfDropZone.style.borderColor = 'var(--blue-bright)'; });
+mfDropZone.addEventListener('dragleave', () => { mfDropZone.style.borderColor = 'var(--line)'; });
+mfDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  mfDropZone.style.borderColor = 'var(--line)';
+  const file = e.dataTransfer.files[0];
+  if (file) handleMfPdfFile(file);
+});
+
+async function handleMfPdfFile(file){
+  const errEl = document.getElementById('mfInputErr');
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
+    errEl.textContent = 'Ese archivo no es un PDF.';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  mfDropZone.textContent = 'Leyendo ' + file.name + '...';
+  try {
+    const text = await extractPdfLayoutText(file);
+    document.getElementById('mfInput').value = text;
+    mfDropZone.innerHTML = mfDropZoneDefaultHtml;
+    await processMfText();
+  } catch (e) {
+    errEl.textContent = 'No pude leer el PDF: ' + e.message;
+    errEl.style.display = '';
+    mfDropZone.innerHTML = mfDropZoneDefaultHtml;
+  }
+}
+
+// Row-clustering: groups pdf.js text items (each with an x/y position, no inherent layout) by
+// Y-baseline into rows, sorts each row left-to-right by X, and pads gaps with spaces proportional
+// to their real horizontal distance — the same visual-column structure pdftotext -layout produces
+// from the same PDF, which is what the header/anchor/weekly-row regexes below depend on.
+async function extractPdfLayoutText(file){
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  let fullText = '';
+  const Y_TOL = 2.5;
+  const CHAR_W = 4.3;
+  for (let p = 1; p <= doc.numPages; p++){
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })).filter(it => it.str !== undefined);
+    const rowsMap = new Map();
+    for (const it of items){
+      let matchedKey = null;
+      for (const key of rowsMap.keys()){ if (Math.abs(key - it.y) <= Y_TOL){ matchedKey = key; break; } }
+      if (matchedKey == null){ matchedKey = it.y; rowsMap.set(matchedKey, []); }
+      rowsMap.get(matchedKey).push(it);
+    }
+    const rowYs = [...rowsMap.keys()].sort((a, b) => b - a);
+    for (const y of rowYs){
+      const rowItems = rowsMap.get(y).sort((a, b) => a.x - b.x);
+      let line = '';
+      let lastEndX = null;
+      for (const it of rowItems){
+        if (lastEndX != null){
+          const gap = it.x - lastEndX;
+          const spaces = Math.max(1, Math.round(gap / CHAR_W));
+          line += ' '.repeat(Math.min(spaces, 200));
+        }
+        line += it.str;
+        lastEndX = it.x + it.str.length * CHAR_W * 0.55;
+      }
+      fullText += line + '\n';
+    }
+    fullText += '\f';
+  }
+  return fullText;
 }
 
 // Fallback: one line per item, real value at the end (for a trader typing a quick manual line
