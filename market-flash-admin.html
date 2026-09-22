@@ -56,6 +56,14 @@
   .mf-badge.product{color:#3FCB7E;border-color:rgba(63,203,126,.4);}
   .mf-badge.species{color:var(--amber);border-color:rgba(255,200,118,.4);}
   .teach-row{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+  /* Same .tt-overlay shape as plants.html's Load Prices panel — a full-screen fixed panel with a
+     header bar and a scrolling body, not a small centered modal. */
+  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:850;display:none;flex-direction:column;}
+  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
+  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-body{flex:1;min-height:0;overflow-y:auto;padding:20px;}
 </style>
 <!-- ============ LOGIN GATE (same Firebase project/login as every other screen) ============ -->
 <style>
@@ -172,23 +180,48 @@ auth.onAuthStateChanged(user => {
   <div id="errBox"></div>
 
   <!-- ============ LOAD MARKET FLASH — paste one cut per line, trend at the end ============ -->
-  <h1>Load Market Flash</h1>
-  <div class="card">
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">Pegá una línea por corte, tal como lo copiaste — el % de tendencia al final. Ej: <span style="font-family:monospace;">Spareribs MED -9.5</span>. Ningún trader edita productos — todo pasa por acá.</div>
-    <textarea id="mfInput" rows="8" style="width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03);color:#fff;"></textarea>
-    <div id="mfInputErr" style="display:none;color:#FF9C8A;font-size:12.5px;margin-top:6px;"></div>
-    <div style="margin-top:10px;"><button class="btn" onclick="processMarketFlash()">Process</button></div>
+  <div style="display:flex;align-items:center;gap:10px;margin:28px 0 14px;">
+    <h1 style="margin:0;">Market Flash Admin</h1>
+    <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openMfPanel()">📋 Load Market Flash</button>
   </div>
-
-  <!-- ============ NEEDS TEACHING — the only place anything is ever asked, once per term ever ============ -->
-  <h1>Needs Teaching <span id="mfPendingCount" style="color:var(--ink-soft);font-weight:400;font-size:15px;"></span></h1>
-  <div id="mfPendingWrap" class="card"><div class="empty">Loading…</div></div>
 
   <!-- ============ ACTIVE BULLETS — the whole picture: what's live, connected to which product/protein, and which customers it reaches ============ -->
   <h1>Active Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— what's currently reaching customers, and who</span></h1>
   <div class="tbl-wrap"><table id="tblMfActive"><thead><tr><th>Connected to</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
 </main>
 </div><!-- /appContent -->
+
+<!-- ============ LOAD MARKET FLASH POPUP — same shape as plants.html's Load Prices: one
+     .tt-overlay, two mutually-exclusive steps toggled by style.display, nothing written to the
+     database until Apply All fires. ============ -->
+<div class="tt-overlay" id="mfCard">
+  <div class="tt-overlay-head">
+    <div class="tt-overlay-title" id="mfCardTitle">Load Market Flash</div>
+    <button class="tt-overlay-close" onclick="closeMfPanel()" title="Close">✕</button>
+  </div>
+  <div class="tt-overlay-body">
+    <div style="max-width:900px;margin:0 auto;">
+      <div id="mfPasteStep">
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Pegá el texto tal como lo copiaste — una línea por corte, el % de tendencia al final. Ej: <span style="font-family:monospace;">Spareribs MED -9.5</span>. Nada se guarda todavía — después revisás y confirmás con Apply All.</p>
+        <textarea id="mfInput" rows="14" style="width:100%;min-height:260px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03);color:#fff;"></textarea>
+        <div id="mfInputErr" style="display:none;color:#FF9C8A;font-size:12.5px;margin-top:6px;"></div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="processMfText()">Process</button>
+          <button class="btn secondary" onclick="closeMfPanel()">Cancel</button>
+        </div>
+      </div>
+      <div id="mfReviewStep" style="display:none;">
+        <div id="mfSummary" style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;"></div>
+        <div id="mfReviewRows"></div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" id="mfApplyBtn" onclick="applyMfAll()">Apply All</button>
+          <button class="btn secondary" onclick="backToMfPaste()">← Back to paste</button>
+          <button class="btn secondary" onclick="closeMfPanel()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
@@ -212,6 +245,7 @@ function showErr(msg){ document.getElementById('errBox').innerHTML = `<div class
 
 let mfCategories = [];
 let mfProducts = [];
+let mfRows = []; // { raw_cut_name, trend_pct, known, meaning_type, meaning_id, meaning_label }
 
 async function loadMarketFlash(){
   document.getElementById('errBox').innerHTML = '';
@@ -223,7 +257,6 @@ async function loadMarketFlash(){
     ]);
     mfCategories = lookups.categories || [];
     mfProducts = productsRes.results || [];
-    renderMfPending(mf.pending || []);
     renderMfActive(mf.product_notes || [], mf.category_notes || []);
   } catch (e) {
     showErr('Error loading: ' + e.message);
@@ -237,7 +270,33 @@ function parseMfLine(line){
   return { raw_cut_name: m[1].trim(), trend_pct: Number(m[2]) };
 }
 
-async function processMarketFlash(){
+// ============ POPUP — same mechanic as plants.html's openPriceListPanel/closePriceListPanel/
+// processPriceListText/applyPriceList: one overlay, two mutually-exclusive steps, everything held
+// in the mfRows array until Apply All fires the one batch of writes. ============
+
+function openMfPanel(){
+  document.getElementById('mfCard').style.display = 'flex';
+  document.getElementById('mfInput').value = '';
+  document.getElementById('mfInputErr').style.display = 'none';
+  document.getElementById('mfPasteStep').style.display = 'block';
+  document.getElementById('mfReviewStep').style.display = 'none';
+  document.getElementById('mfCardTitle').textContent = 'Load Market Flash';
+  mfRows = [];
+}
+function closeMfPanel(){
+  document.getElementById('mfCard').style.display = 'none';
+  mfRows = [];
+}
+function backToMfPaste(){
+  mfRows = [];
+  document.getElementById('mfReviewStep').style.display = 'none';
+  document.getElementById('mfPasteStep').style.display = 'block';
+  document.getElementById('mfCardTitle').textContent = 'Load Market Flash';
+}
+
+// Process — READ-ONLY (preview_market_flash_lines), same as plants.html's own read-only match
+// call during processPriceListText. Nothing is written here.
+async function processMfText(){
   const text = document.getElementById('mfInput').value;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const parsed = lines.map(parseMfLine).filter(Boolean);
@@ -249,90 +308,129 @@ async function processMarketFlash(){
   }
   errEl.style.display = 'none';
   let result;
-  try { result = await callApi('price-history-search', { process_market_flash_lines: { lines: parsed, actor: currentActor() } }); }
-  catch (e) { showErr('Error: ' + e.message); return; }
-  document.getElementById('mfInput').value = '';
-  await loadMarketFlash();
-  alert(`${result.applied} corte${result.applied === 1 ? '' : 's'} ya conocido${result.applied === 1 ? '' : 's'}, aplicado${result.applied === 1 ? '' : 's'} solo${result.applied === 1 ? '' : 's'}. ${result.queued} nuevo${result.queued === 1 ? '' : 's'}, esperando que le enseñes qué es (abajo).`);
+  try { result = await callApi('price-history-search', { preview_market_flash_lines: { lines: parsed } }); }
+  catch (e) { errEl.textContent = 'Error: ' + e.message; errEl.style.display = ''; return; }
+  mfRows = result.rows;
+  document.getElementById('mfPasteStep').style.display = 'none';
+  document.getElementById('mfReviewStep').style.display = 'block';
+  document.getElementById('mfCardTitle').textContent = `Review Market Flash (${mfRows.length})`;
+  renderMfReview();
 }
 
-function renderMfPending(pending){
-  document.getElementById('mfPendingCount').textContent = pending.length ? `(${pending.length})` : '';
-  const wrap = document.getElementById('mfPendingWrap');
-  if (!pending.length){ wrap.innerHTML = '<div class="empty">Nada esperando — todo lo que llegó ya se reconoció solo.</div>'; return; }
-  wrap.innerHTML = pending.map(p => {
+function mfIsResolved(row){
+  return row.known || !!row.meaning_type;
+}
+
+function renderMfReview(){
+  const resolvedCount = mfRows.filter(mfIsResolved).length;
+  document.getElementById('mfSummary').textContent = `${resolvedCount} de ${mfRows.length} listos para aplicar.`;
+  document.getElementById('mfReviewRows').innerHTML = mfRows.map((r, i) => {
+    if (r.known){
+      const bits = [`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`];
+      return `
+        <div class="teach-row">
+          <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:#3FCB7E;font-size:11.5px;font-weight:400;">✓ ya conocido</span></div>
+          <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
+            <span class="mf-badge ${r.meaning_type === 'product' ? 'product' : 'species'}">${r.meaning_type === 'product' ? 'Producto' : r.meaning_type === 'species' ? 'Proteína' : 'Mercado general'}</span>
+            ${escapeHtml(r.meaning_label || '')} — ${bits.join(' · ')}
+          </div>
+        </div>`;
+    }
+    if (r.meaning_type){
+      // Resolved in THIS session (not yet known before) — show the pick, still editable via the same controls.
+      const label = r.meaning_type === 'market' ? 'Info de mercado general' : escapeHtml(r.meaning_label || '');
+      return `
+        <div class="teach-row">
+          <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:var(--blue-bright);font-size:11.5px;font-weight:400;">recién elegido</span></div>
+          <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
+            <span class="mf-badge ${r.meaning_type === 'product' ? 'product' : 'species'}">${r.meaning_type === 'product' ? 'Producto' : r.meaning_type === 'species' ? 'Proteína' : 'Mercado general'}</span>
+            ${label}
+          </div>
+        </div>`;
+    }
     const bits = [];
-    if (p.trend_pct != null) bits.push(`${p.trend_pct > 0 ? '+' : ''}${p.trend_pct}%`);
-    if (p.note) bits.push(escapeHtml(p.note));
+    if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
     return `
-      <div class="teach-row" data-term="${escapeHtml(p.raw_cut_name)}">
-        <div style="font-weight:600;font-size:13px;">${escapeHtml(p.raw_cut_name)}</div>
-        <div style="color:var(--ink-soft);font-size:12.5px;margin:3px 0 10px;">${bits.join(' · ') || '(sin datos extra)'}</div>
+      <div class="teach-row" data-idx="${i}">
+        <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)}</div>
+        <div style="color:var(--ink-soft);font-size:12.5px;margin:3px 0 10px;">${bits.join(' · ') || '(sin datos extra)'} — nunca visto antes</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
           <div style="flex:1;min-width:220px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Es este producto:</label>
-            <input type="text" id="mf_prod_${p.id}" autocomplete="off" placeholder="Buscar producto…" oninput="mfFilterProduct('${p.id}', this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
-            <div id="mf_prod_results_${p.id}" style="max-height:120px;overflow-y:auto;"></div>
-            <button type="button" id="mf_prod_btn_${p.id}" disabled style="margin-top:4px;padding:5px 12px;font-size:12px;background:var(--blue);color:#fff;border:none;border-radius:6px;cursor:pointer;opacity:.5;" onclick="mfTeachProduct('${p.id}')">Confirmar producto</button>
+            <input type="text" id="mf_prod_${i}" autocomplete="off" placeholder="Buscar producto…" oninput="mfFilterProduct(${i}, this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <div id="mf_prod_results_${i}" style="max-height:120px;overflow-y:auto;"></div>
           </div>
           <div>
             <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">O es esta proteína en general:</label>
-            <select id="mf_species_${p.id}" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <select onchange="mfPickSpecies(${i}, this.value)" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
               <option value="">—</option>
               ${mfCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name_en || c.name)}</option>`).join('')}
             </select>
-            <button type="button" style="margin-top:4px;padding:5px 12px;font-size:12px;background:var(--amber);color:#0A2547;border:none;border-radius:6px;cursor:pointer;font-weight:700;" onclick="mfTeachSpecies('${p.id}')">Confirmar proteína</button>
           </div>
           <div>
-            <button type="button" class="btn ghost" onclick="mfTeachMarket('${p.id}')">No es ni producto ni proteína — info de mercado general</button>
+            <button type="button" class="btn ghost" onclick="mfPickMarket(${i})">No es ni producto ni proteína — info de mercado general</button>
           </div>
         </div>
       </div>`;
   }).join('');
 }
 
-let mfPickedProduct = {}; // pending id -> { productId, name }
-
-function mfFilterProduct(id, query){
-  const resultsEl = document.getElementById('mf_prod_results_' + id);
+function mfFilterProduct(i, query){
+  const resultsEl = document.getElementById('mf_prod_results_' + i);
   const q = query.trim().toLowerCase();
   if (!q){ resultsEl.innerHTML = ''; return; }
   const matches = mfProducts.filter(p => (p.full_name_en || '').toLowerCase().includes(q)).slice(0, 8);
   resultsEl.innerHTML = matches.map(p =>
-    `<div onclick="mfPickProduct('${id}','${p.id}', ${JSON.stringify(p.full_name_en).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''">${escapeHtml(p.full_name_en)}</div>`
+    `<div onclick="mfPickProduct(${i},'${p.id}', ${JSON.stringify(p.full_name_en).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''">${escapeHtml(p.full_name_en)}</div>`
   ).join('') || '<div style="padding:4px 8px;color:var(--ink-soft);font-size:12px;">Sin resultados.</div>';
 }
-function mfPickProduct(id, productId, name){
-  mfPickedProduct[id] = { productId, name };
-  document.getElementById('mf_prod_' + id).value = name;
-  document.getElementById('mf_prod_results_' + id).innerHTML = '';
-  const btn = document.getElementById('mf_prod_btn_' + id);
-  btn.disabled = false; btn.style.opacity = '1';
+function mfPickProduct(i, productId, name){
+  mfRows[i].meaning_type = 'product';
+  mfRows[i].meaning_id = productId;
+  mfRows[i].meaning_label = name;
+  renderMfReview();
+}
+function mfPickSpecies(i, categoryId){
+  if (!categoryId) return;
+  const cat = mfCategories.find(c => c.id === categoryId);
+  mfRows[i].meaning_type = 'species';
+  mfRows[i].meaning_id = categoryId;
+  mfRows[i].meaning_label = cat ? (cat.name_en || cat.name) : '';
+  renderMfReview();
+}
+function mfPickMarket(i){
+  mfRows[i].meaning_type = 'market';
+  mfRows[i].meaning_id = null;
+  mfRows[i].meaning_label = null;
+  renderMfReview();
 }
 
-async function mfTeachProduct(id){
-  const pick = mfPickedProduct[id];
-  if (!pick) return;
-  await mfTeach(id, 'product', pick.productId);
-}
-async function mfTeachSpecies(id){
-  const sel = document.getElementById('mf_species_' + id);
-  if (!sel.value){ alert('Elegí una proteína primero.'); return; }
-  await mfTeach(id, 'species', sel.value);
-}
-async function mfTeachMarket(id){
-  await mfTeach(id, 'market', null);
-}
-
-async function mfTeach(id, meaningType, meaningId){
-  const el = document.querySelector(`#mf_prod_${id}`) || document.querySelector(`#mf_species_${id}`);
-  const rawCutName = el && el.closest('.teach-row').dataset.term;
-  if (!rawCutName){ alert('Error interno: no encontré el término.'); return; }
-  try {
-    await callApi('price-history-search', { teach_term: { raw_cut_name: rawCutName, meaning_type: meaningType, meaning_id: meaningId, actor: currentActor() } });
-  } catch (e) { showErr('Error: ' + e.message); return; }
-  delete mfPickedProduct[id];
+// Apply All — the ONE point where anything is written, same as plants.html's applyPriceList:
+// fires one teach_term call per resolved row in parallel, refreshes Active Bullets, and only
+// closes the panel once nothing is left unresolved (unresolved rows stay in the review step).
+async function applyMfAll(){
+  const toApply = mfRows.filter(mfIsResolved);
+  if (!toApply.length){ alert('Nada listo para aplicar todavía — elegí producto, proteína, o mercado general para al menos una línea.'); return; }
+  const btn = document.getElementById('mfApplyBtn');
+  btn.disabled = true; btn.textContent = 'Applying…';
+  const results = await Promise.allSettled(toApply.map(row => callApi('price-history-search', {
+    teach_term: {
+      raw_cut_name: row.raw_cut_name, meaning_type: row.meaning_type, meaning_id: row.meaning_id,
+      trend_pct: row.trend_pct, actor: currentActor(),
+    },
+  })));
+  btn.disabled = false; btn.textContent = 'Apply All';
+  const failedRawNames = new Set();
+  results.forEach((r, idx) => { if (r.status === 'rejected') failedRawNames.add(toApply[idx].raw_cut_name); });
+  const stillUnresolved = mfRows.filter(r => !mfIsResolved(r) || failedRawNames.has(r.raw_cut_name));
   await loadMarketFlash();
+  if (stillUnresolved.length){
+    mfRows = stillUnresolved;
+    renderMfReview();
+    if (failedRawNames.size) alert(`${failedRawNames.size} fallaron al guardar — quedan abajo para reintentar.`);
+  } else {
+    closeMfPanel();
+  }
 }
 
 function renderMfActive(productNotes, categoryNotes){
@@ -357,6 +455,7 @@ function renderMfActive(productNotes, categoryNotes){
     </tr>`;
   }).join('');
 }
+
 </script>
 </body>
 </html>

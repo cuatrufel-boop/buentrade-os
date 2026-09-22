@@ -14,28 +14,29 @@
 // price history, exactly where the market note belongs. save_market_note is mutually exclusive
 // with the default read.
 //
-// Real correction 2026-09-22, same day ("no quiero editar producto por producto... esto tiene que
-// ir conectado a who buy this, ningún trader va a ir a alimentar productos nunca" / "Market Flash,
-// no boletín" / "reconozca matches con producto, proteína y mercado, hasta que aprende"): the whole
-// per-product manual-entry idea is gone. The real, permanent flow is:
+// Real correction 2026-09-22, twice same day ("no quiero editar producto por producto... esto
+// tiene que ir conectado a who buy this" / "busca plants y construyelo igual — upload popup
+// después cierro y salen bullets bien hechas"): matches plants.html's own "Load Prices" mechanic
+// exactly — nothing is written to the database until ONE final batch commit. The real flow:
 //
-//   1. process_market_flash_lines — trader pastes Market Flash text in ONE new screen (not
-//      Products). For each line, checks market_flash_term_aliases first (same proven "learn the
-//      language" shape as plant_term_aliases): a term it already knows auto-applies with zero
-//      interaction, forever. A term it's never seen stays unresolved (never guessed).
-//   2. teach_term — the ONLY moment a trader is ever asked anything, and only for a genuinely new
-//      term: is this a specific PRODUCT, a whole PROTEIN/species category, or general MARKET info
-//      with no association at all? Whichever it is, this both applies the data now AND remembers
-//      the term forever in market_flash_term_aliases — next Market Flash never asks again.
-//   3. list_market_flash — the one screen showing everything: every active note (product- or
-//      category-scoped), joined with which real customers are linked to that product/category
-//      (customer_products) — so the trader sees the who-buys-this connection right there, never a
-//      bare product ID with no context.
+//   1. preview_market_flash_lines — READ-ONLY. For each pasted line, checks market_flash_term_
+//      aliases (case-insensitive exact match on the term — same proven "learn the language" shape
+//      as plant_term_aliases) and reports back whether it's already known and what it means.
+//      Nothing is written here, same as plants.html's processPriceListText/products-match-from-
+//      plant-text being read-only until Apply.
+//   2. Market Flash Admin holds the whole reviewed batch in browser memory (known rows shown as
+//      already-resolved, unknown rows get a product/species/market choice) — Cancel loses
+//      everything, Apply All commits everything in one shot.
+//   3. teach_term — the ONE write per row, called once per line at Apply time (batched):
+//      remembers the term in market_flash_term_aliases forever (so it's read-only/known next
+//      Market Flash) AND applies the note now. Called for every row in the batch, not just new
+//      ones — a previously-known term still needs this to record THIS bulletin's actual numbers,
+//      the alias only remembers the MEANING, never the changing data.
+//   4. list_market_flash — the one visibility screen: every active note (product- or category-
+//      scoped), joined with the REAL customers linked to that product/category (customer_products).
 //
-// product_market_notes.product_id is nullable now — a note is either product-scoped or
-// category_id-scoped (species-wide), never both (DB check constraint). save_market_note/
-// create_suggestion/approve_suggestion/reject_suggestion below are kept only as the underlying
-// primitives teach_term itself calls — never called directly by the UI any more.
+// product_market_notes.product_id is nullable — a note is either product-scoped or category_id-
+// scoped (species-wide), never both (DB check constraint).
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse, MARKET_NOTE_FRESHNESS_DAYS } from "../_shared/matching.ts";
 
@@ -60,42 +61,46 @@ Deno.serve(async (req) => {
       return jsonResponse({ saved: true });
     }
 
-    // Real addition 2026-09-22 ("hasta que aprende"): the ONE screen where a trader pastes Market
-    // Flash text — never per-product. Each line checks market_flash_term_aliases FIRST (case-
-    // insensitive exact match on the term); a term already taught applies with zero interaction,
-    // forever. A term never seen before is queued as a suggestion, waiting for teach_term — never
-    // guessed, never silently dropped.
-    if (body.process_market_flash_lines) {
-      const { lines, actor } = body.process_market_flash_lines;
-      if (!Array.isArray(lines) || !lines.length) return jsonResponse({ error: "process_market_flash_lines requires a non-empty lines array" }, 400);
-      let applied = 0, queued = 0;
-      for (const line of lines) {
-        const rawCutName = line?.raw_cut_name;
-        const trendPct = line?.trend_pct;
-        if (!rawCutName) continue;
-        const [alias] = await sql`select meaning_type, meaning_id from market_flash_term_aliases where lower(term) = lower(${rawCutName})`;
-        if (alias) {
-          if (alias.meaning_type === "product") {
-            await sql`insert into product_market_notes (product_id, trend_pct, created_by) values (${alias.meaning_id}, ${trendPct ?? null}, ${actor ?? null})`;
-          } else if (alias.meaning_type === "species") {
-            await sql`insert into product_market_notes (category_id, trend_pct, created_by) values (${alias.meaning_id}, ${trendPct ?? null}, ${actor ?? null})`;
-          }
-          // meaning_type === "market": already known to be general/unassociated — nothing to apply, never asked again.
-          applied++;
-        } else {
-          await sql`insert into product_market_note_suggestions (raw_cut_name, trend_pct, created_by) values (${rawCutName}, ${trendPct ?? null}, ${actor ?? null})`;
-          queued++;
-        }
-      }
-      return jsonResponse({ applied, queued });
+    // Real correction 2026-09-22 ("upload popup después cierro y salen bullets bien hechas"):
+    // READ-ONLY, matches plants.html's processPriceListText step exactly — parses nothing server-
+    // side (that's client JS), just answers "does market_flash_term_aliases already know this
+    // term" for each line, so Market Flash Admin can render known rows as already-resolved and
+    // unknown rows with a product/species/market choice, ALL still in browser memory. Nothing
+    // written here.
+    if (body.preview_market_flash_lines) {
+      const { lines } = body.preview_market_flash_lines;
+      if (!Array.isArray(lines) || !lines.length) return jsonResponse({ error: "preview_market_flash_lines requires a non-empty lines array" }, 400);
+      const terms = lines.map((l: any) => l?.raw_cut_name).filter(Boolean);
+      const aliasRows = terms.length
+        ? await sql`
+            select a.term, a.meaning_type, a.meaning_id,
+              case when a.meaning_type = 'product' then p.full_name_en when a.meaning_type = 'species' then cat.name_en else null end as meaning_label
+            from market_flash_term_aliases a
+            left join products p on a.meaning_type = 'product' and p.id = a.meaning_id
+            left join categories cat on a.meaning_type = 'species' and cat.id = a.meaning_id
+            where lower(a.term) = any(${terms.map((t: string) => t.toLowerCase())})
+          `
+        : [];
+      const aliasByTerm = new Map(aliasRows.map((r: any) => [String(r.term).toLowerCase(), r]));
+      const rows = lines.map((l: any) => {
+        const alias = l?.raw_cut_name ? aliasByTerm.get(String(l.raw_cut_name).toLowerCase()) : null;
+        return {
+          raw_cut_name: l?.raw_cut_name, trend_pct: l?.trend_pct ?? null,
+          known: !!alias,
+          meaning_type: alias?.meaning_type ?? null, meaning_id: alias?.meaning_id ?? null, meaning_label: alias?.meaning_label ?? null,
+        };
+      });
+      return jsonResponse({ rows });
     }
 
-    // Real addition 2026-09-22: the ONLY moment a trader is ever asked anything about a Market
-    // Flash term, and only once per unique term, ever. meaning_type: 'product' (meaning_id = a real
-    // product), 'species' (meaning_id = a real category/protein), or 'market' (no association at
-    // all — genuinely general market info, meaning_id stays null). Remembers the term in
-    // market_flash_term_aliases (so it never asks again), applies the data now if there's any real
-    // data to apply, and resolves every pending suggestion that used this exact raw term.
+    // Real addition 2026-09-22: the single write per row, called once per line at "Apply All" time
+    // (batched from the client, same as plants.html's applyPriceList firing one call per row).
+    // meaning_type: 'product' (meaning_id = a real product), 'species' (meaning_id = a real
+    // category/protein), or 'market' (no association at all, meaning_id stays null). Always
+    // remembers the term in market_flash_term_aliases (upsert — safe to call again for an already-
+    // known term, it just re-confirms the same meaning) AND applies THIS bulletin's real numbers as
+    // a fresh product_market_notes row — the alias only remembers the meaning, never the changing
+    // data, so a known term still needs this call every time to record today's actual %.
     if (body.teach_term) {
       const { raw_cut_name, meaning_type, meaning_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.teach_term;
       if (!raw_cut_name || !meaning_type) return jsonResponse({ error: "teach_term requires raw_cut_name and meaning_type" }, 400);
@@ -114,8 +119,6 @@ Deno.serve(async (req) => {
       } else if (hasData && meaning_type === "species") {
         await sql`insert into product_market_notes (category_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by) values (${meaning_id}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})`;
       }
-
-      await sql`update product_market_note_suggestions set status = 'approved', reviewed_by = ${actor ?? null}, reviewed_at = now() where raw_cut_name = ${raw_cut_name} and status = 'pending'`;
       return jsonResponse({ taught: true });
     }
 
@@ -123,8 +126,7 @@ Deno.serve(async (req) => {
     // correcto con proteína correcta con cliente correcto"): the one visibility screen — every
     // active note (product- or species-scoped), joined with the REAL customers linked to that
     // product/category (customer_products), so "who this applies to" is never a guess or a
-    // separate lookup. Plus whatever's still waiting to be taught, plus every term already learned
-    // (so the trader can see/undo what the system knows, same as Plants' "Recognized Words").
+    // separate lookup, plus every term already learned.
     if (body.list_market_flash) {
       const productNotes = await sql`
         select pmn.id, pmn.product_id, pmn.trend_pct, pmn.note, pmn.note_date,
@@ -154,10 +156,8 @@ Deno.serve(async (req) => {
         where pmn.category_id is not null and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
         order by pmn.note_date desc
       `;
-      const pending = await sql`
-        select id, bulletin_date, raw_cut_name, trend_pct, note, created_at
-        from product_market_note_suggestions where status = 'pending' order by bulletin_date desc, created_at desc
-      `;
+      // Every term already learned, so the trader can see/undo what the system knows — same idea
+      // as Plants' "Recognized Words" screen.
       const aliases = await sql`
         select a.id, a.term, a.meaning_type, a.meaning_id, a.created_at,
           case when a.meaning_type = 'product' then p.full_name_en when a.meaning_type = 'species' then cat.name_en else null end as meaning_label
@@ -166,63 +166,7 @@ Deno.serve(async (req) => {
         left join categories cat on a.meaning_type = 'species' and cat.id = a.meaning_id
         order by a.created_at desc
       `;
-      return jsonResponse({ product_notes: productNotes, category_notes: categoryNotes, pending, aliases });
-    }
-
-    // Real addition 2026-09-22: stage a suggestion — whoever read the bulletin (a Claude session
-    // today) calls this once per cut it recognizes as possibly one of BuenTrade's own products.
-    // suggested_product_id is a guess (nullable — "couldn't tell which catalog row" is a valid,
-    // honest state, still worth showing the trader with no pre-selected product).
-    if (body.create_suggestion) {
-      const { bulletin_date, raw_cut_name, suggested_product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.create_suggestion;
-      if (!raw_cut_name) return jsonResponse({ error: "create_suggestion requires raw_cut_name" }, 400);
-      const [row] = await sql`
-        insert into product_market_note_suggestions
-          (bulletin_date, raw_cut_name, suggested_product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by)
-        values (${bulletin_date ?? new Date().toISOString().slice(0, 10)}, ${raw_cut_name}, ${suggested_product_id ?? null}, ${trend_pct ?? null}, ${note ?? null}, ${mx_benchmark_price_usd_kg ?? null}, ${mx_benchmark_region ?? null}, ${actor ?? null})
-        returning id
-      `;
-      return jsonResponse({ created: true, id: row.id });
-    }
-
-    // Real addition 2026-09-22: every pending suggestion, for the "Review bulletin suggestions"
-    // panel — joined with the suggested product's own name so the trader sees a real product name,
-    // not a raw ID, and can judge the match at a glance.
-    if (body.list_suggestions) {
-      const rows = await sql`
-        select s.id, s.bulletin_date, s.raw_cut_name, s.suggested_product_id, s.trend_pct, s.note,
-          s.mx_benchmark_price_usd_kg, s.mx_benchmark_region, s.created_at,
-          p.full_name_en as suggested_product_name
-        from product_market_note_suggestions s
-        left join products p on p.id = s.suggested_product_id
-        where s.status = 'pending'
-        order by s.bulletin_date desc, s.created_at desc
-      `;
-      return jsonResponse({ suggestions: rows });
-    }
-
-    // Real addition 2026-09-22: trader confirms — confirmed_product_id lets them override the
-    // suggestion (pick a different real product than the guess, or supply one when there was no
-    // guess) before it becomes a real, customer-facing product_market_notes row. Never silently
-    // applies the guess without this explicit confirmation.
-    if (body.approve_suggestion) {
-      const { id, confirmed_product_id, actor } = body.approve_suggestion;
-      if (!id || !confirmed_product_id) return jsonResponse({ error: "approve_suggestion requires id and confirmed_product_id" }, 400);
-      const [suggestion] = await sql`select * from product_market_note_suggestions where id = ${id} and status = 'pending'`;
-      if (!suggestion) return jsonResponse({ error: "suggestion not found or already reviewed" }, 404);
-      await sql`
-        insert into product_market_notes (product_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, created_by)
-        values (${confirmed_product_id}, ${suggestion.trend_pct}, ${suggestion.note}, ${suggestion.mx_benchmark_price_usd_kg}, ${suggestion.mx_benchmark_region}, ${actor ?? null})
-      `;
-      await sql`update product_market_note_suggestions set status = 'approved', reviewed_by = ${actor ?? null}, reviewed_at = now() where id = ${id}`;
-      return jsonResponse({ approved: true });
-    }
-
-    if (body.reject_suggestion) {
-      const { id, actor } = body.reject_suggestion;
-      if (!id) return jsonResponse({ error: "reject_suggestion requires id" }, 400);
-      await sql`update product_market_note_suggestions set status = 'rejected', reviewed_by = ${actor ?? null}, reviewed_at = now() where id = ${id} and status = 'pending'`;
-      return jsonResponse({ rejected: true });
+      return jsonResponse({ product_notes: productNotes, category_notes: categoryNotes, aliases });
     }
 
     const { product_id } = body;
