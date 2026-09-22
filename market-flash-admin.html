@@ -558,26 +558,35 @@ function renderMfReview(){
           ${pickLabel}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
           ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
         </div>`;
-    const productValue = r.meaning_type === 'product' ? escapeHtml(r.meaning_label || '') : '';
+    // Real correction 2026-09-22 ("el producto es mas importante que la proteina"): picking product
+    // then protein used to silently overwrite the product with whichever was touched last — losing
+    // the more precise, more valuable pick without any signal it happened. A specific product (or a
+    // product-family pick — same precision, just several packaging/temp variants) now outranks
+    // protein/market outright: once one is picked, the other two controls lock (dimmed, disabled)
+    // until the trader clears the product box themselves — an explicit, visible action, never an
+    // accidental dropdown click quietly downgrading a precise match to a broad one.
+    const productLocked = r.meaning_type === 'product' || r.meaning_type === 'product_family';
+    const productValue = productLocked ? escapeHtml(r.meaning_label || '') : '';
     return `
       <div class="teach-row" data-idx="${i}">
         <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)}</div>
         ${statusLine}
+        ${productLocked ? '<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;">Protein and general-market are locked while a product is picked — clear the product box to change.</div>' : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
           <div style="flex:1;min-width:220px;">
             <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Is this product:</label>
-            <input type="text" id="mf_prod_${i}" autocomplete="off" placeholder="Search product…" value="${productValue}" oninput="mfFilterProduct(${i}, this.value)" style="width:100%;padding:6px 8px;border:1.5px solid ${r.meaning_type === 'product' ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <input type="text" id="mf_prod_${i}" autocomplete="off" placeholder="Search product…" value="${productValue}" oninput="mfFilterProduct(${i}, this.value)" style="width:100%;padding:6px 8px;border:1.5px solid ${productLocked ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
             <div id="mf_prod_results_${i}" style="max-height:120px;overflow-y:auto;"></div>
           </div>
-          <div>
+          <div style="${productLocked ? 'opacity:.4;' : ''}">
             <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Or this protein overall:</label>
-            <select onchange="mfPickSpecies(${i}, this.value)" style="padding:6px 8px;border:1.5px solid ${r.meaning_type === 'species' ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
+            <select ${productLocked ? 'disabled' : ''} onchange="mfPickSpecies(${i}, this.value)" style="padding:6px 8px;border:1.5px solid ${r.meaning_type === 'species' ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
               <option value="">—</option>
               ${mfCategories.map(c => `<option value="${c.id}" ${r.meaning_type === 'species' && r.meaning_id === c.id ? 'selected' : ''}>${escapeHtml(c.name_en || c.name)}</option>`).join('')}
             </select>
           </div>
-          <div>
-            <button type="button" class="btn ${r.meaning_type === 'market' ? '' : 'ghost'}" onclick="mfPickMarket(${i})">Neither a product nor a protein — general market info</button>
+          <div style="${productLocked ? 'opacity:.4;' : ''}">
+            <button type="button" ${productLocked ? 'disabled' : ''} class="btn ${r.meaning_type === 'market' ? '' : 'ghost'}" onclick="mfPickMarket(${i})">Neither a product nor a protein — general market info</button>
           </div>
         </div>
       </div>`;
@@ -603,7 +612,17 @@ function renderMfReview(){
 function mfFilterProduct(i, query){
   const resultsEl = document.getElementById('mf_prod_results_' + i);
   const q = query.trim().toLowerCase();
-  if (!q){ resultsEl.innerHTML = ''; return; }
+  if (!q){
+    resultsEl.innerHTML = '';
+    // Clearing the product box is the deliberate, visible action that releases the product-outranks-
+    // protein lock (see renderMfReview) — never a side effect of anything else.
+    if (mfRows[i].meaning_type === 'product' || mfRows[i].meaning_type === 'product_family'){
+      mfRows[i].meaning_type = null; mfRows[i].meaning_id = null;
+      mfRows[i].meaning_text = null; mfRows[i].meaning_subtext = null; mfRows[i].meaning_label = null;
+      renderMfReview();
+    }
+    return;
+  }
   const matches = mfProducts.filter(p => (p.full_name_en || '').toLowerCase().includes(q)).slice(0, 8);
 
   const familyKeys = new Set();
@@ -646,6 +665,10 @@ function mfPickProductFamily(i, categoryId, nameEn, subcategoryEn, categoryName)
 }
 function mfPickSpecies(i, categoryId){
   if (!categoryId) return;
+  // Defense in depth: the dropdown is already disabled in the DOM while a product/family is
+  // picked (see renderMfReview) — this refuses the change regardless, product always outranks
+  // protein, never a quiet downgrade from whichever control fires last.
+  if (mfRows[i].meaning_type === 'product' || mfRows[i].meaning_type === 'product_family') return;
   const cat = mfCategories.find(c => c.id === categoryId);
   mfRows[i].meaning_type = 'species';
   mfRows[i].meaning_id = categoryId;
@@ -655,6 +678,7 @@ function mfPickSpecies(i, categoryId){
   renderMfReview();
 }
 function mfPickMarket(i){
+  if (mfRows[i].meaning_type === 'product' || mfRows[i].meaning_type === 'product_family') return;
   mfRows[i].meaning_type = 'market';
   mfRows[i].meaning_id = null;
   mfRows[i].meaning_text = null;
