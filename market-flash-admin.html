@@ -197,9 +197,18 @@ auth.onAuthStateChanged(user => {
     <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openMfPanel()">📋 Load Market Flash</button>
   </div>
 
-  <!-- ============ ACTIVE BULLETS — the whole picture: what's live, connected to which product/protein, and which customers it reaches ============ -->
-  <h1>Active Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— what's currently reaching customers, and who</span></h1>
-  <div class="tbl-wrap"><table id="tblMfActive"><thead><tr><th>Connected to</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+  <!-- ============ ACTIVE BULLETS — real correction 2026-09-23 ("producto, proteina, mercado estas
+       3 deben ser vistas en limpio despues de filtrado"): one flat mixed table made it hard to see
+       at a glance what's actually live at each precision level — three separate sections instead,
+       same real data, split by scope so Product/Protein/Market are each readable on their own. ============ -->
+  <h1>Product Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— tied to one exact SKU or a packaging/temp family, reaching only those real buyers</span></h1>
+  <div class="tbl-wrap"><table id="tblMfActiveProduct"><thead><tr><th>Product</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Protein Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— category-wide, reaching every customer of every product in that protein</span></h1>
+  <div class="tbl-wrap"><table id="tblMfActiveProtein"><thead><tr><th>Protein</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+
+  <h1>Market Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— pure context, not tied to any product or customer</span></h1>
+  <div class="tbl-wrap"><table id="tblMfActiveMarket"><thead><tr><th>Bulletin term</th><th>Learned</th></tr></thead><tbody></tbody></table></div>
 </main>
 </div><!-- /appContent -->
 
@@ -271,7 +280,7 @@ async function loadMarketFlash(){
     ]);
     mfCategories = lookups.categories || [];
     mfProducts = productsRes.results || [];
-    renderMfActive(mf.product_notes || [], mf.category_notes || [], mf.family_notes || []);
+    renderMfActive(mf.product_notes || [], mf.category_notes || [], mf.family_notes || [], mf.aliases || []);
   } catch (e) {
     showErr('Error loading: ' + e.message);
   }
@@ -741,33 +750,54 @@ async function applyMfAll(){
     // anything happened — same table, same scroll position, no confirmation. Now scrolls to Active
     // Bullets and shows exactly how many lines just went live there.
     showSuccess(`${appliedCount} line${appliedCount === 1 ? '' : 's'} applied — now live in Active Bullets below.`);
-    document.querySelector('#tblMfActive').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelector('#tblMfActiveProduct').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
-function renderMfActive(productNotes, categoryNotes, familyNotes){
-  const tbody = document.querySelector('#tblMfActive tbody');
-  const rows = [
-    ...productNotes.map(n => ({ ...n, kind: 'product', label: n.product_name })),
-    ...(familyNotes || []).map(n => ({ ...n, kind: 'product_family', label: `${n.category_name} — ${n.product_name_en}${n.product_subcategory_en ? ' (' + n.product_subcategory_en + ')' : ''} (all packaging/temp variants)` })),
-    ...categoryNotes.map(n => ({ ...n, kind: 'species', label: n.category_name })),
+// Real correction 2026-09-23 ("producto, proteina, mercado estas 3 deben ser vistas en limpio
+// despues de filtrado"): one flat mixed table made every scope look the same at a glance — three
+// separate sections instead, same real data (product_notes/family_notes/category_notes/aliases
+// from list_market_flash), split by precision so each is readable on its own without hunting
+// through badges in a single long list.
+function mfBulletRowHtml(r, dataCols){
+  const bits = [];
+  if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
+  if (r.note) bits.push(escapeHtml(r.note));
+  if (r.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${r.mx_benchmark_price_usd_kg}/kg`);
+  const asOf = new Date(r.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const customers = (r.customer_names || []).length ? escapeHtml(r.customer_names.join(', ')) : '<span style="color:var(--ink-soft);">No customer linked yet</span>';
+  return `<tr>
+    <td>${escapeHtml(r.label || '—')}</td>
+    <td>${bits.join(' · ') || '—'}</td>
+    <td>${asOf}</td>
+    <td>${customers}</td>
+  </tr>`;
+}
+
+function renderMfActive(productNotes, categoryNotes, familyNotes, aliases){
+  const productRows = [
+    ...productNotes.map(n => ({ ...n, label: n.product_name })),
+    ...(familyNotes || []).map(n => ({ ...n, label: `${n.category_name} — ${n.product_name_en}${n.product_subcategory_en ? ' (' + n.product_subcategory_en + ')' : ''} (all packaging/temp variants)` })),
   ].sort((a, b) => new Date(b.note_date) - new Date(a.note_date));
-  if (!rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing active yet.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => {
-    const bits = [];
-    if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
-    if (r.note) bits.push(escapeHtml(r.note));
-    if (r.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${r.mx_benchmark_price_usd_kg}/kg`);
-    const asOf = new Date(r.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const customers = (r.customer_names || []).length ? escapeHtml(r.customer_names.join(', ')) : '<span style="color:var(--ink-soft);">No customer linked yet</span>';
-    const badge = mfBadgeInfo(r.kind);
-    return `<tr>
-      <td><span class="mf-badge ${badge.cls}">${badge.text}</span> ${escapeHtml(r.label || '—')}</td>
-      <td>${bits.join(' · ') || '—'}</td>
-      <td>${asOf}</td>
-      <td>${customers}</td>
-    </tr>`;
-  }).join('');
+  const productTbody = document.querySelector('#tblMfActiveProduct tbody');
+  productTbody.innerHTML = productRows.length
+    ? productRows.map(r => mfBulletRowHtml(r)).join('')
+    : '<tr><td colspan="4" class="empty">Nothing active yet.</td></tr>';
+
+  const proteinRows = categoryNotes.map(n => ({ ...n, label: n.category_name })).sort((a, b) => new Date(b.note_date) - new Date(a.note_date));
+  const proteinTbody = document.querySelector('#tblMfActiveProtein tbody');
+  proteinTbody.innerHTML = proteinRows.length
+    ? proteinRows.map(r => mfBulletRowHtml(r)).join('')
+    : '<tr><td colspan="4" class="empty">Nothing active yet.</td></tr>';
+
+  // Market-only terms never get a product_market_notes row (nothing to reach a customer with) —
+  // listed here straight from the learned aliases so a term the trader marked as pure context
+  // still shows up somewhere, instead of vanishing the moment it's taught.
+  const marketRows = (aliases || []).filter(a => a.meaning_type === 'market').sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const marketTbody = document.querySelector('#tblMfActiveMarket tbody');
+  marketTbody.innerHTML = marketRows.length
+    ? marketRows.map(a => `<tr><td>${escapeHtml(a.term)}</td><td>${new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="empty">Nothing marked as general market yet.</td></tr>';
 }
 
 </script>
