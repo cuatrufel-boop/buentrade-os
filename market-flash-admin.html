@@ -56,6 +56,15 @@
   .nav-pill.active{color:var(--blue-bright);}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:20px;}
   .mf-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid;margin-right:4px;}
+  /* Same tab pattern quotes.html already uses (tab-row/tab-btn/tab-count) — reused as-is, not a
+     new component, for Active Bullets' three sections (real correction 2026-09-23: "tengo que
+     escroll demasiado para abajo cuando hay mucha data"). */
+  .tab-row{display:flex;gap:6px;margin:0 0 18px;border-bottom:1.5px solid var(--line);}
+  .tab-btn{background:none;border:none;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;font-family:inherit;display:inline-flex;align-items:center;gap:7px;}
+  .tab-btn.active{color:var(--blue-bright);border-bottom-color:var(--blue-bright);}
+  .tab-btn:focus{outline:none;}
+  .tab-btn:focus-visible{outline:2px solid var(--blue-bright);outline-offset:2px;}
+  .tab-count{background:#C4432E;color:#fff;font-size:10.5px;font-weight:700;border-radius:10px;padding:1px 7px;line-height:1.5;}
   .mf-badge.product{color:#3FCB7E;border-color:rgba(63,203,126,.4);}
   .mf-badge.species{color:var(--amber);border-color:rgba(255,200,118,.4);}
   .teach-row{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
@@ -197,18 +206,29 @@ auth.onAuthStateChanged(user => {
     <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openMfPanel()">📋 Load Market Flash</button>
   </div>
 
-  <!-- ============ ACTIVE BULLETS — real correction 2026-09-23 ("producto, proteina, mercado estas
-       3 deben ser vistas en limpio despues de filtrado"): one flat mixed table made it hard to see
-       at a glance what's actually live at each precision level — three separate sections instead,
-       same real data, split by scope so Product/Protein/Market are each readable on their own. ============ -->
-  <h1>Product Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— tied to one exact SKU or a packaging/temp family, reaching only those real buyers</span></h1>
-  <div class="tbl-wrap"><table id="tblMfActiveProduct"><thead><tr><th>Product</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+  <!-- ============ ACTIVE BULLETS — real correction 2026-09-23 ("tengo que escroll demasiado para
+       abajo cuando hay mucha data"): three stacked full tables meant scrolling past all of Product
+       to reach Protein/Market — same tab pattern quotes.html already uses, one section visible at
+       a time, with a live count on each tab so the split is visible without opening any of them. ============ -->
+  <h1>Active Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— what's currently reaching customers, and who</span></h1>
+  <div class="tab-row">
+    <button type="button" class="tab-btn active" id="mfTabBtn_product" onclick="setMfActiveTab('product')">Product <span class="tab-count" id="mfTabCount_product" style="display:none;"></span></button>
+    <button type="button" class="tab-btn" id="mfTabBtn_protein" onclick="setMfActiveTab('protein')">Protein <span class="tab-count" id="mfTabCount_protein" style="display:none;"></span></button>
+    <button type="button" class="tab-btn" id="mfTabBtn_market" onclick="setMfActiveTab('market')">Market <span class="tab-count" id="mfTabCount_market" style="display:none;"></span></button>
+  </div>
 
-  <h1>Protein Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— category-wide, reaching every customer of every product in that protein</span></h1>
-  <div class="tbl-wrap"><table id="tblMfActiveProtein"><thead><tr><th>Protein</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Market Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— pure context, not tied to any product or customer</span></h1>
-  <div class="tbl-wrap"><table id="tblMfActiveMarket"><thead><tr><th>Bulletin term</th><th>Learned</th></tr></thead><tbody></tbody></table></div>
+  <div id="mfTabPanel_product">
+    <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Tied to one exact SKU or a packaging/temp family — reaches only those real buyers.</p>
+    <div class="tbl-wrap"><table id="tblMfActiveProduct"><thead><tr><th>Product</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div id="mfTabPanel_protein" style="display:none;">
+    <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Category-wide — reaches every customer of every product in that protein.</p>
+    <div class="tbl-wrap"><table id="tblMfActiveProtein"><thead><tr><th>Protein</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div id="mfTabPanel_market" style="display:none;">
+    <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Pure context — not tied to any product or customer.</p>
+    <div class="tbl-wrap"><table id="tblMfActiveMarket"><thead><tr><th>Bulletin term</th><th>Learned</th></tr></thead><tbody></tbody></table></div>
+  </div>
 </main>
 </div><!-- /appContent -->
 
@@ -541,9 +561,20 @@ function mfProductProteinLabel(productId){
   return cat ? (cat.name_en || cat.name) : null;
 }
 
+// Real correction 2026-09-23 ("no esta claro como se filtran para las 3 tablas la data desde que
+// subo el pdf"): the only feedback while resolving a batch used to be a bare "N of 41 ready" count
+// — no visible link to which of the three Active Bullets tabs (Product/Protein/Market) each pick
+// was actually headed for. This live count updates on every single pick, right where the trader is
+// already working, not just after Apply All closes the popup.
 function renderMfReview(){
-  const resolvedCount = mfRows.filter(mfIsResolved).length;
-  document.getElementById('mfSummary').textContent = `${resolvedCount} of ${mfRows.length} ready to apply.`;
+  const resolvedRows = mfRows.filter(mfIsResolved);
+  const productCount = resolvedRows.filter(r => r.meaning_type === 'product' || r.meaning_type === 'product_family').length;
+  const proteinCount = resolvedRows.filter(r => r.meaning_type === 'species').length;
+  const marketCount = resolvedRows.filter(r => r.meaning_type === 'market').length;
+  const unresolvedCount = mfRows.length - resolvedRows.length;
+  document.getElementById('mfSummary').textContent =
+    `${resolvedRows.length} of ${mfRows.length} ready to apply — Product: ${productCount} · Protein: ${proteinCount} · Market: ${marketCount}` +
+    (unresolvedCount ? ` · ${unresolvedCount} still unresolved` : '');
   document.getElementById('mfReviewRows').innerHTML = mfRows.map((r, i) => {
     if (r.known){
       const bits = [`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`];
@@ -798,6 +829,22 @@ function renderMfActive(productNotes, categoryNotes, familyNotes, aliases){
   marketTbody.innerHTML = marketRows.length
     ? marketRows.map(a => `<tr><td>${escapeHtml(a.term)}</td><td>${new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td></tr>`).join('')
     : '<tr><td colspan="2" class="empty">Nothing marked as general market yet.</td></tr>';
+
+  mfSetTabCount('product', productRows.length);
+  mfSetTabCount('protein', proteinRows.length);
+  mfSetTabCount('market', marketRows.length);
+}
+
+function mfSetTabCount(tab, count){
+  const el = document.getElementById('mfTabCount_' + tab);
+  el.textContent = count;
+  el.style.display = count ? 'inline-block' : 'none';
+}
+function setMfActiveTab(tab){
+  ['product', 'protein', 'market'].forEach(t => {
+    document.getElementById('mfTabBtn_' + t).classList.toggle('active', t === tab);
+    document.getElementById('mfTabPanel_' + t).style.display = t === tab ? 'block' : 'none';
+  });
 }
 
 </script>
