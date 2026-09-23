@@ -355,9 +355,29 @@ async function handleMfPdfFile(file){
   mfDropZone.textContent = 'Reading ' + file.name + '...';
   try {
     const text = await extractPdfLayoutText(file);
+    let narrativeSections = [];
+    try { narrativeSections = await extractPdfNarrativeSections(file); }
+    catch (e) { /* never blocks the real per-cut rows over the narrative extraction failing */ }
     document.getElementById('mfInput').value = text;
     mfDropZone.innerHTML = mfDropZoneDefaultHtml;
     await processMfText();
+    // Real addition 2026-09-23 ("necesitamos que lea el texto y lo convierta en data para market y
+    // para proteina"): the report's own species-level commentary, pre-resolved as Protein with the
+    // real paragraph as its note (never just a bare %) — shown at the top of the review list so the
+    // trader confirms/edits it like anything else, never silently applied.
+    if (narrativeSections.length){
+      const narrativeRows = narrativeSections.map(s => {
+        const cat = mfCategories.find(c => (c.name_en || c.name) === s.categoryName);
+        return {
+          raw_cut_name: `${s.categoryName} Market Trends (report summary)`, trend_pct: null, known: false,
+          meaning_type: cat ? 'species' : null, meaning_id: cat ? cat.id : null,
+          meaning_text: null, meaning_subtext: null, meaning_label: cat ? s.categoryName : null,
+          note: s.text,
+        };
+      });
+      mfRows = [...narrativeRows, ...mfRows];
+      renderMfReview();
+    }
   } catch (e) {
     errEl.textContent = 'Could not read the PDF: ' + e.message;
     errEl.style.display = '';
@@ -405,6 +425,80 @@ async function extractPdfLayoutText(file){
     fullText += '\f';
   }
   return fullText;
+}
+
+// Real addition 2026-09-23 ("el parser solo lee productos... necesitamos que lea el texto y lo
+// convierta en data para market y para proteina"): the report's own real qualitative commentary —
+// "Pork Market Trends", "Beef Market Trends", etc., laid out as a 2-column block of bullet-point
+// paragraphs (found on the report's own Summary page, not a fixed page number) — never reached the
+// review list before; only the 41 per-cut price charts did.
+//
+// Real bug found testing against the live report: the table-of-contents column ("Summary", "1",
+// "Pork Statistics", "2"...) sits at nearly the exact same y as the two header rows just below it —
+// off by ~1pt, well inside normal row-clustering tolerance — so a naive "join everything on this
+// row" approach produced "Summary 1 Pork Market Trends Beef Market Trends" as one contaminated row,
+// with the header's OWN x lost under the TOC's x=17. Fixed by matching a sliding window of
+// consecutive items (not the whole clustered row) against the header pattern, so the match keeps
+// the true header item's own x/y regardless of what else shares its row.
+async function extractPdfNarrativeSections(file){
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const Y_TOL = 3;
+  const HEADER_RE = /^([A-Za-z]+)\s+Market\s+Trends?$/i;
+  const KNOWN_SPECIES = ['Pork', 'Beef', 'Chicken', 'Turkey', 'Lamb', 'Sow'];
+
+  function groupRows(items){
+    const rowsMap = new Map();
+    for (const it of items){
+      let key = null;
+      for (const y of rowsMap.keys()){ if (Math.abs(y - it.y) <= Y_TOL){ key = y; break; } }
+      if (key == null){ key = it.y; rowsMap.set(key, []); }
+      rowsMap.get(key).push(it);
+    }
+    return [...rowsMap.entries()].map(([y, its]) => ({
+      y, sorted: its.sort((a, b) => a.x - b.x),
+      text: its.sort((a, b) => a.x - b.x).map(it => it.str).join(' ').replace(/\s+/g, ' ').trim(),
+    })).filter(r => r.text);
+  }
+
+  function findHeadersInRow(row){
+    const found = [];
+    for (let start = 0; start < row.sorted.length; start++){
+      for (let end = start; end < Math.min(start + 4, row.sorted.length); end++){
+        const windowText = row.sorted.slice(start, end + 1).map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+        const m = windowText.match(HEADER_RE);
+        if (m && KNOWN_SPECIES.includes(m[1])){ found.push({ species: m[1], x: row.sorted[start].x, y: row.sorted[start].y }); break; }
+      }
+    }
+    return found;
+  }
+
+  for (let p = 1; p <= doc.numPages; p++){
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })).filter(it => it.str && it.str.trim());
+    const rows = groupRows(items);
+    const headers = rows.flatMap(findHeadersInRow);
+    if (headers.length < 2) continue; // not the narrative page — every real bulletin has 4 of these together
+
+    const colSplitX = (Math.min(...headers.map(h => h.x)) + Math.max(...headers.map(h => h.x))) / 2;
+    const tocMaxX = Math.min(...headers.map(h => h.x)) - 10;
+    const sections = [];
+    for (const h of headers){
+      const isLeft = h.x < colSplitX;
+      const sameColHeaders = headers.filter(o => (o.x < colSplitX) === isLeft && o.y < h.y).sort((a, b) => b.y - a.y);
+      const yBottom = sameColHeaders.length ? sameColHeaders[0].y : -Infinity;
+      // Filter individual ITEMS by x/y (not whole rows) — the same TOC-contamination the header
+      // detection above works around can also leak a stray "Cattle on Feed"-style label into a
+      // paragraph row that otherwise belongs to this section.
+      const colItems = items.filter(it => it.y < h.y && it.y > yBottom && (isLeft ? it.x >= tocMaxX && it.x < colSplitX : it.x >= colSplitX));
+      const colRows = groupRows(colItems);
+      const text = colRows.sort((a, b) => b.y - a.y).map(r => r.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (text) sections.push({ categoryName: h.species, text });
+    }
+    if (sections.length) return sections; // one narrative page per report — stop at the first one found
+  }
+  return [];
 }
 
 // Fallback: one line per item, real value at the end (for a trader typing a quick manual line
@@ -630,10 +724,15 @@ function renderMfReview(){
     // accidental dropdown click quietly downgrading a precise match to a broad one.
     const productLocked = r.meaning_type === 'product' || r.meaning_type === 'product_family';
     const productValue = productLocked ? escapeHtml(r.meaning_label || '') : '';
+    // Real addition 2026-09-23 ("necesitamos que lea el texto"): the report's own narrative
+    // commentary rows carry real prose in .note (not just a %) — shown in full so the trader
+    // actually reads and confirms it before applying, never hidden behind a badge alone.
+    const noteBlock = r.note ? `<div style="background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">${escapeHtml(r.note)}</div>` : '';
     return `
       <div class="teach-row" data-idx="${i}">
         <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)}</div>
         ${statusLine}
+        ${noteBlock}
         ${productLocked ? '<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;">Protein and Market are locked while a Product is picked — clear the Product box to change.</div>' : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
           <div style="flex:1;min-width:220px;">
@@ -761,7 +860,8 @@ async function applyMfAll(){
   const results = await Promise.allSettled(toApply.map(row => callApi('price-history-search', {
     teach_term: {
       raw_cut_name: row.raw_cut_name, meaning_type: row.meaning_type, meaning_id: row.meaning_id,
-      meaning_text: row.meaning_text ?? null, meaning_subtext: row.meaning_subtext ?? null, trend_pct: row.trend_pct, actor: currentActor(),
+      meaning_text: row.meaning_text ?? null, meaning_subtext: row.meaning_subtext ?? null,
+      trend_pct: row.trend_pct, note: row.note ?? null, actor: currentActor(),
     },
   })));
   btn.disabled = false; btn.textContent = 'Apply All';
