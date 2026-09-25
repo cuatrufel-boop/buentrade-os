@@ -43,6 +43,12 @@ Deno.serve(async (req) => {
       return jsonResponse(await processInboxMessage(sql, body.process_market_flash_inbox.message_id));
     }
 
+    // Cheap: only the latest bulletin's identity — the header's red dot (every page) asks this on load.
+    if (body.market_flash_status) {
+      const [b] = await sql`select id, as_of, created_at, source from market_flash_bulletins order by as_of desc, created_at desc limit 1`;
+      return jsonResponse({ bulletin: b ?? null });
+    }
+
     if (body.list_market_flash) return jsonResponse(await listMarketFlash(sql));
 
     if (body.teach_market_flash_term) {
