@@ -2829,9 +2829,12 @@ function fmtPriceCell(p){
   const dateStr = dOnly ? new Date(dOnly + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : null;
   const age = priceAgeDays(p.price_date);
   const stale = age != null && age > PRICE_STALE_DAYS;
-  const dateColor = stale ? '#C4432E' : 'var(--ink-soft)';
-  const dateLabel = stale ? `⚠ expired · ${dateStr}` : `· ${dateStr}`;
-  return `<span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(p.current_price).toFixed(2)}</span>${dateStr ? `<span style="font-size:11px;color:${dateColor};font-weight:${stale ? '700' : '400'};"> ${dateLabel}</span>` : ''}`;
+  const priceHtml = `<span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(p.current_price).toFixed(2)}</span>`;
+  if (!dateStr) return priceHtml;
+  // Old price: the same amber outlined pill as .payment-badge.due-soon everywhere else — the price stays the loud element,
+  // the date reads as a quiet tag instead of a red warning line.
+  if (stale) return `${priceHtml} <span class="payment-badge due-soon" title="Price from ${dateStr} — ${age} days old">${dateStr}</span>`;
+  return `${priceHtml}<span style="font-size:11px;color:var(--ink-soft);"> · ${dateStr}</span>`;
 }
 
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
