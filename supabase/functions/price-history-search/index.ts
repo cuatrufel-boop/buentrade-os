@@ -10,6 +10,7 @@
 //                            narrative by an audited literal-translation step) and stores every Spanish bullet.
 //                            Idempotent by the sha-256 of the PDF (computed here): the same PDF/email twice = one bulletin.
 //   list_market_flash        the three tabs (Product / Protein / Market) + Pending Matches, read-only.
+//   poll_market_flash_emails / process_market_flash_inbox  the bulletin arriving by email (cron every 15 min).
 //   teach_market_flash_term  Pending Matches → "this printed term means this catalog product/family" (learned once,
 //                            applies to every stored and future bulletin). Idempotent upsert.
 // Mutually exclusive with each other and with the default read below.
@@ -18,6 +19,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse } from "../_shared/matching.ts";
 import { ingestBulletin, listMarketFlash, pickBulletsForCustomerProduct, teachTerm } from "../_shared/marketFlash/store.ts";
+import { diagnoseInbox, pollBulletinEmails, processInboxMessage } from "../_shared/marketFlash/emailInbox.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -30,6 +32,15 @@ Deno.serve(async (req) => {
       const { items, file_hash, pdf_base64, actor, source } = body.ingest_market_flash;
       const r = await ingestBulletin(sql, { items, file_hash, pdf_base64, actor: actor ?? "unknown", source });
       return jsonResponse(r, "error" in r ? 400 : 200);
+    }
+
+    // Bulletin by email (see _shared/marketFlash/emailInbox.ts): poll finds/validates/downloads/reads the PDF; process turns
+    // one stored message into a bulletin (called by poll per message, so each step has its own compute budget).
+    if (body.poll_market_flash_emails?.diagnose) return jsonResponse(await diagnoseInbox());
+    if (body.poll_market_flash_emails) return jsonResponse(await pollBulletinEmails(sql, body.poll_market_flash_emails.max_results || 10));
+    if (body.process_market_flash_inbox) {
+      if (!body.process_market_flash_inbox.message_id) return jsonResponse({ error: "process_market_flash_inbox requires message_id" }, 400);
+      return jsonResponse(await processInboxMessage(sql, body.process_market_flash_inbox.message_id));
     }
 
     if (body.list_market_flash) return jsonResponse(await listMarketFlash(sql));

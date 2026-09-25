@@ -3994,14 +3994,23 @@ function rqMxBenchmarkLineEs(signal, full){
   return `Referencia de mercado${region}: $${benchmarkPerLb.toFixed(4)} USD/lb — tu precio con nosotros te sale ${pctBetter}% mejor.`;
 }
 
-async function rqFetchCustomerSignalLine(customerId, full, channel){
+// Market Flash bullets picked for each customer's message while it is being composed. They count as SENT (so they are
+// never offered to that customer again) only when the trader confirms the message — rqConfirmBullets, called from the
+// review modal's onSent / onOpened — never merely because the text was built or the modal was opened and closed.
+const rqMarketNoteByCustomer = {};
+function rqConfirmBullets(customerId, channel){
+  return mfLogSends(callApi, rqMarketNoteByCustomer[customerId], customerId, channel, currentActor());
+}
+
+async function rqFetchCustomerSignalLine(customerId, full){
+  rqMarketNoteByCustomer[customerId] = null;
   const productIds = [...new Set((full || []).map(({ plant }) => plant.rqProductId).filter(Boolean))];
   if (!productIds.length) return '';
   let signals = [];
   try { signals = (await callApi('customer-product-signal', { customer_id: customerId, product_ids: productIds })).signals || []; } catch (e) { return ''; }
   const withSignal = signals.find(s => s.cadence || s.priceTrend || s.marketNote);
   if (!withSignal) return '';
-  await mfLogSends(callApi, withSignal.marketNote, customerId, channel, currentActor());
+  rqMarketNoteByCustomer[customerId] = withSignal.marketNote || null;
   const parts = [rqSignalLineEs(withSignal), rqMxBenchmarkLineEs(withSignal, full)].filter(Boolean);
   return parts.join(' ');
 }
@@ -5056,21 +5065,16 @@ async function sendOfferEmailTo(customerId){
   // previously this logged only after send succeeded/failed, once each, never before building body.
   const { warnings } = await rqLogSentOffersRows(full, [c], 'email');
   warnings.forEach(w => rqShowNotice(w.message));
-  const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'email');
+  const signalLine = await rqFetchCustomerSignalLine(c.id, full);
   const body = buildCustomerOfferText(firstName, full, warnings.length > 0, signalLine);
-  try {
-    await sendEmailApiRaw('offers', c.email, subject, body, null, attachments);
-    rqShowNotice(`Cotización enviada a ${c.email}.`);
-  } catch (e) {
-    // API failed — same fallback every other send flow uses: open the real Gmail compose so the
-    // send isn't fully blocked, downloading the attachments first since Gmail can't accept them
-    // via URL param (no mail provider's compose link can — that would let any page silently
-    // attach arbitrary files to an email the trader never chose).
-    const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
-    downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
-    rqOpenGmail(c.email, subject, body);
-    rqShowNotice(`Envío automático falló (${e.message}) — se abrió Gmail` + (downloadFiles.length ? `, ${downloadFiles.length} archivo${downloadFiles.length > 1 ? 's' : ''} descargado${downloadFiles.length > 1 ? 's' : ''}, arrástra${downloadFiles.length > 1 ? 'los' : 'lo'} a la ventana.` : '.'));
-  }
+  // Confirmed by the trader, never automatic (2026-09-25, "todo debe ser confirmado con trader tanto whatsapps como
+  // emails"): the message opens in the editable review card and only its own Send goes out. If the API send fails the
+  // card itself offers the Gmail fallback, as before.
+  const downloadFiles = full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean);
+  rqOpenEmailModal(`Email offer — ${c.trade_name}`, [{
+    id: c.id, label: c.trade_name, to: c.email, subject, body, fromAlias: 'offers', attachments, downloadFiles,
+    onSent: async () => { await rqConfirmBullets(c.id, 'email'); rqShowNotice(`Cotización enviada a ${c.email}.`); },
+  }], true);
 }
 
 async function sendOfferWhatsAppTo(customerId){
@@ -5091,10 +5095,11 @@ async function sendOfferWhatsAppTo(customerId){
   const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
   warnings.forEach(w => rqShowNotice(w.message));
   const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
-  const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'whatsapp');
+  const signalLine = await rqFetchCustomerSignalLine(c.id, full);
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
     id: c.id, label: c.trade_name, phone,
     body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId, warnings.length > 0, signalLine),
+    onOpened: () => rqConfirmBullets(c.id, 'whatsapp'),
   }], true);
 }
 
@@ -5137,7 +5142,7 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
     const subjectSpecs = [...new Set(full.map(({ plant }) => rqSpecEsForPlant(plant)).filter(Boolean))];
     const { warnings } = await rqLogSentOffersRows(full, [c], 'email');
     warnings.forEach(w => rqShowNotice(w.message));
-    const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'email');
+    const signalLine = await rqFetchCustomerSignalLine(c.id, full);
     toSend.push({
       id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${subjectSpecs.join(' / ')}`,
       body: buildCustomerOfferText(firstName, full, warnings.length > 0, signalLine), full, c,
@@ -5157,35 +5162,13 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
       : 'No customer with an email is linked to any variant in this quote yet — link one in Customers first.');
     return;
   }
-  const failed = [];
-  for (const it of toSend) {
-    try {
-      await sendEmailApiRaw('offers', it.to, it.subject, it.body, null, it.attachments);
-    } catch (e) {
-      failed.push({ ...it, error: e.message });
-    }
-  }
-  const sentCount = toSend.length - failed.length;
-  if (!failed.length){
-    rqShowNotice(`Cotización enviada a ${sentCount} cliente${sentCount > 1 ? 's' : ''}.`);
-    return;
-  }
-  if (sentCount) rqShowNotice(`Cotización enviada a ${sentCount} cliente${sentCount > 1 ? 's' : ''} — ${failed.length} fallaron, revisa abajo.`);
-  // Only real failures get the review-and-Gmail modal now — a customer that already sent fine
-  // through the API never shows up here for the trader to look at.
-  // No onSent hook needed here any more — every customer above was already logged before this
-  // loop even attempted to send (see the "log first" comment above), so a failure just means the
-  // email itself needs the Gmail fallback, not that the sent_offers row still needs creating.
-  const items = failed.map(it => ({
-    id: it.id, label: it.label, to: it.to, subject: it.subject, body: it.body, downloadFiles: it.downloadFiles,
-  }));
-  if (items.length === 1){
-    const it = items[0];
-    it.downloadFiles.forEach(f => rqDownloadBytes(f.bytes, f.filename));
-    rqOpenGmail(it.to, it.subject, it.body);
-    return;
-  }
-  rqOpenEmailModal(`Email offer — Failed sends (${items.length})`, items, false);
+  // Every customer's message is reviewed and confirmed by the trader (editable card + its own Send, or "Make All Offers"
+  // once they have looked at them) — nothing goes out automatically. A failed API send offers the Gmail fallback on that card.
+  rqOpenEmailModal(`Email offer — ${toSend.length} customer${toSend.length > 1 ? 's' : ''}`, toSend.map(it => ({
+    id: it.id, label: it.label, to: it.to, subject: it.subject, body: it.body, fromAlias: 'offers',
+    attachments: it.attachments, downloadFiles: it.downloadFiles,
+    onSent: async () => { await rqConfirmBullets(it.id, 'email'); },
+  })), true);
 }
 
 // filterProductIds — see sendOfferEmailToAll's own note; same scoping, used by Pending Quotes'
@@ -5205,10 +5188,11 @@ async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds){
     const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
     warnings.forEach(w => rqShowNotice(w.message));
     const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
-    const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'whatsapp');
+    const signalLine = await rqFetchCustomerSignalLine(c.id, full);
     items.push({
       id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
       body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId, warnings.length > 0, signalLine),
+      onOpened: () => rqConfirmBullets(c.id, 'whatsapp'),
     });
   }
   if (!items.length){

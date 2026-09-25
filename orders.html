@@ -1207,11 +1207,12 @@ async function sendSignatureThankYou(orderNumber){
   if (!email && !phone){ await btAlert('This customer has no email or WhatsApp on file.'); return; }
 
   let signalLine = '';
+  let marketNote = null; // Market Flash bullets in this message — logged as sent only once the trader confirms it
   if (o.customer_id && o.product_id){
     try {
       const signals = (await callApi('customer-product-signal', { customer_id: o.customer_id, product_ids: [o.product_id] })).signals || [];
       const signal = signals.find(s => s.cadence || s.priceTrend || s.marketNote);
-      await mfLogSends(callApi, signal && signal.marketNote, o.customer_id, email ? 'email' : 'whatsapp', currentActor());
+      marketNote = signal && signal.marketNote || null;
       const parts = [ordSignalLineEs(signal), ordMxBenchmarkLineEs(signal, Number(o.sale_per_lb) || 0)].filter(Boolean);
       signalLine = parts.join(' ');
     } catch (e) {}
@@ -1220,12 +1221,14 @@ async function sendSignatureThankYou(orderNumber){
 
   if (email){
     const waInfo = phone ? { phone: phone.replace(/\D/g, ''), message } : null;
-    await bcOpenEmailModal({
+    const r = await bcOpenEmailModal({
       title: `Gracias — ${orderNumber}`, fromAlias: 'offers', fromDisplay: FROM_DISPLAY.offers,
       to: [email], subject: `Gracias — ${orderNumber}`, text: message, waInfo,
     });
+    if (r && r.sent) await mfLogSends(callApi, marketNote, o.customer_id, 'email', currentActor());
   } else {
-    await bcOpenWaOnlyModal({ title: `Gracias — ${orderNumber}`, phone: phone.replace(/\D/g, ''), message });
+    const r = await bcOpenWaOnlyModal({ title: `Gracias — ${orderNumber}`, phone: phone.replace(/\D/g, ''), message });
+    if (r && r.sent) await mfLogSends(callApi, marketNote, o.customer_id, 'whatsapp', currentActor());
   }
 }
 async function openInvoiceQT(orderNumber){

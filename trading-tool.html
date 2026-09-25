@@ -2785,7 +2785,6 @@ async function negoSendToCustomer(channel){
   // fetch already found (negoLastSignal), so this doesn't refetch on every send click.
   let signalBlock = '';
   if (negoLastSignal){
-    await mfLogSends(callApi, negoLastSignal.marketNote, negoOffer.customer_id, channel, currentActor());
     const parts = [negoSignalLineEs(negoLastSignal), negoMxBenchmarkLineEs(negoLastSignal)].filter(Boolean);
     if (parts.length) signalBlock = '\n\n' + parts.join(' ');
   }
@@ -2796,6 +2795,8 @@ async function negoSendToCustomer(channel){
     const customerPhone = (negoCustomer.whatsapp || negoCustomer.phone || '').replace(/\D/g, '');
     try {
       await sendEmailApi('offers', negoCustomer.email, 'Cotización', body, [], customerPhone ? { phone: customerPhone, message: body } : null);
+      // sent from the review modal = confirmed by the trader → these Market Flash bullets now count as delivered
+      if (negoLastSignal) await mfLogSends(callApi, negoLastSignal.marketNote, negoOffer.customer_id, 'email', currentActor());
     } catch(e){
       if (e.cancelled) return;
       window.open(`mailto:${negoCustomer.email}?subject=${encodeURIComponent('Cotización')}&body=${encodeURIComponent(body)}`, '_blank');
@@ -2803,7 +2804,10 @@ async function negoSendToCustomer(channel){
   } else {
     const phone = (negoCustomer.whatsapp || negoCustomer.phone || '').replace(/\D/g, '');
     if (!phone){ document.getElementById('negoMsg').textContent = 'This customer has no phone/WhatsApp on file.'; return; }
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
+    // Reviewed and confirmed by the trader in the app before WhatsApp opens (same shared confirm window as the other modules)
+    const waResult = await bcOpenWaOnlyModal({ title: `WhatsApp — ${negoCustomer.trade_name || negoCustomer.name || ''}`, phone, message: body });
+    if (waResult && waResult.cancelled) return;
+    if (negoLastSignal) await mfLogSends(callApi, negoLastSignal.marketNote, negoOffer.customer_id, 'whatsapp', currentActor());
   }
   negoLogEvent('customer', price);
 }

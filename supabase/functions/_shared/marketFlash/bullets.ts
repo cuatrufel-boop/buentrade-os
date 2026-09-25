@@ -38,6 +38,11 @@ const moreLess = (p: number) => (p > 0 ? "más" : "menos");
 const ZERO: Record<string, string> = { "hace un año": "sin cambio frente al año anterior", "la semana anterior": "sin cambio frente a la semana anterior" };
 const versus = (p: number, label: string, ref?: string) => (p === 0 ? `${ZERO[label] || `sin cambio frente a ${label}`}${ref ? ` (${ref})` : ""}` : `${pct(p)} ${moreLess(p)} que ${label}${ref ? ` (${ref})` : ""}`);
 
+// Prices are talked about ONLY as a percentage change (2026-09-25): a US$/cwt figure (per 100 lb) next to US$/kg ones
+// confuses customers, and a percentage is the same for every unit. Percentages between two printed numbers are plain
+// arithmetic (marked `computed`).
+const chg = (cur: number, prev: number) => Math.round((cur / prev - 1) * 1000) / 10;
+
 const SPECIES_ES: Record<Species, string> = { pork: "cerdo", beef: "res", chicken: "pollo", turkey: "pavo", feed: "" };
 
 // USDA Hogs & Pigs labels — fixed, closed set. A label not listed here is not published (never guessed).
@@ -89,19 +94,18 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
     switch (f.kind) {
       case "cut_price_weekly": {
         const wow = v.wow_pct as number | null;
-        const t = `{{CUT}}, semana al ${fmtDate(v.week_end)}: US$${n(v.price)}/cwt — ${versus(v.yoy_pct, "hace un año", usd(v.yrago_price))}` +
-          (wow != null ? `; ${versus(wow, "la semana anterior", usd(v.prev_price))}` : "") + ".";
+        const t = `{{CUT}}, semana al ${fmtDate(v.week_end)}: ${versus(v.yoy_pct, "hace un año")}` + (wow != null ? `; ${versus(wow, "la semana anterior")}` : "") + ".";
         out.push(base(f, bulletinDate, { levels: lv(true, f.species), product_entity: f.entity, text_es: t, computed: wow != null }));
         break;
       }
       case "cut_price_forecast_week":
-        out.push(base(f, bulletinDate, { levels: lv(true, f.species), product_entity: f.entity, text_es: `{{CUT}} — el boletín proyecta para la semana del ${fmtDate(v.for_week)}: US$${n(v.price)}/cwt (${versus(v.yoy_pct, "hace un año")}).` }));
+        out.push(base(f, bulletinDate, { levels: lv(true, f.species), product_entity: f.entity, text_es: `{{CUT}} — el boletín proyecta para la semana del ${fmtDate(v.for_week)}: ${versus(v.yoy_pct, "hace un año")}.` }));
         break;
       case "mx_pork_price": {
-        // Only the two printed prices: the bulletin's own "Cambio" column is computed from unrounded prices, so
-        // stating it next to the rounded ones can look contradictory (e.g. 3.86 vs 3.87 with a printed change of 0.00).
-        const t = `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: US$${n(v.price)}/kg` + (v.prev_price != null ? ` (semana anterior US$${n(v.prev_price)})` : "") + " (SNIIM).";
-        out.push(base(f, bulletinDate, { levels: ["product", "protein", "market"], product_entity: f.entity, text_es: t }));
+        if (v.prev_price == null) break; // no previous week printed → no percentage can be stated
+        const p = v.change === 0 ? 0 : chg(v.price, v.prev_price); // a printed "Cambio 0.00" stays "sin cambio" even if rounded prices differ by a cent
+        const t = `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: ${versus(p, "la semana anterior")} (SNIIM).`;
+        out.push(base(f, bulletinDate, { levels: ["product", "protein", "market"], product_entity: f.entity, text_es: t, computed: v.change !== 0 }));
         break;
       }
       case "prod_weekly": {
@@ -157,11 +161,11 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
         break;
       }
       case "hog_price_us_mx": {
-        out.push(base(f, bulletinDate, { levels: lv(false, "pork"), text_es: `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: US$${n(v.price)}/kg — ${versus(v.yoy_pct, "hace un año", usd(v.year_ago_price))}; semana anterior US$${n(v.prev_price)}/kg.` }));
+        out.push(base(f, bulletinDate, { levels: lv(false, "pork"), computed: true, text_es: `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: ${versus(v.yoy_pct, "hace un año")}; ${versus(chg(v.price, v.prev_price), "la semana anterior")}.` }));
         break;
       }
       case "futures": {
-        out.push(base(f, bulletinDate, { levels: ["market"], species: null, text_es: `${labelEs(f)!.text}, cierre del ${fmtDate(v.week_end)}: ${n(v.price)} (semana anterior ${n(v.prev_price)}; hace un año ${n(v.year_ago_price)}).` }));
+        out.push(base(f, bulletinDate, { levels: ["market"], species: null, computed: true, text_es: `${labelEs(f)!.text}, cierre del ${fmtDate(v.week_end)}: ${versus(chg(v.price, v.prev_price), "la semana anterior")}; ${versus(chg(v.price, v.year_ago_price), "hace un año")}.` }));
         break;
       }
       case "export_change": {
@@ -186,10 +190,10 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
   // one bullet per cut for the month-by-month forecast (first three months, each with its own printed %)
   for (const [, arr] of monthlyByCut) {
     const f0 = arr[0];
-    const items = arr.map((m) => { const v = m.values as Record<string, any>; const mm = +String(v.month).slice(5); return `${MES_LARGO[mm - 1]} US$${n(v.price)} (${versus(v.yoy_pct, "hace un año")})`; });
+    const items = arr.map((m) => { const v = m.values as Record<string, any>; const mm = +String(v.month).slice(5); return `${MES_LARGO[mm - 1]} ${v.yoy_pct === 0 ? "sin cambio" : `${pct(v.yoy_pct)} ${moreLess(v.yoy_pct)}`}`; });
     out.push({
       key: `${f0.kind}|${f0.species}|${f0.entity}`, fact_keys: arr.map((a) => a.key), kind: "cut_price_forecast_month", levels: lv(true, f0.species), species: f0.species, market: "US",
-      product_entity: f0.entity, text_es: `{{CUT}} — el boletín proyecta (US$/cwt): ${items.join("; ")}.`, source_note: src(f0, bulletinDate), page: f0.page, computed: false
+      product_entity: f0.entity, text_es: `{{CUT}} — el boletín proyecta, frente a hace un año: ${items.join("; ")}.`, source_note: src(f0, bulletinDate), page: f0.page, computed: false
     });
   }
   return out;
