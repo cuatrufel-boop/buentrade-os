@@ -45,25 +45,7 @@ Deno.serve(async (req) => {
         `;
         rows.push(row);
       }
-      // Learn globally: a term two or more DIFFERENT plants have taught with the SAME meaning is industry shorthand, not one plant's
-      // habit — it becomes a global term (plant_id null) so no other plant has to be asked again. Never when the plants disagree on
-      // the meaning (one distinct meaning only), and never over an existing global term. Plant-specific rows still win for that plant.
-      const promoted: string[] = [];
-      for (const a of aliases) {
-        const [agree] = await tx`
-          select count(distinct plant_id)::int as plants, count(distinct meaning_id)::int as meanings
-          from plant_term_aliases
-          where plant_id is not null and lower(term) = lower(${a.term}) and meaning_type = ${a.meaning_type}`;
-        if (agree.plants >= 2 && agree.meanings === 1) {
-          const done = await tx`
-            insert into plant_term_aliases (plant_id, term, meaning_type, meaning_id)
-            select null, ${a.term}, ${a.meaning_type}, ${a.meaning_id}
-            where not exists (select 1 from plant_term_aliases where plant_id is null and lower(term) = lower(${a.term}) and meaning_type = ${a.meaning_type})
-            returning term`;
-          if (done.length) promoted.push(a.term);
-        }
-      }
-      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_term_aliases", record_id: plant_id, after: { rows, promoted_to_global: promoted } });
+      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plant_term_aliases", record_id: plant_id, after: rows });
       return rows;
     });
 
