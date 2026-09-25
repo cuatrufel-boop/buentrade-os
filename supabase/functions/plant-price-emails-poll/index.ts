@@ -45,11 +45,11 @@ import { extractItemsFromImage, extractItemsWithLLM } from "../_shared/llmExtrac
 // Wholestone Prestage-specific: their frozen list arrives as a real .xlsx attachment (columns
 // WHS/CATEGORY/CODE/DESC/CASES/LBS/PRICE/Avg Age, confirmed against a real "Freezer List" file) —
 // nothing about this is generic to every plant yet, this is the first real attachment-reading
-// case, scoped narrowly rather than guessed at for plants that don't do this. Explicit real
-// business rule (not inferred from the file): only a row with 40,000+ lbs on hand (a full
-// truckload) is worth offering — anything less stays out, never applied, never even queued as a
-// pending match (there's nothing wrong to review, it's just not enough volume to sell as a load).
-const MIN_LOAD_LBS = 40000;
+// case, scoped narrowly rather than guessed at for plants that don't do this.
+// Every priced row of the sheet is read (2026-09-25, explicit: "debe subir todos los precios de ese excel"). An earlier
+// rule dropped any row under 40,000 lb — those rows were silently lost, never even queued; that rule is gone. A row the
+// catalog can't confidently match still becomes a pending match for a person, exactly like any other plant's line —
+// nothing in the sheet is discarded.
 
 // Real, explicit rule: "no puede leer data vieja" — a plant's price is only good as of the date
 // they sent it, and this changes fast: some plants (Seaboard) send daily, prices move within the
@@ -99,15 +99,14 @@ async function extractXlsxItems(
 
   const header = rows[0].map((h: any) => String(h || "").trim().toUpperCase());
   const col = (name: string) => header.indexOf(name);
-  const whsCol = col("WHS"), descCol = col("DESC"), lbsCol = col("LBS"), priceCol = col("PRICE");
-  if (descCol === -1 || lbsCol === -1 || priceCol === -1) return [];
+  const whsCol = col("WHS"), descCol = col("DESC"), priceCol = col("PRICE");
+  if (descCol === -1 || priceCol === -1) return [];
 
   const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[] = [];
   for (const row of rows.slice(1)) {
-    const lbs = Number(row[lbsCol]);
     const price = Number(row[priceCol]);
     const desc = String(row[descCol] || "").trim();
-    if (!desc || !Number.isFinite(lbs) || !Number.isFinite(price) || lbs < MIN_LOAD_LBS) continue;
+    if (!desc || !Number.isFinite(price) || price <= 0) continue;
     const whs = whsCol !== -1 ? String(row[whsCol] || "").trim() : "";
     const state = WHOLESTONE_FACILITY_STATE[whs];
     items.push({
@@ -341,6 +340,10 @@ Deno.serve(async (req) => {
       const msgData = await msgRes.json();
       if (!msgRes.ok) { results.push({ id: m.id, skipped: "gmail_fetch_failed" }); continue; }
 
+      // A price is only as fresh as the email that carried it. Normal cron runs only see emails younger than
+      // MAX_EMAIL_AGE_DAYS, so "today" is right; when an OLDER message is deliberately re-run (test_message_id — e.g. a list
+      // that was only partly read the first time) its own date is used, so the stale-price rules still see how old it is.
+      const messagePriceDate = testMessageId && msgData.internalDate ? new Date(Number(msgData.internalDate)).toISOString().slice(0, 10) : today;
       if (!testMessageId && msgData.internalDate) {
         const ageDays = (Date.now() - Number(msgData.internalDate)) / 86400000;
         if (ageDays > MAX_EMAIL_AGE_DAYS) {
@@ -589,7 +592,7 @@ Deno.serve(async (req) => {
             const applyResult = await applyPlantProductMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, product_id: matchRes.product.id,
               raw_text: normalize(item.rawText), price: item.price,
-              price_currency_id: usdCurrencyId, price_date: today,
+              price_currency_id: usdCurrencyId, price_date: messagePriceDate,
               docs_included: plant.docs_included === true, freight_included: item.freightIncluded,
               location_name: item.locationName || null,
             });
