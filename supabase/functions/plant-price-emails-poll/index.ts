@@ -67,9 +67,14 @@ const MAX_EMAIL_AGE_DAYS = 3;
 // the locations catalog (verified live), not guessed here.
 const WHOLESTONE_FACILITY_STATE: Record<string, string> = { Fremont: "NE", "Eagle Grove": "IA" };
 
+function hasXlsxAttachment(p: any): boolean {
+  if (p.filename && p.filename.toLowerCase().endsWith(".xlsx")) return true;
+  return (p.parts || []).some((x: any) => hasXlsxAttachment(x));
+}
+
 async function extractXlsxItems(
   payload: any, msgId: string, authHeaders: Record<string, string>,
-): Promise<{ rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]> {
+): Promise<{ rawText: string; price: number; freightIncluded: boolean; locationName: string | null; needsReview?: boolean }[]> {
   const findXlsxPart = (p: any): any => {
     if (p.filename && p.filename.toLowerCase().endsWith(".xlsx")) return p;
     for (const part of p.parts || []) {
@@ -102,7 +107,7 @@ async function extractXlsxItems(
   const whsCol = col("WHS"), descCol = col("DESC"), priceCol = col("PRICE");
   if (descCol === -1 || priceCol === -1) return [];
 
-  const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[] = [];
+  const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null; needsReview?: boolean }[] = [];
   for (const row of rows.slice(1)) {
     const price = Number(row[priceCol]);
     const desc = String(row[descCol] || "").trim();
@@ -110,7 +115,12 @@ async function extractXlsxItems(
     const whs = whsCol !== -1 ? String(row[whsCol] || "").trim() : "";
     const state = WHOLESTONE_FACILITY_STATE[whs];
     items.push({
-      rawText: desc, price,
+      // A "Freezer List" is frozen product — its own file name says so. Without stating it the catalog matcher was free to
+      // pick a Fresh product for a line that names no temperature (a frozen sparerib price landed on Fresh Spareribs).
+      rawText: /freezer|frozen/i.test(part.filename || "") ? `Frozen — ${desc}` : desc, price,
+      // Cut styles the catalog has no product for (rib end, cushion-removed, brisket-removed, St. Louis style) read close enough to a
+      // real product that the matcher would attach them to it — a price on the WRONG product. They always wait for a person.
+      needsReview: /ribend|rib\s*end|cushrmvd|brskt|st\.?\s*louis/i.test(desc),
       freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
       locationName: state ? `${whs}, ${state}` : null,
     });
@@ -186,6 +196,14 @@ const EMAIL_AUTOMATION_ACTOR = "email-automation@buentradegroup.com";
 // used to send from purchasing@buentradegroup.com — one already-authenticated account, one less
 // external dependency.
 const TRADER_NOTIFICATION_EMAILS = (Deno.env.get("TRADER_NOTIFICATION_EMAILS") || "").split(",").map((s) => s.trim()).filter(Boolean);
+
+// Silent failure is what made "the Excel didn't upload" invisible: these tell the traders, once per message (the ledger row
+// is written right after, so a message is never alerted twice).
+async function alertTraders(authHeaders: Record<string, string>, subject: string, body: string) {
+  for (const to of TRADER_NOTIFICATION_EMAILS) {
+    try { await sendGmailNotification(authHeaders, to, subject, body); } catch { /* an alert failing never blocks the poll */ }
+  }
+}
 
 async function getAccessToken(): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
@@ -402,6 +420,10 @@ Deno.serve(async (req) => {
       if (!plant) {
         await sql`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
         results.push({ id: m.id, skipped: "no_matching_plant", from: fromEmail });
+        if (hasXlsxAttachment(msgData.payload) && !testMessageId) {
+          await alertTraders(authHeaders, `Price list Excel from ${fromEmail} NOT applied — which plant is it?`,
+            `An email with an Excel attachment arrived from ${fromEmail} (subject "${subject}"), but I couldn't tell which plant it belongs to, so NO prices were applied.\n\nResend it with the plant's name in the subject (for example "Wholestone freezer"), or forward it from the plant's own address.`);
+        }
         continue;
       }
 
@@ -461,7 +483,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      type Item = { rawText: string; nameEn?: string; nameEs?: string | null; price: number; freightIncluded: boolean; locationName?: string | null };
+      type Item = { rawText: string; nameEn?: string; nameEs?: string | null; price: number; freightIncluded: boolean; locationName?: string | null; needsReview?: boolean };
 
       // Rule-based extraction (block-format checked first, same order Load Prices already uses —
       // a name-line-then-price-line-below list can fool the single-line scanner into latching onto
@@ -552,6 +574,10 @@ Deno.serve(async (req) => {
       // separate item source from the body text, always read deterministically (a spreadsheet is
       // already structured data — no LLM needed) — so this adds to whichever text-source won above.
       const xlsxItems = await extractXlsxItems(msgData.payload, m.id, authHeaders);
+      if (hasXlsxAttachment(msgData.payload) && !xlsxItems.length && !testMessageId) {
+        await alertTraders(authHeaders, `${plant.name} - Excel attached but no prices could be read`,
+          `${plant.name} sent an email with an Excel attachment (subject "${subject}"), but I couldn't read any priced rows from it (I look for DESC and PRICE columns), so nothing was applied from it. The file's columns may have changed — please check it.`);
+      }
       // A real third source, separate from both body text and the xlsx: an embedded picture of a
       // price grid (confirmed real for Wholestone's "fresh offers" — no plain-text or HTML-table
       // equivalent exists for it at all). extractImageItems no-ops (empty array, no API call) for
@@ -588,7 +614,7 @@ Deno.serve(async (req) => {
         } catch (e) { skipped++; errors.push(`match ${item.rawText}: ${e}`); continue; }
         if ("error" in matchRes) { skipped++; errors.push(`match ${item.rawText}: ${matchRes.error}`); continue; }
         try {
-          if (matchRes.matched) {
+          if (matchRes.matched && !item.needsReview) {
             const applyResult = await applyPlantProductMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, product_id: matchRes.product.id,
               raw_text: normalize(item.rawText), price: item.price,
@@ -604,8 +630,8 @@ Deno.serve(async (req) => {
           } else {
             await createPendingMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, raw_text: item.rawText,
-              detected_price: item.price, candidate_product_ids: matchRes.candidates.map((p: any) => p.id),
-              idempotency_key: `${m.id}|${normalize(item.rawText)}`, candidates_conflicted: matchRes.conflicted === true,
+              detected_price: item.price, candidate_product_ids: matchRes.matched ? [matchRes.product.id] : matchRes.candidates.map((p: any) => p.id),
+              idempotency_key: `${m.id}|${normalize(item.rawText)}`, candidates_conflicted: matchRes.matched ? true : matchRes.conflicted === true,
             });
             pending++;
           }

@@ -19,7 +19,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse } from "../_shared/matching.ts";
 import { ingestBulletin, listMarketFlash, pickBulletsForCustomerProduct, teachTerm } from "../_shared/marketFlash/store.ts";
-import { diagnoseInbox, pollBulletinEmails, processInboxMessage } from "../_shared/marketFlash/emailInbox.ts";
+import { diagnoseInbox, dumpXlsx, pollBulletinEmails, processInboxMessage } from "../_shared/marketFlash/emailInbox.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
 
     // Bulletin by email (see _shared/marketFlash/emailInbox.ts): poll finds/validates/downloads/reads the PDF; process turns
     // one stored message into a bulletin (called by poll per message, so each step has its own compute budget).
+    if (body.poll_market_flash_emails?.xlsx_message_id) return jsonResponse(await dumpXlsx(String(body.poll_market_flash_emails.xlsx_message_id)));
     if (body.poll_market_flash_emails?.diagnose) return jsonResponse(await diagnoseInbox(body.poll_market_flash_emails.count || 8, String(body.poll_market_flash_emails.q || "")));
     if (body.poll_market_flash_emails) return jsonResponse(await pollBulletinEmails(sql, body.poll_market_flash_emails.max_results || 10));
     if (body.process_market_flash_inbox) {

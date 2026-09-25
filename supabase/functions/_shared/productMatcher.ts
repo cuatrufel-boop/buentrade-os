@@ -215,6 +215,22 @@ function productSummary(p: any): ProductRow {
   };
 }
 
+// Reference tables (temperatures, packagings, variations, cut names, a plant's term glossary, the catalog) are re-read for
+// EVERY line of a price list otherwise: a 56-line Wholestone Excel meant ~500 queries and 132 s — close to the Edge
+// Function's time limit, where a cut-off run would be retried every 15 minutes. They change rarely, so a short-lived cache
+// per database connection serves the whole batch. Per-line lookups (a line's own learned alias) are NOT cached.
+const REF_TTL_MS = 30_000;
+const refCache = new WeakMap<object, Map<string, { at: number; value: any }>>();
+async function cachedRef<T>(sql: any, key: string, load: () => Promise<T>): Promise<T> {
+  let m = refCache.get(sql);
+  if (!m) { m = new Map(); refCache.set(sql, m); }
+  const hit = m.get(key);
+  if (hit && Date.now() - hit.at < REF_TTL_MS) return hit.value as T;
+  const value = await load();
+  m.set(key, { at: Date.now(), value });
+  return value;
+}
+
 export async function matchProductFromPlantText(
   sql: any,
   { plant_id, raw_text, name_en, name_es, extra_term_aliases }: {
@@ -228,23 +244,23 @@ export async function matchProductFromPlantText(
   if (!plant) return { error: "unknown plant_id" };
   const plantCategoryId: string | null = plant.category_id;
 
-  const temperatures = await sql`select id, name, name_en from temperature`;
-  const packagings = await sql`select id, name, name_en from packaging`;
-  const variationRows = await sql`select id, name_es, name_en from variations`;
+  const temperatures = await cachedRef(sql, "temperature", () => sql`select id, name, name_en from temperature`);
+  const packagings = await cachedRef(sql, "packaging", () => sql`select id, name, name_en from packaging`);
+  const variationRows = await cachedRef(sql, "variations", () => sql`select id, name_es, name_en from variations`);
   const variationNames = variationRows.map((v: any) => v.name_en).filter(Boolean) as string[];
   const variationNameById = new Map(variationRows.map((v: any) => [v.id, v.name_en]));
-  const cutNameRows = await sql`select id, name_es, name_en from cut_names`;
+  const cutNameRows = await cachedRef(sql, "cut_names", () => sql`select id, name_es, name_en from cut_names`);
   const cutNameById = new Map(cutNameRows.map((c: any) => [c.id, c.name_en]));
 
   // Global (plant_id null) rows are industry-standard shorthand any plant could use (confirmed
   // real: BI/BNLS/LGT/MED/SPARES/CBO were first taught scoped to one plant, then explicitly
   // corrected — "esas abreviaciones las puede usar cualquiera... buentrade tiene que match con un
   // solo full name"). Loaded first so a plant-specific row for the same term overrides it.
-  const termAliasRows = await sql`
+  const termAliasRows = await cachedRef(sql, `term_aliases:${plant_id}`, () => sql`
     select term, meaning_type, meaning_id, plant_id from plant_term_aliases
     where plant_id = ${plant_id} or plant_id is null
     order by plant_id nulls first
-  `;
+  `);
   const plantTermAliasMap = new Map<string, { temperature?: string; packaging?: string; variation?: string; cut_name?: string }>();
   for (const a of termAliasRows) {
     const entry = plantTermAliasMap.get(a.term) || {};
@@ -305,9 +321,9 @@ export async function matchProductFromPlantText(
     }
   }
 
-  const allInCategoryProducts = plantCategoryId
-    ? await sql`select * from products where category_id = ${plantCategoryId}`
-    : await sql`select * from products`;
+  const allInCategoryProducts = await cachedRef(sql, `products:${plantCategoryId ?? "all"}`, () => plantCategoryId
+    ? sql`select * from products where category_id = ${plantCategoryId}`
+    : sql`select * from products`);
 
   // Computed early (not just before the temp/pack/variation narrowing below) so the widening step
   // right after the name tiers can check it too — see that block's own comment for why.

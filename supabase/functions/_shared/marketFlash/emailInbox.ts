@@ -19,6 +19,25 @@ const SEARCH = "subject:flash has:attachment filename:pdf newer_than:14d";
 const SELF_URL = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/price-history-search";
 const API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
 
+// A rejected bulletin email must not be silent ("no subió nada" with no signal is what this prevents): tell the traders once —
+// the message is recorded first, so the same message is never alerted twice. Subject is RFC 2047-encoded (non-ASCII safe).
+async function alertTraders(auth: Record<string, string>, subject: string, body: string) {
+  const encSubject = `=?UTF-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(subject)))}?=`;
+  for (const to of (Deno.env.get("TRADER_NOTIFICATION_EMAILS") || "").split(",").map((x) => x.trim()).filter(Boolean)) {
+    const raw = `To: ${to}\r\nFrom: purchasing@buentradegroup.com\r\nSubject: ${encSubject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${body}`;
+    const bytes = new TextEncoder().encode(raw);
+    let bin = ""; for (const b of bytes) bin += String.fromCharCode(b);
+    try {
+      await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+        method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ raw: btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") }),
+      });
+    } catch { /* an alert failing never blocks the poll */ }
+  }
+}
+const rejectionAlert = (from: string, subject: string, reason: string) =>
+  ({ subject: "Market Flash email NOT processed", body: `An email that looked like the Market Flash bulletin (from ${from}, subject "${subject}") was not processed: ${reason}.\n\nNothing was loaded. Fix that and send it again.` });
+
 async function accessToken(): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -61,6 +80,23 @@ export async function diagnoseInbox(count = 8, query = "") {
   return { mailbox: profile.emailAddress, search_query: SEARCH, search_hits: (search.messages || []).length, recent: out, trusted_senders_configured: trusted().length };
 }
 
+// Read-only: open the .xlsx attached to one message and return its header + every row as the sheet holds it, so what a
+// price list REALLY says can be compared with what the poller understood from it.
+export async function dumpXlsx(messageId: string) {
+  const XLSX = await import("npm:xlsx@0.18.5");
+  const auth = { Authorization: `Bearer ${await accessToken()}` };
+  const msg = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, { headers: auth })).json();
+  const find = (p: any): any => (p.filename && p.filename.toLowerCase().endsWith(".xlsx") ? p : (p.parts || []).map(find).find(Boolean));
+  const part = find(msg.payload || {});
+  if (!part?.body?.attachmentId) return { error: "no .xlsx attached" };
+  const att = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${part.body.attachmentId}`, { headers: auth })).json();
+  const bin = atob(att.data.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const wb = XLSX.read(bytes, { type: "array" });
+  return { filename: part.filename, sheets: wb.SheetNames.map((n: string) => ({ name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1 }) })) };
+}
+
 export async function pollBulletinEmails(sql: any, maxResults = 10) {
   const token = await accessToken();
   const auth = { Authorization: `Bearer ${token}` };
@@ -72,6 +108,7 @@ export async function pollBulletinEmails(sql: any, maxResults = 10) {
       values (${id}, ${from}, ${subject}, ${status}, ${reason}, ${extra.file_hash ?? null}, ${extra.items ? sql.json(extra.items) : null}, ${extra.bulletin_id ?? null}, ${status === "pending" ? null : sql`now()`})
       on conflict (message_id) do nothing`;
     results.push({ id, status, reason });
+    if (status === "rejected" && !/subject does not contain/.test(reason || "")) { const a = rejectionAlert(from, subject, reason || "unknown"); await alertTraders(auth, a.subject, a.body); }
   };
   for (const m of list.messages || []) {
     const [seen] = await sql`select 1 from market_flash_email_inbox where message_id = ${m.id}`;
@@ -123,6 +160,8 @@ export async function processInboxMessage(sql: any, messageId: string) {
   const r = await ingestBulletin(sql, { items: row.items, file_hash: row.file_hash, actor: `email:${row.from_email}`, source: "email" });
   if ("error" in r) {
     await sql`update market_flash_email_inbox set status = 'rejected', reason = ${r.error}, items = null, processed_at = now() where message_id = ${messageId}`;
+    const a = rejectionAlert(row.from_email, "(stored message)", r.error);
+    await alertTraders({ Authorization: `Bearer ${await accessToken()}` }, a.subject, a.body);
     return { message_id: messageId, status: "rejected", reason: r.error };
   }
   await sql`update market_flash_email_inbox set status = 'ingested', reason = ${(r as any).idempotent_replay ? "this exact bulletin was already loaded" : null}, bulletin_id = ${(r as any).bulletin_id}, items = null, processed_at = now() where message_id = ${messageId}`;
