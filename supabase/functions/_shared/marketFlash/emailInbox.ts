@@ -44,11 +44,11 @@ export function senderAuthenticated(authResults: string): boolean {
   return /dmarc=pass/.test(a) || (/spf=pass/.test(a) && /dkim=pass/.test(a));
 }
 
-// Read-only look at what the inbox actually holds (sender, subject, date, attachment names — no bodies), for when a
+// Read-only look at what the inbox actually holds (sender, subject, date, attachment names — no bodies; optional Gmail search `query`), for when a
 // bulletin "should have arrived" and did not.
-export async function diagnoseInbox(count = 8) {
+export async function diagnoseInbox(count = 8, query = "") {
   const auth = { Authorization: `Bearer ${await accessToken()}` };
-  const list = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${count}`, { headers: auth })).json();
+  const list = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(count, 40)}${query ? `&q=${encodeURIComponent(query)}` : ""}`, { headers: auth })).json();
   const out: any[] = [];
   for (const m of list.messages || []) {
     const msg = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, { headers: auth })).json();

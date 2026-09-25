@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
 
     // Bulletin by email (see _shared/marketFlash/emailInbox.ts): poll finds/validates/downloads/reads the PDF; process turns
     // one stored message into a bulletin (called by poll per message, so each step has its own compute budget).
-    if (body.poll_market_flash_emails?.diagnose) return jsonResponse(await diagnoseInbox());
+    if (body.poll_market_flash_emails?.diagnose) return jsonResponse(await diagnoseInbox(body.poll_market_flash_emails.count || 8, String(body.poll_market_flash_emails.q || "")));
     if (body.poll_market_flash_emails) return jsonResponse(await pollBulletinEmails(sql, body.poll_market_flash_emails.max_results || 10));
     if (body.process_market_flash_inbox) {
       if (!body.process_market_flash_inbox.message_id) return jsonResponse({ error: "process_market_flash_inbox requires message_id" }, 400);
