@@ -1006,6 +1006,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/market-flash-send.js"></script>
 
 <div class="wrap">
   <h1 id="rq_page_title">Quotes</h1>
@@ -3955,9 +3956,11 @@ function rqSignalLineEs(signal){
 }
 
 // Real addition 2026-09-22 ("boletín de la industria, por producto específico") — the trader's own
-// note (their words, from product_market_notes) always wins when present; the % alone only builds
-// a generic sentence when there's a number but no note text, never both stacked redundantly.
+// note always wins when present. Since Market Flash v2 (2026-09-25) `line` — already composed server-side from the
+// bulletin's own bullets (customer-product-signal) — is what normally arrives; note/trendPct remain as the fallback shape.
 function rqMarketNoteLineEs(marketNote){
+  // Market Flash v2: the server already composed the full attributed line from the bulletin's bullets.
+  if (marketNote.line) return marketNote.line;
   if (marketNote.note) return `Según el último reporte de mercado: ${marketNote.note}`;
   if (marketNote.trendPct != null){
     const pct = Math.abs(Math.round(marketNote.trendPct));
@@ -3991,13 +3994,14 @@ function rqMxBenchmarkLineEs(signal, full){
   return `Referencia de mercado${region}: $${benchmarkPerLb.toFixed(4)} USD/lb — tu precio con nosotros te sale ${pctBetter}% mejor.`;
 }
 
-async function rqFetchCustomerSignalLine(customerId, full){
+async function rqFetchCustomerSignalLine(customerId, full, channel){
   const productIds = [...new Set((full || []).map(({ plant }) => plant.rqProductId).filter(Boolean))];
   if (!productIds.length) return '';
   let signals = [];
   try { signals = (await callApi('customer-product-signal', { customer_id: customerId, product_ids: productIds })).signals || []; } catch (e) { return ''; }
   const withSignal = signals.find(s => s.cadence || s.priceTrend || s.marketNote);
   if (!withSignal) return '';
+  await mfLogSends(callApi, withSignal.marketNote, customerId, channel, currentActor());
   const parts = [rqSignalLineEs(withSignal), rqMxBenchmarkLineEs(withSignal, full)].filter(Boolean);
   return parts.join(' ');
 }
@@ -5052,7 +5056,7 @@ async function sendOfferEmailTo(customerId){
   // previously this logged only after send succeeded/failed, once each, never before building body.
   const { warnings } = await rqLogSentOffersRows(full, [c], 'email');
   warnings.forEach(w => rqShowNotice(w.message));
-  const signalLine = await rqFetchCustomerSignalLine(c.id, full);
+  const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'email');
   const body = buildCustomerOfferText(firstName, full, warnings.length > 0, signalLine);
   try {
     await sendEmailApiRaw('offers', c.email, subject, body, null, attachments);
@@ -5087,7 +5091,7 @@ async function sendOfferWhatsAppTo(customerId){
   const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
   warnings.forEach(w => rqShowNotice(w.message));
   const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
-  const signalLine = await rqFetchCustomerSignalLine(c.id, full);
+  const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'whatsapp');
   rqOpenWaModal(`WhatsApp offer — ${c.trade_name}`, [{
     id: c.id, label: c.trade_name, phone,
     body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId, warnings.length > 0, signalLine),
@@ -5133,7 +5137,7 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
     const subjectSpecs = [...new Set(full.map(({ plant }) => rqSpecEsForPlant(plant)).filter(Boolean))];
     const { warnings } = await rqLogSentOffersRows(full, [c], 'email');
     warnings.forEach(w => rqShowNotice(w.message));
-    const signalLine = await rqFetchCustomerSignalLine(c.id, full);
+    const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'email');
     toSend.push({
       id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${subjectSpecs.join(' / ')}`,
       body: buildCustomerOfferText(firstName, full, warnings.length > 0, signalLine), full, c,
@@ -5201,7 +5205,7 @@ async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds){
     const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
     warnings.forEach(w => rqShowNotice(w.message));
     const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
-    const signalLine = await rqFetchCustomerSignalLine(c.id, full);
+    const signalLine = await rqFetchCustomerSignalLine(c.id, full, 'whatsapp');
     items.push({
       id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
       body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId, warnings.length > 0, signalLine),

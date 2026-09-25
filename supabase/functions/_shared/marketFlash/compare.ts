@@ -40,10 +40,10 @@ export function trendBullets(current: Fact[], previous: Fact[], sourceNote: (f: 
     const L = labelEs(f)!;
     const fmt = (x: number) => `${S.pre}${num(x, S.dec)}${S.post}`;
     out.push({
-      key: `trend|${f.key}`, fact_keys: [f.key, p.key], kind: "trend_vs_previous", levels: [...(["cut_price_weekly", "mx_pork_price"].includes(f.kind) ? ["product" as const] : []), ...(f.species !== "feed" ? ["protein" as const] : []), "market" as const],
-      species: f.species === "feed" ? null : f.species, market: f.market, product_entity: ["cut_price_weekly", "mx_pork_price"].includes(f.kind) ? (f.kind === "mx_pork_price" ? f.entity : f.entity) : null,
+      key: `trend|${f.key}`, fact_keys: [f.key, p.key], kind: "trend_vs_previous", levels: [...(["cut_price_weekly", "mx_pork_price", "cold_storage"].includes(f.kind) ? ["product" as const] : []), ...(f.species !== "feed" ? ["protein" as const] : []), "market" as const],
+      species: f.species === "feed" ? null : f.species, market: f.market, product_entity: ["cut_price_weekly", "mx_pork_price", "cold_storage"].includes(f.kind) ? f.entity : null,
       text_es: `${L.text}: ${fmt(c)} al ${fd(cd)} frente a ${fmt(q)} al ${fd(pd)} (boletín anterior) — ${word}.`,
-      source_note: `${sourceNote(f)} · comparado con la edición anterior`, page: f.page, computed: true, glossary_gaps: L.gaps, sendable: L.gaps.length === 0,
+      source_note: `${sourceNote(f)} · comparado con la edición anterior`, page: f.page, computed: true, 
     });
   }
   return out;

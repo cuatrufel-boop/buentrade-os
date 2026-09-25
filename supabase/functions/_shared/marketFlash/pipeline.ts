@@ -4,7 +4,7 @@ import { splitPages } from "./pages.ts";
 import { extractPriceCharts } from "./priceCharts.ts";
 import { extractMxPorkPrices } from "./mxPorkPrices.ts";
 import { extractProduction } from "./production.ts";
-import { extractColdStorage, extractHogsAndPigs, extractCattleOnFeed, extractWorldHogPrices, extractFutures } from "./tables.ts";
+import { extractColdStorage, extractColdStorageTotals, extractHogsAndPigs, extractCattleOnFeed, extractWorldHogPrices, extractFutures } from "./tables.ts";
 import { extractExports } from "./exports.ts";
 import { buildBullets } from "./bullets.ts";
 import type { Dropped, Fact } from "./types.ts";
@@ -13,7 +13,7 @@ export function runDeterministic(text: string) {
   const pages = splitPages(text);
   const parts = [
     ["cut prices", extractPriceCharts(pages)], ["Mexico pork prices", extractMxPorkPrices(pages)], ["production", extractProduction(pages)],
-    ["cold storage", extractColdStorage(pages)], ["hogs & pigs", extractHogsAndPigs(pages)], ["cattle on feed", extractCattleOnFeed(pages)],
+    ["cold storage", extractColdStorage(pages)], ["cold storage totals", extractColdStorageTotals(pages)], ["hogs & pigs", extractHogsAndPigs(pages)], ["cattle on feed", extractCattleOnFeed(pages)],
     ["world hog prices", extractWorldHogPrices(pages)], ["futures", extractFutures(pages)], ["exports", extractExports(pages)],
   ] as const;
   const facts: Fact[] = [], dropped: Dropped[] = [];

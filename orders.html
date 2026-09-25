@@ -616,6 +616,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/market-flash-send.js"></script>
 
 <!-- Real correction 2026-09-06: "la confirmacion de pago es la del banco. no soy yo diciendo que
      ya pague" — confirming payment to a plant means attaching the real bank wire confirmation,
@@ -1170,7 +1171,8 @@ function ordSignalLineEs(signal){
   }
   if (signal.priceTrend) parts.push(`Este precio está ${Math.abs(Math.round(signal.priceTrend.pctChange))}% mejor que el promedio del último mes.`);
   if (signal.marketNote){
-    if (signal.marketNote.note) parts.push(`Según el último reporte de mercado: ${signal.marketNote.note}`);
+    if (signal.marketNote.line) parts.push(signal.marketNote.line);
+    else if (signal.marketNote.note) parts.push(`Según el último reporte de mercado: ${signal.marketNote.note}`);
     else if (signal.marketNote.trendPct != null){
       const pct = Math.abs(Math.round(signal.marketNote.trendPct));
       const dir = signal.marketNote.trendPct < 0 ? 'a la baja' : 'al alza';
@@ -1209,6 +1211,7 @@ async function sendSignatureThankYou(orderNumber){
     try {
       const signals = (await callApi('customer-product-signal', { customer_id: o.customer_id, product_ids: [o.product_id] })).signals || [];
       const signal = signals.find(s => s.cadence || s.priceTrend || s.marketNote);
+      await mfLogSends(callApi, signal && signal.marketNote, o.customer_id, email ? 'email' : 'whatsapp', currentActor());
       const parts = [ordSignalLineEs(signal), ordMxBenchmarkLineEs(signal, Number(o.sale_per_lb) || 0)].filter(Boolean);
       signalLine = parts.join(' ');
     } catch (e) {}

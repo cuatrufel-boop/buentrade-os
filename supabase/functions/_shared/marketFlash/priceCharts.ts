@@ -11,9 +11,9 @@ const MONTH_RE = MONTHS.join("|");
 const ROW_RE = new RegExp(`(?:^|\\s)(\\d{1,2}-(?:${MONTH_RE})|(?:${MONTH_RE}))\\s+((?:\\d[\\d,]*\\.\\d+\\s+)+)(-?\\d+\\.\\d+)%\\s*$`);
 const ANCHOR_RE = /(?:wk\.\s*end\.\s*)?([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})\s*=\s*([\d,.]+)/;
 // A chart title is the nearest non-blank line above its "$/cwt YEAR OVER YEAR…" line, starting at the
-// left margin (col ≤ 2) with letters — titles vary in wording ("Ham, …, FOB Plant, USDA",
+// left side with letters (it may be indented, depending on how the text was laid out) — titles vary in wording ("Ham, …, FOB Plant, USDA",
 // "USDA, 50CL BEEF TRIM, …", "NE BONELESS BREAST …"), so shape is checked, not a keyword.
-const TITLE_RE = /^ {0,2}[A-Za-z].{8,}/;
+const TITLE_RE = /^\s*[A-Za-z].{8,}/;
 const NOT_TITLE_RE = /^\s*(?:\$\/cwt|Source:|\d{4}-\d{2}|5 YR\. MONTHLY|Jan\s+Feb|YEAR OVER YEAR|-\s*DOLLARS)/;
 const SPECIES_MARKERS: Array<[RegExp, Species]> = [
   [/^Weekly Pork Production Statistics/i, "pork"],

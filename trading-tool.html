@@ -518,6 +518,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
 <script src="js/date-picker.js"></script>
+<script src="js/market-flash-send.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -2722,7 +2723,8 @@ function negoSignalLineEs(signal){
     parts.push(line + '.');
   }
   if (signal.priceTrend) parts.push(`Este precio está ${Math.abs(Math.round(signal.priceTrend.pctChange))}% mejor que el promedio del último mes.`);
-  if (signal.marketNote && signal.marketNote.note) parts.push(`Según el último reporte de mercado: ${signal.marketNote.note}`);
+  if (signal.marketNote && signal.marketNote.line) parts.push(signal.marketNote.line);
+  else if (signal.marketNote && signal.marketNote.note) parts.push(`Según el último reporte de mercado: ${signal.marketNote.note}`);
   else if (signal.marketNote && signal.marketNote.trendPct != null){
     const pct = Math.abs(Math.round(signal.marketNote.trendPct));
     const dir = signal.marketNote.trendPct < 0 ? 'a la baja' : 'al alza';
@@ -2783,6 +2785,7 @@ async function negoSendToCustomer(channel){
   // fetch already found (negoLastSignal), so this doesn't refetch on every send click.
   let signalBlock = '';
   if (negoLastSignal){
+    await mfLogSends(callApi, negoLastSignal.marketNote, negoOffer.customer_id, channel, currentActor());
     const parts = [negoSignalLineEs(negoLastSignal), negoMxBenchmarkLineEs(negoLastSignal)].filter(Boolean);
     if (parts.length) signalBlock = '\n\n' + parts.join(' ');
   }

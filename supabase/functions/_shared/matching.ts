@@ -4,6 +4,7 @@
 // One copy, imported everywhere, so a fix or a rule change happens once, not once per function.
 
 import { createHmac } from "node:crypto";
+import { pickBulletsForCustomerProduct } from "./marketFlash/store.ts";
 
 // Real bug caught live 2026-09-16, same class already hit once in plants.html (toDateOnly) and
 // documented there: a `date` column comes back from postgres.js as a JS Date object, and
@@ -251,10 +252,6 @@ export async function computeProductPriceSignal(
 // won, see sent-offers-mark-won) — never sent_offers, which also holds quotes that never closed.
 const PRICE_FAVORABLE_THRESHOLD_PCT = -2;
 
-// Shared with price-history-search's own save_market_note/read — a bit more than the bulletin's
-// own bi-weekly cadence, so a note never keeps showing well past when the next one should replace it.
-export const MARKET_NOTE_FRESHNESS_DAYS = 21;
-
 export async function computeCustomerProductSignal(
   sql: any,
   customerId: string,
@@ -265,6 +262,7 @@ export async function computeCustomerProductSignal(
   marketNote: {
     trendPct: number | null; note: string | null;
     mxBenchmarkPriceUsdKg: number | null; mxBenchmarkRegion: string | null;
+    line: string; bulletIds: string[];
   } | null;
   overCreditLimit: boolean;
 } | null> {
@@ -286,55 +284,19 @@ export async function computeCustomerProductSignal(
     ? { pctChange: priceSignal.trend.pctChange }
     : null;
 
-  // Real addition 2026-09-22, extended same day ("no es solo por producto, hay proteina y
-  // mercado"): product-specific note wins when one exists; otherwise falls back to the species/
-  // category-wide note for this exact product's own category (e.g. no note on "Pork Medium
-  // Spareribs" itself, but there IS one for "Pork" overall) — coalesce, never both, never a
-  // standalone broadcast unrelated to the product actually being quoted.
-  //
-  // Real addition 2026-09-22 ("si no especifica que llegue a todos si especifica que lo asocie con
-  // el correcto"): a THIRD tier sits between those two — a family note (product_name_en set,
-  // scoped to this product's own category + its own clean name_en, e.g. "Picnic") reaches every
-  // real SKU sharing that name regardless of packaging/temperature, without broadcasting to the
-  // whole category the way a species-wide note would. Precedence: product-specific, then family,
-  // then category-wide — most specific real match always wins.
-  //
-  // Real correction 2026-09-22 ("mucho cuidado... no se puede equivocar"): name_en alone is NOT a
-  // safe family boundary — confirmed live that it also groups genuinely different grades under one
-  // name ("Trim" spans 42% and 72% fat content, "Spareribs" spans Light/Medium/#2, "Bellies" spans
-  // several real weight ranges). products.subcategory_en is what actually carries that distinction,
-  // so the family match now requires it to match too (both null counts as a match, via IS NOT
-  // DISTINCT FROM) — a family only ever collapses packaging + temperature, never grade/size.
-  const [marketNoteRow] = await sql`
-    select trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region from product_market_notes
-    where product_id = ${productId} and note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
-    order by note_date desc, created_at desc
-    limit 1
-  `;
-  const familyNoteRow = marketNoteRow ? null : (await sql`
-    select pmn.trend_pct, pmn.note, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
-    from product_market_notes pmn
-    join products p on p.category_id = pmn.category_id and p.name_en = pmn.product_name_en
-      and p.subcategory_en is not distinct from pmn.product_subcategory_en
-    where p.id = ${productId} and pmn.product_name_en is not null
-      and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
-    order by pmn.note_date desc, pmn.created_at desc
-    limit 1
-  `)[0];
-  const marketNoteRowFinal = marketNoteRow ?? familyNoteRow ?? (await sql`
-    select pmn.trend_pct, pmn.note, pmn.mx_benchmark_price_usd_kg, pmn.mx_benchmark_region
-    from product_market_notes pmn
-    join products p on p.category_id = pmn.category_id
-    where p.id = ${productId} and pmn.category_id is not null and pmn.product_name_en is null
-      and pmn.note_date >= current_date - (${MARKET_NOTE_FRESHNESS_DAYS} || ' days')::interval
-    order by pmn.note_date desc, pmn.created_at desc
-    limit 1
-  `)[0];
-  const marketNote = marketNoteRowFinal
+  // Market Flash v2 (2026-09-25): the bulletin is read automatically and stored as Spanish bullets
+  // (see _shared/marketFlash/store.ts). This picks up to 2 that apply to THIS customer and product —
+  // most specific first (this product, then its protein, then the market) — and never one this customer
+  // was already sent. It only READS: a bullet is marked as sent (log_market_flash_sends) when the message
+  // really goes out, so previewing a quote never burns a bullet. `note` keeps the shape older consumers read.
+  // A failure here must never take down cadence/price/credit signals or a quote — log it, return no note.
+  const picked = await pickBulletsForCustomerProduct(sql, customerId, productId, 2).catch((e: unknown) => { console.error("market flash pick failed", e); return []; });
+  const marketNote = picked.length
     ? {
-        trendPct: marketNoteRowFinal.trend_pct != null ? Number(marketNoteRowFinal.trend_pct) : null, note: marketNoteRowFinal.note ?? null,
-        mxBenchmarkPriceUsdKg: marketNoteRowFinal.mx_benchmark_price_usd_kg != null ? Number(marketNoteRowFinal.mx_benchmark_price_usd_kg) : null,
-        mxBenchmarkRegion: marketNoteRowFinal.mx_benchmark_region ?? null,
+        trendPct: null, note: picked.map((b) => b.text).join(" "),
+        mxBenchmarkPriceUsdKg: null, mxBenchmarkRegion: null,
+        line: `Según el último reporte de mercado (Steiner Consulting): ${picked.map((b) => b.text).join(" ")}`,
+        bulletIds: picked.map((b) => b.id),
       }
     : null;
 

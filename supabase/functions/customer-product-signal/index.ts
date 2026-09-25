@@ -13,10 +13,11 @@
 // `check_notified` (has a customer already been pinged about a closed load for this product in the
 // last 7 days — the frequency cap) and `log_notification` (record that a ping just went out, same
 // 7-day cap). Both are mutually exclusive with the default signals behavior and with each other —
-// exactly one of customer_id+product_ids / check_notified / log_notification is expected per call.
+// exactly one of customer_id+product_ids / check_notified / log_notification / log_market_flash_sends is expected per call.
 
 import postgres from "npm:postgres@3.4.4";
 import { computeCustomerProductSignal, jsonResponse } from "../_shared/matching.ts";
+import { logBulletSends } from "../_shared/marketFlash/store.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -53,6 +54,15 @@ Deno.serve(async (req) => {
         on conflict (customer_id, product_id, order_number) do nothing
       `;
       return jsonResponse({ logged: true });
+    }
+
+    // Market Flash v2: called when a message REALLY goes out, so each bullet reaches a customer once
+    // (unique bullet+customer, on conflict do nothing → a retry or double click never double-counts).
+    if (body.log_market_flash_sends) {
+      const { bullet_ids, customer_id, channel, actor } = body.log_market_flash_sends;
+      if (channel && !["email", "whatsapp"].includes(channel)) return jsonResponse({ error: "channel must be email or whatsapp" }, 400);
+      const r = await logBulletSends(sql, { bullet_ids, customer_id, channel, actor: actor ?? "unknown" });
+      return jsonResponse(r, "error" in r ? 400 : 200);
     }
 
     const { customer_id, product_ids } = body;

@@ -16,13 +16,11 @@ export interface Bullet {
   levels: Array<"product" | "protein" | "market">;
   species: Species | null;
   market: Market;
-  product_entity: string | null;   // printed cut name to be matched to the catalog (null unless level includes product)
+  product_entity: string | null;   // the term exactly as the bulletin prints it; its catalog meaning is resolved at read time via market_flash_term_aliases (learned once). {{CUT}} in text_es is replaced by the catalog's Spanish name.
   text_es: string;
   source_note: string;             // provenance shown to the trader, never invented
   page: number;
   computed: boolean;               // true when a number in the text is arithmetic between two printed numbers
-  glossary_gaps: string[];         // English terms kept as printed because no certified Spanish term exists yet
-  sendable: boolean;               // false while a term is uncertified: held back, never sent with English words in it
   quote_en?: string;               // narrative bullets: the exact source sentence(s) this text translates
 }
 
@@ -42,18 +40,7 @@ const versus = (p: number, label: string, ref?: string) => (p === 0 ? `${ZERO[la
 
 const SPECIES_ES: Record<Species, string> = { pork: "cerdo", beef: "res", chicken: "pollo", turkey: "pavo", feed: "" };
 
-// Certified Spanish terms only. Anything else is kept exactly as printed and reported as a gap.
-const GLOSSARY: Record<string, string> = {
-  "Hams, Total": "jamones (total)", "Bone-in": "con hueso", "Boneless": "sin hueso", "Total": "total",
-  "Loins, Total": "lomos (total)", "Ribs": "costillas",
-  "Breasts and Breast Meat": "pechugas", "Wings": "alas", "Whole Turkeys": "pavos enteros", "Turkey Breast": "pechuga de pavo",
-};
-function glossary(entity: string, gaps: string[]): string {
-  const parts = entity.split(" / ").slice(1); // drop the group ("Frozen Pork" …), the species is stated separately
-  return parts.map((p) => { if (GLOSSARY[p]) return GLOSSARY[p]; gaps.push(p); return p; }).join(" — ");
-}
-
-// USDA Hogs & Pigs labels — fixed, closed set. A label not listed here is HELD (sendable=false), never guessed.
+// USDA Hogs & Pigs labels — fixed, closed set. A label not listed here is not published (never guessed).
 const HOGS_ES: Record<string, string> = {
   "ALL HOGS AND PIGS": "total de cerdos y lechones", "KEPT FOR BREEDING": "cerdos para reproducción", "KEPT FOR MARKET": "cerdos para mercado",
   "180 Pounds and over": "cerdos para mercado de 180 lb o más", "120 - 179 Pounds": "cerdos para mercado de 120 a 179 lb", "50 - 119 Pounds": "cerdos para mercado de 50 a 119 lb", "Under 50 Pounds": "cerdos para mercado de menos de 50 lb",
@@ -66,28 +53,28 @@ const CONTRACT_MES: Record<string, string> = { Sep: "sep.", Sept: "sep.", Oct: "
 const FUT_ES: Record<string, string> = { Corn: "maíz", Soybean: "soya", "Soybean Meal": "harina de soya", "Crude Oil": "petróleo WTI" };
 
 // The ONE place a datum's Spanish name is built — used by the bullets below and by the trend bullets (compare.ts),
-// so English words can never leak into one and not the other. `gaps` lists terms still uncertified.
-export function labelEs(f: Fact): { text: string; gaps: string[] } | null {
-  const v = f.values as Record<string, any>, gaps: string[] = [];
+// so English words can never leak into one and not the other.
+export function labelEs(f: Fact): { text: string } | null {
+  const v = f.values as Record<string, any>;
   switch (f.kind) {
-    case "cut_price_weekly": return { text: "{{CUT}}", gaps };
-    case "mx_pork_price": return { text: `${f.entity} en ${v.region}`, gaps };
-    case "hog_price_us_mx": return { text: /^Mexico/.test(f.entity) ? "Cerdo vivo en México (peso vivo)" : "Cerdo en canal en EE.UU. (Iowa/Minnesota, peso en canal)", gaps };
+    case "cut_price_weekly": return { text: "{{CUT}}" };
+    case "mx_pork_price": return { text: `{{CUT}} en ${v.region}` };
+    case "hog_price_us_mx": return { text: /^Mexico/.test(f.entity) ? "Cerdo vivo en México (peso vivo)" : "Cerdo en canal en EE.UU. (Iowa/Minnesota, peso en canal)" };
     case "futures": {
       const [mo, yr] = String(v.contract).split(/\s+/);
-      return { text: `Futuros de ${FUT_ES[v.commodity] || v.commodity}, contrato ${CONTRACT_MES[mo] || mo} ${yr}`, gaps };
+      return { text: `Futuros de ${FUT_ES[v.commodity] || v.commodity}, contrato ${CONTRACT_MES[mo] || mo} ${yr}` };
     }
-    case "cold_storage": { const what = glossary(f.entity, gaps); return { text: `Inventario en frío de ${SPECIES_ES[f.species]}${what ? ` — ${what}` : ""} en EE.UU.`, gaps }; }
+    case "cold_storage": return { text: `Inventario en frío de ${SPECIES_ES[f.species]} — {{CUT}} en EE.UU.` };
   }
   return null;
 }
 
-const src = (f: Fact, bulletinDate: string) => `Boletín Steiner Consulting · datos al ${fmtDateY(bulletinDate)} · pág. ${f.page}`;
+export const src = (f: Fact, bulletinDate: string) => `Boletín Steiner Consulting · datos al ${fmtDateY(bulletinDate)} · pág. ${f.page}`;
 
 function base(f: Fact, bulletinDate: string, extra: Partial<Bullet> & Pick<Bullet, "text_es" | "levels">): Bullet {
   return {
     key: f.key, fact_keys: [f.key], kind: f.kind, species: f.species === "feed" ? null : f.species, market: f.market,
-    product_entity: null, source_note: src(f, bulletinDate), page: f.page, computed: false, glossary_gaps: [], sendable: true, ...extra,
+    product_entity: null, source_note: src(f, bulletinDate), page: f.page, computed: false, ...extra,
   };
 }
 const lv = (product: boolean, species: Species): Bullet["levels"] => [...(product ? ["product" as const] : []), ...(species !== "feed" ? ["protein" as const] : []), "market" as const];
@@ -111,9 +98,9 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
         out.push(base(f, bulletinDate, { levels: lv(true, f.species), product_entity: f.entity, text_es: `{{CUT}} — el boletín proyecta para la semana del ${fmtDate(v.for_week)}: US$${n(v.price)}/cwt (${versus(v.yoy_pct, "hace un año")}).` }));
         break;
       case "mx_pork_price": {
-        const chg = v.change as number | null;
-        const t = `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: US$${n(v.price)}/kg` +
-          (chg != null && v.prev_price != null ? (chg === 0 ? `, sin cambio vs la semana anterior (US$${n(v.prev_price)})` : `, ${chg > 0 ? "sube" : "baja"} US$${n(Math.abs(chg))} vs la semana anterior (US$${n(v.prev_price)})`) : "") + " (SNIIM).";
+        // Only the two printed prices: the bulletin's own "Cambio" column is computed from unrounded prices, so
+        // stating it next to the rounded ones can look contradictory (e.g. 3.86 vs 3.87 with a printed change of 0.00).
+        const t = `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: US$${n(v.price)}/kg` + (v.prev_price != null ? ` (semana anterior US$${n(v.prev_price)})` : "") + " (SNIIM).";
         out.push(base(f, bulletinDate, { levels: ["product", "protein", "market"], product_entity: f.entity, text_es: t }));
         break;
       }
@@ -136,20 +123,27 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
         out.push(base(f, bulletinDate, { levels: lv(false, f.species), text_es: `El boletín proyecta la producción de ${SPECIES_ES[f.species]} en EE.UU. para ${String(v.period).replace("Annual", "el año")}: ${n(v.production, 0)} millones de lb (${versus(v.yoy_pct, "el periodo equivalente del año anterior")}).` }));
         break;
       case "cold_storage": {
-        const L = labelEs(f)!;
         out.push(base(f, bulletinDate, {
-          levels: lv(false, f.species), glossary_gaps: L.gaps, sendable: L.gaps.length === 0,
-          text_es: `${L.text} al ${fmtDate(v.as_of)}: ${n(v.stocks, 0)} mil lb (${v.pct_of_year_ago}% del nivel de hace un año; ${v.pct_of_prev_month}% del mes anterior).`,
+          levels: lv(true, f.species), product_entity: f.entity,
+          text_es: `${labelEs(f)!.text} al ${fmtDate(v.as_of)}: ${n(v.stocks, 0)} mil lb (${v.pct_of_year_ago}% del nivel de hace un año; ${v.pct_of_prev_month}% del mes anterior).`,
+        }));
+        break;
+      }
+      case "cold_storage_total": {
+        const [y, m] = String(v.month).split("-").map(Number);
+        out.push(base(f, bulletinDate, {
+          levels: lv(false, f.species),
+          text_es: `Inventario total de ${SPECIES_ES[f.species]} en frío en EE.UU. al cierre de ${MES_LARGO[m - 1]} de ${y}: ${n(v.stocks, 0)} millones de lb — ${versus(v.yoy_pct, "hace un año", `${n(v.year_ago_stocks, 0)}`)}; ${versus(v.avg5_pct, "el promedio de 5 años", `${n(v.avg5_stocks, 0)}`)}.`,
         }));
         break;
       }
       case "hogs_pigs": {
         const [g, l] = f.entity.includes(" / ") ? f.entity.split(" / ") : ["", f.entity];
-        const gaps: string[] = [];
-        const lab = g ? `${HOGS_ES[g] || (gaps.push(g), g)}, ${PERIOD_ES[l] || (gaps.push(l), l)}` : (HOGS_ES[l] || (gaps.push(l), l));
+        const lab = g ? `${HOGS_ES[g]}, ${PERIOD_ES[l]}` : HOGS_ES[l];
+        if (!lab || lab.includes("undefined")) break; // an unrecognized USDA label is not published (never guessed)
         const unitEs = v.unit === "pigs per litter" ? "" : " mil cabezas";
         out.push(base(f, bulletinDate, {
-          levels: lv(false, "pork"), glossary_gaps: gaps, sendable: gaps.length === 0,
+          levels: lv(false, "pork"),
           text_es: `Reporte trimestral de cerdos y lechones de EE.UU. al ${fmtDateY(v.report_date)} — ${lab}: ${nAuto(v.y2026)}${unitEs} (${n(v.pct_of_2025, 1)}% del nivel de 2025).`,
         }));
         break;
@@ -195,7 +189,7 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
     const items = arr.map((m) => { const v = m.values as Record<string, any>; const mm = +String(v.month).slice(5); return `${MES_LARGO[mm - 1]} US$${n(v.price)} (${versus(v.yoy_pct, "hace un año")})`; });
     out.push({
       key: `${f0.kind}|${f0.species}|${f0.entity}`, fact_keys: arr.map((a) => a.key), kind: "cut_price_forecast_month", levels: lv(true, f0.species), species: f0.species, market: "US",
-      product_entity: f0.entity, text_es: `{{CUT}} — el boletín proyecta (US$/cwt): ${items.join("; ")}.`, source_note: src(f0, bulletinDate), page: f0.page, computed: false, glossary_gaps: [], sendable: true,
+      product_entity: f0.entity, text_es: `{{CUT}} — el boletín proyecta (US$/cwt): ${items.join("; ")}.`, source_note: src(f0, bulletinDate), page: f0.page, computed: false
     });
   }
   return out;
@@ -209,8 +203,8 @@ export function narrativeBullets(claims: NarrativeClaim[], bulletinDate: string)
   return claims.map((c) => ({
     key: `narrative|${c.species}|${hash(c.quote_en)}`, fact_keys: [], kind: c.stance === "forward_looking" ? "narrative_view" : "narrative_observed",
     levels: ["protein", "market"] as Bullet["levels"], species: c.species, market: "US" as Market, product_entity: null,
-    text_es: `Según el boletín de Steiner Consulting: «${c.text_es.trim()}»`,
+    text_es: `«${c.text_es.trim()}»`,
     source_note: `Boletín Steiner Consulting · datos al ${fmtDateY(bulletinDate)} · pág. ${c.page ?? 2}`, page: c.page ?? 2,
-    computed: false, glossary_gaps: [], sendable: true, quote_en: c.quote_en,
+    computed: false, quote_en: c.quote_en,
   }));
 }

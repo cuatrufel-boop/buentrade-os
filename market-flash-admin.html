@@ -64,7 +64,6 @@
   /* Exact .payment-badge recipe from orders.html (font/padding/radius/border/transparent bg) —
      same pill, only the modifier colors differ to fit Product/Protein/Market instead of
      paid/due-soon/overdue. */
-  .mf-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;margin-right:4px;background:transparent;}
   /* Same tab pattern quotes.html already uses (tab-row/tab-btn/tab-count) — reused as-is, not a
      new component, for Active Bullets' three sections (real correction 2026-09-23: "tengo que
      escroll demasiado para abajo cuando hay mucha data"). */
@@ -74,17 +73,6 @@
   .tab-btn:focus{outline:none;}
   .tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
   .tab-count{background:#C4432E;color:#fff;font-size:10.5px;font-weight:700;border-radius:10px;padding:1px 7px;line-height:1.5;}
-  .mf-badge.product{color:#6FD3A8;border-color:rgba(15,138,95,.4);}
-  .mf-badge.species{color:var(--amber);border-color:rgba(255,200,118,.4);}
-  .teach-row{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
-  /* Same .tt-overlay shape as plants.html's Load Prices panel — a full-screen fixed panel with a
-     header bar and a scrolling body, not a small centered modal. */
-  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:850;display:none;flex-direction:column;}
-  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
-  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
-  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
-  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
-  .tt-overlay-body{flex:1;min-height:0;overflow-y:auto;padding:20px;}
 </style>
 <!-- ============ LOGIN GATE (same Firebase project/login as every other screen) ============ -->
 <style>
@@ -101,6 +89,29 @@
   .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
   .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
   .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+</style>
+<style>
+  /* Pending Matches — same chip system as plants.html (Pending Matches / Price List Review) */
+  .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+  .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:var(--card);color:var(--blue-bright);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;font-family:inherit;}
+  .plr-chip:hover{background:var(--blue);color:#fff;}
+  .plr-chip-current{background:var(--blue);color:#fff;}
+  @keyframes plr-nudge{0%,100%{box-shadow:0 0 0 0 rgba(255,200,118,0);}25%,75%{box-shadow:0 0 0 3px rgba(255,200,118,.55);}}
+  .plr-candidates-nudge{animation:plr-nudge .5s ease-in-out 2;border-radius:8px;}
+  .plr-browse{max-height:210px;overflow-y:auto;padding:8px;display:none;background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:8px;flex-wrap:wrap;gap:6px;}
+  .plr-browse-empty{display:none;font-size:11.5px;color:var(--ink-soft);padding:8px 2px;}
+  .plr-browse-search{display:block;width:100%;max-width:340px;padding:7px 10px;margin-bottom:8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;background:var(--card);color:var(--ink);}
+  .plr-browse-search:focus{outline:none;border-color:var(--blue);}
+  .plr-browse-toggle{background:none;border:none;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px;font-family:inherit;}
+  /* Bullets */
+  .mf-bullet{padding:7px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.45;text-align:left;}
+  .mf-bullet:first-child{border-top:none;}
+  .mf-src{display:block;color:var(--ink-soft);font-size:11px;margin-top:2px;}
+  .mf-group{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:14px;}
+  .mf-group-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+  .mf-group-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;}
+  .mf-reach{font-size:12px;color:var(--ink-soft);}
+  .mf-more{background:none;border:none;color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;padding:6px 0 0;font-family:inherit;}
 </style>
 </head>
 <body>
@@ -202,70 +213,46 @@ auth.onAuthStateChanged(user => {
 <main>
   <div id="errBox"></div>
 
-  <!-- ============ LOAD MARKET FLASH — paste one cut per line, trend at the end ============ -->
-  <div style="display:flex;align-items:center;gap:10px;margin:28px 0 14px;">
+  <div style="display:flex;align-items:center;gap:14px;margin:28px 0 6px;flex-wrap:wrap;">
     <h1 style="margin:0;">Market Flash</h1>
-    <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openMfPanel()">📋 Load Market Flash</button>
+    <span id="mfStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
   </div>
+  <div id="mfDropZone" style="border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;font-size:12.5px;color:var(--ink-soft);margin:10px 0 22px;cursor:pointer;transition:border-color .15s;">📄 Load Market Flash — drag the bulletin PDF here, or <span style="color:var(--blue-bright);text-decoration:underline;">choose the file</span></div>
+  <input type="file" id="mfFileInput" accept="application/pdf,.pdf" style="display:none;">
 
-  <!-- ============ ACTIVE BULLETS — real correction 2026-09-23 ("tengo que escroll demasiado para
-       abajo cuando hay mucha data"): three stacked full tables meant scrolling past all of Product
-       to reach Protein/Market — same tab pattern quotes.html already uses, one section visible at
-       a time, with a live count on each tab so the split is visible without opening any of them. ============ -->
-  <h1>Active Bullets <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— what's currently reaching customers, and who</span></h1>
   <div class="tab-row">
     <button type="button" class="tab-btn active" id="mfTabBtn_product" onclick="setMfActiveTab('product')">Product <span class="tab-count" id="mfTabCount_product" style="display:none;"></span></button>
     <button type="button" class="tab-btn" id="mfTabBtn_protein" onclick="setMfActiveTab('protein')">Protein <span class="tab-count" id="mfTabCount_protein" style="display:none;"></span></button>
     <button type="button" class="tab-btn" id="mfTabBtn_market" onclick="setMfActiveTab('market')">Market <span class="tab-count" id="mfTabCount_market" style="display:none;"></span></button>
+    <button type="button" class="tab-btn" id="mfTabBtn_pending" onclick="setMfActiveTab('pending')">Pending Matches <span class="tab-count" id="mfTabCount_pending" style="display:none;"></span></button>
   </div>
 
   <div id="mfTabPanel_product">
     <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Tied to one exact SKU or a packaging/temp family — reaches only those real buyers.</p>
-    <div class="tbl-wrap"><table id="tblMfActiveProduct"><thead><tr><th>Product</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+    <div id="mfProductList"></div>
   </div>
   <div id="mfTabPanel_protein" style="display:none;">
     <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Category-wide — reaches every customer of every product in that protein.</p>
-    <div class="tbl-wrap"><table id="tblMfActiveProtein"><thead><tr><th>Protein</th><th>Data</th><th>As of</th><th>Reaches these customers</th></tr></thead><tbody></tbody></table></div>
+    <div id="mfProteinList"></div>
   </div>
   <div id="mfTabPanel_market" style="display:none;">
-    <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Pure context — not tied to any product or customer.</p>
-    <div class="tbl-wrap"><table id="tblMfActiveMarket"><thead><tr><th>Bulletin term</th><th>Learned</th></tr></thead><tbody></tbody></table></div>
+    <p style="color:var(--ink-soft);font-size:13px;margin:0 0 12px;">Context for the market — United States reaches every customer, Mexico reaches the customers in Mexico.</p>
+    <div id="mfMarketList"></div>
+  </div>
+  <div id="mfTabPanel_pending" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
+      <span id="mfMatchAllStatus" style="font-size:12px;color:var(--ink-soft);"></span>
+      <button class="btn secondary" id="mfMatchAllBtn" onclick="matchAllConfirmedTerms()">Match All Confirmed</button>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th style="width:38%;">From the bulletin</th><th>Match to product</th><th style="width:110px;"></th></tr></thead>
+      <tbody id="mfPendingRows"></tbody>
+    </table></div>
+    <div id="mfPendingEmpty" class="empty" style="display:none;">Nothing waiting on a match.</div>
+    <div id="mfNoCatalogNote" style="display:none;font-size:12px;color:var(--ink-soft);margin-top:6px;"></div>
   </div>
 </main>
 </div><!-- /appContent -->
-
-<!-- ============ LOAD MARKET FLASH POPUP — same shape as plants.html's Load Prices: one
-     .tt-overlay, two mutually-exclusive steps toggled by style.display, nothing written to the
-     database until Apply All fires. ============ -->
-<div class="tt-overlay" id="mfCard">
-  <div class="tt-overlay-head">
-    <div class="tt-overlay-title" id="mfCardTitle">Load Market Flash</div>
-    <button class="tt-overlay-close" onclick="closeMfPanel()" title="Close">✕</button>
-  </div>
-  <div class="tt-overlay-body">
-    <div style="max-width:900px;margin:0 auto;">
-      <div id="mfPasteStep">
-        <p style="font-size:12.5px;color:var(--ink-soft);margin:6px 0 10px;">Drag the bulletin PDF in, or paste the report text directly (copied as-is from the PDF, no reformatting) — the system recognizes each cut and its current % on its own. If you prefer, a simple one-line-per-cut format also works: <span style="font-family:monospace;">Spareribs MED -9.5</span>. Nothing is saved yet — you review and confirm with Apply All after.</p>
-        <div id="mfDropZone" style="border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;cursor:pointer;transition:border-color .15s;">📄 Drag the bulletin PDF here, or <span style="color:var(--blue-bright);text-decoration:underline;">click to choose it</span><input type="file" id="mfFileInput" accept="application/pdf" style="display:none;"></div>
-        <textarea id="mfInput" rows="14" style="width:100%;min-height:260px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px;border:1.5px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03);color:#fff;"></textarea>
-        <div id="mfInputErr" style="display:none;color:#FF9C8A;font-size:12.5px;margin-top:6px;"></div>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-          <button class="btn" onclick="processMfText()">Process</button>
-          <button class="btn secondary" onclick="closeMfPanel()">Cancel</button>
-        </div>
-      </div>
-      <div id="mfReviewStep" style="display:none;">
-        <div id="mfSummary" style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;"></div>
-        <div id="mfReviewRows"></div>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-          <button class="btn" id="mfApplyBtn" onclick="applyMfAll()">Apply All</button>
-          <button class="btn secondary" onclick="backToMfPaste()">← Back to paste</button>
-          <button class="btn secondary" onclick="closeMfPanel()">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
 const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
@@ -281,46 +268,32 @@ async function callApi(fn, body){
   if (!res.ok) throw new Error(data.error || res.status);
   return data;
 }
-
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 function showErr(msg){ document.getElementById('errBox').innerHTML = `<div class="err">${escapeHtml(msg)}</div>`; }
 function showSuccess(msg){ document.getElementById('errBox').innerHTML = `<div class="ok">✓ ${escapeHtml(msg)}</div>`; }
 
-let mfCategories = [];
-let mfProducts = [];
-let mfRows = []; // { raw_cut_name, trend_pct, known, meaning_type, meaning_id, meaning_text, meaning_subtext, meaning_label }
+const SPECIES_LABEL = { pork: 'Pork', beef: 'Beef', chicken: 'Chicken', turkey: 'Turkey' };
+const MARKET_LABEL = { US: 'United States', MX: 'Mexico' };
+let mf = null;                 // last list_market_flash response
+const mfPicks = {};            // term -> chosen catalog option key (client-only until Match)
+const mfBrowseOpen = {};       // term -> true when "view rest of catalog" is open
+const mfExpanded = {};         // group id -> true when "show all" is open
 
 async function loadMarketFlash(){
-  document.getElementById('errBox').innerHTML = '';
   try {
-    const [lookups, productsRes, mf] = await Promise.all([
-      callApi('lookups-search', {}),
-      callApi('products-search', {}),
-      callApi('price-history-search', { list_market_flash: true }),
-    ]);
-    mfCategories = lookups.categories || [];
-    mfProducts = productsRes.results || [];
-    renderMfActive(mf.product_notes || [], mf.category_notes || [], mf.family_notes || [], mf.aliases || []);
-  } catch (e) {
-    showErr('Error loading: ' + e.message);
-  }
+    mf = await callApi('price-history-search', { list_market_flash: true });
+    renderMarketFlash();
+  } catch (e) { showErr('Error loading: ' + e.message); }
 }
 
-// Real addition 2026-09-22 ("arrastro el pdf del boletin en load market flash no pega rebota"):
-// the trader's actual workflow is dragging the PDF file in, not copy-pasting its text out of a PDF
-// viewer first — that copy step was the friction. Reads the dropped/picked PDF with pdf.js
-// entirely client-side (no upload, no server round trip) and reconstructs pdftotext -layout-
-// equivalent text (row-clustered by Y position, ordered left-to-right by X) so the existing,
-// already-validated parseBulletinRawText reads it completely unchanged. Verified against the real
-// 48-page bulletin PDF: identical 41/41 sections and percentages either way (pasted text vs.
-// dropped PDF) — same numbers, same names, spot-checked against the raw report.
+// ---------------------------------------------------------------- loading a bulletin (PDF → the server reads everything)
 const mfDropZone = document.getElementById('mfDropZone');
 const mfFileInput = document.getElementById('mfFileInput');
 const mfDropZoneDefaultHtml = mfDropZone.innerHTML;
 mfDropZone.addEventListener('click', () => mfFileInput.click());
-mfFileInput.addEventListener('change', () => { if (mfFileInput.files[0]) handleMfPdfFile(mfFileInput.files[0]); });
+mfFileInput.addEventListener('change', () => { if (mfFileInput.files[0]) handleMfPdfFile(mfFileInput.files[0]); mfFileInput.value = ''; });
 mfDropZone.addEventListener('dragenter', (e) => { e.preventDefault(); mfDropZone.style.borderColor = 'var(--blue-bright)'; });
 mfDropZone.addEventListener('dragover', (e) => { e.preventDefault(); mfDropZone.style.borderColor = 'var(--blue-bright)'; });
 mfDropZone.addEventListener('dragleave', () => { mfDropZone.style.borderColor = 'var(--line)'; });
@@ -330,626 +303,198 @@ mfDropZone.addEventListener('drop', (e) => {
   const file = e.dataTransfer.files[0];
   if (file) handleMfPdfFile(file);
 });
-// Without a page-wide guard, releasing the drag even slightly outside the small drop-zone box —
-// very easy to do — hits Chrome's default action for an unhandled drop: navigate the tab away to
-// open the PDF directly. That reads as the drag just bouncing/doing nothing. This catches it
-// anywhere in the document, not only inside the drop zone itself.
+// Without a page-wide guard, releasing the drag slightly outside the drop zone makes Chrome navigate the tab
+// away to open the PDF — which reads as the drag "bouncing".
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => { if (!mfDropZone.contains(e.target)) e.preventDefault(); });
 
-async function handleMfPdfFile(file){
-  const errEl = document.getElementById('mfInputErr');
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
-    errEl.textContent = 'That file is not a PDF.';
-    errEl.style.display = '';
-    return;
+// The browser reads the PDF's text (positions included) itself and sends only that — ~190 KB instead of the 4 MB file.
+// The server does everything else (layout, every table, the narrative) with one code path shared with the email import.
+async function readPdfItemsClient(file){
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let p = 1; p <= doc.numPages; p++){
+    const content = await (await doc.getPage(p)).getTextContent();
+    pages.push(content.items.filter(it => it.str && it.str.trim() !== '').map(it => [it.str, Math.round(it.transform[4] * 10) / 10, Math.round(it.transform[5] * 10) / 10]));
   }
-  errEl.style.display = 'none';
-  mfDropZone.textContent = 'Reading ' + file.name + '...';
+  return pages;
+}
+async function sha256Hex(file){
+  const h = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function handleMfPdfFile(file){
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){ showErr('That file is not a PDF.'); return; }
+  document.getElementById('errBox').innerHTML = '';
+  mfDropZone.style.pointerEvents = 'none';
+  mfDropZone.textContent = 'Reading ' + file.name + ' — the whole bulletin is read automatically, this takes about a minute…';
   try {
-    const text = await extractPdfLayoutText(file);
-    let narrativeSections = [];
-    try { narrativeSections = await extractPdfNarrativeSections(file); }
-    catch (e) { /* never blocks the real per-cut rows over the narrative extraction failing */ }
-    document.getElementById('mfInput').value = text;
-    mfDropZone.innerHTML = mfDropZoneDefaultHtml;
-    await processMfText();
-    // Real addition 2026-09-23 ("necesitamos que lea el texto y lo convierta en data para market y
-    // para proteina"): the report's own species-level commentary, pre-resolved as Protein with the
-    // real paragraph as its note (never just a bare %) — shown at the top of the review list so the
-    // trader confirms/edits it like anything else, never silently applied.
-    if (narrativeSections.length){
-      const narrativeRows = narrativeSections.map(s => {
-        const cat = mfCategories.find(c => (c.name_en || c.name) === s.categoryName);
-        return {
-          raw_cut_name: `${s.categoryName} Market Trends (report summary)`, trend_pct: null, known: false,
-          meaning_type: cat ? 'species' : null, meaning_id: cat ? cat.id : null,
-          meaning_text: null, meaning_subtext: null, meaning_label: cat ? s.categoryName : null,
-          note: s.text,
-        };
-      });
-      mfRows = [...narrativeRows, ...mfRows];
-      renderMfReview();
+    const [items, file_hash] = await Promise.all([readPdfItemsClient(file), sha256Hex(file)]);
+    const r = await callApi('price-history-search', { ingest_market_flash: { items, file_hash, actor: currentActor(), source: 'upload' } });
+    await loadMarketFlash();
+    if (r.idempotent_replay) showSuccess('This exact bulletin was already loaded — nothing was duplicated.');
+    else {
+      let msg = `Bulletin loaded (data as of ${String(r.as_of).slice(0, 10)}): ${r.bullets} bullets.`;
+      if (r.trend_bullets) msg += ` ${r.trend_bullets} compare with the previous edition.`;
+      showSuccess(msg);
+      if (r.narrative_error) showErr('The text commentary could not be read this time (' + r.narrative_error + ') — the tables were read normally.');
     }
   } catch (e) {
-    errEl.textContent = 'Could not read the PDF: ' + e.message;
-    errEl.style.display = '';
+    showErr('Could not read the bulletin: ' + e.message);
+  } finally {
     mfDropZone.innerHTML = mfDropZoneDefaultHtml;
+    mfDropZone.style.pointerEvents = '';
   }
 }
 
-// Row-clustering: groups pdf.js text items (each with an x/y position, no inherent layout) by
-// Y-baseline into rows, sorts each row left-to-right by X, and pads gaps with spaces proportional
-// to their real horizontal distance — the same visual-column structure pdftotext -layout produces
-// from the same PDF, which is what the header/anchor/weekly-row regexes below depend on.
-async function extractPdfLayoutText(file){
-  const buf = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  let fullText = '';
-  const Y_TOL = 2.5;
-  const CHAR_W = 4.3;
-  for (let p = 1; p <= doc.numPages; p++){
-    const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })).filter(it => it.str !== undefined);
-    const rowsMap = new Map();
-    for (const it of items){
-      let matchedKey = null;
-      for (const key of rowsMap.keys()){ if (Math.abs(key - it.y) <= Y_TOL){ matchedKey = key; break; } }
-      if (matchedKey == null){ matchedKey = it.y; rowsMap.set(matchedKey, []); }
-      rowsMap.get(matchedKey).push(it);
-    }
-    const rowYs = [...rowsMap.keys()].sort((a, b) => b - a);
-    for (const y of rowYs){
-      const rowItems = rowsMap.get(y).sort((a, b) => a.x - b.x);
-      let line = '';
-      let lastEndX = null;
-      for (const it of rowItems){
-        if (lastEndX != null){
-          const gap = it.x - lastEndX;
-          const spaces = Math.max(1, Math.round(gap / CHAR_W));
-          line += ' '.repeat(Math.min(spaces, 200));
-        }
-        line += it.str;
-        lastEndX = it.x + it.str.length * CHAR_W * 0.55;
-      }
-      fullText += line + '\n';
-    }
-    fullText += '\f';
-  }
-  return fullText;
-}
-
-// Real addition 2026-09-23 ("el parser solo lee productos... necesitamos que lea el texto y lo
-// convierta en data para market y para proteina"): the report's own real qualitative commentary —
-// "Pork Market Trends", "Beef Market Trends", etc., laid out as a 2-column block of bullet-point
-// paragraphs (found on the report's own Summary page, not a fixed page number) — never reached the
-// review list before; only the 41 per-cut price charts did.
-//
-// Real bug found testing against the live report: the table-of-contents column ("Summary", "1",
-// "Pork Statistics", "2"...) sits at nearly the exact same y as the two header rows just below it —
-// off by ~1pt, well inside normal row-clustering tolerance — so a naive "join everything on this
-// row" approach produced "Summary 1 Pork Market Trends Beef Market Trends" as one contaminated row,
-// with the header's OWN x lost under the TOC's x=17. Fixed by matching a sliding window of
-// consecutive items (not the whole clustered row) against the header pattern, so the match keeps
-// the true header item's own x/y regardless of what else shares its row.
-async function extractPdfNarrativeSections(file){
-  const buf = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const Y_TOL = 3;
-  const HEADER_RE = /^([A-Za-z]+)\s+Market\s+Trends?$/i;
-  const KNOWN_SPECIES = ['Pork', 'Beef', 'Chicken', 'Turkey', 'Lamb', 'Sow'];
-
-  function groupRows(items){
-    const rowsMap = new Map();
-    for (const it of items){
-      let key = null;
-      for (const y of rowsMap.keys()){ if (Math.abs(y - it.y) <= Y_TOL){ key = y; break; } }
-      if (key == null){ key = it.y; rowsMap.set(key, []); }
-      rowsMap.get(key).push(it);
-    }
-    return [...rowsMap.entries()].map(([y, its]) => ({
-      y, sorted: its.sort((a, b) => a.x - b.x),
-      text: its.sort((a, b) => a.x - b.x).map(it => it.str).join(' ').replace(/\s+/g, ' ').trim(),
-    })).filter(r => r.text);
-  }
-
-  function findHeadersInRow(row){
-    const found = [];
-    for (let start = 0; start < row.sorted.length; start++){
-      for (let end = start; end < Math.min(start + 4, row.sorted.length); end++){
-        const windowText = row.sorted.slice(start, end + 1).map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
-        const m = windowText.match(HEADER_RE);
-        if (m && KNOWN_SPECIES.includes(m[1])){ found.push({ species: m[1], x: row.sorted[start].x, y: row.sorted[start].y }); break; }
-      }
-    }
-    return found;
-  }
-
-  for (let p = 1; p <= doc.numPages; p++){
-    const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })).filter(it => it.str && it.str.trim());
-    const rows = groupRows(items);
-    const headers = rows.flatMap(findHeadersInRow);
-    if (headers.length < 2) continue; // not the narrative page — every real bulletin has 4 of these together
-
-    const colSplitX = (Math.min(...headers.map(h => h.x)) + Math.max(...headers.map(h => h.x))) / 2;
-    const tocMaxX = Math.min(...headers.map(h => h.x)) - 10;
-    const sections = [];
-    for (const h of headers){
-      const isLeft = h.x < colSplitX;
-      const sameColHeaders = headers.filter(o => (o.x < colSplitX) === isLeft && o.y < h.y).sort((a, b) => b.y - a.y);
-      const yBottom = sameColHeaders.length ? sameColHeaders[0].y : -Infinity;
-      // Filter individual ITEMS by x/y (not whole rows) — the same TOC-contamination the header
-      // detection above works around can also leak a stray "Cattle on Feed"-style label into a
-      // paragraph row that otherwise belongs to this section.
-      const colItems = items.filter(it => it.y < h.y && it.y > yBottom && (isLeft ? it.x >= tocMaxX && it.x < colSplitX : it.x >= colSplitX));
-      const colRows = groupRows(colItems);
-      const text = colRows.sort((a, b) => b.y - a.y).map(r => r.text).join(' ').replace(/\s+/g, ' ').trim();
-      if (text) sections.push({ categoryName: h.species, text });
-    }
-    if (sections.length) return sections; // one narrative page per report — stop at the first one found
-  }
-  return [];
-}
-
-// Fallback: one line per item, real value at the end (for a trader typing a quick manual line
-// instead of pasting the real report — never the primary path any more).
-function parseMfLine(line){
-  const m = line.trim().match(/^(.+?)\s+([+-]?\d+(?:\.\d+)?)\s*%?\s*$/);
-  if (!m) return null;
-  return { raw_cut_name: m[1].trim(), trend_pct: Number(m[2]) };
-}
-
-// Real addition 2026-09-22 ("no debería poder pegar el pdf y que lo discrimine"): reads the report
-// text exactly as it comes out of a real PDF copy-paste (tested against the actual document —
-// pdftotext -layout of the full 48-page report). First version matched the header line by its own
-// text format ("<Cut Name>, FOB Plant, USDA" etc.) and only caught 23 of the report's 41 real
-// per-cut sections — beef (CHOICE/SELECT primal cuts, USDA sometimes mid-string not at the end)
-// and poultry (broiler/turkey, several with no "USDA" at all, e.g. "NE BONELESS BREAST BROILER
-// WHITE TRIM MEAT, UNDER 15%, FRESH") use name formats too varied to regex reliably. Fixed by
-// anchoring on the report's own fixed chart caption instead of the name text: every real per-cut
-// section's name line is immediately followed (skipping blank lines) by a
-// "YEAR OVER YEAR PRICE COMPARISON AND FORECAST" chart-header line — confirmed structurally
-// present exactly once per section, in every species section checked (pork/beef/poultry). That
-// anchor, not the name's own punctuation, is what makes it a header. Verified against the full
-// 48-page document: 41/41 structural sections found, 41/41 parsed with a real trend %, spot-checked
-// by hand against the raw report text for pork, beef and poultry rows. Within a found section: the
-// report's OWN "as of" date caption next to its chart (e.g. "Sep 4, 2026 = 72.66") is the anchor for
-// which weekly row is the real current one — never guessed by counting numbers, which was tried
-// first and got it wrong (a forecast-only row can have as many numbers on its line as a real
-// current one; only the report's own caption says which week is "now"). The matching weekly row's
-// trailing % is the trend. A section with no recognizable anchor or matching row is simply skipped
-// — never a guessed number.
-function parseBulletinRawText(text){
-  const lines = text.split('\n');
-  const chartLineRe = /YEAR OVER YEAR PRICE COMPARISON AND FORECAST/;
-  const anchorRe = /(?:wk\.\s*end\.\s*)?([A-Za-z]{3,9})\s+(\d{1,2}),\s*\d{4}\s*=/;
-  const weeklyRowRe = /(\d{1,2}-[A-Za-z]{3})\s+([0-9.,\s]+?)(-?\d+\.\d+)%/;
-  const toRowLabel = (monthWord, day) => day + '-' + (monthWord.slice(0, 3).charAt(0).toUpperCase() + monthWord.slice(1, 3).toLowerCase());
-
-  const headerIdxs = [];
-  for (let i = 0; i < lines.length; i++){
-    if (!chartLineRe.test(lines[i])) continue;
-    let j = i - 1;
-    while (j >= 0 && lines[j].trim() === '') j--;
-    if (j >= 0 && lines[j].trim()) headerIdxs.push(j);
-  }
-
-  const results = [];
-  for (let h = 0; h < headerIdxs.length; h++){
-    const start = headerIdxs[h];
-    const end = h + 1 < headerIdxs.length ? headerIdxs[h + 1] : lines.length;
-    const name = lines[start].trim().replace(/\s*Page\s*\d*\s*$/, '').trim();
-    const section = lines.slice(start, Math.min(end, start + 45));
-
-    let anchorLabel = null;
-    for (const line of section){
-      const am = line.match(anchorRe);
-      if (am){ anchorLabel = toRowLabel(am[1], am[2]); break; }
-    }
-    if (!anchorLabel) continue;
-
-    let chosenPct = null;
-    for (const line of section){
-      const m = line.match(weeklyRowRe);
-      if (m && m[1] === anchorLabel){ chosenPct = parseFloat(m[3]); break; }
-    }
-    if (chosenPct == null) continue;
-
-    results.push({ raw_cut_name: name, trend_pct: chosenPct });
-  }
-  return results;
-}
-
-// ============ POPUP — same mechanic as plants.html's openPriceListPanel/closePriceListPanel/
-// processPriceListText/applyPriceList: one overlay, two mutually-exclusive steps, everything held
-// in the mfRows array until Apply All fires the one batch of writes. ============
-
-function openMfPanel(){
-  document.getElementById('mfCard').style.display = 'flex';
-  document.getElementById('mfInput').value = '';
-  document.getElementById('mfInputErr').style.display = 'none';
-  document.getElementById('mfPasteStep').style.display = 'block';
-  document.getElementById('mfReviewStep').style.display = 'none';
-  document.getElementById('mfCardTitle').textContent = 'Load Market Flash';
-  mfRows = [];
-}
-// Real correction 2026-09-22 ("claro que si escogi muhcos los otros los deje en blanco" — Apply
-// All then said nothing was ready): Cancel and "Back to paste" wiped mfRows with zero warning,
-// even when several rows had real, unsaved picks sitting in it — one accidental click on either
-// silently threw away everything picked so far, with no way to tell it had happened until Apply
-// All came back empty. Both now confirm first whenever there's real unsaved work to lose.
-function mfUnsavedPickCount(){
-  return mfRows.filter(mfIsResolved).length;
-}
-function closeMfPanel(){
-  const n = mfUnsavedPickCount();
-  if (n > 0 && !confirm(`You picked ${n} line${n === 1 ? '' : 's'} that ${n === 1 ? "hasn't" : "haven't"} been applied yet. Closing now discards ${n === 1 ? 'it' : 'them'} — continue?`)) return;
-  document.getElementById('mfCard').style.display = 'none';
-  mfRows = [];
-}
-function backToMfPaste(){
-  const n = mfUnsavedPickCount();
-  if (n > 0 && !confirm(`You picked ${n} line${n === 1 ? '' : 's'} that ${n === 1 ? "hasn't" : "haven't"} been applied yet. Going back to paste discards ${n === 1 ? 'it' : 'them'} — continue?`)) return;
-  mfRows = [];
-  document.getElementById('mfReviewStep').style.display = 'none';
-  document.getElementById('mfPasteStep').style.display = 'block';
-  document.getElementById('mfCardTitle').textContent = 'Load Market Flash';
-}
-
-// Process — READ-ONLY (preview_market_flash_lines), same as plants.html's own read-only match
-// call during processPriceListText. Nothing is written here. Tries the real report format first
-// (parseBulletinRawText — paste straight from the PDF, no reformatting); falls back to the simple
-// one-line-per-cut format only when the pasted text has no recognizable report structure at all.
-async function processMfText(){
-  const text = document.getElementById('mfInput').value;
-  let parsed = parseBulletinRawText(text);
-  let usedFallback = false;
-  if (!parsed.length){
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    parsed = lines.map(parseMfLine).filter(Boolean);
-    usedFallback = true;
-  }
-  const errEl = document.getElementById('mfInputErr');
-  if (!parsed.length){
-    errEl.textContent = 'Could not recognize anything — paste the text exactly as it comes out of the report, or a simple one-line-per-cut format with the % at the end (e.g. "Spareribs MED -9.5").';
-    errEl.style.display = '';
-    return;
-  }
-  errEl.style.display = 'none';
-  let result;
-  try { result = await callApi('price-history-search', { preview_market_flash_lines: { lines: parsed } }); }
-  catch (e) { errEl.textContent = 'Error: ' + e.message; errEl.style.display = ''; return; }
-  mfRows = result.rows;
-  document.getElementById('mfPasteStep').style.display = 'none';
-  document.getElementById('mfReviewStep').style.display = 'block';
-  document.getElementById('mfCardTitle').textContent = `Review Market Flash (${mfRows.length})` + (usedFallback ? ' — simple format' : ' — read from report');
-  renderMfReview();
-}
-
-function mfIsResolved(row){
-  return row.known || !!row.meaning_type;
-}
-
-// One place for the badge class + label text per meaning_type, so "product family" (a real
-// addition alongside the original product/species/market three) never drifts out of sync between
-// the "already known" and "just picked" rows below.
-function mfBadgeInfo(meaningType){
-  if (meaningType === 'product') return { cls: 'product', text: 'Product' };
-  if (meaningType === 'product_family') return { cls: 'product', text: 'Product (family)' };
-  if (meaningType === 'species') return { cls: 'species', text: 'Protein' };
-  return { cls: 'species', text: 'Market' };
-}
-
-// Real addition 2026-09-22 ("cuando escojo un producto no escojo proteina y viceversa"): a row is
-// always exactly one of product/protein/market — never both at once, because a specific product
-// already belongs to a protein (its own category_id) — but once picked, the protein dropdown
-// disappears entirely, which reads as "protein never got answered." This makes the implied protein
-// explicit next to a product pick (derived from the product's own category, never a second manual
-// choice), and marks a protein-only pick as deliberately not tied to one exact product, so neither
-// side of the row ever looks blank or skipped.
-function mfProductProteinLabel(productId){
-  const p = mfProducts.find(x => x.id === productId);
-  if (!p || !p.category_id) return null;
-  const cat = mfCategories.find(c => c.id === p.category_id);
-  return cat ? (cat.name_en || cat.name) : null;
-}
-
-// Real correction 2026-09-23 ("no esta claro como se filtran para las 3 tablas la data desde que
-// subo el pdf"): the only feedback while resolving a batch used to be a bare "N of 41 ready" count
-// — no visible link to which of the three Active Bullets tabs (Product/Protein/Market) each pick
-// was actually headed for. This live count updates on every single pick, right where the trader is
-// already working, not just after Apply All closes the popup.
-function renderMfReview(){
-  const resolvedRows = mfRows.filter(mfIsResolved);
-  const productCount = resolvedRows.filter(r => r.meaning_type === 'product' || r.meaning_type === 'product_family').length;
-  const proteinCount = resolvedRows.filter(r => r.meaning_type === 'species').length;
-  const marketCount = resolvedRows.filter(r => r.meaning_type === 'market').length;
-  const unresolvedCount = mfRows.length - resolvedRows.length;
-  document.getElementById('mfSummary').textContent =
-    `${resolvedRows.length} of ${mfRows.length} ready to apply — Product: ${productCount} · Protein: ${proteinCount} · Market: ${marketCount}` +
-    (unresolvedCount ? ` · ${unresolvedCount} still unresolved` : '');
-  document.getElementById('mfReviewRows').innerHTML = mfRows.map((r, i) => {
-    if (r.known){
-      const bits = [`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`];
-      const badge = mfBadgeInfo(r.meaning_type);
-      const protein = r.meaning_type === 'product' ? mfProductProteinLabel(r.meaning_id) : null;
-      return `
-        <div class="teach-row">
-          <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)} <span style="color:#3FCB7E;font-size:11.5px;font-weight:400;">✓ already known</span></div>
-          <div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">
-            <span class="mf-badge ${badge.cls}">${badge.text}</span>
-            ${escapeHtml(r.meaning_label || '')}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
-            ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
-            — ${bits.join(' · ')}
-          </div>
-        </div>`;
-    }
-    // Real correction 2026-09-22 ("escojo producto y se cierra... se cierra la opcion de proteina",
-    // said 7 times): picking any of the three options used to collapse the row into a static
-    // summary — the product search and protein dropdown disappeared entirely, which read as the
-    // other option being unavailable/lost, not just "not chosen." Both controls now stay visible
-    // and live for every unresolved-this-session row, whether or not something's picked yet — the
-    // current pick is shown as a status line above them (with the implied protein alongside a
-    // product pick), and the trader can switch by directly using either control again, no separate
-    // "change" step needed.
-    const bits = [];
-    if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
-    const hasPick = !!r.meaning_type;
-    const badge = hasPick ? mfBadgeInfo(r.meaning_type) : null;
-    const protein = (hasPick && r.meaning_type === 'product') ? mfProductProteinLabel(r.meaning_id) : null;
-    const pickLabel = !hasPick || r.meaning_type === 'market' ? '' : escapeHtml(r.meaning_label || '');
-    const statusLine = !hasPick
-      ? `<div style="color:var(--ink-soft);font-size:12.5px;margin:3px 0 10px;">${bits.join(' · ') || '(no extra data)'} — never seen before</div>`
-      : `<div style="font-size:12.5px;margin:3px 0 10px;">
-          <span class="mf-badge ${badge.cls}">${badge.text}</span>
-          ${pickLabel}${protein ? ` <span style="color:var(--ink-soft);">· Protein: ${escapeHtml(protein)}</span>` : ''}
-          ${r.meaning_type === 'species' ? '<span style="color:var(--ink-soft);"> · (no specific product)</span>' : ''}
-        </div>`;
-    // Real correction 2026-09-22 ("el producto es mas importante que la proteina"): picking product
-    // then protein used to silently overwrite the product with whichever was touched last — losing
-    // the more precise, more valuable pick without any signal it happened. A specific product (or a
-    // product-family pick — same precision, just several packaging/temp variants) now outranks
-    // protein/market outright: once one is picked, the other two controls lock (dimmed, disabled)
-    // until the trader clears the product box themselves — an explicit, visible action, never an
-    // accidental dropdown click quietly downgrading a precise match to a broad one.
-    const productLocked = r.meaning_type === 'product' || r.meaning_type === 'product_family';
-    const productValue = productLocked ? escapeHtml(r.meaning_label || '') : '';
-    // Real addition 2026-09-23 ("necesitamos que lea el texto"): the report's own narrative
-    // commentary rows carry real prose in .note (not just a %) — shown in full so the trader
-    // actually reads and confirms it before applying, never hidden behind a badge alone.
-    const noteBlock = r.note ? `<div style="background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">${escapeHtml(r.note)}</div>` : '';
-    return `
-      <div class="teach-row" data-idx="${i}">
-        <div style="font-weight:600;font-size:13px;">${escapeHtml(r.raw_cut_name)}</div>
-        ${statusLine}
-        ${noteBlock}
-        ${productLocked ? '<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;">Protein and Market are locked while a Product is picked — clear the Product box to change.</div>' : ''}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-          <div style="flex:1;min-width:220px;">
-            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Product:</label>
-            <input type="text" id="mf_prod_${i}" autocomplete="off" placeholder="Search product…" value="${productValue}" oninput="mfFilterProduct(${i}, this.value)" style="width:100%;padding:6px 8px;border:1.5px solid ${productLocked ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
-            <div id="mf_prod_results_${i}" style="max-height:120px;overflow-y:auto;"></div>
-          </div>
-          <div style="${productLocked ? 'opacity:.4;' : ''}">
-            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">Protein:</label>
-            <select ${productLocked ? 'disabled' : ''} onchange="mfPickSpecies(${i}, this.value)" style="padding:6px 8px;border:1.5px solid ${r.meaning_type === 'species' ? 'var(--green, #3FCB7E)' : 'var(--line)'};border-radius:6px;background:rgba(255,255,255,.03);color:#fff;">
-              <option value="">—</option>
-              ${mfCategories.map(c => `<option value="${c.id}" ${r.meaning_type === 'species' && r.meaning_id === c.id ? 'selected' : ''}>${escapeHtml(c.name_en || c.name)}</option>`).join('')}
-            </select>
-          </div>
-          <div style="${productLocked ? 'opacity:.4;' : ''}">
-            <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;">&nbsp;</label>
-            <button type="button" ${productLocked ? 'disabled' : ''} class="btn ${r.meaning_type === 'market' ? '' : 'ghost'}" onclick="mfPickMarket(${i})">Market</button>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-// Real addition 2026-09-22 ("si no especifica que llegue a todos si especifica que lo asocie con
-// el correcto y solo llegue a los que compran ese especifico"): the bulletin's cut name almost
-// never specifies packaging or temperature, but the catalog often splits that one real cut into
-// several SKUs (e.g. 6 real "Picnic" rows — Bone-In/Boneless x Fresh/Frozen x Combo/Box/VAC/Poly).
-// When 2+ of the current matches share the same clean name_en AND subcategory_en within one
-// category, a family option is offered above the individual rows — picking it reaches every real
-// buyer of every packaging/temperature variant, not just whichever one row got picked. The
-// individual exact rows stay available right below it for when the bulletin line IS specific
-// enough to name one.
-//
-// Real correction 2026-09-22 ("mucho cuidado... no se puede equivocar"): grouping by name_en alone
-// also collapsed real grade/size differences the catalog does carry — confirmed live that "Trim"
-// spans 42%/72% fat content, "Spareribs" spans Light/Medium/#2, "Bellies" spans several real weight
-// ranges, all under one name_en. subcategory_en is what actually carries that distinction, so it's
-// now a required second key — a family only ever collapses packaging + temperature, never grade,
-// size, or bone-in/boneless.
-function mfFilterProduct(i, query){
-  const resultsEl = document.getElementById('mf_prod_results_' + i);
-  const q = query.trim().toLowerCase();
-  if (!q){
-    resultsEl.innerHTML = '';
-    // Clearing the product box is the deliberate, visible action that releases the product-outranks-
-    // protein lock (see renderMfReview) — never a side effect of anything else.
-    if (mfRows[i].meaning_type === 'product' || mfRows[i].meaning_type === 'product_family'){
-      mfRows[i].meaning_type = null; mfRows[i].meaning_id = null;
-      mfRows[i].meaning_text = null; mfRows[i].meaning_subtext = null; mfRows[i].meaning_label = null;
-      renderMfReview();
-    }
-    return;
-  }
-  const matches = mfProducts.filter(p => (p.full_name_en || '').toLowerCase().includes(q)).slice(0, 8);
-
-  const familyKeys = new Set();
-  const familyOptions = [];
-  matches.forEach(p => {
-    if (!p.name_en || !p.category_id) return;
-    const key = p.category_id + '|' + p.name_en + '|' + (p.subcategory_en || '');
-    if (familyKeys.has(key)) return;
-    const allInFamily = mfProducts.filter(x => x.category_id === p.category_id && x.name_en === p.name_en && (x.subcategory_en || '') === (p.subcategory_en || ''));
-    if (allInFamily.length < 2) return;
-    familyKeys.add(key);
-    const cat = mfCategories.find(c => c.id === p.category_id);
-    familyOptions.push({ categoryId: p.category_id, nameEn: p.name_en, subcategoryEn: p.subcategory_en || null, categoryName: cat ? (cat.name_en || cat.name) : '', count: allInFamily.length });
+// ---------------------------------------------------------------- rendering
+function setMfActiveTab(tab){
+  ['product', 'protein', 'market', 'pending'].forEach(t => {
+    document.getElementById('mfTabPanel_' + t).style.display = t === tab ? '' : 'none';
+    document.getElementById('mfTabBtn_' + t).classList.toggle('active', t === tab);
   });
-  const familyHtml = familyOptions.map(f => {
-    const displayName = f.subcategoryEn ? `${f.nameEn} (${f.subcategoryEn})` : f.nameEn;
-    return `<div onclick="mfPickProductFamily(${i},'${f.categoryId}', ${JSON.stringify(f.nameEn).replace(/"/g, '&quot;')}, ${JSON.stringify(f.subcategoryEn).replace(/"/g, '&quot;')}, ${JSON.stringify(f.categoryName).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;background:rgba(90,170,255,.08);border:1px solid rgba(90,170,255,.3);margin-bottom:3px;" onmouseover="this.style.background='rgba(90,170,255,.18)'" onmouseout="this.style.background='rgba(90,170,255,.08)'">All "${escapeHtml(displayName)}" packaging/temp variants (${f.count} products) — ${escapeHtml(f.categoryName)}</div>`;
-  }).join('');
-  const rowsHtml = matches.map(p =>
-    `<div onclick="mfPickProduct(${i},'${p.id}', ${JSON.stringify(p.full_name_en).replace(/"/g, '&quot;')})" style="padding:5px 8px;cursor:pointer;font-size:12.5px;border-radius:4px;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''">${escapeHtml(p.full_name_en)}</div>`
-  ).join('');
-  resultsEl.innerHTML = (familyHtml + rowsHtml) || '<div style="padding:4px 8px;color:var(--ink-soft);font-size:12px;">No results.</div>';
 }
-function mfPickProduct(i, productId, name){
-  mfRows[i].meaning_type = 'product';
-  mfRows[i].meaning_id = productId;
-  mfRows[i].meaning_text = null;
-  mfRows[i].meaning_subtext = null;
-  mfRows[i].meaning_label = name;
-  renderMfReview();
-}
-function mfPickProductFamily(i, categoryId, nameEn, subcategoryEn, categoryName){
-  mfRows[i].meaning_type = 'product_family';
-  mfRows[i].meaning_id = categoryId;
-  mfRows[i].meaning_text = nameEn;
-  mfRows[i].meaning_subtext = subcategoryEn;
-  const displayName = subcategoryEn ? `${nameEn} (${subcategoryEn})` : nameEn;
-  mfRows[i].meaning_label = categoryName + ' — ' + displayName + ' (all packaging/temp variants)';
-  renderMfReview();
-}
-function mfPickSpecies(i, categoryId){
-  if (!categoryId) return;
-  // Defense in depth: the dropdown is already disabled in the DOM while a product/family is
-  // picked (see renderMfReview) — this refuses the change regardless, product always outranks
-  // protein, never a quiet downgrade from whichever control fires last.
-  if (mfRows[i].meaning_type === 'product' || mfRows[i].meaning_type === 'product_family') return;
-  const cat = mfCategories.find(c => c.id === categoryId);
-  mfRows[i].meaning_type = 'species';
-  mfRows[i].meaning_id = categoryId;
-  mfRows[i].meaning_text = null;
-  mfRows[i].meaning_subtext = null;
-  mfRows[i].meaning_label = cat ? (cat.name_en || cat.name) : '';
-  renderMfReview();
-}
-function mfPickMarket(i){
-  if (mfRows[i].meaning_type === 'product' || mfRows[i].meaning_type === 'product_family') return;
-  mfRows[i].meaning_type = 'market';
-  mfRows[i].meaning_id = null;
-  mfRows[i].meaning_text = null;
-  mfRows[i].meaning_subtext = null;
-  mfRows[i].meaning_label = null;
-  renderMfReview();
-}
-// Apply All — the ONE point where anything is written, same as plants.html's applyPriceList:
-// fires one teach_term call per resolved row in parallel, refreshes Active Bullets, and only
-// closes the panel once nothing is left unresolved (unresolved rows stay in the review step).
-async function applyMfAll(){
-  const toApply = mfRows.filter(mfIsResolved);
-  if (!toApply.length){ alert('Nothing ready to apply yet — pick a product, protein, or general market for at least one line.'); return; }
-  const btn = document.getElementById('mfApplyBtn');
-  btn.disabled = true; btn.textContent = 'Applying…';
-  const results = await Promise.allSettled(toApply.map(row => callApi('price-history-search', {
-    teach_term: {
-      raw_cut_name: row.raw_cut_name, meaning_type: row.meaning_type, meaning_id: row.meaning_id,
-      meaning_text: row.meaning_text ?? null, meaning_subtext: row.meaning_subtext ?? null,
-      trend_pct: row.trend_pct, note: row.note ?? null, actor: currentActor(),
-    },
-  })));
-  btn.disabled = false; btn.textContent = 'Apply All';
-  const failedRawNames = new Set();
-  results.forEach((r, idx) => { if (r.status === 'rejected') failedRawNames.add(toApply[idx].raw_cut_name); });
-  const appliedCount = toApply.length - failedRawNames.size;
-  const stillUnresolved = mfRows.filter(r => !mfIsResolved(r) || failedRawNames.has(r.raw_cut_name));
-  await loadMarketFlash();
-  if (stillUnresolved.length){
-    mfRows = stillUnresolved;
-    renderMfReview();
-    // Real correction 2026-09-22/23 ("me deja ahi y no me lleva a ningun lado diciendome que
-    // paso"): applying used to give zero feedback either way — no confirmation of what was saved,
-    // no sense of having made progress. Shown right inside the still-open popup (the page's own
-    // #errBox is hidden behind it) so a partial apply is never silent either.
-    if (appliedCount > 0) document.getElementById('mfSummary').insertAdjacentHTML('afterbegin', `<div class="ok" style="margin-bottom:8px;">✓ ${appliedCount} line${appliedCount === 1 ? '' : 's'} applied — now reaching real customers in Active Bullets.</div>`);
-    if (failedRawNames.size) alert(`${failedRawNames.size} failed to save — left below to retry.`);
-  } else {
-    // Everything just applied successfully — clear mfRows BEFORE closeMfPanel(), otherwise its own
-    // unsaved-work guard (added right after this same fix) sees these already-saved rows as still
-    // unresolved and asks "discard unsaved work?" for work that was already safely applied, which
-    // silently blocks the close waiting on a confirm() nobody's answering.
-    mfRows = [];
-    closeMfPanel();
-    // Real correction 2026-09-22/23 ("debe sacarme de ahi y llevarme a donde quedan hechas las
-    // bullets relevantes"): closing used to just drop the trader back on the page with zero signal
-    // anything happened — same table, same scroll position, no confirmation. Now scrolls to Active
-    // Bullets and shows exactly how many lines just went live there.
-    showSuccess(`${appliedCount} line${appliedCount === 1 ? '' : 's'} applied — now live in Active Bullets below.`);
-    document.querySelector('#tblMfActiveProduct').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
-
-// Real correction 2026-09-23 ("producto, proteina, mercado estas 3 deben ser vistas en limpio
-// despues de filtrado"): one flat mixed table made every scope look the same at a glance — three
-// separate sections instead, same real data (product_notes/family_notes/category_notes/aliases
-// from list_market_flash), split by precision so each is readable on its own without hunting
-// through badges in a single long list.
-function mfBulletRowHtml(r, dataCols){
-  const bits = [];
-  if (r.trend_pct != null) bits.push(`${r.trend_pct > 0 ? '+' : ''}${r.trend_pct}%`);
-  if (r.note) bits.push(escapeHtml(r.note));
-  if (r.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${r.mx_benchmark_price_usd_kg}/kg`);
-  const asOf = new Date(r.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const customers = (r.customer_names || []).length ? escapeHtml(r.customer_names.join(', ')) : '<span style="color:var(--ink-soft);">No customer linked yet</span>';
-  return `<tr>
-    <td>${escapeHtml(r.label || '—')}</td>
-    <td>${bits.join(' · ') || '—'}</td>
-    <td>${asOf}</td>
-    <td>${customers}</td>
-  </tr>`;
-}
-
-function renderMfActive(productNotes, categoryNotes, familyNotes, aliases){
-  const productRows = [
-    ...productNotes.map(n => ({ ...n, label: n.product_name })),
-    ...(familyNotes || []).map(n => ({ ...n, label: `${n.category_name} — ${n.product_name_en}${n.product_subcategory_en ? ' (' + n.product_subcategory_en + ')' : ''} (all packaging/temp variants)` })),
-  ].sort((a, b) => new Date(b.note_date) - new Date(a.note_date));
-  const productTbody = document.querySelector('#tblMfActiveProduct tbody');
-  productTbody.innerHTML = productRows.length
-    ? productRows.map(r => mfBulletRowHtml(r)).join('')
-    : '<tr><td colspan="4" class="empty">Nothing active yet.</td></tr>';
-
-  const proteinRows = categoryNotes.map(n => ({ ...n, label: n.category_name })).sort((a, b) => new Date(b.note_date) - new Date(a.note_date));
-  const proteinTbody = document.querySelector('#tblMfActiveProtein tbody');
-  proteinTbody.innerHTML = proteinRows.length
-    ? proteinRows.map(r => mfBulletRowHtml(r)).join('')
-    : '<tr><td colspan="4" class="empty">Nothing active yet.</td></tr>';
-
-  // Market-only terms never get a product_market_notes row (nothing to reach a customer with) —
-  // listed here straight from the learned aliases so a term the trader marked as pure context
-  // still shows up somewhere, instead of vanishing the moment it's taught.
-  const marketRows = (aliases || []).filter(a => a.meaning_type === 'market').sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  const marketTbody = document.querySelector('#tblMfActiveMarket tbody');
-  marketTbody.innerHTML = marketRows.length
-    ? marketRows.map(a => `<tr><td>${escapeHtml(a.term)}</td><td>${new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td></tr>`).join('')
-    : '<tr><td colspan="2" class="empty">Nothing marked as general market yet.</td></tr>';
-
-  mfSetTabCount('product', productRows.length);
-  mfSetTabCount('protein', proteinRows.length);
-  mfSetTabCount('market', marketRows.length);
-}
-
 function mfSetTabCount(tab, count){
   const el = document.getElementById('mfTabCount_' + tab);
-  el.textContent = count;
-  el.style.display = count ? 'inline-block' : 'none';
+  el.style.display = count ? '' : 'none';
+  el.textContent = count || '';
 }
-function setMfActiveTab(tab){
-  ['product', 'protein', 'market'].forEach(t => {
-    document.getElementById('mfTabBtn_' + t).classList.toggle('active', t === tab);
-    document.getElementById('mfTabPanel_' + t).style.display = t === tab ? 'block' : 'none';
+
+function fmtAsOf(iso){ return new Date(String(iso).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+
+function bulletHtml(b){
+  const src = b.source_note + (b.sent_count ? ` · already sent to ${b.sent_count} customer${b.sent_count === 1 ? '' : 's'}` : '');
+  return `<div class="mf-bullet"><span${b.quote_en ? ` title="${escapeHtml(b.quote_en)}"` : ''}>${escapeHtml(b.text_es)}</span><span class="mf-src">${escapeHtml(src)}</span></div>`;
+}
+function reachText(names){ return names.length ? `Reaches ${names.length} customer${names.length === 1 ? '' : 's'}: ${names.join(', ')}` : 'No customers linked yet'; }
+
+// a group card: header (title + who it reaches) + bullets, first few shown, the rest behind "Show all"
+function groupHtml(id, title, sub, names, bullets){
+  const SHOW = 6;
+  const open = mfExpanded[id];
+  const shown = open ? bullets : bullets.slice(0, SHOW);
+  return `<div class="mf-group">
+    <div class="mf-group-head"><div><span class="mf-group-title">${escapeHtml(title)}</span>${sub ? ` <span style="color:var(--ink-soft);font-size:12px;">${escapeHtml(sub)}</span>` : ''}</div>
+    <span class="mf-reach" title="${escapeHtml(names.join(', '))}">${escapeHtml(reachText(names))}</span></div>
+    ${shown.map(bulletHtml).join('')}
+    ${bullets.length > SHOW ? `<button type="button" class="mf-more" onclick="mfToggleGroup('${escapeHtml(id).replace(/'/g, "\\'")}')">${open ? 'Show fewer' : `Show all ${bullets.length}`}</button>` : ''}
+  </div>`;
+}
+function mfToggleGroup(id){ mfExpanded[id] = !mfExpanded[id]; renderMarketFlash(); }
+
+function renderMarketFlash(){
+  const status = document.getElementById('mfStatus');
+  if (!mf.bulletin){
+    status.textContent = 'No bulletin loaded yet.';
+  } else {
+    status.textContent = `Latest bulletin: data as of ${fmtAsOf(mf.bulletin.as_of)} · loaded ${new Date(mf.bulletin.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  }
+  mfSetTabCount('product', mf.counts.product);
+  mfSetTabCount('protein', mf.counts.protein);
+  mfSetTabCount('market', mf.counts.market);
+  mfSetTabCount('pending', mf.counts.pending);
+
+  document.getElementById('mfProductList').innerHTML = mf.product.length
+    ? mf.product.map(g => groupHtml('p|' + g.label_es, g.label_es, g.label_en, g.customers, g.bullets)).join('')
+    : `<div class="empty">${mf.bulletin ? 'No bullets are tied to a product yet — match the terms in Pending Matches.' : 'Load a bulletin to see its bullets here.'}</div>`;
+
+  const proteinKeys = ['pork', 'beef', 'chicken', 'turkey'].filter(k => mf.protein[k]);
+  document.getElementById('mfProteinList').innerHTML = proteinKeys.length
+    ? proteinKeys.map(k => groupHtml('s|' + k, SPECIES_LABEL[k], '', mf.protein[k].customers, mf.protein[k].bullets)).join('')
+    : `<div class="empty">Load a bulletin to see its bullets here.</div>`;
+
+  const marketKeys = ['US', 'MX'].filter(k => mf.market[k]);
+  document.getElementById('mfMarketList').innerHTML = marketKeys.length
+    ? marketKeys.map(k => groupHtml('m|' + k, MARKET_LABEL[k], '', mf.market[k].customers, mf.market[k].bullets)).join('')
+    : `<div class="empty">Load a bulletin to see its bullets here.</div>`;
+
+  renderPending();
+}
+
+// ---------------------------------------------------------------- Pending Matches (same flow as plants: pick a chip, Match, learned for good)
+function optionByKey(key){ return mf.catalog_options.find(o => o.key === key); }
+function renderPending(){
+  const actionable = mf.pending.filter(p => !p.no_catalog);
+  const noCatalog = mf.pending.filter(p => p.no_catalog);
+  document.getElementById('mfPendingEmpty').style.display = actionable.length ? 'none' : 'block';
+  const note = document.getElementById('mfNoCatalogNote');
+  const species = [...new Set(noCatalog.map(p => SPECIES_LABEL[p.species] || p.species))];
+  note.style.display = noCatalog.length ? '' : 'none';
+  note.textContent = noCatalog.length ? `${noCatalog.length} more term${noCatalog.length === 1 ? '' : 's'} (${species.join(', ')}) will appear here once ${species.length === 1 ? 'that protein has' : 'those proteins have'} products in the catalog.` : '';
+
+  document.getElementById('mfPendingRows').innerHTML = actionable.map((p, i) => {
+    const key = 'pm' + i;
+    const picked = mfPicks[p.term] || null;
+    const shown = [...new Set([...(picked ? [picked] : []), ...p.suggested_keys])];
+    const chips = shown.map(k => {
+      const o = optionByKey(k); if (!o) return '';
+      const cur = k === picked;
+      return `<button type="button" class="plr-chip${cur ? ' plr-chip-current' : ''}" onclick="mfPick(${i}, '${escapeHtml(k).replace(/'/g, "\\'")}')">${cur ? '✓ ' : ''}${escapeHtml(o.label_en)}</button>`;
+    }).join('');
+    const rest = mf.catalog_options.filter(o => !shown.includes(o.key) && (!p.species || o.species === p.species));
+    const showBrowse = mfBrowseOpen[p.term] || !shown.length;
+    const browse = showBrowse ? `
+      <input type="text" class="plr-browse-search" placeholder="Search ${rest.length} products…" autocomplete="off" onfocus="mfFilterBrowse(this)" oninput="mfFilterBrowse(this)" data-for="mfBrowse_${key}">
+      <div class="plr-browse" id="mfBrowse_${key}">
+        ${rest.map(o => `<button type="button" class="plr-chip" data-label="${escapeHtml([o.label_en, o.label_es, o.search].join(' ').toLowerCase())}" onclick="mfPick(${i}, '${escapeHtml(o.key).replace(/'/g, "\\'")}')">${escapeHtml(o.label_en)}</button>`).join('')}
+      </div>` : '';
+    const toggle = (shown.length && !mfBrowseOpen[p.term]) ? `<button type="button" class="plr-browse-toggle" onclick="mfToggleBrowse(${i})">View rest of catalog (${rest.length})</button>` : '';
+    return `<tr>
+      <td>${escapeHtml(p.term)}<div style="font-size:11.5px;color:var(--ink-soft);margin-top:3px;">${escapeHtml(p.example.length > 120 ? p.example.slice(0, 120) + '…' : p.example)}${p.bullet_count > 1 ? ` <span style="color:var(--amber);">(+${p.bullet_count - 1} more bullet${p.bullet_count === 2 ? '' : 's'} waiting)</span>` : ''}</div></td>
+      <td style="text-align:left;"><div class="plr-candidates" id="mfCandidates_${key}">${chips}</div>${toggle}${browse}</td>
+      <td class="row-actions"><button class="btn" onclick="resolveTerm(${i})">Match</button><div id="mfMsg_${key}" style="font-size:11px;color:#FFC876;margin-top:5px;max-width:140px;"></div></td>
+    </tr>`;
+  }).join('');
+}
+function mfActionable(){ return mf.pending.filter(p => !p.no_catalog); }
+function mfPick(i, key){ mfPicks[mfActionable()[i].term] = key; renderPending(); }
+function mfToggleBrowse(i){
+  const t = mfActionable()[i].term;
+  mfBrowseOpen[t] = !mfBrowseOpen[t];
+  renderPending();
+  if (mfBrowseOpen[t]) document.querySelector(`input[data-for="mfBrowse_pm${i}"]`)?.focus();
+}
+// filters the already-rendered chips in place (no re-render, so the search box keeps focus)
+function mfFilterBrowse(inputEl){
+  const container = document.getElementById(inputEl.dataset.for);
+  if (!container) return;
+  container.style.display = 'flex';
+  const words = inputEl.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  container.querySelectorAll('.plr-chip').forEach(chip => {
+    chip.style.display = !words.length || words.every(w => chip.dataset.label.includes(w)) ? '' : 'none';
   });
 }
 
+async function teachOne(term){
+  await callApi('price-history-search', { teach_market_flash_term: { term, option_key: mfPicks[term], actor: currentActor() } });
+  delete mfPicks[term]; delete mfBrowseOpen[term];
+}
+async function resolveTerm(i){
+  const p = mfActionable()[i];
+  if (!mfPicks[p.term]){
+    const el = document.getElementById(`mfCandidates_pm${i}`), msg = document.getElementById(`mfMsg_pm${i}`);
+    if (el){ el.classList.remove('plr-candidates-nudge'); void el.offsetWidth; el.classList.add('plr-candidates-nudge'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    if (msg) msg.textContent = p.suggested_keys.length ? 'Click the match above first' : 'Search and click a match first';
+    return;
+  }
+  try { await teachOne(p.term); await loadMarketFlash(); } catch (e) { showErr("Couldn't save this match: " + e.message); }
+}
+async function matchAllConfirmedTerms(){
+  const eligible = mfActionable().filter(p => mfPicks[p.term]);
+  if (!eligible.length){ showErr('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch.'); return; }
+  if (!confirm(`Apply ${eligible.length} confirmed match${eligible.length > 1 ? 'es' : ''}?`)) return;
+  const btn = document.getElementById('mfMatchAllBtn'), status = document.getElementById('mfMatchAllStatus');
+  btn.disabled = true;
+  let done = 0;
+  try {
+    for (const p of eligible){ status.textContent = `Applying ${done + 1} of ${eligible.length}…`; await teachOne(p.term); done++; }
+  } catch (e) { showErr("Couldn't save a match: " + e.message); }
+  await loadMarketFlash();
+  status.textContent = `${done} match${done === 1 ? '' : 'es'} applied.`;
+  btn.disabled = false;
+  setTimeout(() => { status.textContent = ''; }, 4000);
+}
 </script>
 </body>
 </html>

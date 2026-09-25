@@ -64,11 +64,15 @@ export function extractExports(pages: string[]): ExtractResult {
           for (const s of segs(line)) {
             if (!inPanel(s.col)) continue;
             const tx = s.text;
-            if (/%$/.test(tx) || /^(Change|Y\/Y|Source|Unit)/i.test(tx) || /^[a-z]/.test(tx) || /:$/.test(tx)) continue; // callouts
+            if (/%$/.test(tx) || /^(Change|Y\/Y|Source|Unit)/i.test(tx)) continue; // chart callouts, not bars
             if (NUMTOK.test(tx)) { nums.push({ v: toNum(tx), raw: tx }); continue; }
             const lm = tx.match(/^([A-Z][A-Za-z ,.()*&\-]*[A-Za-z)*])\s+(-?\$?[\d,]+)$/); // label + number in one segment
             if (lm) { labels.push(lm[1].trim()); nums.push({ v: toNum(lm[2]), raw: lm[2] }); continue; }
-            if (/^[A-Z][A-Za-z ,.()*&\-]*$/.test(tx)) labels.push(tx.trim());
+            // a label may be glued to a callout in the same segment ("Korea, South pork variety meats:"):
+            // the label is the leading run of capitalized words, everything from the first lowercase word on is callout
+            const words = tx.split(" "), lead: string[] = [];
+            for (const w of words) { if (/^[A-Z(]/.test(w)) lead.push(w); else break; }
+            if (lead.length && /^[A-Z][A-Za-z ,.()*&\-]*$/.test(lead.join(" "))) labels.push(lead.join(" ").trim());
           }
         }
         if (labels.length < 3 || labels.length !== nums.length) return drop(`labels (${labels.length}) and numbers (${nums.length}) do not pair up`);

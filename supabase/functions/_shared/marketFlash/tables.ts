@@ -21,6 +21,7 @@ export function extractColdStorage(pages: string[]): ExtractResult {
     if (dates.length !== 3) { dropped.push({ kind: "cold_storage", entity: "table", page, reason: "column dates not found" }); return; }
     let group = "", parent = "";
     let seenData = false;
+    let baseIndent = -1; // indentation of the first data row = top level; deeper rows are children (Bone-in / Boneless)
     for (let i = hi + 1; i < lines.length; i++) {
       const l = lines[i];
       if (/Cold Storage Inventories/.test(l) && seenData) break;
@@ -39,7 +40,8 @@ export function extractColdStorage(pages: string[]): ExtractResult {
       const [p1, p2] = [num(m[5]), num(m[6])];
       // standalone lines that are not part of the group above them
       if (/^(Ducks|Total Poultry|Total Red Meat)$/.test(label)) { group = label; parent = ""; }
-      const top = indent <= 10;
+      if (baseIndent < 0) baseIndent = indent;
+      const top = indent <= baseIndent + 2;
       if (top) parent = /,\s*Total$|Total$/.test(label) && label !== "Total" ? label : "";
       const entity = [group, !top && parent ? parent : "", label].filter(Boolean).join(" / ");
       const drop = (r: string) => dropped.push({ kind: "cold_storage", entity, page, reason: r });
@@ -94,10 +96,10 @@ export function extractCattleOnFeed(pages: string[]): ExtractResult {
   const facts: Fact[] = [], dropped: ExtractResult["dropped"] = [];
   pages.forEach((pt, pi) => {
     const lines = pt.split("\n");
-    if (!lines.some((l) => /^Cattle on Feed\s*$/.test(l.trim()))) return;
+    if (!/Placed on Feed During/.test(pt)) return;
     const page = pi + 1;
     for (const l of lines) {
-      const m = l.match(/^(Placed on Feed During \w+|Fed Cattle Marketed in \w+|On Feed \w+ \d+)\s+(\d[\d,]*)\s+(\d[\d,]*)\s+(\d[\d,]*)\s+([\d.]+)\s+([\d.]+)\s+(-?[\d.]+)/);
+      const m = l.match(/^\s*(Placed on Feed During \w+|Fed Cattle Marketed in \w+|On Feed \w+ \d+)\s+(\d[\d,]*)\s+(\d[\d,]*)\s+(\d[\d,]*)\s+([\d.]+)\s+([\d.]+)\s+(-?[\d.]+)/);
       if (!m) continue;
       const [v24, v25, v26, act, est, diff] = [num(m[2]), num(m[3]), num(m[4]), num(m[5]), num(m[6]), num(m[7])];
       const drop = (r: string) => dropped.push({ kind: "cattle_on_feed", entity: m[1], page, reason: r });
@@ -165,6 +167,48 @@ export function extractFutures(pages: string[]): ExtractResult {
         values: { commodity, contract: m[1], week_end: dates[0], price: cur, prev_week_end: dates[1], prev_price: prev, change: chg, year_ago_date: dates[2], year_ago_price: ly, change_vs_year_ago: lchg },
       });
     }
+  });
+  return { facts, dropped };
+}
+
+// ---------- "All Beef/Pork/Chicken In Cold Storage at End of Month" monthly tables ----------
+// Rows: Month, 2025, 2026, %ch, 5-Yr Avg, %ch (millions of lb, integers). Months not yet reported print #N/A and are
+// skipped. Only the LATEST reported month is emitted. Integers are rounded, so the printed % is checked with a
+// tolerance that covers rounding of the inputs (not the 0.15 used for one-decimal tables).
+export function extractColdStorageTotals(pages: string[]): ExtractResult {
+  const facts: Fact[] = [], dropped: ExtractResult["dropped"] = [];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  pages.forEach((pt, pi) => {
+    const lines = pt.split("\n");
+    const page = pi + 1;
+    lines.forEach((tl, ti) => {
+      const hm = tl.match(/All (Beef|Pork|Chicken) In Cold Storage at End of Month/);
+      if (!hm) return;
+      const sp = hm[1].toLowerCase() as "beef" | "pork" | "chicken";
+      const entity = `All ${hm[1]} in cold storage`;
+      // year columns come from the header line "2025 2026 %ch 5-Yr Avg %ch"
+      const head = lines.slice(ti, ti + 6).find((l) => /2025\s+2026\s+%ch/.test(l));
+      const ym = head && head.match(/(\d{4})\s+(\d{4})\s+%ch/);
+      if (!ym) { dropped.push({ kind: "cold_storage_total", entity, page, reason: "year header not found" }); return; }
+      const rows: Array<{ mi: number; ya: number; cur: number; p1: number; avg: number; p2: number; line: string }> = [];
+      for (const l of lines.slice(ti + 1, ti + 30)) {
+        if (/In Cold Storage at End of Month/.test(l) && rows.length) break;
+        const m = l.match(new RegExp(`\\b(${MONTHS.join("|")})\\s+(\\d+)\\s+(\\d+)\\s+(-?[\\d.]+)%\\s+(\\d+)\\s+(-?[\\d.]+)%\\s*$`));
+        if (!m) continue;
+        rows.push({ mi: MONTHS.indexOf(m[1]), ya: +m[2], cur: +m[3], p1: parseFloat(m[4]), avg: +m[5], p2: parseFloat(m[6]), line: clean(l.replace(/^.*?\b(?=(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d)/, "")) });
+      }
+      const last = rows[rows.length - 1];
+      if (!last) { dropped.push({ kind: "cold_storage_total", entity, page, reason: "no reported month found" }); return; }
+      const drop = (r: string) => dropped.push({ kind: "cold_storage_total", entity, page, reason: r });
+      const tolY = (100 / last.ya) * 0.5 + (100 * last.cur / (last.ya * last.ya)) * 0.5 + 0.06;
+      if (Math.abs((last.cur / last.ya - 1) * 100 - last.p1) > tolY) return drop(`printed ${last.p1}% vs ${ym[1]} but numbers give ${((last.cur / last.ya - 1) * 100).toFixed(1)}%`);
+      const tolA = (100 / last.avg) * 0.5 + (100 * last.cur / (last.avg * last.avg)) * 0.5 + 0.06;
+      if (Math.abs((last.cur / last.avg - 1) * 100 - last.p2) > tolA) return drop(`printed ${last.p2}% vs 5-yr avg but numbers give ${((last.cur / last.avg - 1) * 100).toFixed(1)}%`);
+      facts.push({
+        key: `cold_storage_total|${sp}`, kind: "cold_storage_total", species: sp, market: "US", entity, page, source: last.line, method: "parser",
+        values: { month: `${ym[2]}-${String(last.mi + 1).padStart(2, "0")}`, unit: "million lb", stocks: last.cur, year_ago_stocks: last.ya, yoy_pct: last.p1, avg5_stocks: last.avg, avg5_pct: last.p2 },
+      });
+    });
   });
   return { facts, dropped };
 }
