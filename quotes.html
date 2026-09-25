@@ -984,12 +984,16 @@ auth.onAuthStateChanged(user => {
 
 <div id="appContent" style="display:none;">
 <header>
-  <div class="top-row">
-    <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Go to Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
-    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;">
-      <button onclick="logout()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Log Out</button>
-      <span id="userBadge" style="font-size:12px;color:rgba(255,255,255,.85);font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;text-align:center;"></span>
+  <div class="top-row" style="min-height:84px;">
+    <div style="position:absolute;left:32px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+      <a href="dashboard.html" style="text-align:center;text-decoration:none;" title="Go to Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
+      <div style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:4px 6px 4px 4px;">
+        <span id="userAvatar" style="width:22px;height:22px;border-radius:50%;background:#1E6ADB;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;flex-shrink:0;"></span>
+        <span id="userBadge" style="font-size:11.5px;color:rgba(255,255,255,.85);font-family:'Space Grotesk',sans-serif;font-weight:600;white-space:nowrap;"></span>
+        <button type="button" class="hdr-logout" onclick="logout()" title="Log Out" aria-label="Log Out"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+      </div>
     </div>
+    <a href="market-flash-admin.html" class="hdr-flash" style="position:absolute;right:32px;top:50%;transform:translateY(-50%);" title="Market Flash"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5AAAFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Market Flash</a>
   </div>
   <nav class="nav-row">
     <a href="customers.html" class="nav-pill">Clients</a>
@@ -1003,6 +1007,7 @@ auth.onAuthStateChanged(user => {
       <a href="payments.html" class="nav-pill">Payments</a>
   </nav>
 </header>
+<script src="js/header-chip.js"></script>
 
 <div class="wrap">
   <h1 id="rq_page_title">Quotes</h1>
@@ -1015,7 +1020,6 @@ auth.onAuthStateChanged(user => {
          Quotes"): moved off the top nav (was crowding it as an 11th page) into a 4th tab here,
          same embedded-iframe pattern as Quoting Tool right above — Quotes is where the trader
          actually uses these signals, so it's also the most natural place to load them. -->
-    <button type="button" class="tab-btn" id="qTabBtn_marketflash" onclick="setQuoteTab('marketflash')">Market Flash</button>
   </div>
 
   <div id="qPanel_request">
@@ -1192,9 +1196,6 @@ auth.onAuthStateChanged(user => {
     <iframe id="qQuotingToolFrame" style="width:100%;height:85vh;border:none;border-radius:12px;background:#fff;" title="Quoting Tool"></iframe>
   </div>
 
-  <div id="qPanel_marketflash" style="display:none;">
-    <iframe id="qMarketFlashFrame" style="width:100%;height:85vh;border:none;border-radius:12px;background:#0A2547;" title="Market Flash"></iframe>
-  </div>
 </div>
 </div>
 
@@ -1493,11 +1494,9 @@ function setQuoteTab(tab){
   document.getElementById('qTabBtn_request').classList.toggle('active', tab === 'request');
   document.getElementById('qTabBtn_coverage').classList.toggle('active', tab === 'coverage');
   document.getElementById('qTabBtn_quotingtool').classList.toggle('active', tab === 'quotingtool');
-  document.getElementById('qTabBtn_marketflash').classList.toggle('active', tab === 'marketflash');
   document.getElementById('qPanel_request').style.display = tab === 'request' ? 'block' : 'none';
   document.getElementById('qPanel_coverage').style.display = tab === 'coverage' ? 'block' : 'none';
   document.getElementById('qPanel_quotingtool').style.display = tab === 'quotingtool' ? 'block' : 'none';
-  document.getElementById('qPanel_marketflash').style.display = tab === 'marketflash' ? 'block' : 'none';
   if (tab === 'request') renderRqPlants();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
   // survives leaving the tab (e.g. to load prices in plants.html) and coming back would keep
@@ -1509,12 +1508,6 @@ function setQuoteTab(tab){
   if (tab === 'quotingtool'){
     const frame = document.getElementById('qQuotingToolFrame');
     if (!frame.src) frame.src = 'trading-tool.html?embed=1&v=' + Date.now();
-  }
-  // Same lazy-load-once pattern as Quoting Tool above — market-flash-admin.html?embed=1 hides its
-  // own header/nav (added the same day, mirroring trading-tool.html's own embed-mode CSS class).
-  if (tab === 'marketflash'){
-    const frame = document.getElementById('qMarketFlashFrame');
-    if (!frame.src) frame.src = 'market-flash-admin.html?embed=1&v=' + Date.now();
   }
 }
 
