@@ -686,14 +686,14 @@ auth.onAuthStateChanged(user => {
          matcher couldn't confidently resolve to one catalog product. A confident match never
          shows up here at all; it applies itself straight to Products & Prices. ============ -->
     <div id="plantTab_pending" style="display:none;">
-      <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
-        <span id="matchAllStatus" style="font-size:12px;color:var(--ink-soft);"></span>
-        <button class="btn secondary small" id="matchAllBtn" onclick="matchAllConfirmedPendingMatches()">Match All Confirmed</button>
-      </div>
       <table>
         <thead><tr><th>From the plant's email</th><th>Price detected</th><th>Match to product</th><th></th></tr></thead>
         <tbody id="plantPendingMatchRows"></tbody>
       </table>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+        <button class="btn" id="matchAllBtn" onclick="matchAllConfirmedPendingMatches()">Apply All</button>
+        <span id="matchAllStatus" style="font-size:12px;color:var(--ink-soft);"></span>
+      </div>
       <div id="plantPendingMatchesEmpty" class="empty" style="display:none;">Nothing waiting on a match for this plant.</div>
     </div>
 
@@ -2581,7 +2581,12 @@ async function matchAllConfirmedPendingMatches(){
     return m._pickedProductId || (tightIds.length === 1 && !m.candidates_conflicted);
   });
   if (!eligible.length){ await btAlert('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch, or wait for a row that already has a single confident match.'); return; }
-  if (!confirm(`Apply ${eligible.length} confirmed match${eligible.length > 1 ? 'es' : ''}?`)) return;
+  // Rows nobody picked a product for are never guessed at — they stay in Pending Matches, but the person is asked first.
+  const leftover = plantPendingMatches.length - eligible.length;
+  const question = leftover
+    ? `Apply ${eligible.length} match${eligible.length > 1 ? 'es' : ''} and leave the ${leftover} without a match in Pending Matches?`
+    : `Apply ${eligible.length} match${eligible.length > 1 ? 'es' : ''}?`;
+  if (!confirm(question)) return;
   // Real gap found live 2026-09-10 ("no graba" — the data was actually all saved, confirmed
   // against the real DB, but a several-second run of sequential API calls with zero visible
   // feedback while a native confirm() dialog had just closed reads exactly like it did nothing.
@@ -4031,6 +4036,12 @@ async function applyPriceList(){
   // actually for. Real risk this closes: one plant's price landing on another plant's product row.
   const applyPlantId = currentPlantId;
   const today = new Date().toISOString().slice(0, 10);
+  // Priced lines nobody matched to a product are never guessed at — with the person's OK they go to Pending Matches in this same batch.
+  const unmatchedPriced = priceListRows.filter(r => !r.matchedProductId && r.price != null && !r._sendToPending);
+  if (unmatchedPriced.length && priceListRows.some(r => r.matchedProductId && r.price != null)){
+    if (!confirm(`${unmatchedPriced.length} line${unmatchedPriced.length > 1 ? 's have' : ' has'} no match. Apply the matched ones and leave these ${unmatchedPriced.length} in Pending Matches?`)) return;
+    unmatchedPriced.forEach(r => { r._sendToPending = true; });
+  }
   const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null && !r._sendToPending);
   // Real correction 2026-09-12 ("solo quiero que me los marque como pending... y que ejecute...
   // cuando yo le de apply abajo no automatico"): rows staged via "Add to Pending Matches" only get

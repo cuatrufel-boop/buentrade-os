@@ -240,14 +240,14 @@ auth.onAuthStateChanged(user => {
     <div id="mfMarketList"></div>
   </div>
   <div id="mfTabPanel_pending" style="display:none;">
-    <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
-      <span id="mfMatchAllStatus" style="font-size:12px;color:var(--ink-soft);"></span>
-      <button class="btn secondary" id="mfMatchAllBtn" onclick="matchAllConfirmedTerms()">Match All Confirmed</button>
-    </div>
     <div class="tbl-wrap"><table>
       <thead><tr><th style="width:38%;">From the bulletin</th><th>Match to product</th><th style="width:110px;"></th></tr></thead>
       <tbody id="mfPendingRows"></tbody>
     </table></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+      <button class="btn" id="mfMatchAllBtn" onclick="matchAllConfirmedTerms()">Apply All</button>
+      <span id="mfMatchAllStatus" style="font-size:12px;color:var(--ink-soft);"></span>
+    </div>
     <div id="mfPendingEmpty" class="empty" style="display:none;">Nothing waiting on a match.</div>
     <div id="mfNoCatalogNote" style="display:none;font-size:12px;color:var(--ink-soft);margin-top:6px;"></div>
   </div>
@@ -484,7 +484,11 @@ async function resolveTerm(i){
 async function matchAllConfirmedTerms(){
   const eligible = mfActionable().filter(p => mfPicks[p.term]);
   if (!eligible.length){ showErr('No confirmed matches to apply yet — click a candidate chip first for the ones you want to batch.'); return; }
-  if (!confirm(`Apply ${eligible.length} confirmed match${eligible.length > 1 ? 'es' : ''}?`)) return;
+  const leftover = mfActionable().length - eligible.length;
+  const question = leftover
+    ? `Apply ${eligible.length} match${eligible.length > 1 ? 'es' : ''} and leave the ${leftover} without a match in Pending Matches?`
+    : `Apply ${eligible.length} match${eligible.length > 1 ? 'es' : ''}?`;
+  if (!confirm(question)) return;
   const btn = document.getElementById('mfMatchAllBtn'), status = document.getElementById('mfMatchAllStatus');
   btn.disabled = true;
   let done = 0;
