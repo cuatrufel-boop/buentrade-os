@@ -39,6 +39,10 @@
 // scoped (species-wide), never both (DB check constraint).
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse, MARKET_NOTE_FRESHNESS_DAYS } from "../_shared/matching.ts";
+import { runDeterministic } from "../_shared/marketFlash/pipeline.ts";
+import { readNarrative } from "../_shared/marketFlash/narrative.ts";
+import { narrativeBullets } from "../_shared/marketFlash/bullets.ts";
+import { callClaude } from "../_shared/marketFlash/claude.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -46,6 +50,24 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
     const body = await req.json();
+
+    // Market Flash v2 (2026-09-25): reads the WHOLE bulletin automatically — tables by deterministic,
+    // self-validating parsers (every printed % recomputed from the table's own numbers), narrative
+    // sentences by a literal-translation LLM step audited by code + a second pass. READ-ONLY here: returns
+    // verified facts, Spanish bullets and everything that was dropped (with the reason). Same function
+    // serves the upload path and, later, the email/API path.
+    if (body.read_market_flash_bulletin) {
+      const { text, narrative_sections } = body.read_market_flash_bulletin;
+      if (typeof text !== "string" || text.length < 5000) return jsonResponse({ error: "read_market_flash_bulletin requires the bulletin's layout text" }, 400);
+      const det = runDeterministic(text);
+      let narrative: { claims: unknown[]; dropped: unknown[]; error: string | null } = { claims: [], dropped: [], error: null };
+      if (Array.isArray(narrative_sections) && narrative_sections.length) {
+        try { const r = await readNarrative(narrative_sections, callClaude); narrative = { ...r, error: null }; }
+        catch (e) { narrative.error = String((e as Error).message || e); }
+      }
+      const bullets = [...det.bullets, ...narrativeBullets((narrative.claims as any[]), det.asOf)];
+      return jsonResponse({ as_of: det.asOf, pages: det.pages, per_source: det.perSource, facts: det.facts, bullets, dropped: det.dropped, narrative });
+    }
 
     if (body.save_market_note) {
       const { product_id, category_id, trend_pct, note, mx_benchmark_price_usd_kg, mx_benchmark_region, actor } = body.save_market_note;
