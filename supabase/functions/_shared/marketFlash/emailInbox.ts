@@ -1,11 +1,12 @@
 // Market Flash by email. Same Gmail inbox (and the same OAuth credentials) the other pollers read — no new access.
 //
-// A message is considered ONLY when its subject contains "Market Flash" and it carries a PDF. Because a doctored
-// bulletin mailed to that inbox would end up in front of customers, three checks run before anything is read:
-//   1. the sender must be one of the traders in TRADER_NOTIFICATION_EMAILS (the project's existing trusted list),
-//   2. the sender must be authenticated (Gmail's Authentication-Results says dmarc=pass, or spf AND dkim pass) so
-//      the From line can't simply be forged,
-//   3. the PDF must then actually read as the bulletin (ingestBulletin refuses anything without the bulletin's data).
+// A message is considered ONLY when its subject contains the word "flash" and it carries a PDF. Because a doctored
+// bulletin mailed to that inbox would end up in front of customers, the origin is checked before anything is read:
+//   • a message the mailbox owner SENT (Gmail label SENT — only someone with access to the account can create one,
+//     e.g. a trader sending the bulletin from the purchasing@ send-as address) is trusted; otherwise
+//   • the sender must be one of the traders in TRADER_NOTIFICATION_EMAILS (the project's existing trusted list) AND be
+//     authenticated (Authentication-Results: dmarc=pass, or spf AND dkim pass) so the From line can't simply be forged,
+//   and finally the PDF must actually read as the bulletin (ingestBulletin refuses anything without its data).
 // Every candidate is recorded once in market_flash_email_inbox with its outcome and reason — nothing is invisible.
 //
 // Two steps, each its own invocation: (a) poll = find the message, download the PDF, read its text items (the heavy
@@ -14,7 +15,7 @@
 import { ingestBulletin } from "./store.ts";
 import { readPdfItems } from "./pdf.ts";
 
-const SEARCH = 'subject:"Market Flash" has:attachment filename:pdf newer_than:14d';
+const SEARCH = "subject:flash has:attachment filename:pdf newer_than:14d";
 const SELF_URL = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/price-history-search";
 const API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
 
@@ -76,9 +77,12 @@ export async function pollBulletinEmails(sql: any, maxResults = 10) {
     const hs = msg.payload.headers || [];
     const fromRaw = header(hs, "From"), subject = header(hs, "Subject");
     const from = ((fromRaw.match(/<([^>]+)>/)?.[1] ?? fromRaw).trim()).toLowerCase();
-    if (!/market\s*flash/i.test(subject)) { await record(m.id, from, subject, "rejected", "subject does not contain Market Flash"); continue; }
-    if (!trusted().includes(from)) { await record(m.id, from, subject, "rejected", "sender is not one of the traders allowed to send a bulletin"); continue; }
-    if (!senderAuthenticated(header(hs, "Authentication-Results"))) { await record(m.id, from, subject, "rejected", "sender could not be authenticated (no dmarc/spf+dkim pass) — not read"); continue; }
+    if (!/\bflash\b/i.test(subject)) { await record(m.id, from, subject, "rejected", "subject does not contain the word flash"); continue; }
+    const sentByOwner = (msg.labelIds || []).includes("SENT");
+    if (!sentByOwner) {
+      if (!trusted().includes(from)) { await record(m.id, from, subject, "rejected", "sender is not one of the traders allowed to send a bulletin"); continue; }
+      if (!senderAuthenticated(header(hs, "Authentication-Results"))) { await record(m.id, from, subject, "rejected", "sender could not be authenticated (no dmarc/spf+dkim pass) — not read"); continue; }
+    }
     const parts = pdfParts(msg.payload);
     if (!parts.length) { await record(m.id, from, subject, "rejected", "no PDF attached"); continue; }
     parts.sort((a, b) => (b.body.size || 0) - (a.body.size || 0)); // the bulletin is the big one
