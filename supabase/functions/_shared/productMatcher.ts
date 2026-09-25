@@ -233,30 +233,34 @@ async function cachedRef<T>(sql: any, key: string, load: () => Promise<T>): Prom
 
 export async function matchProductFromPlantText(
   sql: any,
-  { plant_id, raw_text, name_en, name_es, extra_term_aliases }: {
+  { plant_id, raw_text, name_en, name_es, extra_term_aliases, cache_refs }: {
     plant_id: string; raw_text: string; name_en?: string | null; name_es?: string | null;
     extra_term_aliases?: { term: string; meaning_type: string; meaning_id: string }[];
+    // Opt-in, for a batch (an email's many lines): serve the reference tables from a short cache. Off by default so a person
+    // who has just taught an abbreviation or created a product always matches against the live data.
+    cache_refs?: boolean;
   },
 ): Promise<MatchResult> {
   if (!plant_id || !raw_text) return { error: "plant_id and raw_text are required" };
 
+  const ref = <T,>(key: string, load: () => Promise<T>): Promise<T> => (cache_refs ? cachedRef(sql, key, load) : load());
   const [plant] = await sql`select id, category_id from plants where id = ${plant_id}`;
   if (!plant) return { error: "unknown plant_id" };
   const plantCategoryId: string | null = plant.category_id;
 
-  const temperatures = await cachedRef(sql, "temperature", () => sql`select id, name, name_en from temperature`);
-  const packagings = await cachedRef(sql, "packaging", () => sql`select id, name, name_en from packaging`);
-  const variationRows = await cachedRef(sql, "variations", () => sql`select id, name_es, name_en from variations`);
+  const temperatures = await ref("temperature", () => sql`select id, name, name_en from temperature`);
+  const packagings = await ref("packaging", () => sql`select id, name, name_en from packaging`);
+  const variationRows = await ref("variations", () => sql`select id, name_es, name_en from variations`);
   const variationNames = variationRows.map((v: any) => v.name_en).filter(Boolean) as string[];
   const variationNameById = new Map(variationRows.map((v: any) => [v.id, v.name_en]));
-  const cutNameRows = await cachedRef(sql, "cut_names", () => sql`select id, name_es, name_en from cut_names`);
+  const cutNameRows = await ref("cut_names", () => sql`select id, name_es, name_en from cut_names`);
   const cutNameById = new Map(cutNameRows.map((c: any) => [c.id, c.name_en]));
 
   // Global (plant_id null) rows are industry-standard shorthand any plant could use (confirmed
   // real: BI/BNLS/LGT/MED/SPARES/CBO were first taught scoped to one plant, then explicitly
   // corrected — "esas abreviaciones las puede usar cualquiera... buentrade tiene que match con un
   // solo full name"). Loaded first so a plant-specific row for the same term overrides it.
-  const termAliasRows = await cachedRef(sql, `term_aliases:${plant_id}`, () => sql`
+  const termAliasRows = await ref(`term_aliases:${plant_id}`, () => sql`
     select term, meaning_type, meaning_id, plant_id from plant_term_aliases
     where plant_id = ${plant_id} or plant_id is null
     order by plant_id nulls first
@@ -321,7 +325,7 @@ export async function matchProductFromPlantText(
     }
   }
 
-  const allInCategoryProducts = await cachedRef(sql, `products:${plantCategoryId ?? "all"}`, () => plantCategoryId
+  const allInCategoryProducts = await ref(`products:${plantCategoryId ?? "all"}`, () => plantCategoryId
     ? sql`select * from products where category_id = ${plantCategoryId}`
     : sql`select * from products`);
 

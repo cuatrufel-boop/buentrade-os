@@ -609,12 +609,12 @@ Deno.serve(async (req) => {
         let matchRes;
         try {
           matchRes = await matchProductFromPlantText(sql, {
-            plant_id: plant.id, raw_text: item.rawText, name_en: item.nameEn || null, name_es: item.nameEs || null,
+            plant_id: plant.id, raw_text: item.rawText, name_en: item.nameEn || null, name_es: item.nameEs || null, cache_refs: true,
           });
         } catch (e) { skipped++; errors.push(`match ${item.rawText}: ${e}`); continue; }
         if ("error" in matchRes) { skipped++; errors.push(`match ${item.rawText}: ${matchRes.error}`); continue; }
         try {
-          if (matchRes.matched && !item.needsReview) {
+          if (matchRes.matched && (!item.needsReview || matchRes.source === "alias")) {
             const applyResult = await applyPlantProductMatch(sql, HMAC_SECRET, {
               actor: EMAIL_AUTOMATION_ACTOR, plant_id: plant.id, product_id: matchRes.product.id,
               raw_text: normalize(item.rawText), price: item.price,
@@ -649,7 +649,7 @@ Deno.serve(async (req) => {
       for (const decl of declinedTextItems) {
         let matchRes;
         try {
-          matchRes = await matchProductFromPlantText(sql, { plant_id: plant.id, raw_text: decl.rawText });
+          matchRes = await matchProductFromPlantText(sql, { plant_id: plant.id, raw_text: decl.rawText, cache_refs: true });
         } catch (e) { skipped++; errors.push(`declined match ${decl.rawText}: ${e}`); continue; }
         if ("error" in matchRes) { skipped++; errors.push(`declined match ${decl.rawText}: ${matchRes.error}`); continue; }
         try {
