@@ -4,7 +4,7 @@
 // bulletin mailed to that inbox would end up in front of customers, the origin is checked before anything is read:
 //   • a message the mailbox owner SENT (Gmail label SENT — only someone with access to the account can create one,
 //     e.g. a trader sending the bulletin from the purchasing@ send-as address) is trusted; otherwise
-//   • the sender must be one of the traders in TRADER_NOTIFICATION_EMAILS (the project's existing trusted list) AND be
+//   • the sender must be info@/purchasing@buentradegroup.com or one of the traders in TRADER_NOTIFICATION_EMAILS AND be
 //     authenticated (Authentication-Results: dmarc=pass, or spf AND dkim pass) so the From line can't simply be forged,
 //   and finally the PDF must actually read as the bulletin (ingestBulletin refuses anything without its data).
 // Every candidate is recorded once in market_flash_email_inbox with its outcome and reason — nothing is invisible.
@@ -29,7 +29,11 @@ async function accessToken(): Promise<string> {
   return data.access_token;
 }
 const header = (headers: { name: string; value: string }[], name: string) => headers.filter((h) => h.name.toLowerCase() === name.toLowerCase()).map((h) => h.value).join(" | ");
-const trusted = () => (Deno.env.get("TRADER_NOTIFICATION_EMAILS") || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+// The company's own two addresses (info@ is the mailbox itself, purchasing@ its send-as alias — mail addressed to either
+// lands in this inbox) plus the traders already trusted for notifications. A received (not SENT) message from any of them
+// must still pass sender authentication.
+const COMPANY_ADDRESSES = ["info@buentradegroup.com", "purchasing@buentradegroup.com"];
+const trusted = () => [...COMPANY_ADDRESSES, ...(Deno.env.get("TRADER_NOTIFICATION_EMAILS") || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)];
 const pdfParts = (p: any): any[] => [
   ...(p.filename && p.body?.attachmentId && (p.mimeType === "application/pdf" || p.filename.toLowerCase().endsWith(".pdf")) ? [p] : []),
   ...(p.parts || []).flatMap(pdfParts),
@@ -50,7 +54,7 @@ export async function diagnoseInbox(count = 8) {
     const msg = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, { headers: auth })).json();
     const hs = msg.payload?.headers || [];
     const files = (function walk(p: any): string[] { return [...(p.filename ? [p.filename] : []), ...(p.parts || []).flatMap(walk)]; })(msg.payload || {});
-    out.push({ id: m.id, from: header(hs, "From"), subject: header(hs, "Subject"), date: header(hs, "Date"), labels: msg.labelIds, attachments: files, auth: header(hs, "Authentication-Results").slice(0, 160) });
+    out.push({ id: m.id, from: header(hs, "From"), to: header(hs, "To"), delivered_to: header(hs, "Delivered-To"), subject: header(hs, "Subject"), date: header(hs, "Date"), labels: msg.labelIds, attachments: files, auth: header(hs, "Authentication-Results").slice(0, 160) });
   }
   const search = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(SEARCH)}&maxResults=5`, { headers: auth })).json();
   const profile = await (await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: auth })).json();

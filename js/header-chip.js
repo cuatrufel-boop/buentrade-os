@@ -5,8 +5,13 @@
 (function(){
   var css = document.createElement('style');
   css.textContent =
-    '.hdr-flash{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1.5px solid rgba(90,170,255,.4);color:#5AAAFF;padding:8px 14px 8px 12px;border-radius:8px;font-size:12px;font-weight:700;font-family:"Space Grotesk",sans-serif;text-decoration:none;cursor:pointer;transition:background .18s;}' +
-    '.hdr-flash:hover{background:rgba(90,170,255,.16);}' +
+    // Same wordmark language as the BuenTrade logo (.brand-word): Space Grotesk 700, white + bright-blue two-tone — no button box.
+    '.hdr-flash{display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:4px 2px;text-decoration:none;cursor:pointer;color:#fff;}' +
+    '.hdr-flash svg{width:19px;height:19px;flex-shrink:0;transition:transform .18s;}' +
+    '.hdr-flash-word{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:22px;color:#fff;line-height:1;letter-spacing:0;transition:opacity .18s;}' +
+    '.hdr-flash-word b{font-weight:700;color:#5AAAFF;}' +
+    '.hdr-flash:hover .hdr-flash-word{opacity:.82;}' +
+    '.hdr-flash:hover svg{transform:scale(1.12);}' +
     '.hdr-flash-dot{position:absolute;top:-5px;right:-5px;width:11px;height:11px;border-radius:50%;background:#E5533D;border:2px solid #0E3D8F;box-sizing:border-box;}' +
     '.hdr-logout{width:19px;height:19px;border-radius:50%;background:rgba(255,255,255,.1);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .18s;}' +
     '.hdr-logout:hover{background:rgba(255,255,255,.22);}' +
@@ -15,6 +20,17 @@
 
   // Market Flash: a red dot on the button means a bulletin has arrived that THIS browser hasn't opened yet (by upload or by
   // email — the server reads it on its own). Opening Market Flash marks the latest one as seen (mfMarkBulletinSeen).
+  (function styleFlashWordmark(){
+    var fb = document.querySelector('.hdr-flash');
+    if (!fb || fb.querySelector('.hdr-flash-word')) return;
+    var svg = fb.querySelector('svg');
+    fb.textContent = '';
+    if (svg) fb.appendChild(svg);
+    var w = document.createElement('span');
+    w.className = 'hdr-flash-word';
+    w.innerHTML = 'Market <b>Flash</b>';
+    fb.appendChild(w);
+  })();
   var SEEN_KEY = 'mfSeenBulletin';
   function flashDot(on){
     var btn = document.querySelector('.hdr-flash');
