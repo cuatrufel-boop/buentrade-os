@@ -605,6 +605,7 @@
      padding-right pushes real content clear of it; the rest just recolors it to match the OS's
      existing translucent-white line/border tone instead of leaving it visually unstyled. */
   .rq-palette-results{max-height:56vh;overflow-y:auto;margin-top:14px;padding-right:10px;}
+  .rq-palette-results:empty{display:none;}
   .rq-palette-results::-webkit-scrollbar{width:8px;}
   .rq-palette-results::-webkit-scrollbar-track{background:transparent;}
   .rq-palette-results::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:4px;}
@@ -2555,9 +2556,11 @@ async function rqRenderGroupedResults(){
     // now retired ("no me gusta esa ventana de search con most requested") — an empty box with
     // nothing in it at all read as broken, so it shows the same resting prompt "no matches" already
     // used elsewhere, just with different copy.
-    if (box) box.innerHTML = `<div class="rq-results-empty">${RQ_SEARCH_ICO_SVG}<div>Start typing to search the catalog.</div></div>`;
+    // Real ask 2026-09-26 ("si no he escogido producto solo debería sacar search"): nothing under the search box until
+    // something is typed. Emptying the box no longer drops the picks either (several can be picked across searches
+    // now) — "✕ Clear" on the page is what removes them.
+    if (box) box.innerHTML = '';
     if (countEl) countEl.classList.remove('show');
-    rqClearProductFilter();
     return;
   }
   if (rqPendingInlineOpenId) await rqCloseCalculator(rqPendingInlineOpenId);
