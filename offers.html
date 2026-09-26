@@ -1214,10 +1214,10 @@ async function sendWonDocs(result, offerId){
   const orderNumber = result.order_number;
   const kinds = ['PO', 'SO'];
   if (result.freight_order || result.mexican_freight_order) kinds.push('FO');
-  await runDocSendSequence(orderNumber, kinds);
+  // Real ask 2026-09-26: right after the PO goes out → "Quote more clients?" (js/quote-more-clients.js), then SO/FO.
+  await runDocSendSequence(orderNumber, kinds,
+    () => qmcRun({ callApi, actor: currentActor(), offerId, fromDisplay: FROM_DISPLAY.offers, notify: qmcQuietNotify, ask: true }));
   showToast(`Orden ${orderNumber} creada`, '');
-  // Real ask 2026-09-26: right after the new order's documents go out → "Quote more clients?" (js/quote-more-clients.js).
-  await qmcRun({ callApi, actor: currentActor(), offerId, fromDisplay: FROM_DISPLAY.offers, notify: qmcQuietNotify, ask: true });
 }
 // Quiet when there is simply nothing to quote (no other customer, test product) — only a real failure or result shows.
 function qmcQuietNotify(title, detail, isError){
@@ -1388,8 +1388,17 @@ function closeDocPreviewByUser(){
   resolve();
 }
 
-function docSeqAdvance(){
+async function docSeqAdvance(){
   if (!docSeq) return;
+  // Real ask 2026-09-26 ("mandé la PO y no sale nada"): the step to run right after the FIRST document (the PO) of a
+  // new order goes out — "Quote more clients?" — then the sequence carries on to SO/FO as before.
+  if (docSeq.afterFirst){
+    const afterFirst = docSeq.afterFirst;
+    docSeq.afterFirst = null;
+    closeDocPreview();
+    await afterFirst();
+    if (!docSeq) return;
+  }
   if (!docSeq.queue.length){
     closeDocPreview();
     const resolve = docSeq.resolve;
@@ -1411,9 +1420,9 @@ async function previewDocSend(fnName, orderNumber){
 // Shows PO, then SO, then FO (if there's a freight leg) one at a time — resolves once the trader
 // has gone through all of them. Each Email/WhatsApp click sends that one and moves to the next;
 // Download never advances (it's just saving a copy, not "sending").
-function runDocSendSequence(orderNumber, kinds){
+function runDocSendSequence(orderNumber, kinds, afterFirst){
   return new Promise(resolve => {
-    docSeq = { orderNumber, queue: kinds.slice(1), resolve, total: kinds.length };
+    docSeq = { orderNumber, queue: kinds.slice(1), resolve, total: kinds.length, afterFirst: afterFirst || null };
     openDocPreview(kinds[0], orderNumber, { stepIndex: 1, stepCount: kinds.length });
   });
 }
