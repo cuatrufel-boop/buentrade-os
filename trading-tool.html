@@ -1035,12 +1035,16 @@ if (FIREBASE_READY) {
     <div style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:18px;">Choose how BuenTrade pays the plant for this order.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
       <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.18);border-radius:10px;padding:12px;text-align:center;">
-        <div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Direct</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">BuenTrade</div>
+        <div style="font-size:9.5px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Profit</div>
         <div id="ttFinChoiceDirectProfit" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:#fff;"></div>
+        <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:6px;">Finance Cost <span id="ttFinChoiceDirectCost" style="font-family:'IBM Plex Mono',monospace;"></span></div>
       </div>
       <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(232,181,76,.4);border-radius:10px;padding:12px;text-align:center;">
         <div style="font-size:10px;color:#E8B54C;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Summar</div>
+        <div style="font-size:9.5px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Profit</div>
         <div id="ttFinChoiceSummarProfit" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:#fff;"></div>
+        <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:6px;">Finance Cost <span id="ttFinChoiceSummarCost" style="font-family:'IBM Plex Mono',monospace;"></span></div>
       </div>
     </div>
     <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
@@ -1052,12 +1056,15 @@ if (FIREBASE_READY) {
 </div>
 <script>
 let ttFinancingChoiceResolveFn = null;
-// Real correction 2026-09-26: this compares what each way of paying the plant COSTS — Direct = the Finance Cost of
-// paying with BuenTrade's own money (#financeOutTop, the top bar's Finance Cost · Border), Summar = the Summar Fee
-// (#summarFeeAmount). It used to show two profits (Profit Without / After Summar), which was never the comparison asked for.
+// Real correction 2026-09-26: each side shows its Profit AFTER its own finance cost (big) and that Finance Cost (small).
+// BuenTrade = paying the plant with our own money: QT's Profit (#outProfit) and the top bar's Finance Cost · Border
+// (#financeOutTop). Summar = Profit After Summar (#summarProfitAfter) and the Summar Fee (#summarFeeAmount). Read from
+// what QT already shows, never recomputed. (It used to show Profit Without Summar — no finance cost at all — as "Direct".)
 function showTTFinancingChoice(){
-  document.getElementById('ttFinChoiceDirectProfit').textContent = document.getElementById('financeOutTop').textContent;
-  document.getElementById('ttFinChoiceSummarProfit').textContent = document.getElementById('summarFeeAmount').textContent;
+  document.getElementById('ttFinChoiceDirectProfit').textContent = document.getElementById('outProfit').textContent;
+  document.getElementById('ttFinChoiceDirectCost').textContent = document.getElementById('financeOutTop').textContent;
+  document.getElementById('ttFinChoiceSummarProfit').textContent = document.getElementById('summarProfitAfter').textContent;
+  document.getElementById('ttFinChoiceSummarCost').textContent = document.getElementById('summarFeeAmount').textContent;
   document.getElementById('ttFinancingChoiceOverlay').style.display = 'flex';
   return new Promise(resolve => { ttFinancingChoiceResolveFn = resolve; });
 }
