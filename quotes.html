@@ -4575,7 +4575,11 @@ function rqUpdatePlantPrice(id){
 // object from the sweep row instead of looking one up there, and its onSent just re-runs
 // loadPendingPrices() (reaskedStale then reclassifies this exact row into Updating on its own).
 function qAskUpdateForSweepRow(plantId, productId){
-  const r = qPendingRows.find(x => x.plant_id === plantId && x.product_id === productId);
+  // Real bug 2026-09-26 ("ask for update no funciona"): Expired lists EVERY stale price in the system (qAllPricedRows,
+  // since 2026-09-12), but this only looked in qPendingRows — rows someone already asked about — so a never-asked
+  // expired price (last_requested_at null, e.g. Smithfield/Wholestone Picnic VAC) found nothing and silently returned.
+  const same = x => x.plant_id === plantId && x.product_id === productId;
+  const r = qPendingRows.find(same) || rqAllExpiredRows.map(x => x.r).find(same) || rqAllReadyRows.map(x => x.r).find(same);
   if (!r) return;
   const p = {
     id: plantId, rqProductId: productId, name: r.plant.name,
