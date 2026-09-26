@@ -620,6 +620,9 @@
   tr.rq-sheet-dim td{opacity:.72;}
   .rq-sheet-grid .qbucket-waiting-row-decline,.rq-sheet-grid .pkg-trigger-btn{white-space:nowrap;}
   .rq-sheet-grid td{padding-left:8px;padding-right:8px;}
+  .rq-sheet-qt{width:34px;height:34px;border-radius:50%;border:2px solid var(--blue);background:transparent;color:var(--blue-bright);font:700 10px inherit;letter-spacing:.02em;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .rq-sheet-qt:hover{background:var(--blue);color:#fff;}
+  .rq-sheet-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end;}
   .rq-sheet-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;font-size:12px;}
   .rq-sheet-bar .pkg-trigger-btn{margin-left:0;}
   .rq-sheet-bar .pkg-trigger-btn:disabled{opacity:.45;cursor:default;}
@@ -1191,14 +1194,14 @@ auth.onAuthStateChanged(user => {
         <div class="card qbucket">
           <h2 style="display:flex;justify-content:space-between;align-items:center;">Brands <span class="muted" id="rq_sheet_count" style="font-weight:400;font-size:13px;"></span></h2>
           <div id="rq_sheet_rows"></div>
-          <div class="rq-sheet-bar"><span class="muted">Highest border cost first · one message per plant</span><button type="button" class="pkg-trigger-btn" id="rq_sheet_ask_btn" onclick="rqSheetAsk()">Ask plants →</button></div>
+          <div class="rq-sheet-bar"><span></span><button type="button" class="rq-customer-bulk-btn email" id="rq_sheet_ask_btn" onclick="rqSheetAsk()"></button></div>
         </div>
         <div class="card qbucket">
-          <h2>Outbox <span class="muted" style="font-weight:400;font-size:13px;">— one message per customer</span></h2>
+          <h2>Outbox</h2>
           <div id="rq_sheet_outbox"></div>
           <div style="display:flex;gap:8px;margin-top:12px;">
-            <button type="button" class="rq-customer-bulk-btn email" id="rq_sheet_send_email" style="flex:1;justify-content:center;" onclick="rqSheetSend('email')">Email</button>
-            <button type="button" class="rq-customer-bulk-btn whatsapp" id="rq_sheet_send_wa" style="flex:1;justify-content:center;" onclick="rqSheetSend('whatsapp')">WhatsApp</button>
+            <button type="button" class="rq-customer-bulk-btn email" id="rq_sheet_send_email" style="flex:1;justify-content:center;" title="Email the updated list to each customer" onclick="rqSheetSend('email')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:15px;height:15px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
+            <button type="button" class="rq-customer-bulk-btn whatsapp" id="rq_sheet_send_wa" style="flex:1;justify-content:center;" title="WhatsApp the updated list to each customer" onclick="rqSheetSend('whatsapp')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:15px;height:15px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></button>
           </div>
         </div>
       </div>
@@ -2217,30 +2220,35 @@ function rqRenderSheet(){
   const pill = (cls, text) => `<span class="rq-sheet-pill ${cls}">${text}</span>`;
   const statusHtml = r => {
     if (r.kind === 'waiting') return pill('wait', `Asked · ${r.hours}h`);
-    if (r.kind === 'noreply') return `${pill('off', `No reply · ${r.hours}h`)} <button type="button" class="qbucket-waiting-row-decline" onclick="rqSheetAsk(['${r.plant.id}'], true)">Remind</button>`;
+    if (r.kind === 'noreply') return pill('off', `No reply · ${r.hours}h`);
     if (r.kind === 'possible') return pill('off', 'Possible');
     if (r.status === 'sent') return pill('ok', 'Sent');
-    if (r.status === 'ready') return pill('ok', r.sentTo.length ? `Sent to ${r.sentTo.length} · update ready` : 'Ready to send');
+    if (r.status === 'ready') return pill('ok', r.sentTo.length ? 'Update' : 'Ready');
     if (r.status === 'new') return pill('new', 'NEW');
     if (r.status === 'expired') return pill('exp', `Expired ${rqFmtDate(r.priceDate)}`);
     return pill('ok', 'Priced');
   };
+  // 2026-09-26 ("para qué dos botones… ya tenemos diseño de logos"): one round "QT" button per row (Orders' own QT
+  // button) — freight and sale are both set inside that one QT; asking a plant is the existing email icon button.
+  const qtBtn = r => `<button type="button" class="rq-sheet-qt" title="Open QT" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">QT</button>`;
+  const askTargetKeys = new Set(askTargets.map(t => t.key));
+  const askBtn = (r, remind) => `<button type="button" class="rq-customer-bulk-btn email" style="padding:6px 9px;" title="${remind ? 'Remind' : 'Ask price'} — ${escapeHtml(r.plant.name)}" onclick="rqSheetAsk(['${r.plant.id}'], ${remind ? 'true' : 'false'})">${RQ_EMAIL_ICON}</button>`;
+  const offSpec = r => `<button type="button" class="qbucket-waiting-row-decline" title="Doesn't produce it — never asked again" onclick="rqSheetDecline('${r.plant.id}','${r.pid}')">✕ Off-Spec</button>`;
   const rowHtml = r => {
     // With several products picked, the product goes under the brand (one column fewer — the table stays readable).
     const productCell = '';
     const plantCell = `<td style="min-width:170px;"><b>${escapeHtml(r.plant.name)}</b>${multi ? `<span class="muted" style="display:block;font-size:11px;">${escapeHtml(rqProductName(r.pid))}</span>` : ''}</td>`;
     if (r.kind !== 'priced'){
-      const decline = `<button type="button" class="qbucket-waiting-row-decline" onclick="rqSheetDecline('${r.plant.id}','${r.pid}')">Doesn't produce</button>`;
-      return `<tr class="rq-sheet-dim">${productCell}${plantCell}<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td>${statusHtml(r)}</td><td>${decline}</td></tr>`;
+      const actions = r.kind === 'waiting' ? offSpec(r) : `${askBtn(r, r.kind === 'noreply')}${offSpec(r)}`;
+      return `<tr class="rq-sheet-dim">${productCell}${plantCell}<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td>${statusHtml(r)}</td><td><div class="rq-sheet-actions">${actions}</div></td></tr>`;
     }
-    const priceTag = `<span class="pkg-tag price${r.stale ? ' exp' : ''}" style="cursor:pointer;" title="Open QT" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">$${r.price.toFixed(4)}/lb</span>`;
+    const priceTag = `<span class="pkg-tag price${r.stale ? ' exp' : ''}">$${r.price.toFixed(4)}/lb</span>`;
     const freight = r.freight
       ? `<span class="num">${r.freight.label}</span>${r.freight.city ? `<span class="muted" style="display:block;font-size:11px;">${escapeHtml(r.freight.city)}</span>` : ''}`
-      : `<button type="button" class="pkg-trigger-btn" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">Set in QT</button>`;
-    const sale = r.calc
-      ? `<span class="num">$${r.calc.salePerLb.toFixed(4)}/lb</span>`
-      : `<button type="button" class="pkg-trigger-btn" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">Open QT →</button>`;
-    return `<tr class="${r.status === 'new' ? 'rq-sheet-new' : ''}">${productCell}${plantCell}<td class="num">${priceTag}</td><td>${freight}</td><td>${sale}</td><td>${statusHtml(r)}</td><td></td></tr>
+      : '<span class="rq-sheet-pill exp" title="No freight yet — set it in QT">—</span>';
+    const sale = r.calc ? `<span class="num">$${r.calc.salePerLb.toFixed(4)}/lb</span>` : '<span class="muted">—</span>';
+    const actions = `${qtBtn(r)}${askTargetKeys.has(r.key) ? askBtn(r, false) : ''}`;
+    return `<tr class="${r.status === 'new' ? 'rq-sheet-new' : ''}">${productCell}${plantCell}<td class="num">${priceTag}</td><td>${freight}</td><td>${sale}</td><td>${statusHtml(r)}</td><td><div class="rq-sheet-actions">${actions}</div></td></tr>
       ${rqInlineSlotRowHtml(r.plant.id, r.pid, 6)}`;
   };
   const heads = ['Brand', 'Plant Price', 'US Freight', 'Sale', 'Status', ''];
@@ -2248,15 +2256,16 @@ function rqRenderSheet(){
     ? rqTableSection(rows.map(rowHtml).join(''), heads)
     : '<div class="empty">No plant carries these products yet.</div>';
   document.getElementById('rq_sheet_count').textContent = `${priced.length} priced · ${waiting.length} waiting${noreply.length ? ' · ' + noreply.length + ' no reply' : ''}`;
-  const askBtn = document.getElementById('rq_sheet_ask_btn');
+  const askAllBtn = document.getElementById('rq_sheet_ask_btn');
   const askPlants = [...new Set(askTargets.map(r => r.plant.id))];
-  askBtn.textContent = askPlants.length ? `Ask ${askPlants.length} plant${askPlants.length === 1 ? '' : 's'} →` : 'Nothing to ask';
-  askBtn.disabled = !askPlants.length;
+  askAllBtn.innerHTML = `${RQ_EMAIL_ICON} All (${askPlants.length})`;
+  askAllBtn.title = askPlants.length ? `Ask price — every plant marked with the email icon (${askPlants.length}), one message each` : 'Nothing to ask';
+  askAllBtn.disabled = !askPlants.length;
 
   document.getElementById('rq_sheet_outbox').innerHTML = outbox.length ? outbox.map(({ c, fresh }) => `
     <div class="rq-sheet-ob${fresh.length ? ' ready' : ''}">
       <b>${escapeHtml(c.trade_name)}</b>
-      <span class="muted">${fresh.length ? `${fresh.length} to send: ${fresh.map(r => escapeHtml(r.plant.name)).join(', ')}` : 'Nothing new to send'}</span>
+      <span class="muted">${fresh.length ? fresh.map(r => escapeHtml(r.plant.name)).join(' · ') : '—'}</span>
     </div>`).join('') : '<div class="empty">No customer buys these products yet — link one in Customers.</div>';
   document.getElementById('rq_sheet_send_email').disabled = !readyCustomers.length;
   document.getElementById('rq_sheet_send_wa').disabled = !readyCustomers.length;
@@ -2265,7 +2274,9 @@ function rqRenderSheet(){
 // Ask: ONE message per plant with all of its products (approved copy), preview first. plantIds limits it (Remind).
 async function rqSheetAsk(plantIds, remind){
   const rows = rqSheetRows();
-  const targets = remind ? rows.filter(r => r.kind === 'noreply' && plantIds.includes(r.plant.id)) : rqSheetAskTargets(rows);
+  const targets = remind
+    ? rows.filter(r => r.kind === 'noreply' && plantIds.includes(r.plant.id))
+    : rqSheetAskTargets(rows).filter(r => !plantIds || plantIds.includes(r.plant.id));
   const byPlant = new Map();
   targets.forEach(r => { if (!byPlant.has(r.plant.id)) byPlant.set(r.plant.id, { plant: r.plant, rows: [] }); byPlant.get(r.plant.id).rows.push(r); });
   if (!byPlant.size) return;
