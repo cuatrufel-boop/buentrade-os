@@ -606,6 +606,27 @@
      existing translucent-white line/border tone instead of leaving it visually unstyled. */
   .rq-palette-results{max-height:56vh;overflow-y:auto;margin-top:14px;padding-right:10px;}
   .rq-palette-results:empty{display:none;}
+  /* Offer Sheet (2026-09-26) — built from this page's own pills/cards; colors are the existing ok/warn/expired/blue ones. */
+  .rq-sheet-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start;}
+  @media (max-width:1000px){ .rq-sheet-grid{grid-template-columns:1fr;} }
+  .rq-sheet-pill{display:inline-block;font-family:var(--dash-font-mono);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap;}
+  .rq-sheet-pill.ok{color:#5FE097;border-color:rgba(95,224,151,.45);background:rgba(95,224,151,.08);}
+  .rq-sheet-pill.new{color:#0A0E17;background:#5FE097;border-color:#5FE097;}
+  .rq-sheet-pill.wait{color:#E8B54C;border-color:rgba(232,181,76,.5);background:rgba(232,181,76,.08);}
+  .rq-sheet-pill.exp{color:#F2A65A;border-color:rgba(242,166,90,.5);background:rgba(242,166,90,.08);}
+  .rq-sheet-pill.off{color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.25);}
+  .pkg-tag.price.exp{color:#F2A65A;border-color:rgba(242,166,90,.5);}
+  tr.rq-sheet-new td{background:rgba(95,224,151,.06);}
+  tr.rq-sheet-dim td{opacity:.72;}
+  .rq-sheet-grid .qbucket-waiting-row-decline,.rq-sheet-grid .pkg-trigger-btn{white-space:nowrap;}
+  .rq-sheet-grid td{padding-left:8px;padding-right:8px;}
+  .rq-sheet-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;font-size:12px;}
+  .rq-sheet-bar .pkg-trigger-btn{margin-left:0;}
+  .rq-sheet-bar .pkg-trigger-btn:disabled{opacity:.45;cursor:default;}
+  .rq-sheet-ob{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid rgba(255,255,255,.12);border-radius:10px;margin-bottom:8px;font-size:12.5px;opacity:.6;}
+  .rq-sheet-ob.ready{opacity:1;border-color:rgba(90,170,255,.5);background:rgba(30,106,219,.12);}
+  .rq-sheet-ob b{font-size:13.5px;}
+  #rq_sheet_send_email:disabled,#rq_sheet_send_wa:disabled{opacity:.45;cursor:default;}
   .rq-palette-results::-webkit-scrollbar{width:8px;}
   .rq-palette-results::-webkit-scrollbar-track{background:transparent;}
   .rq-palette-results::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:4px;}
@@ -1160,6 +1181,27 @@ auth.onAuthStateChanged(user => {
       <div class="rq-tray-empty-mark">Buen<span>Trade</span></div>
       <div class="rq-tray-empty-text">Search a product above</div>
       <div class="rq-tray-empty-sub">Type a cut name (e.g. "boneless picnic VAC") to see it across Ready, Expired, and Updating.</div>
+      <div id="rq_open_sheets" style="margin-top:18px;"></div>
+    </div>
+    <!-- Offer Sheet (approved 2026-09-26): shown instead of the four sections below while products are picked in Find
+         Product — see rqRenderSheet. Same stat-card / table / button components as the rest of this page. -->
+    <div id="rq_sheet_section" style="display:none;padding-top:12px;">
+      <div class="stats-row" id="rq_sheet_pipeline" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px;"></div>
+      <div class="rq-sheet-grid">
+        <div class="card qbucket">
+          <h2 style="display:flex;justify-content:space-between;align-items:center;">Brands <span class="muted" id="rq_sheet_count" style="font-weight:400;font-size:13px;"></span></h2>
+          <div id="rq_sheet_rows"></div>
+          <div class="rq-sheet-bar"><span class="muted">Highest border cost first · one message per plant</span><button type="button" class="pkg-trigger-btn" id="rq_sheet_ask_btn" onclick="rqSheetAsk()">Ask plants →</button></div>
+        </div>
+        <div class="card qbucket">
+          <h2>Outbox <span class="muted" style="font-weight:400;font-size:13px;">— one message per customer</span></h2>
+          <div id="rq_sheet_outbox"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button type="button" class="rq-customer-bulk-btn email" id="rq_sheet_send_email" style="flex:1;justify-content:center;" onclick="rqSheetSend('email')">Email</button>
+            <button type="button" class="rq-customer-bulk-btn whatsapp" id="rq_sheet_send_wa" style="flex:1;justify-content:center;" onclick="rqSheetSend('whatsapp')">WhatsApp</button>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="rq-results-col" style="padding-top:12px;">
       <div class="card qbucket qbucket-ready" id="rq_ready_section">
@@ -1455,7 +1497,14 @@ async function loadQuotesPage(){
   // see rqRenderGroupedResults) for real performance reasons — which silently removed the only
   // thing that ever triggered the first real fetch, leaving every stat card at 0 until the 45s
   // poll below eventually caught up. Calling it directly here is the actual, explicit trigger now.
+  // Offer Sheet: ?products=<id,id> (the "answered" push alert links here) opens Find Product with those products picked.
+  const urlProducts = new URLSearchParams(location.search).get('products');
+  if (urlProducts){
+    rqActiveProductFilterIds = urlProducts.split(',').filter(id => products.some(p => p.id === id));
+    rqActiveSweepTab = 'quote';
+  }
   loadPendingPrices();
+  rqRenderOpenSheets();
 
   // Explicit ask 2026-09-03: "y refresh" — the Dashboard only ever updated on a manual reload or
   // re-entering Quotes, so a price the API had already filled in from a plant's reply sat unseen
@@ -1773,6 +1822,8 @@ function renderRqStats(){
 // fetch) plus which single product, if any, the trader is currently filtered to. rqRenderSweepTables
 // re-slices these in memory — no API call, nothing written — every time the tab or filter changes.
 let rqAllReadyRows = [], rqAllExpiredRows = [], rqAllWaitingRows = [];
+// Every plant_products row with its plant/product resolved (incl. already-sent and declined) — the Offer Sheet reads these.
+let rqAllPlantProductRows = [];
 // Real ask 2026-09-26 ("a veces necesito el mismo producto con distinta variación, poderlos escoger los dos"): several
 // products can be picked at once in Find Product — every section (Ready, Expired, Updating, Possible) shows all of them,
 // exactly as it did for one. Still a pure in-memory filter: nothing is written or sent.
@@ -1913,6 +1964,18 @@ function rqRenderSweepTables(){
   if (!readyList || !expiredList || !updatingList) return;
   const filterIds = rqActiveProductFilterIds;
   const filterId = filterIds.length > 0; // any product picked
+  // Offer Sheet (2026-09-26): products picked in Find Product are worked in ONE table (rqRenderSheet) instead of the
+  // four Ready/Expired/Updating/Possible sections. Those sections are unchanged everywhere else (the stat-card tabs).
+  const sheetMode = filterId && rqActiveSweepTab === 'quote';
+  const sheetSection = document.getElementById('rq_sheet_section');
+  if (sheetSection) sheetSection.style.display = sheetMode ? '' : 'none';
+  if (sheetMode){
+    ['rq_ready_section', 'rq_expired_section', 'rq_updating_section', 'rq_possible_section'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    const cw = document.getElementById('rq_filter_chip_wrap'); if (cw) cw.style.display = 'flex';
+    const qe = document.getElementById('rq_quote_empty'); if (qe) qe.style.display = 'none';
+    rqRenderSheet();
+    return;
+  }
   const inFilter = id => filterIds.includes(id);
   const plural = filterIds.length > 1;
   // Real ask 2026-09-13: the sweep search box only ever narrows rows already on screen —
@@ -2013,6 +2076,282 @@ function rqClearProductFilter(){
   renderRqStats();
 }
 
+// ============ OFFER SHEET (approved 2026-09-26, parts 2-5) ============
+// The products picked in Find Product, worked in one table: every brand (plant) that could sell them, highest border
+// cost first — priced ones with their US freight and the sale price the trader confirmed in QT, then the plants asked
+// and still waiting, then "possible" plants (same category, never asked), then the ones with no reply after 48h.
+// Two actions: ask the missing plants (ONE message per plant, all its products, preview first) and send to the
+// customers who buy these products (the existing send path, preview first; a customer who already got these products
+// receives "Lista actualizada"). Nothing is priced, sent or asked on the trader's behalf.
+// Server side: sent-offers-search { offer_sheet: … } remembers the sheet's customers/dates and which plants were asked;
+// plant-price-emails-poll marks an asked plant answered and pushes the alert. Everything else is read live.
+const RQ_SHEET_NO_REPLY_HOURS = 48;
+let rqSheetConfirmed = {};   // plant|product → plant snapshot taken when its QT was confirmed (see rqCloseCalculator)
+let rqSheetState = { key: '', loading: false, customers: [], linksByCustomer: {}, sentByCustomer: {}, sheets: [] };
+
+function rqSheetKey(){ return rqActiveProductFilterIds.slice().sort().join(','); }
+async function rqSheetLoad(){
+  const key = rqSheetKey();
+  const pids = rqActiveProductFilterIds.slice();
+  rqSheetState.loading = true;
+  let match = { customers: [], linksByCustomer: {} }, sent = {}, sheets = [];
+  try { match = await rqMatchCustomersForProductIds(pids); } catch (e) {}
+  try { sent = await rqAlreadySentPlantIdsByCustomer(pids); } catch (e) {}
+  try { sheets = (await callApi('sent-offers-search', { offer_sheet: { action: 'get', product_ids: pids } })).sheets || []; } catch (e) {}
+  if (key !== rqSheetKey()) return; // picks changed while loading — the newer load wins
+  rqSheetState = { key, loading: false, customers: match.customers, linksByCustomer: match.linksByCustomer, sentByCustomer: sent, sheets };
+  rqRenderSheet();
+}
+function rqSheetFor(productId){ return rqSheetState.sheets.find(s => s.product_id === productId) || null; }
+function rqHoursSince(ts){ return ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 3600000) : null; }
+function rqSheetCustomersOwning(productId){
+  return rqSheetState.customers.filter(c => { const own = rqSheetState.linksByCustomer[c.id]; return !own || own.has(productId); });
+}
+
+// One row per plant × picked product, with everything the table needs.
+function rqSheetRows(){
+  const rows = [];
+  rqActiveProductFilterIds.forEach(pid => {
+    const prod = products.find(p => p.id === pid);
+    if (!prod) return;
+    const sheet = rqSheetFor(pid);
+    const links = rqAllPlantProductRows.filter(r => r.product_id === pid);
+    const seen = new Set();
+    links.forEach(r => {
+      seen.add(r.plant_id);
+      if (r.declined_at) return;
+      const asked = sheet && sheet.plants.find(x => x.plant_id === r.plant_id);
+      const askedAt = asked ? (asked.reminded_at || asked.asked_at) : r.last_requested_at;
+      const key = r.plant_id + '|' + pid;
+      const confirmed = rqSheetConfirmed[key] || null;
+      const calc = rqPendingCalcCache[key] || null;
+      const base = { key, pid, prod, plant: r.plant, link: r, askedAt, answeredAt: asked ? asked.answered_at : null };
+      if (r.current_price != null){
+        const stale = (rqPriceAgeDays(r.price_date) || 0) > RQ_PRICE_STALE_DAYS;
+        let freight = null;
+        if (r.freight_included) freight = { label: 'Included', perLb: 0 };
+        else {
+          const rateId = rqDefaultUsFreightRateId(r.plant_id, r.location_id, false);
+          const rate = rateId ? rqAllProviderRates.find(x => x.id === rateId) : null;
+          const loc = r.location_id ? rqAllLocations.find(l => l.location_id === r.location_id) : null;
+          if (rate) freight = { label: '$' + Number(rate.rate).toLocaleString('en-US'), perLb: Number(rate.rate) / 40000, city: loc ? loc.location_name : '' };
+        }
+        const owners = rqSheetCustomersOwning(pid);
+        const sentTo = owners.filter(c => { const at = (rqSheetState.sentByCustomer[c.id] || {})[key]; return at && at.slice(0, 10) >= String(r.price_date || '').slice(0, 10); });
+        const isNew = !!(base.answeredAt || (askedAt && r.price_date && String(r.price_date).slice(0, 10) >= String(askedAt).slice(0, 10) && !stale));
+        let status;
+        if (calc && owners.length && sentTo.length === owners.length) status = 'sent';
+        else if (calc) status = 'ready';
+        else if (isNew && !sentTo.length) status = 'new';
+        else status = stale ? 'expired' : 'priced';
+        rows.push({ ...base, kind: 'priced', price: Number(r.current_price), priceDate: r.price_date, stale, freight, calc, confirmed, sentTo, owners, status,
+          border: Number(r.current_price) + (freight ? freight.perLb : 0) });
+      } else if (askedAt){
+        const hours = rqHoursSince(askedAt);
+        rows.push({ ...base, kind: hours >= RQ_SHEET_NO_REPLY_HOURS ? 'noreply' : 'waiting', hours });
+      } else {
+        rows.push({ ...base, kind: 'possible' });
+      }
+    });
+    // Same "possible" rule as the old Possible section: same category, no row at all for this product.
+    if (prod.category_id) rqAllPlants.filter(pl => pl.category_id === prod.category_id && !seen.has(pl.id)).forEach(pl => {
+      const asked = sheet && sheet.plants.find(x => x.plant_id === pl.id);
+      const askedAt = asked ? (asked.reminded_at || asked.asked_at) : null;
+      const base = { key: pl.id + '|' + pid, pid, prod, plant: pl, link: null, askedAt, possible: true };
+      if (askedAt){ const hours = rqHoursSince(askedAt); rows.push({ ...base, kind: hours >= RQ_SHEET_NO_REPLY_HOURS ? 'noreply' : 'waiting', hours }); }
+      else rows.push({ ...base, kind: 'possible' });
+    });
+  });
+  const order = { priced: 0, waiting: 1, possible: 2, noreply: 3 };
+  rows.sort((a, b) => order[a.kind] - order[b.kind] || (b.border || 0) - (a.border || 0) || a.plant.name.localeCompare(b.plant.name));
+  return rows;
+}
+
+// Plants to ask now: expired or missing prices not asked within the cooldown, and never-asked possible plants.
+function rqSheetAskTargets(rows){
+  const cooldownMs = RQ_REQUEST_COOLDOWN_DAYS * 86400000;
+  const recentlyAsked = r => r.askedAt && (Date.now() - new Date(r.askedAt).getTime()) < cooldownMs;
+  return rows.filter(r => (r.kind === 'priced' && r.stale && !r.calc && !recentlyAsked(r)) || r.kind === 'possible');
+}
+// Customers with something new: confirmed brands they have not received yet.
+function rqSheetOutbox(rows){
+  return rqSheetState.customers.map(c => {
+    const own = rqSheetState.linksByCustomer[c.id];
+    const fresh = rows.filter(r => r.kind === 'priced' && r.calc && (!own || own.has(r.pid)) && !r.sentTo.some(x => x.id === c.id));
+    return { c, fresh };
+  });
+}
+
+function rqRenderSheet(){
+  const wrap = document.getElementById('rq_sheet_section');
+  if (!wrap) return;
+  if (rqSheetState.key !== rqSheetKey()){
+    if (!rqSheetState.loading || rqSheetState.pendingKey !== rqSheetKey()){ rqSheetState.pendingKey = rqSheetKey(); rqSheetLoad(); }
+    document.getElementById('rq_sheet_rows').innerHTML = '<div class="empty">Loading…</div>';
+    return;
+  }
+  // Same guard the old sections rely on (see loadPendingPrices' 45s poll): never rebuild the table while a plant's QT
+  // is open from it — its inline slot holds the shared "Customers who buy this" node, and rebuilding would destroy it.
+  // rqCloseCalculator reloads prices when that QT closes, which re-renders the sheet then.
+  if (rqPendingInlineOpenId) return;
+  const cw = document.getElementById('rq_customers_wrap');
+  if (cw && document.getElementById('rq_sheet_rows').contains(cw)) rqReturnCustomersWrapHome();
+  const rows = rqSheetRows();
+  const multi = rqActiveProductFilterIds.length > 1;
+  const priced = rows.filter(r => r.kind === 'priced');
+  const waiting = rows.filter(r => r.kind === 'waiting');
+  const noreply = rows.filter(r => r.kind === 'noreply');
+  const sentCount = priced.filter(r => r.sentTo.length).length;
+  const newCount = priced.filter(r => r.status === 'new').length;
+  const outbox = rqSheetOutbox(rows);
+  const readyCustomers = outbox.filter(o => o.fresh.length);
+  const askTargets = rqSheetAskTargets(rows);
+
+  document.getElementById('rq_sheet_pipeline').innerHTML = [
+    { v: sentCount, l: 'Sent', cls: 'ok' },
+    { v: waiting.length, l: 'Asked', cls: 'warn' },
+    { v: newCount, l: 'New prices', cls: 'hero' },
+    { v: readyCustomers.length, l: 'Outbox', cls: 'hero' },
+  ].map(x => `<div class="stat-card ${x.cls}" style="${x.v ? '' : 'opacity:.55;'}"><div><div class="stat-value">${x.v}</div><div class="stat-label">${x.l}</div></div></div>`).join('');
+
+  const pill = (cls, text) => `<span class="rq-sheet-pill ${cls}">${text}</span>`;
+  const statusHtml = r => {
+    if (r.kind === 'waiting') return pill('wait', `Asked · ${r.hours}h`);
+    if (r.kind === 'noreply') return `${pill('off', `No reply · ${r.hours}h`)} <button type="button" class="qbucket-waiting-row-decline" onclick="rqSheetAsk(['${r.plant.id}'], true)">Remind</button>`;
+    if (r.kind === 'possible') return pill('off', 'Possible');
+    if (r.status === 'sent') return pill('ok', 'Sent');
+    if (r.status === 'ready') return pill('ok', r.sentTo.length ? `Sent to ${r.sentTo.length} · update ready` : 'Ready to send');
+    if (r.status === 'new') return pill('new', 'NEW');
+    if (r.status === 'expired') return pill('exp', `Expired ${rqFmtDate(r.priceDate)}`);
+    return pill('ok', 'Priced');
+  };
+  const rowHtml = r => {
+    // With several products picked, the product goes under the brand (one column fewer — the table stays readable).
+    const productCell = '';
+    const plantCell = `<td style="min-width:170px;"><b>${escapeHtml(r.plant.name)}</b>${multi ? `<span class="muted" style="display:block;font-size:11px;">${escapeHtml(rqProductName(r.pid))}</span>` : ''}</td>`;
+    if (r.kind !== 'priced'){
+      const decline = `<button type="button" class="qbucket-waiting-row-decline" onclick="rqSheetDecline('${r.plant.id}','${r.pid}')">Doesn't produce</button>`;
+      return `<tr class="rq-sheet-dim">${productCell}${plantCell}<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td>${statusHtml(r)}</td><td>${decline}</td></tr>`;
+    }
+    const priceTag = `<span class="pkg-tag price${r.stale ? ' exp' : ''}" style="cursor:pointer;" title="Open QT" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">$${r.price.toFixed(4)}/lb</span>`;
+    const freight = r.freight
+      ? `<span class="num">${r.freight.label}</span>${r.freight.city ? `<span class="muted" style="display:block;font-size:11px;">${escapeHtml(r.freight.city)}</span>` : ''}`
+      : `<button type="button" class="pkg-trigger-btn" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">Set in QT</button>`;
+    const sale = r.calc
+      ? `<span class="num">$${r.calc.salePerLb.toFixed(4)}/lb</span>`
+      : `<button type="button" class="pkg-trigger-btn" onclick="qOpenPendingPlantInline('${r.pid}','${r.plant.id}')">Open QT →</button>`;
+    return `<tr class="${r.status === 'new' ? 'rq-sheet-new' : ''}">${productCell}${plantCell}<td class="num">${priceTag}</td><td>${freight}</td><td>${sale}</td><td>${statusHtml(r)}</td><td></td></tr>
+      ${rqInlineSlotRowHtml(r.plant.id, r.pid, 6)}`;
+  };
+  const heads = ['Brand', 'Plant Price', 'US Freight', 'Sale', 'Status', ''];
+  document.getElementById('rq_sheet_rows').innerHTML = rows.length
+    ? rqTableSection(rows.map(rowHtml).join(''), heads)
+    : '<div class="empty">No plant carries these products yet.</div>';
+  document.getElementById('rq_sheet_count').textContent = `${priced.length} priced · ${waiting.length} waiting${noreply.length ? ' · ' + noreply.length + ' no reply' : ''}`;
+  const askBtn = document.getElementById('rq_sheet_ask_btn');
+  const askPlants = [...new Set(askTargets.map(r => r.plant.id))];
+  askBtn.textContent = askPlants.length ? `Ask ${askPlants.length} plant${askPlants.length === 1 ? '' : 's'} →` : 'Nothing to ask';
+  askBtn.disabled = !askPlants.length;
+
+  document.getElementById('rq_sheet_outbox').innerHTML = outbox.length ? outbox.map(({ c, fresh }) => `
+    <div class="rq-sheet-ob${fresh.length ? ' ready' : ''}">
+      <b>${escapeHtml(c.trade_name)}</b>
+      <span class="muted">${fresh.length ? `${fresh.length} to send: ${fresh.map(r => escapeHtml(r.plant.name)).join(', ')}` : 'Nothing new to send'}</span>
+    </div>`).join('') : '<div class="empty">No customer buys these products yet — link one in Customers.</div>';
+  document.getElementById('rq_sheet_send_email').disabled = !readyCustomers.length;
+  document.getElementById('rq_sheet_send_wa').disabled = !readyCustomers.length;
+}
+
+// Ask: ONE message per plant with all of its products (approved copy), preview first. plantIds limits it (Remind).
+async function rqSheetAsk(plantIds, remind){
+  const rows = rqSheetRows();
+  const targets = remind ? rows.filter(r => r.kind === 'noreply' && plantIds.includes(r.plant.id)) : rqSheetAskTargets(rows);
+  const byPlant = new Map();
+  targets.forEach(r => { if (!byPlant.has(r.plant.id)) byPlant.set(r.plant.id, { plant: r.plant, rows: [] }); byPlant.get(r.plant.id).rows.push(r); });
+  if (!byPlant.size) return;
+  const onDone = (plant, prodRows) => async () => {
+    for (const r of prodRows){
+      try {
+        if (!r.link) await callApi('plant-products-link', { actor: currentActor(), plant_id: plant.id, product_id: r.pid });
+        await callApi('plant-products-request-price', { actor: currentActor(), plant_id: plant.id, product_id: r.pid });
+      } catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${plant.name}: ${e.message}`); }
+    }
+    try { await callApi('sent-offers-search', { offer_sheet: { action: 'mark_asked', actor: currentActor(), product_ids: prodRows.map(r => r.pid), plant_id: plant.id, remind: !!remind } }); } catch (e) {}
+    rqSheetState.key = '';
+    loadPendingPrices();
+  };
+  const emailItems = [], waItems = [];
+  byPlant.forEach(({ plant, rows: prodRows }) => {
+    const specs = prodRows.map(r => rqSpecEnForPlant({ ...plant, rqProductId: r.pid }) || rqProductName(r.pid));
+    const lines = prodRows.map((r, i) => `• ${specs[i]} — ${r.kind === 'priced' && r.priceDate ? `our price on file is from ${rqFmtDate(r.priceDate)} and needs updating` : `we don't have a price on file`}`);
+    const body = `Hi ${rqFirstName(plant.contact_name || plant.name)},\n\nCould you send your current price and pickup location for:\n${lines.join('\n')}\n\nThanks!`;
+    const subject = `${specs.join(' / ')} — price request`;
+    const phone = (plant.whatsapp || plant.phone || '').replace(/\D/g, '');
+    if (plant.email) emailItems.push({ id: plant.id, label: plant.name, to: plant.email, subject, body, fromAlias: 'purchasing', onSent: onDone(plant, prodRows) });
+    else if (phone) waItems.push({ id: plant.id, label: plant.name, phone, body: body + RQ_EMAIL_SIGNATURE, onOpened: onDone(plant, prodRows) });
+  });
+  const openWa = () => { if (waItems.length) rqOpenWaModal(`Ask for prices — WhatsApp (${waItems.length})`, waItems); };
+  if (emailItems.length){
+    rqEmailModalOnClose = openWa;
+    rqOpenEmailModal(`${remind ? 'Remind' : 'Ask for prices'} — ${emailItems.length} plant${emailItems.length === 1 ? '' : 's'}`, emailItems, true, 'Ask for Price');
+  } else openWa();
+}
+
+// Doesn't produce = the existing permanent "Off-Spec" decline (never asked again). A possible plant has no row yet, so
+// the link is created first, then declined.
+async function rqSheetDecline(plantId, productId){
+  const plant = rqAllPlants.find(p => p.id === plantId);
+  let row = rqAllPlantProductRows.find(r => r.plant_id === plantId && r.product_id === productId);
+  if (row) return rqDeclinePlantProduct(row.id, plant ? plant.name : '');
+  if (!(await rqConfirm(`Mark ${plant ? plant.name : 'this plant'} as not producing ${rqProductName(productId)}? It won't be asked for it again.`))) return;
+  try {
+    const res = await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: productId });
+    const linkId = (res.plant_product && res.plant_product.id) || res.id;
+    await callApi('plant-products-update', { actor: currentActor(), id: linkId, declined_at: new Date().toISOString() });
+  } catch (e) { alert(`Couldn't save: ${e.message}`); return; }
+  loadPendingPrices();
+}
+
+// Send: the existing send path, scoped to the brands confirmed on this sheet and the customers who buy these products.
+// Opens (or continues) the server-side sheet first so a plant's later answer can be matched back to it.
+async function rqSheetSend(channel){
+  const pids = rqActiveProductFilterIds.slice();
+  const rows = rqSheetRows().filter(r => r.kind === 'priced' && r.calc && r.confirmed);
+  if (!rows.length) return;
+  try {
+    await callApi('sent-offers-search', { offer_sheet: { action: 'open', actor: currentActor(), product_ids: pids, customer_ids: rqSheetState.customers.map(c => c.id), delivery_dates: [...rqDeliveryDates] } });
+  } catch (e) { /* the send itself never depends on this */ }
+  const saved = { plants: rqSelectedPlants, customers: rqMatchedCustomers, links: rqCustomerProductIds };
+  rqSelectedPlants = rows.map(r => ({ ...r.confirmed, rqProductId: r.pid, rqLastCalc: r.calc, rqIncludeStale: true }));
+  rqMatchedCustomers = rqSheetState.customers;
+  rqCustomerProductIds = rqSheetState.linksByCustomer;
+  const afterSend = () => { rqSheetState.key = ''; setTimeout(() => rqRenderSweepTables(), 1500); };
+  try {
+    if (channel === 'email') await sendOfferEmailToAll(pids, null, { skipChase: true, onSent: afterSend });
+    else await sendOfferWhatsAppToAll(pids, null, { skipChase: true, onSent: afterSend });
+  } finally {
+    rqSelectedPlants = saved.plants; rqMatchedCustomers = saved.customers; rqCustomerProductIds = saved.links;
+  }
+}
+
+// Open sheets, shown under "Search a product above" so a sheet can be picked up again later (e.g. after an alert).
+async function rqRenderOpenSheets(){
+  const el = document.getElementById('rq_open_sheets');
+  if (!el) return;
+  let sheets = [];
+  try { sheets = (await callApi('sent-offers-search', { offer_sheet: { action: 'list' } })).sheets || []; } catch (e) {}
+  el.innerHTML = sheets.length
+    ? `<div class="muted" style="font-size:12px;margin-bottom:8px;">Open sheets</div>` + sheets.map(s =>
+        `<button type="button" class="pkg-trigger-btn" style="margin:0 6px 6px 0;" onclick="rqOpenSheetFromList('${s.product_id}')">${escapeHtml(s.product_name)}</button>`).join('')
+    : '';
+}
+function rqOpenSheetFromList(productIdsCsv){
+  rqActiveProductFilterIds = String(productIdsCsv).split(',').filter(Boolean);
+  rqSetSweepTab('quote');
+  rqRenderSweepTables();
+  renderRqStats();
+}
+
 async function loadPendingPrices(){
   // Real redesign 2026-09-08, explicit ask: Ready to Send/Expired/Updating are always live on
   // the same page now (see rqRenderSweepTables), regardless of what's typed in the search box — the
@@ -2067,6 +2406,7 @@ async function loadPendingPrices(){
   // valued by the real fields Possible needs to tell "never touched" apart from "already asked" or
   // "declined," without a second fetch.
   rqAllPlantProductPairs = new Map(raw.map(r => [r.plant_id + '|' + r.product_id, { current_price: r.current_price, last_requested_at: r.last_requested_at, declined_at: r.declined_at }]));
+  rqAllPlantProductRows = raw.map(r => ({ ...r, plant: rqAllPlants.find(p => p.id === r.plant_id), prod: products.find(p => p.id === r.product_id) })).filter(r => r.plant && r.prod);
   qPendingRows = raw.map(r => {
     const plant = rqAllPlants.find(p => p.id === r.plant_id);
     const prod = products.find(p => p.id === r.product_id);
@@ -3672,6 +4012,7 @@ async function rqCloseCalculator(id){
   // exact same Selling price Quotes does, the moment it's known, from wherever it became known.
   if (p.rqLastCalc && p.rqProductId){
     rqPendingCalcCache[p.id + '|' + p.rqProductId] = p.rqLastCalc;
+    rqSheetConfirmed[p.id + '|' + p.rqProductId] = { ...p, rqCalculatorOpen: false };
   }
   // Real ask 2026-09-04 ("lee esto despacio... la pregunta deberia salir en el momento de
   // enviar, no aqui"): asking whether to also request an updated price moved to the actual send
@@ -4099,6 +4440,33 @@ function buildCustomerOfferTextWithLinks(customerFirstName, withCalc, offersByPl
   return greeting + signalBlock + lines + (pending ? '\n\n' + pending : '') + (overCreditLimit ? '\n\n' + RQ_CREDIT_HOLD_NOTE : '');
 }
 
+// Approved 2026-09-26 (Offer Sheets): a customer who already received this product gets "Lista actualizada" — ONLY the
+// product lines (same line format as the first offer, highest price first), each product under its own title, with
+// "(nuevo)" on the brands they have not received yet. No market line, credit line or pending note.
+function buildCustomerUpdateText(customerFirstName, withCalc, newKeys, offersByPlantId){
+  const greeting = customerFirstName ? `Hola ${customerFirstName},\n\n` : '';
+  const delivery = rqDeliveryDatesText();
+  const byProduct = new Map();
+  withCalc.forEach(it => { const k = it.plant.rqProductId; if (!byProduct.has(k)) byProduct.set(k, []); byProduct.get(k).push(it); });
+  const blocks = [...byProduct.values()].map(items => {
+    const title = `Lista actualizada — ${rqSpecEsForPlant(items[0].plant) || ''}:`;
+    const lines = items.map(({ plant, calc }) => {
+      const staleFlag = plant.rqIncludeStale && plant.rqPriceDate && (rqPriceAgeDays(plant.rqPriceDate) || 0) > RQ_PRICE_STALE_DAYS
+        ? ' (precio preliminar, sujeto a confirmación)' : '';
+      const isNew = newKeys.has(plant.id + '|' + plant.rqProductId) ? ' (nuevo)' : '';
+      const offer = offersByPlantId && offersByPlantId.get(plant.id);
+      const link = offer && offer.short_code ? `\n${APP_ORIGIN}/p/${offer.short_code}` : '';
+      return `${plant.name} — ${rqSpecEsForPlant(plant) || ''} — $${calc.salePerLb.toFixed(4)} USD/lb frontera${delivery ? ' — Entrega ' + delivery : ''}${staleFlag}${isNew}${link}`;
+    }).join('\n\n');
+    return title + '\n\n' + lines;
+  });
+  return greeting + blocks.join('\n\n');
+}
+// A customer "already received this product" when any plant of these products was sent to them before.
+function rqCustomerHadProducts(sentMap, productIds){
+  return Object.keys(sentMap || {}).some(k => !productIds || productIds.includes(k.split('|')[1]));
+}
+
 // One shared line for both the text and HTML customer offer — kept generic (no plant name) since
 // the customer has no context for which supplier that is yet, only that another option may follow.
 function rqPendingNote(){
@@ -4215,19 +4583,22 @@ async function rqPrepareOfferFilesByPlant(filterProductIds, filterPlantIds){
 // Real behavior before this: every send bundled EVERY currently-priced plant, so a plant that just
 // came back from Pending Quotes re-sent every plant a customer already had, every time. One
 // sent_offers fetch for the whole product (not per customer), sliced per customer below.
-async function rqAlreadySentPlantIdsByCustomer(){
+// Keyed plant|product (2026-09-26): the same plant sells several variants (Smithfield Box and Poly) — keyed by plant alone,
+// sending one variant made the other look already sent. productIds defaults to the Building tray's own list, as before.
+async function rqAlreadySentPlantIdsByCustomer(productIds){
   const byCustomer = {};
   // sent-offers-search only ever takes one product_id at a time — never confirmed it accepts an
   // array, so one call per variant currently in the quote instead of guessing at a batch shape the
   // API might not actually support.
-  for (const pid of rqQuoteProductIds){
+  for (const pid of (productIds && productIds.length ? productIds : rqQuoteProductIds)){
     let sentRows = [];
     try { sentRows = (await callApi('sent-offers-search', { product_id: pid, limit: 500 })).results || []; }
     catch (e) { continue; }
     sentRows.forEach(r => {
       if (!byCustomer[r.customer_id]) byCustomer[r.customer_id] = {};
-      const prev = byCustomer[r.customer_id][r.plant_id];
-      if (!prev || r.sent_at > prev) byCustomer[r.customer_id][r.plant_id] = r.sent_at;
+      const key = r.plant_id + '|' + r.product_id;
+      const prev = byCustomer[r.customer_id][key];
+      if (!prev || r.sent_at > prev) byCustomer[r.customer_id][key] = r.sent_at;
     });
   }
   return byCustomer;
@@ -4252,8 +4623,8 @@ function rqUnsentPlantsFor(customerId, sentByCustomer, filterProductIds, filterP
   const ownedProductIds = rqCustomerProductIds[customerId];
   return rqPricedPlantsSorted(filterProductIds, filterPlantIds).filter(({ plant }) => {
     if (ownedProductIds && !ownedProductIds.has(plant.rqProductId)) return false;
-    const sentAt = sentMap[plant.id];
-    return !(sentAt && plant.rqPriceDate && sentAt.slice(0, 10) >= plant.rqPriceDate);
+    const sentAt = sentMap[plant.id + '|' + plant.rqProductId];
+    return !(sentAt && plant.rqPriceDate && sentAt.slice(0, 10) >= String(plant.rqPriceDate).slice(0, 10));
   });
 }
 
@@ -4741,7 +5112,9 @@ async function rqLogSentOfferForPlant(plant, calc, customers, channel){
 async function rqLogSentOffers(customers, channel){
   return rqLogSentOffersRows(rqPricedPlantsSorted(), customers, channel);
 }
-async function rqLogSentOffersRows(withCalc, customers, channel){
+// dryRun (2026-09-26, Offer Sheets): only asks sent-offers-create for the customer's credit warning — nothing is logged.
+// The real log happens once the trader confirms the send (see sendOfferEmailToAll's onSent).
+async function rqLogSentOffersRows(withCalc, customers, channel, dryRun){
   const rows = [];
   withCalc.forEach(({ plant, calc }) => {
     // Prefer the catalog's own clean name over anything typed in a search box — matches what's
@@ -4818,7 +5191,7 @@ async function rqLogSentOffersRows(withCalc, customers, channel){
   const offers = [];
   for (const row of rows) {
     try {
-      const result = await callApi('sent-offers-create', row);
+      const result = await callApi('sent-offers-create', dryRun ? { ...row, dry_run: true } : row);
       if (result.offer) offers.push(result.offer);
       if (result.credit_warning && !warnings.some(w => w.message === result.credit_warning.message)) {
         warnings.push(result.credit_warning);
@@ -4960,7 +5333,8 @@ function rqRenderEmailModal(){
   sendAllBtn.style.gap = '5px';
   const remaining = rqEmailModalItems.filter(it => !it.sent).length;
   sendAllBtn.innerHTML = rqEmailModalItems.length > 1
-    ? (rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make All Offers (${remaining})` : `${RQ_EMAIL_ICON} Emailing All (${remaining})`)
+    ? (rqEmailModalSendLabel ? `${RQ_EMAIL_ICON} ${rqEmailModalSendLabel} — All (${remaining})` // e.g. several plants' price requests: not "offers"
+      : rqEmailModalIsOffer ? `${RQ_EMAIL_ICON} Make All Offers (${remaining})` : `${RQ_EMAIL_ICON} Emailing All (${remaining})`)
     : sendLabel;
 }
 async function rqEmailModalSendOne(i){
@@ -5169,9 +5543,12 @@ async function sendOfferWhatsAppTo(customerId){
 // instead of every variant currently in the building quote — used by Pending Quotes' own per-card
 // Email all (qSendPendingProductEmail) so clicking one card's button never also sends whatever
 // else the trader happens to have added to Request Quote at the same time.
-async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
-  if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds))) return;
-  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
+// opts.skipChase (Offer Sheets): the sheet asks plants with its own grouped request, so the old per-product chase is skipped.
+async function sendOfferEmailToAll(filterProductIds, filterPlantIds, opts){
+  opts = opts || {};
+  if (!rqRequireDeliveryDay()) return;
+  if (!opts.skipChase && !(await rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds))) return;
+  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer(filterProductIds);
   const filesByPlant = await rqPrepareOfferFilesByPlant(filterProductIds, filterPlantIds);
   const withEmail = rqMatchedCustomers.filter(c => c.email);
   const toSend = [];
@@ -5186,12 +5563,15 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
     // The recap can span multiple variants at once — name every distinct one involved instead of
     // one global spec that was only ever right for a single product.
     const subjectSpecs = [...new Set(full.map(({ plant }) => rqSpecEsForPlant(plant)).filter(Boolean))];
-    const { warnings } = await rqLogSentOffersRows(full, [c], 'email');
+    // 2026-09-26: credit check only (dry run) — the offer itself is logged when the trader confirms the send (onSent below).
+    const { warnings } = await rqLogSentOffersRows(full, [c], 'email', true);
     warnings.forEach(w => rqShowNotice(w.message));
-    const signalLine = await rqFetchCustomerSignalLine(c.id, full);
+    const isUpdate = rqCustomerHadProducts(sentByCustomer[c.id], filterProductIds);
+    const newKeys = new Set(unsent.map(({ plant }) => plant.id + '|' + plant.rqProductId));
+    const signalLine = isUpdate ? '' : await rqFetchCustomerSignalLine(c.id, full);
     toSend.push({
-      id: c.id, label: c.trade_name, to: c.email, subject: `Cotización — ${subjectSpecs.join(' / ')}`,
-      body: buildCustomerOfferText(firstName, full, warnings.length > 0, signalLine), full, c,
+      id: c.id, label: c.trade_name, to: c.email, subject: `${isUpdate ? 'Lista actualizada' : 'Cotización'} — ${subjectSpecs.join(' / ')}`,
+      body: isUpdate ? buildCustomerUpdateText(firstName, full, newKeys) : buildCustomerOfferText(firstName, full, warnings.length > 0, signalLine), full, c,
       attachments: full.map(({ plant }) => filesByPlant[plant.id]?.attachment).filter(Boolean),
       downloadFiles: full.map(({ plant }) => filesByPlant[plant.id]?.downloadFile).filter(Boolean),
     });
@@ -5213,15 +5593,17 @@ async function sendOfferEmailToAll(filterProductIds, filterPlantIds){
   rqOpenEmailModal(`Email offer — ${toSend.length} customer${toSend.length > 1 ? 's' : ''}`, toSend.map(it => ({
     id: it.id, label: it.label, to: it.to, subject: it.subject, body: it.body, fromAlias: 'offers',
     attachments: it.attachments, downloadFiles: it.downloadFiles,
-    onSent: async () => { await rqConfirmBullets(it.id, 'email'); },
+    onSent: async () => { await rqLogSentOffersRows(it.full, [it.c], 'email'); await rqConfirmBullets(it.id, 'email'); if (opts.onSent) opts.onSent(it.c); },
   })), true);
 }
 
 // filterProductIds — see sendOfferEmailToAll's own note; same scoping, used by Pending Quotes'
 // per-card WhatsApp all (qSendPendingProductWhatsApp).
-async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds){
-  if (!rqRequireDeliveryDay() || !(await rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds))) return;
-  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer();
+async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds, opts){
+  opts = opts || {};
+  if (!rqRequireDeliveryDay()) return;
+  if (!opts.skipChase && !(await rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds))) return;
+  const sentByCustomer = await rqAlreadySentPlantIdsByCustomer(filterProductIds);
   const withWa = rqMatchedCustomers.filter(c => c.whatsapp || c.phone);
   const items = [];
   // Real ask 2026-09-15: same "log first, get short_code back" order as sendOfferWhatsAppTo —
@@ -5234,11 +5616,15 @@ async function sendOfferWhatsAppToAll(filterProductIds, filterPlantIds){
     const { warnings, offers } = await rqLogSentOffersRows(full, [c], 'whatsapp');
     warnings.forEach(w => rqShowNotice(w.message));
     const offersByPlantId = new Map(offers.map(o => [o.plant_id, o]));
-    const signalLine = await rqFetchCustomerSignalLine(c.id, full);
+    const isUpdate = rqCustomerHadProducts(sentByCustomer[c.id], filterProductIds);
+    const newKeys = new Set(unsent.map(({ plant }) => plant.id + '|' + plant.rqProductId));
+    const signalLine = isUpdate ? '' : await rqFetchCustomerSignalLine(c.id, full);
     items.push({
       id: c.id, label: c.trade_name, phone: (c.whatsapp || c.phone || '').replace(/\D/g, ''),
-      body: buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId, warnings.length > 0, signalLine),
-      onOpened: () => rqConfirmBullets(c.id, 'whatsapp'),
+      body: isUpdate
+        ? buildCustomerUpdateText(rqFirstName(c.contact_name || c.trade_name), full, newKeys, offersByPlantId)
+        : buildCustomerOfferTextWithLinks(rqFirstName(c.contact_name || c.trade_name), full, offersByPlantId, warnings.length > 0, signalLine),
+      onOpened: () => { rqConfirmBullets(c.id, 'whatsapp'); if (opts.onSent) opts.onSent(c); },
     });
   }
   if (!items.length){
