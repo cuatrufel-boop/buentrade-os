@@ -519,7 +519,6 @@
 <script src="js/email-modal.js"></script>
 <script src="js/date-picker.js"></script>
 <script src="js/market-flash-send.js"></script>
-<script src="js/quote-more-clients.js"></script>
 <script>
 // ===== STEP 1: paste your Firebase project config here (see setup notes below) =====
 const firebaseConfig = {
@@ -982,7 +981,7 @@ if (FIREBASE_READY) {
     <div id="ttConfirmTitle" style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;"></div>
     <div id="ttConfirmMessage" style="font-size:13.5px;color:rgba(255,255,255,.65);line-height:1.5;margin-bottom:20px;white-space:pre-line;"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
-      <button id="ttConfirmCancelBtn" onclick="ttConfirmResolve(false)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+      <button onclick="ttConfirmResolve(false)" style="background:transparent;color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
       <button id="ttConfirmOkBtn" class="wa-btn" onclick="ttConfirmResolve(true)" style="padding:8px 18px;font-size:13px;"></button>
     </div>
   </div>
@@ -1089,11 +1088,10 @@ async function requestFinancialStatements(customerEmail, customerName){
 }
 
 let ttConfirmResolveFn = null;
-function showTTConfirm(title, message, okLabel, cancelLabel){
+function showTTConfirm(title, message, okLabel){
   document.getElementById('ttConfirmTitle').textContent = title;
   document.getElementById('ttConfirmMessage').textContent = message;
   document.getElementById('ttConfirmOkBtn').textContent = okLabel;
-  document.getElementById('ttConfirmCancelBtn').textContent = cancelLabel || 'Cancel';
   document.getElementById('ttConfirmOverlay').style.display = 'flex';
   return new Promise(resolve => { ttConfirmResolveFn = resolve; });
 }
@@ -2456,22 +2454,6 @@ async function markInvoiceSentFallback(){
   await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
   const msgEl = document.getElementById('invoiceMsg');
   if (msgEl) msgEl.innerHTML = 'Invoice marked sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
-  await ttQuoteMoreClientsAfterInvoice(ctx);
-}
-// Real ask 2026-09-26: once the Invoice goes out (any of the three send paths), offer to quote the other customers
-// who buy this product with this load's real closed border price — see js/quote-more-clients.js. Asked once per
-// invoice preview, never forced (Skip).
-async function ttQuoteMoreClientsAfterInvoice(ctx){
-  if (!ctx || ctx.qmcAsked || !negoOffer) return;
-  ctx.qmcAsked = true;
-  // The invoice preview sits above every dialog (z-index 1000); the WhatsApp path leaves it open, so close it first.
-  if (document.getElementById('docPreviewOverlay').style.display !== 'none') closeDocPreview();
-  await qmcRun({
-    callApi, actor: currentActor(), offerId: negoOffer.id,
-    // Quiet when there is simply nothing to quote (no other customer, test product) — only a real failure or a real result is shown.
-    notify: (title, detail) => { if (title === 'Offer not saved') btAlert(`${title} — ${detail}`); else if (/ created /.test(detail)) btAlert(detail); },
-    confirm: (count) => showTTConfirm('Quote more clients?', `${count} customer${count === 1 ? ' also buys' : 's also buy'} this product.`, 'Quote', 'Skip'),
-  });
 }
 async function sendInvoicePreviewEmail(){
   const ctx = invoicePreviewCtx;
@@ -2487,7 +2469,6 @@ async function sendInvoicePreviewEmail(){
     // an invoice, so it just became a real Collections item; give the trader the direct link
     // instead of leaving them to remember to go look for it.
     msgEl.innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
-    await ttQuoteMoreClientsAfterInvoice(ctx);
   } catch (e) {
     if (e.cancelled) return;
     const url = gmailComposeUrl(ctx.emails, ctx.subject, ctx.body + EMAIL_SIGNATURE);
@@ -2510,7 +2491,6 @@ async function sendInvoicePreviewWhatsApp(){
     await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
     document.getElementById('invoiceMsg').innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
   } catch (e) { /* best-effort — the WhatsApp send itself already went out above regardless */ }
-  await ttQuoteMoreClientsAfterInvoice(ctx);
 }
 function openInvoiceDocPreview(ctx){
   invoicePreviewCtx = ctx;
@@ -2968,6 +2948,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
   // offers.html's own sendWonDocs uses — nothing sends without the trader confirming each one.
   sessionStorage.setItem('bt_pending_doc_confirm', JSON.stringify({
     order_number: orderNumber, freight_order: result.freight_order, mexican_freight_order: result.mexican_freight_order,
+    sent_offer_id: negoOffer.id,
   }));
   const target = window.parent !== window ? window.parent : window;
   target.location.href = 'orders.html';

@@ -1188,7 +1188,7 @@ async function markWon(id, overrideCreditCheck, confirmedDeliveryDate){
     await btAlert('Error marking won: ' + e.message);
     return;
   }
-  await sendWonDocs(result);
+  await sendWonDocs(result, id);
   loadOffers();
 }
 
@@ -1210,12 +1210,18 @@ async function markWon(id, overrideCreditCheck, confirmedDeliveryDate){
 // list/label photos/USDA papers, requested from carrier AND plant, forwarded to customs) — that's
 // a separate step at Confirm Pickup, not this one. PO/SO/FO are the only documents that belong at
 // the moment an offer becomes an order.
-async function sendWonDocs(result){
+async function sendWonDocs(result, offerId){
   const orderNumber = result.order_number;
   const kinds = ['PO', 'SO'];
   if (result.freight_order || result.mexican_freight_order) kinds.push('FO');
   await runDocSendSequence(orderNumber, kinds);
   showToast(`Orden ${orderNumber} creada`, '');
+  // Real ask 2026-09-26: right after the new order's documents go out → "Quote more clients?" (js/quote-more-clients.js).
+  await qmcRun({ callApi, actor: currentActor(), offerId, fromDisplay: FROM_DISPLAY.offers, notify: qmcQuietNotify, ask: true });
+}
+// Quiet when there is simply nothing to quote (no other customer, test product) — only a real failure or result shows.
+function qmcQuietNotify(title, detail, isError){
+  if (title === 'Offer not saved' || / created /.test(detail)) showToast(title, detail, isError);
 }
 
 // Real addition 2026-09-22, reworked 2026-09-26 as "Quote more clients" — the logic lives in

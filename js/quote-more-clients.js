@@ -1,4 +1,4 @@
-// Quote more clients — shared by offers.html (row menu ⋮) and trading-tool.html (right after the Invoice is sent).
+// Quote more clients — shared by offers.html (row menu ⋮ + right after a new order's PO/SO/FO go out) and orders.html (same, when the order was created from QT).
 // Real ask 2026-09-26: when a load is closed, tell the OTHER customers who buy that product, with the real closed
 // border price and where the load is going (the buyer's city, never the buyer's name) — a real closed deal is what
 // makes it credible. Every message the trader confirms also creates a normal offer (sent_offers, status 'sent') for
@@ -82,14 +82,42 @@ function qmcOfferRow(offer, customer, channel, actor){
   };
 }
 
-// opts: { callApi, actor, offerId, fromDisplay, notify(title, detail, isError), confirm(count) → Promise<bool> | null }
-// confirm is the "Quote more clients?" gate (QT, after the Invoice); the Offers menu calls it without one.
+// "Quote more clients?" — Quote / Skip. Same shared modal classes/buttons as the email review modal (js/email-modal.js).
+function qmcAsk(count){
+  if (!document.getElementById('qmcAskOverlay')){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+<div id="qmcAskOverlay" class="email-modal-overlay" style="display:none;z-index:8000;">
+  <div class="email-modal-box" style="max-width:420px;">
+    <h3>Quote more clients?</h3>
+    <div class="email-modal-from" id="qmcAskMessage"></div>
+    <div class="email-modal-actions">
+      <button onclick="qmcAskResolve(false)" style="background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Skip</button>
+      <button onclick="qmcAskResolve(true)" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Quote</button>
+    </div>
+  </div>
+</div>`;
+    document.body.appendChild(wrap.firstElementChild);
+  }
+  document.getElementById('qmcAskMessage').textContent = `${count} customer${count === 1 ? ' also buys' : 's also buy'} this product.`;
+  document.getElementById('qmcAskOverlay').style.display = 'flex';
+  return new Promise(resolve => { qmcAskResolveFn = resolve; });
+}
+let qmcAskResolveFn = null;
+function qmcAskResolve(val){
+  document.getElementById('qmcAskOverlay').style.display = 'none';
+  if (qmcAskResolveFn) qmcAskResolveFn(val);
+  qmcAskResolveFn = null;
+}
+
+// opts: { callApi, actor, offerId, fromDisplay, notify(title, detail, isError), ask: bool }
+// ask = show "Quote more clients?" first (right after the PO/SO/FO of a new order go out); the Offers menu skips it.
 async function qmcRun(opts){
   const { callApi, actor, offerId, fromDisplay, notify } = opts;
   const { offer, candidates, error } = await qmcLoad(callApi, offerId);
   if (error){ notify('Quote more clients', error, true); return; }
   if (!candidates.length){ notify('Quote more clients', 'No other customer is linked to this product.', false); return; }
-  if (opts.confirm && !(await opts.confirm(candidates.length))) return;
+  if (opts.ask && !(await qmcAsk(candidates.length))) return;
 
   let buyerCity = '';
   try { buyerCity = (((await callApi('customers-search', { ids: [offer.customer_id] })).results || [])[0] || {}).city || ''; } catch (e) {}

@@ -469,6 +469,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
+<script src="js/quote-more-clients.js"></script>
 <script src="js/date-picker.js"></script>
 <script>
 const firebaseConfig = {
@@ -3725,11 +3726,16 @@ async function runPendingWonDocConfirm(){
   sessionStorage.removeItem('bt_pending_doc_confirm');
   let pending;
   try { pending = JSON.parse(raw); } catch (e) { return; }
-  const { order_number, freight_order, mexican_freight_order } = pending;
+  const { order_number, freight_order, mexican_freight_order, sent_offer_id } = pending;
   if (!order_number) return;
   const kinds = ['PO', 'SO'];
   if (freight_order || mexican_freight_order) kinds.push('FO');
   await runDocSendSequence(order_number, kinds);
+  // Real ask 2026-09-26: same "Quote more clients?" as offers.html's sendWonDocs, right after the documents go out.
+  if (sent_offer_id) await qmcRun({
+    callApi, actor: currentActor(), offerId: sent_offer_id, fromDisplay: FROM_DISPLAY.offers, ask: true,
+    notify: (title, detail) => { if (title === 'Offer not saved') btAlert(`${title} — ${detail}`); else if (/ created /.test(detail)) btAlert(detail); },
+  });
 }
 
 // ============ WHATSAPP SEND (real PDF, never a summary image) — same engine as offers.html.
