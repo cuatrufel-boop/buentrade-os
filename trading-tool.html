@@ -314,6 +314,11 @@
   }
   .prod-row .prod-top{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;}
   .prod-row .prod-top input[type=text]{flex:1 1 auto; min-width:0;}
+  /* Real ask 2026-09-26 ("el producto centrado", every QT the same): a long product name wraps, centered, instead of
+     being cut off and pushed left by a one-line input. */
+  .prod-row .prod-top textarea.prod-title{flex:1 1 auto; min-width:0; border:none; outline:none; background:transparent; resize:none; overflow:hidden;
+    color:var(--ink); text-align:center; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; line-height:1.35; padding:4px 0;
+    field-sizing:content; min-height:1.35em;}
   .prod-row .prod-top input[type=text]{
     font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; padding:4px 0; flex:1;
   }
@@ -759,6 +764,9 @@ if (FIREBASE_READY) {
     </div>
     </div>
 
+    <!-- Real ask 2026-09-26: Quotes' "Confirm Price" sits in this same middle slot (was in the overlay header). Shown only
+         when quotes.html embeds this with confirmPrice=1; calls back into quotes.html (rqConfirmPriceFromTool). -->
+    <button id="qbConfirmPriceBtn" class="wa-btn" onclick="window.parent.rqConfirmPriceFromTool && window.parent.rqConfirmPriceFromTool()" title="Saves this price and closes the calculator" style="grid-column:2;display:none;height:32px;padding:0 16px;font-size:12.5px;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;">✓ Confirm Price</button>
     <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="grid-column:2;display:none;height:32px;padding:0 16px;font-size:12.5px;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;">✓ Create Order</button>
 
     <div style="grid-column:3;display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:8px;min-width:0;">
@@ -1259,6 +1267,10 @@ function ttCarrierModalResolve(val){
 // if the user had typed them in themselves; never touches the calc() formula below.
 const __qp = new URLSearchParams(location.search);
 if (__qp.get('embed') === '1') document.documentElement.classList.add('embed-mode');
+if (__qp.get('confirmPrice') === '1') document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('qbConfirmPriceBtn').style.display = 'inline-flex';
+  document.getElementById('qbBar').classList.remove('qb-centered');
+});
 // Set before applyEmbedParams's first call below (needs to exist that early) — true once a real
 // per-plant freight rate picker has taken over the US Freight field, so Quotes' own freight/
 // hideFreight params (still sent on every sync for other reasons — Docs toggle, delivery
@@ -1324,7 +1336,7 @@ function buildProductRows(){
     div.innerHTML = `
       ${products.length>1 ? `<button class="rm-btn" onclick="removeProduct(${i})">×</button>` : ''}
       <div class="prod-top">
-        <input type="text" value="${p.name}" oninput="updateProd(${i},'name',this.value)">
+        <textarea class="prod-title" rows="1" oninput="updateProd(${i},'name',this.value);ttFitTitle(this)">${ttEscapeHtml(p.name)}</textarea>
       </div>
       <div class="section-label" style="margin:0 0 6px;">🇺🇸 Border</div>
       <div class="prod-grid">
@@ -1366,6 +1378,7 @@ function buildProductRows(){
     `;
     body.appendChild(div);
   });
+  body.querySelectorAll('textarea.prod-title').forEach(ttFitTitle);
   document.getElementById('addProdBtn').disabled = products.length>=MAX_PRODUCTS;
   document.getElementById('rmProdBtn').disabled = products.length<=1;
   const tpRow = document.getElementById('targetProfitRow');
@@ -1403,6 +1416,13 @@ function updateProductOutputs(){
   });
 }
 
+// Grows the product title to show the whole name (wrapped, centered) — see .prod-title.
+// CSS field-sizing does it natively; the manual fallback only runs on browsers without it, and only while visible.
+function ttFitTitle(el){
+  if (window.CSS && CSS.supports && CSS.supports('field-sizing', 'content')) return;
+  if (!el.offsetParent) return;
+  el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';
+}
 function updateProd(i, field, val){
   if(field==='name'){ products[i].name = val; calc(); return; }
   if(field==='sellMx'){ products[i].sellMxManual = true; }

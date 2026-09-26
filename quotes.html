@@ -701,10 +701,12 @@
   .tt-card{border-radius:16px;overflow:hidden;margin-top:8px;box-shadow:0 8px 24px rgba(15,31,51,.1);border:1px solid var(--line);}
   /* Same full-screen Trading Tool viewer as Offers — one shared overlay, not one per plant row. */
   .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:850;display:none;flex-direction:column;}
-  .tt-overlay-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  /* Real ask 2026-09-26 ("todos los QTs iguales"): same QT overlay header as offers.html/orders.html — title centered,
+     "✕ Close" on the right; Confirm Price moved into the QT's own top bar (middle slot, like Create Order). */
+  .tt-overlay-head{display:grid;grid-template-columns:1fr minmax(0,auto) 1fr;align-items:center;gap:14px;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
   .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:10px;}
-  .tt-overlay-close{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
-  .tt-overlay-close:hover{background:rgba(255,255,255,.24);}
+  .tt-overlay-close{font-family:inherit;font-size:11px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer;border:1px solid var(--blue);background:transparent;color:var(--blue-bright);display:flex;align-items:center;gap:5px;transition:background .12s;flex-shrink:0;white-space:nowrap;}
+  .tt-overlay-close:hover{background:var(--blue-light);}
   .tt-overlay-body{flex:1;min-height:0;position:relative;}
   .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   .tt-brand-header{text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;}
@@ -1247,11 +1249,9 @@ auth.onAuthStateChanged(user => {
 
 <div id="rq_tt_overlay" class="tt-overlay">
   <div class="tt-overlay-head">
-    <div class="tt-overlay-title" id="rq_tt_overlay_title"></div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div id="rq_tt_overlay_action"></div>
-      <button class="tt-overlay-close" onclick="rqCloseCalculator()" title="Close">✕</button>
-    </div>
+    <div></div>
+    <div class="tt-overlay-title" id="rq_tt_overlay_title" style="justify-content:center;min-width:0;"></div>
+    <button class="tt-overlay-close" onclick="rqCloseCalculator()" title="Close" style="justify-self:end;">✕ Close</button>
   </div>
   <div class="rq-tt-overlay-fields" id="rq_tt_overlay_fields"></div>
   <div class="tt-overlay-body" id="rq_tt_overlay_body"></div>
@@ -3518,8 +3518,15 @@ function rqBuildToolParams(p){
 
 function rqBuildToolUrl(p){
   const params = rqBuildToolParams(p);
+  params.set('confirmPrice', '1'); // Confirm Price lives in the QT's own top bar (middle slot) — see rqConfirmPriceFromTool
   params.set('v', String(Date.now())); // cache-bust so the embedded Trading Tool always loads the latest file
   return 'trading-tool.html?' + params.toString();
+}
+// Called by the QT's own "Confirm Price" button (trading-tool.html, embedded here) — same path the header button used:
+// rqToggleCalculator on the plant whose calculator is open, which saves the price and closes the overlay.
+async function rqConfirmPriceFromTool(){
+  const p = rqSelectedPlants.find(x => x.rqCalculatorOpen);
+  if (p) await rqToggleCalculator(p.id);
 }
 
 // Manual double-click detection (two clicks within 500ms) instead of relying on the browser's
@@ -3588,8 +3595,6 @@ async function rqToggleCalculator(id){
     // below (the plant list itself, and the bulk buttons in "Customers who buy this"). Confirm Price
     // just closes the calculator — the price it computed is already saved (rqCalcRow/rqLastCalc)
     // and now round-trips correctly on reopen (see the 'sell' param in rqBuildToolParams).
-    document.getElementById('rq_tt_overlay_action').innerHTML =
-      `<button type="button" class="rq-send-offer-btn" style="width:auto;padding:8px 16px;font-size:12.5px;border-radius:9px;" onclick="rqToggleCalculator('${id}')">✅ Confirm Price</button>`;
     document.getElementById('rq_tt_overlay').style.display = 'flex';
     rqStartPolling();
     const nameEl = document.getElementById('rq_plant_name_' + id);
@@ -3660,7 +3665,6 @@ async function rqCloseCalculator(id){
   p.rqCalculatorOpen = false;
   document.getElementById('rq_tt_overlay').style.display = 'none';
   document.getElementById('rq_tt_overlay_body').innerHTML = '';
-  document.getElementById('rq_tt_overlay_action').innerHTML = '';
   document.getElementById('rq_tt_overlay_fields').innerHTML = '';
   const nameEl = document.getElementById('rq_plant_name_' + p.id);
   if (nameEl) nameEl.classList.remove('tt-open');
