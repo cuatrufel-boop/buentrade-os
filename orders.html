@@ -97,6 +97,7 @@
   .tt-overlay-close:active{transform:scale(.94);}
   .tt-overlay-close:focus-visible{outline:2px solid #5AAAFF;outline-offset:2px;}
   .tt-overlay-body{flex:1;min-height:0;position:relative;}
+  .tt-logo-inline{width:auto;max-width:52px;height:32px;object-fit:contain;background:#fff;border-radius:7px;padding:4px;box-sizing:border-box;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
   .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   /* Real preview screen for PO/SO/FO — same tt-overlay shell the Trading Tool iframe already uses
      (full-screen dark header + body), not a new container. Ported from offers.html's doc preview,
@@ -728,7 +729,10 @@ auth.onAuthStateChanged(user => {
 <div id="ttOverlay" class="tt-overlay">
   <div class="tt-overlay-head">
     <div></div>
-    <div class="tt-overlay-title" id="ttOverlayTitle" style="text-align:center;"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;min-width:0;">
+      <img id="ttOverlayLogo" class="tt-logo-inline" alt="" style="display:none;">
+      <div class="tt-overlay-title" id="ttOverlayTitle"></div>
+    </div>
     <button class="tt-overlay-close" onclick="closeTTOverlay()" title="Close" aria-label="Close" style="justify-self:end;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <div class="tt-overlay-body" id="ttOverlayBody"></div>
@@ -2755,8 +2759,19 @@ async function acceptSignature(){
 let ttOverlayResolve = null;
 // Real ask 2026-09-26 ("dentro del QT solo debería ver Close"): embed=1 hides QT's own app header/nav (CSS only),
 // same as every other QT overlay — the overlay's own title + close are all that's needed here.
+// Real ask 2026-09-26 ("orders QT no tiene producto ni marca"): same header as Offers' QT — plant logo + "product — plant
+// — customer" — built from this order's own row; the caller's title is only the fallback if the order isn't loaded.
 function openTTOverlay(sentOfferId, title){
-  document.getElementById('ttOverlayTitle').textContent = title || '';
+  const o = statusOrders.find(x => x.sent_offer_id === sentOfferId);
+  document.getElementById('ttOverlayTitle').textContent = o
+    ? `${(o.product_spec || o.product_name) || ''} — ${o.plant_name || ''} — ${o.customer_name || ''}` : (title || '');
+  const logoEl = document.getElementById('ttOverlayLogo');
+  logoEl.style.display = 'none'; logoEl.src = '';
+  if (o && o.plant_id) callApi('plants-search', { id: o.plant_id }).then(r => {
+    const plant = (r.results || [])[0];
+    const logo = plant && (plant.logo_url || plant.logo_url_dark);
+    if (logo && document.getElementById('ttOverlay').style.display !== 'none'){ logoEl.src = logo; logoEl.style.display = 'block'; }
+  }).catch(() => {});
   document.getElementById('ttOverlayBody').innerHTML =
     `<iframe id="ttIframe" src="trading-tool.html?${new URLSearchParams({ offerId: sentOfferId, embed: '1', v: String(Date.now()) }).toString()}"></iframe>`;
   document.getElementById('ttOverlay').style.display = 'flex';

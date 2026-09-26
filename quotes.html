@@ -713,6 +713,7 @@
   .tt-overlay-close:active{transform:scale(.94);}
   .tt-overlay-close:focus-visible{outline:2px solid #5AAAFF;outline-offset:2px;}
   .tt-overlay-body{flex:1;min-height:0;position:relative;}
+  .tt-logo-inline{width:auto;max-width:52px;height:32px;object-fit:contain;background:#fff;border-radius:7px;padding:4px;box-sizing:border-box;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
   .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
   .tt-brand-header{text-align:center;font-size:15px;font-weight:700;color:var(--navy);background:var(--blue-light);padding:9px 14px;}
   .rq-tt-action-bar{display:flex;gap:8px;flex:0 0 auto;}
@@ -3588,7 +3589,7 @@ async function rqToggleCalculator(id){
     // in the OS uses, not the one made for sitting directly on a dark bar.
     const ttSpec = rqSpecEnForPlant(p);
     document.getElementById('rq_tt_overlay_title').innerHTML =
-      `${(p.logo_url || p.logo_url_dark) ? `<div class="rq-tt-logo"><img src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt=""></div>` : ''}<span>${escapeHtml(p.name)}${ttSpec ? ' — ' + escapeHtml(ttSpec) : ''}</span>`;
+      `${(p.logo_url || p.logo_url_dark) ? `<img class="tt-logo-inline" src="${escapeHtml(p.logo_url || p.logo_url_dark)}" alt="">` : ''}<span>${ttSpec ? escapeHtml(ttSpec) + ' — ' : ''}${escapeHtml(p.name)}</span>`; // same look/order as Offers' QT header (2026-09-26)
     document.getElementById('rq_tt_overlay_fields').innerHTML = rqPlantFieldsHtml(p);
     document.getElementById('rq_tt_overlay_body').innerHTML = `
       <iframe id="rq_iframe_${id}" src="${rqBuildToolUrl(p)}" onload="rqOnIframeLoaded('${id}')"></iframe>
