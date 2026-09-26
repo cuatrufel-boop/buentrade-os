@@ -98,6 +98,7 @@
     background:linear-gradient(90deg, transparent, #E8B54C 25%, #E8B54C 75%, transparent);
     opacity:.55;
   }
+  #qbBar.qb-centered{display:flex !important; justify-content:center;}
   .qb-group{display:flex; flex-direction:column; align-items:center; gap:6px; padding:2px 10px; flex-shrink:0;}
   .qb-group-label{
     font-size:8.5px; color:rgba(255,255,255,.6); font-family:'Inter',sans-serif;
@@ -695,9 +696,14 @@ if (FIREBASE_READY) {
          middle) so Create Order sits in the true mathematical center regardless of how much sits
          on either side. negoQbLeft/negoQbRight are always toggled together (see negoInit) so a
          hidden Plant/Customer group never unbalances the two sides. -->
-    <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;width:100%;overflow-x:auto;">
+    <!-- Real bug 2026-09-26 ("está contra la izquierda, céntralo, globalízalo"): with Create Order hidden (a won
+         offer, a read-only view, the plain tool) the grid only had two items, so the right group auto-placed into the
+         middle "auto" column and the whole bar sat left. Each side is now pinned to its own column, and whenever Create
+         Order isn't there the bar is one centered row (.qb-centered) — Create Order still sits in the exact middle when
+         it is shown (negoInit removes the class). -->
+    <div id="qbBar" class="qb-centered" style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;width:100%;overflow-x:auto;">
 
-    <div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:nowrap;gap:8px;min-width:0;">
+    <div style="grid-column:1;display:flex;align-items:center;justify-content:flex-end;flex-wrap:nowrap;gap:8px;min-width:0;">
 <div id="negoQbLeft" style="display:none;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Plant</span>
         <button onclick="negoSendToPlant('email')" title="Email Plant" style="background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:8px;width:32px;height:32px;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
@@ -753,9 +759,9 @@ if (FIREBASE_READY) {
     </div>
     </div>
 
-    <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="display:none;height:32px;padding:0 16px;font-size:12.5px;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;">✓ Create Order</button>
+    <button id="negoCreateOrderBtn" class="wa-btn" onclick="negoSaveDefinitive()" title="Creates the PO/SO/FO and marks this offer won" style="grid-column:2;display:none;height:32px;padding:0 16px;font-size:12.5px;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;">✓ Create Order</button>
 
-    <div style="display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:8px;min-width:0;">
+    <div style="grid-column:3;display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:8px;min-width:0;">
 
     <div class="qb-group">
       <div class="qb-group-label">Finance Cost</div>
@@ -2221,6 +2227,7 @@ async function negoInit(){
     document.getElementById('negoQbLeft').style.display = 'flex';
     document.getElementById('negoQbRight').style.display = 'flex';
     document.getElementById('negoCreateOrderBtn').style.display = 'inline-flex';
+    document.getElementById('qbBar').classList.remove('qb-centered');
   }
   // Real race condition caught live 2026-09-20: the page's very first calc() (triggered
   // synchronously by the URL's own cost/sell query params, before this async function ever
