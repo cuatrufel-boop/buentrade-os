@@ -259,10 +259,13 @@ function bcEnsureWaAttachModal(){
   const wrap = document.createElement('div');
   wrap.innerHTML = `
 <div id="bcWaAttachModalOverlay" class="email-modal-overlay" style="display:none;">
-  <div class="email-modal-box" style="max-width:440px;text-align:center;">
-    <h3>PDF descargado</h3>
-    <div class="email-modal-from" id="bcWaAttachModalFilename" style="font-weight:700;"></div>
-    <div class="email-modal-from">Se acaba de descargar a tu computadora. Al abrir WhatsApp, arrástralo (o adjúntalo con el clip) dentro del chat antes de enviar el mensaje — WhatsApp no permite adjuntarlo automáticamente.</div>
+  <!-- Real ask 2026-09-26: "sin diseño buentrade" — the shared .email-modal-box is only 6% white, so over a light
+       page this read as a washed-out grey card with faded text. Same opaque navy glass + gold border as QT's
+       ttConfirmOverlay (fixed for the same complaint 2026-09-21). -->
+  <div class="email-modal-box" style="max-width:440px;text-align:center;background:rgba(15,31,51,.92);box-shadow:0 24px 60px rgba(4,12,26,.55);">
+    <h3 style="color:#fff;">PDF descargado</h3>
+    <div class="email-modal-from" id="bcWaAttachModalFilename" style="font-weight:700;color:#fff;"></div>
+    <div class="email-modal-from" style="color:rgba(255,255,255,.75);line-height:1.5;">Se acaba de descargar a tu computadora. Al abrir WhatsApp, arrástralo (o adjúntalo con el clip) dentro del chat antes de enviar el mensaje — WhatsApp no permite adjuntarlo automáticamente.</div>
     <div class="email-modal-actions" style="justify-content:center;">
       <button onclick="bcWaAttachModalContinue()" style="background:#0F8A5F;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:13px;cursor:pointer;">Entendido, abrir WhatsApp</button>
     </div>
