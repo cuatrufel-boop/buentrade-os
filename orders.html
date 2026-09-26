@@ -2753,10 +2753,12 @@ async function acceptSignature(){
 // once loaded) and resolves its promise when the trader closes it, so callers can wait for the
 // real weight/costs to actually be saved before moving on to the next step.
 let ttOverlayResolve = null;
+// Real ask 2026-09-26 ("dentro del QT solo debería ver Close"): embed=1 hides QT's own app header/nav (CSS only),
+// same as every other QT overlay — the overlay's own title + close are all that's needed here.
 function openTTOverlay(sentOfferId, title){
   document.getElementById('ttOverlayTitle').textContent = title || '';
   document.getElementById('ttOverlayBody').innerHTML =
-    `<iframe id="ttIframe" src="trading-tool.html?${new URLSearchParams({ offerId: sentOfferId, v: String(Date.now()) }).toString()}"></iframe>`;
+    `<iframe id="ttIframe" src="trading-tool.html?${new URLSearchParams({ offerId: sentOfferId, embed: '1', v: String(Date.now()) }).toString()}"></iframe>`;
   document.getElementById('ttOverlay').style.display = 'flex';
   return new Promise(resolve => { ttOverlayResolve = resolve; });
 }
