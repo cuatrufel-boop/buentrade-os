@@ -203,6 +203,19 @@ const EMAIL_AUTOMATION_ACTOR = "email-automation@buentradegroup.com";
 // reuses the SAME Gmail OAuth credentials this function already holds to read plant mail, now also
 // used to send from purchasing@buentradegroup.com — one already-authenticated account, one less
 // external dependency.
+// Same push-send call shape as pickup-docs-emails-poll/shipment-alerts-poll (isolated runtimes, no shared import).
+// Opens Quotes on Find Product with that product picked (quotes.html reads ?products=).
+const API_ROOT = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/";
+const API_KEY = Deno.env.get("API_PUBLISHABLE_KEY") || "sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe";
+const APP_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
+async function sendSheetPush(actor: string, title: string, body: string, productId: string) {
+  const url = `${APP_ORIGIN}/quotes.html?products=${productId}`;
+  await fetch(API_ROOT + "push-send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + API_KEY, apikey: API_KEY },
+    body: JSON.stringify({ actor, title, body, url }),
+  }).catch(() => {});
+}
 const TRADER_NOTIFICATION_EMAILS = (Deno.env.get("TRADER_NOTIFICATION_EMAILS") || "").split(",").map((s) => s.trim()).filter(Boolean);
 
 async function getAccessToken(): Promise<string> {
@@ -591,6 +604,9 @@ Deno.serve(async (req) => {
       // run actually applied — requested or not — goes here so the notification below always fires
       // once real prices land, not only the narrower "you were waiting on this" case above.
       const allAppliedForNotification: { name: string; price: number }[] = [];
+      // Offer Sheets part 4 (2026-09-26): every product whose price this email applied, with the saved row — used below to
+      // mark any open sheet that asked this plant as answered and alert whoever opened that sheet.
+      const appliedForSheets = new Map<string, { name: string; price: number; locationId: string | null; freightIncluded: boolean }>();
       // Real fix for a real 51-item Tyson list hitting a Postgres connection rate limit partway
       // through: these three now run IN-PROCESS (see _shared/productMatcher.ts,
       // applyPlantProductMatch.ts, pendingMatch.ts) sharing this function's own single `sql`
@@ -618,6 +634,12 @@ Deno.serve(async (req) => {
               resolvedForTrader.push({ name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price });
             }
             allAppliedForNotification.push({ name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price });
+            if ("applied" in applyResult) {
+              appliedForSheets.set(matchRes.product.id, {
+                name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price,
+                locationId: applyResult.plant_product.location_id || null, freightIncluded: applyResult.plant_product.freight_included === true,
+              });
+            }
             applied++;
           } else {
             await createPendingMatch(sql, HMAC_SECRET, {
@@ -679,6 +701,36 @@ Deno.serve(async (req) => {
           try { await sendGmailNotification(authHeaders, to, subject, body); }
           catch (e) { errors.push(`notify ${to}: ${e}`); }
         }
+      }
+
+      // Offer Sheets part 4: this plant answered an open sheet that asked it → mark answered and alert the sheet's owner.
+      // The sheet itself shows the new price as NEW on its own (read live); this is only the "it just came in" signal.
+      // Never fails the poll run — a missed alert must not block the next email.
+      if (appliedForSheets.size) {
+        try {
+          const answered = await sql`
+            update offer_sheet_plants sp set answered_at = now()
+            from offer_sheets s
+            where s.id = sp.sheet_id and s.status = 'open' and sp.plant_id = ${plant.id}
+              and sp.asked_at is not null and sp.answered_at is null
+              and s.product_id = any(${[...appliedForSheets.keys()]}::uuid[])
+            returning s.product_id, s.created_by`;
+          for (const row of answered) {
+            const a = appliedForSheets.get(row.product_id);
+            if (!a || !row.created_by) continue;
+            let detail = `$${a.price.toFixed(4)}/lb. Pick the freight yourself on the sheet.`;
+            if (a.freightIncluded) {
+              detail = `$${a.price.toFixed(4)}/lb (freight included). Confirm the sale price to add it to the Outbox.`;
+            } else if (a.locationId) {
+              const [loc] = await sql`select city from locations where id = ${a.locationId}`;
+              const [rate] = await sql`select id from provider_rates where service_type = 'us_freight' and location_id = ${a.locationId} limit 1`;
+              detail = rate
+                ? `$${a.price.toFixed(4)}/lb · ${loc?.city || ""} (freight set). Confirm the sale price to add it to the Outbox.`
+                : `$${a.price.toFixed(4)}/lb · ${loc?.city || ""}, no freight rate on file. Pick the freight yourself on the sheet.`;
+            }
+            await sendSheetPush(row.created_by, `${plant.name.trim()} answered — ${a.name}`, detail, row.product_id);
+          }
+        } catch (e) { errors.push(`offer sheet alert: ${e}`); }
       }
 
       await sql`

@@ -88,6 +88,25 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "missing_sale_price", message: "Cannot create an offer with no sale price (sale_per_lb) set." }, 400);
     }
 
+    // Real ask 2026-09-26 (Offer Sheets): an offer is logged only once the trader confirms the send, not while the message
+    // is still being built. dry_run answers the one thing the message needs beforehand — is this customer over their
+    // credit limit (the "Carga sujeta a pago…" line) — without creating anything. Same computeCustomerExposure as below.
+    if (body.dry_run === true) {
+      let creditWarning = null;
+      if (total_sale != null) {
+        const [customer] = await sql`select trade_name from customers where id = ${customer_id}`;
+        const exposure = await computeCustomerExposure(sql, customer_id, earliestDeliveryDate(delivery_dates));
+        if (customer && exposure && exposure.outstanding + Number(total_sale) > exposure.creditLimit) {
+          creditWarning = {
+            message: `⚠ ${customer.trade_name} tiene $${exposure.outstanding.toLocaleString()} USD pendientes de pago (límite de crédito: $${exposure.creditLimit.toLocaleString()} USD). Para liberar cupo debemos ponernos al día con el pago de las facturas vencidas.`,
+            outstanding_balance: exposure.outstanding, offer_amount: total_sale, credit_limit: exposure.creditLimit,
+            projected_total: exposure.outstanding + Number(total_sale),
+          };
+        }
+      }
+      return jsonResponse({ dry_run: true, credit_warning: creditWarning });
+    }
+
     // A double-click on Send (or a retried network request) replays the exact same key — return
     // the offer already created instead of logging the send twice.
     if (idempotency_key) {
