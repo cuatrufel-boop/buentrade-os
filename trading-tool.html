@@ -722,13 +722,22 @@ if (FIREBASE_READY) {
       </div>
     </div>
 
-    <!-- Real ask 2026-09-14: "no agrandes este campo solo ponlo en la mitad entre terms y finance"
-         — moved out of the row below (where it stretched across, alone on its own line) to sit
-         inline right here, same compact height as every other control on this row. -->
-    <button id="createShareInvoiceBtn" class="wa-btn" onclick="createAndShareInvoice()" title="Creates and sends the customer invoice" style="display:none;height:32px;padding:0 12px;font-size:11.5px;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;">
+    <!-- Real ask 2026-09-14: "no agrandes este campo solo ponlo en la mitad entre terms y finance".
+         Real ask 2026-09-26: "que quede centrado, mira los campos del QT original" — built like the Exchange Rate
+         group (group label row + item label row kept invisible) so the button sits on the same line as the input
+         boxes, same 27px height. Shown only once the load is Delivered (see realCostsInit). -->
+    <div id="createShareInvoiceWrap" class="qb-group" style="display:none;">
+      <div class="qb-group-label" style="visibility:hidden;">Invoice</div>
+      <div class="qb-group-row">
+        <div class="qb-item" style="width:auto;">
+          <label style="visibility:hidden;">Invoice</label>
+          <button id="createShareInvoiceBtn" class="wa-btn" onclick="createAndShareInvoice()" title="Creates and sends the customer invoice" style="display:inline-flex;height:27px;padding:0 12px;font-size:11.5px;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       Invoice
     </button>
+        </div>
+      </div>
+    </div>
 
     <div id="qbMxFxWrap" style="display:contents;">
     <div class="qb-group">
@@ -2374,8 +2383,12 @@ function buildInvoicePdfUnsigned(composed, so, customer, orderNumber){
   return { doc, finalWeight, finalTotal };
 }
 
+// Real ask 2026-09-26: the Invoice belongs to Closing — only once the load is Delivered (same gate as the Invoice
+// milestone in orders.html), never from a QT opened for PO/SO/FO.
 async function realCostsInit(){
-  document.getElementById('createShareInvoiceBtn').style.display = 'inline-flex';
+  let shipment = null;
+  try { shipment = ((await callApi('shipments-search', { order_number: negoOffer.order_number, limit: 1 })).results || [])[0] || null; } catch (e) {}
+  document.getElementById('createShareInvoiceWrap').style.display = (shipment && shipment.status === 'delivered') ? 'flex' : 'none';
 }
 
 // Real, confirmed production URL (2026-09-06) — never guessed. Netlify's own free-plan credit
