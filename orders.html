@@ -736,7 +736,7 @@ auth.onAuthStateChanged(user => {
       <div class="tt-overlay-title" id="docPreviewTitle"></div>
       <div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;" id="docPreviewSub"></div>
     </div>
-    <button class="tt-overlay-close" onclick="closeDocPreview()" title="Close" style="justify-self:end;">✕ Close</button>
+    <button class="tt-overlay-close" onclick="closeDocPreviewByUser()" title="Close" style="justify-self:end;">✕ Close</button>
   </div>
   <div class="tt-overlay-body" style="display:flex;flex-direction:column;">
     <div id="docPreviewCompare" style="display:none;flex-shrink:0;padding:10px 20px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.12);"></div>
@@ -3430,6 +3430,17 @@ function openInvoicePreview(orderNumber, fileUrl, filename){
 // offers.html's runDocSendSequence, used both for a single stepper-icon click (queue of one) and
 // for runPendingWonDocConfirm's PO -> SO -> FO chain right after a deal is won. ============
 let docSeq = null; // { orderNumber, queue: [kinds left], resolve, total }
+
+// Real bug 2026-09-26: closing the preview (✕) in the middle of the PO → SO → FO sequence left runDocSendSequence's
+// promise pending forever, so nothing after it ran (the "Quote more clients?" question never appeared once the
+// trader closed after sending the PO). Closing now ends the sequence; nothing is sent by closing.
+function closeDocPreviewByUser(){
+  closeDocPreview();
+  if (!docSeq) return;
+  const resolve = docSeq.resolve;
+  docSeq = null;
+  resolve();
+}
 
 function docSeqAdvance(){
   if (!docSeq) return;

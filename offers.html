@@ -643,14 +643,14 @@ auth.onAuthStateChanged(user => {
 <div id="menuOverlay" class="menu-overlay" style="display:none;" onclick="closeFloatingMenus()">
   <div id="docsMenu" class="docs-menu" style="display:none;" onclick="event.stopPropagation()"></div>
 </div>
-<div id="docPreviewOverlay" class="menu-overlay" style="display:none;" onclick="closeDocPreview()">
+<div id="docPreviewOverlay" class="menu-overlay" style="display:none;" onclick="closeDocPreviewByUser()">
   <div class="doc-preview-box" onclick="event.stopPropagation()">
     <div class="doc-preview-head">
       <div>
         <div class="doc-preview-title" id="docPreviewTitle">Purchase Order</div>
         <div class="doc-preview-sub" id="docPreviewSub"></div>
       </div>
-      <button class="row-menu-btn" onclick="closeDocPreview()" title="Close" style="width:32px;height:32px;">✕</button>
+      <button class="row-menu-btn" onclick="closeDocPreviewByUser()" title="Close" style="width:32px;height:32px;">✕</button>
     </div>
     <div class="doc-preview-body" id="docPreviewBody">
       <div class="doc-preview-loading" id="docPreviewLoading">Building document…</div>
@@ -1376,6 +1376,17 @@ function closeDocPreview(){
 // This reuses the exact same preview screen the row-menu already shows for a single document
 // (openDocPreview above) — no new UI — and just drives which document it shows next.
 let docSeq = null; // { orderNumber, queue: [kinds left], resolve }
+
+// Real bug 2026-09-26: closing the preview (✕) in the middle of the PO → SO → FO sequence left runDocSendSequence's
+// promise pending forever, so nothing after it ran (the "Quote more clients?" question never appeared once the
+// trader closed after sending the PO). Closing now ends the sequence; nothing is sent by closing.
+function closeDocPreviewByUser(){
+  closeDocPreview();
+  if (!docSeq) return;
+  const resolve = docSeq.resolve;
+  docSeq = null;
+  resolve();
+}
 
 function docSeqAdvance(){
   if (!docSeq) return;
