@@ -2118,6 +2118,14 @@ function ttPickFreightRate(value){
   document.getElementById('freight').value = Math.round(amount * 100) / 100;
   ttRenderFreightDdown();
   calc();
+  ttNotifyFreightChanged();
+}
+// Real ask 2026-09-26 ("cuando le pongo el flete no me da los 1000 USD de profit de default"): freight picked or typed
+// HERE, inside a QT that Quotes embeds, never reached Quotes — only freight changed from Quotes' own controls re-ran its
+// ~$1,000-profit Selling Price suggestion (rqPrefillSellingPrice). Tells Quotes so it re-suggests; same rule as always:
+// a Selling Price the trader typed by hand is never touched. No-op outside Quotes.
+function ttNotifyFreightChanged(){
+  try { if (window.parent !== window && window.parent.rqToolFreightChanged) window.parent.rqToolFreightChanged(); } catch (e) {}
 }
 // Typing directly in the $ box — no re-render (would blur the input mid-keystroke, same class of
 // bug the capture-phase fix above deals with); it's a separate DOM node from #freight, so it has
@@ -2125,6 +2133,7 @@ function ttPickFreightRate(value){
 function ttFreightManualEdit(value){
   document.getElementById('freight').value = value;
   calc();
+  ttNotifyFreightChanged();
 }
 // capture:true — must run BEFORE the button's own onclick (which re-renders and detaches
 // itself), otherwise e.target.closest() on the now-detached button always returns null and the

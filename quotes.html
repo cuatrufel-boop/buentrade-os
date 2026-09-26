@@ -3735,6 +3735,13 @@ function rqStopPolling(){
 
 const RQ_TARGET_PROFIT_USD = 1000;
 
+// Called by an embedded QT when freight is picked/typed inside it (trading-tool.html's ttNotifyFreightChanged) — re-runs
+// the same ~$1,000-profit suggestion Quotes' own freight changes already trigger.
+function rqToolFreightChanged(){
+  const p = rqSelectedPlants.find(x => x.rqCalculatorOpen);
+  if (p) rqPrefillSellingPrice(p.id);
+}
+
 function rqOnIframeLoaded(id){
   setTimeout(() => {
     rqPrefillSellingPrice(id);
