@@ -441,6 +441,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
 <script src="js/date-picker.js"></script>
+<script src="js/quote-more-clients.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
@@ -1217,75 +1218,12 @@ async function sendWonDocs(result){
   showToast(`Orden ${orderNumber} creada`, '');
 }
 
-// Real addition 2026-09-22 ("cuando cierro una carga, avisarle a otros clientes que compran ese
-// producto que si quieren pueden haber más cargas"). Deliberately NOT part of runDocSendSequence
-// above — that chain is one document, one fixed recipient (PO to plant, SO to customer, FO to
-// carrier); this is a different shape (a plain message, a variable-length list of OTHER customers,
-// never the one who actually bought) and lives as its own optional action in the row menu instead,
-// so the trader can trigger it right after Won or days later, whenever they want, never forced.
-//
-// Destination shown to each candidate is the BUYING customer's own state/city on file (customers
-// table) — never their name (see the same conversation's explicit privacy call: real destination,
-// never the buyer's identity). Price/plant/delivery date come straight off this real sent_offers
-// row (o.sale_per_lb, o.plant_name, o.delivery_dates — the latter already holds the real confirmed
-// date from markWon's showDateConfirm, not an estimate). Frequency-capped at one ping per customer
-// per product per 7 days (customer-product-signal's check_notified/log_notification — see that
-// file's own comment on why this lives there instead of a new function, the Edge Function project
-// cap being maxed at 100/100 with zero real dead functions found in a full audit).
+// Real addition 2026-09-22, reworked 2026-09-26 as "Quote more clients" — the logic lives in
+// js/quote-more-clients.js (shared with trading-tool.html, which offers it right after the Invoice
+// is sent). From here it stays an optional row-menu action the trader can run whenever they want.
 async function notifyOtherCustomers(offerId){
-  const o = offers.find(x => x.id === offerId);
-  if (!o || !o.product_id){ showToast('No se puede avisar', 'Esta orden no tiene un producto asociado.', true); return; }
-
-  let links = [];
-  try { links = (await callApi('customer-products-search', { product_ids: [o.product_id] })).results || []; } catch (e) {}
-  const candidateIds = [...new Set(links.map(l => l.customer_id))].filter(id => id !== o.customer_id);
-  if (!candidateIds.length){ showToast('Nadie más para avisar', 'Ningún otro cliente está vinculado a este producto.', false); return; }
-
-  let notifiedIds = [];
-  try {
-    notifiedIds = (await callApi('customer-product-signal', {
-      check_notified: { product_id: o.product_id, customer_ids: candidateIds },
-    })).notified_customer_ids || [];
-  } catch (e) {}
-  const eligibleIds = candidateIds.filter(id => !notifiedIds.includes(id));
-  if (!eligibleIds.length){ showToast('Nadie más para avisar', 'Ya se avisó a todos los clientes de este producto en los últimos 7 días.', false); return; }
-
-  let candidates = [];
-  try { candidates = (await callApi('customers-search', { ids: eligibleIds })).results || []; } catch (e) {}
-
-  const productLabel = [o.product_name_es || o.product_name, o.product_spec_es || o.product_spec].filter(Boolean).join(', ');
-  const rawDeliveryDate = o.delivery_dates && o.delivery_dates[0];
-  const deliveryDate = rawDeliveryDate ? fmtDateStr(String(rawDeliveryDate).slice(0, 10)) : null;
-
-  for (const c of candidates){
-    const destination = c.state || c.city || '';
-    const message = `Cerramos ${productLabel} a $${Number(o.sale_per_lb || 0).toFixed(4)}/lb con ${o.plant_name}`
-      + (destination ? ` — con destino a ${destination}` : '')
-      + (deliveryDate ? `, llegando el ${deliveryDate}` : '')
-      + `. Si te interesa, contame y vemos qué disponibilidad queda.`;
-
-    let outcome = null;
-    if (c.email){
-      const waInfo = (c.whatsapp || c.phone) ? { phone: (c.whatsapp || c.phone).replace(/\D/g, ''), message } : null;
-      outcome = await bcOpenEmailModal({
-        title: `Avisar — ${c.trade_name}`, fromAlias: 'offers', fromDisplay: FROM_DISPLAY.offers,
-        to: [c.email], subject: `Precio cerrado — ${productLabel}`, text: message, waInfo,
-      });
-    } else if (c.whatsapp || c.phone){
-      outcome = await bcOpenWaOnlyModal({ title: `Avisar — ${c.trade_name}`, phone: (c.whatsapp || c.phone).replace(/\D/g, ''), message });
-    } else {
-      continue; // no email, no phone on file — nothing to send this one
-    }
-
-    if (outcome && outcome.sent){
-      try {
-        await callApi('customer-product-signal', {
-          log_notification: { customer_id: c.id, product_id: o.product_id, order_number: o.order_number, channel: c.email ? 'email' : 'whatsapp', actor: currentActor() },
-        });
-      } catch (e) {}
-    }
-  }
-  showToast('Listo', 'Terminaste de revisar los avisos a otros clientes.', false);
+  await qmcRun({ callApi, actor: currentActor(), offerId, fromDisplay: FROM_DISPLAY.offers, notify: showToast });
+  loadOffers();
 }
 
 function escapeHtml(str){
@@ -1352,7 +1290,7 @@ function toggleRowMenu(evt, offerId, orderNumber, hasCustoms, historyCount){
       ${HISTORY_ICON}<span>History</span>
     </div>` : ''}
     <div class="docs-menu-action-row" onclick="closeFloatingMenus(); notifyOtherCustomers('${offerId}')">
-      ${NOTIFY_ICON}<span>Notify other buyers</span>
+      ${NOTIFY_ICON}<span>Quote more clients</span>
     </div>`;
 
   menu.innerHTML = rows + customsRow + otherRows;
