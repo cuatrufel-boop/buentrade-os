@@ -1146,7 +1146,7 @@ auth.onAuthStateChanged(user => {
          system-wide view — clicking Updating/Expired/Ready shows that one table, the other two
          hide, and drops any active search. "Find Product" (label renamed 2026-09-13, same tab)
          is its own 4th tab now (tab: 'quote') — the one place searching a product (rq_search_trigger, or clicking any product
-         name in a row) is meant to live: it sets rqActiveProductFilterId, which shows all 3
+         name in a row) is meant to live: it sets rqActiveProductFilterIds, which shows all 3
          sections at once, each sliced to just that product. This chip is the one way back to an
          empty search on that same tab. See rqRenderSweepTables/rqFilterToProduct/
          rqClearProductFilter/rqSetSweepTab. -->
@@ -1538,7 +1538,7 @@ let rqActiveSweepTab = 'quote';
 // Real ask 2026-09-13 ("uno simple que solo filtre lo que esta en su propia pantalla"): plain
 // substring filter over whichever tab's already-fetched rows are on screen — set by
 // rqFilterSweepByText, read by rqRenderSweepTables. Completely separate from
-// rqActiveProductFilterId (Find Product's cross-tab filter) — the two just compose (AND) if
+// rqActiveProductFilterIds (Find Product's cross-tab filter) — the two just compose (AND) if
 // somehow both are active at once.
 let rqSweepSearchTerm = '';
 // Real ask 2026-09-12: clicking a tab is "go back to browsing everything" — always clears any
@@ -1550,7 +1550,7 @@ function rqSetSweepTab(tab){
   // Real ask 2026-09-12 ("pon a funcionar este boton"): Ready/Expired/Updating are "go browse
   // everything" clicks — always drop any active product filter. Quote is the one tab the filter
   // belongs on, so clicking it (or already being on it while typing a search) never clears it.
-  if (tab !== 'quote') rqActiveProductFilterId = null;
+  if (tab !== 'quote') rqActiveProductFilterIds = [];
   // Real ask 2026-09-13: a new tab is a fresh list — a text filter typed for a different tab
   // silently carrying over here would look like the new tab is missing rows, not filtered.
   rqSweepSearchTerm = '';
@@ -1619,7 +1619,7 @@ const rqIsMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent
 function rqUpdatePaletteDoneCount(){
   const el = document.getElementById('rq_palette_done_count');
   if (!el) return;
-  el.textContent = rqQuoteProductIds.length ? ` (${rqQuoteProductIds.length})` : '';
+  el.textContent = rqActiveProductFilterIds.length ? ` (${rqActiveProductFilterIds.length})` : '';
 }
 function rqOpenSearchPalette(){
   const panel = document.getElementById('qPanel_request');
@@ -1771,7 +1771,10 @@ function renderRqStats(){
 // fetch) plus which single product, if any, the trader is currently filtered to. rqRenderSweepTables
 // re-slices these in memory — no API call, nothing written — every time the tab or filter changes.
 let rqAllReadyRows = [], rqAllExpiredRows = [], rqAllWaitingRows = [];
-let rqActiveProductFilterId = null;
+// Real ask 2026-09-26 ("a veces necesito el mismo producto con distinta variación, poderlos escoger los dos"): several
+// products can be picked at once in Find Product — every section (Ready, Expired, Updating, Possible) shows all of them,
+// exactly as it did for one. Still a pure in-memory filter: nothing is written or sent.
+let rqActiveProductFilterIds = [];
 // Every plant_id+product_id pair that has a plant_products row, mapped to its real
 // {current_price, last_requested_at, declined_at} (see loadPendingPrices). Real fix 2026-09-12,
 // confirmed live ("casi todas las plantas ofrecen este producto por que no muestra las posibles"):
@@ -1906,25 +1909,28 @@ function rqRenderSweepTables(){
   const expiredList = document.getElementById('rq_expired_results');
   const updatingList = document.getElementById('rq_updating_results');
   if (!readyList || !expiredList || !updatingList) return;
-  const filterId = rqActiveProductFilterId;
+  const filterIds = rqActiveProductFilterIds;
+  const filterId = filterIds.length > 0; // any product picked
+  const inFilter = id => filterIds.includes(id);
+  const plural = filterIds.length > 1;
   // Real ask 2026-09-13: the sweep search box only ever narrows rows already on screen —
   // matched against the same product name rqProductCellHtml already displays for that row, never
   // a catalog search (that's Find Product's job, a completely different data source).
   const term = rqSweepSearchTerm;
   const matchesTerm = x => !term || rqProductName(x.g.productId).toLowerCase().includes(term);
-  const ready = (filterId ? rqAllReadyRows.filter(x => x.g.productId === filterId) : rqAllReadyRows).filter(matchesTerm);
-  const expired = (filterId ? rqAllExpiredRows.filter(x => x.g.productId === filterId) : rqAllExpiredRows).filter(matchesTerm);
-  const waiting = (filterId ? rqAllWaitingRows.filter(x => x.g.productId === filterId) : rqAllWaitingRows).filter(matchesTerm);
+  const ready = (filterId ? rqAllReadyRows.filter(x => inFilter(x.g.productId)) : rqAllReadyRows).filter(matchesTerm);
+  const expired = (filterId ? rqAllExpiredRows.filter(x => inFilter(x.g.productId)) : rqAllExpiredRows).filter(matchesTerm);
+  const waiting = (filterId ? rqAllWaitingRows.filter(x => inFilter(x.g.productId)) : rqAllWaitingRows).filter(matchesTerm);
   const noMatchMsg = term ? `No product matches "${escapeHtml(term)}".` : null;
   readyList.innerHTML = ready.length
     ? rqTableSection(ready.map(x => rqReadyRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', 'Sale', ''])
-    : `<div class="empty">${noMatchMsg || (filterId ? 'Not ready for this product.' : RQ_EMPTY_MSG.ready)}</div>`;
+    : `<div class="empty">${noMatchMsg || (filterId ? (plural ? 'Not ready for these products.' : 'Not ready for this product.') : RQ_EMPTY_MSG.ready)}</div>`;
   expiredList.innerHTML = expired.length
     ? rqTableSection(expired.map(x => rqExpiredRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Price', ''])
-    : `<div class="empty">${noMatchMsg || (filterId ? 'Nothing expired for this product.' : RQ_EMPTY_MSG.expired)}</div>`;
+    : `<div class="empty">${noMatchMsg || (filterId ? (plural ? 'Nothing expired for these products.' : 'Nothing expired for this product.') : RQ_EMPTY_MSG.expired)}</div>`;
   updatingList.innerHTML = waiting.length
     ? rqTableSection(waiting.map(x => rqWaitingRowHtml(x.r, x.g)).join(''), ['Product', 'Plant', 'Requested', ''])
-    : `<div class="empty">${noMatchMsg || (filterId ? 'Nothing waiting for this product.' : RQ_EMPTY_MSG.updating)}</div>`;
+    : `<div class="empty">${noMatchMsg || (filterId ? (plural ? 'Nothing waiting for these products.' : 'Nothing waiting for this product.') : RQ_EMPTY_MSG.updating)}</div>`;
   document.getElementById('rq_ready_section').style.display = (filterId || rqActiveSweepTab === 'ready') ? '' : 'none';
   document.getElementById('rq_expired_section').style.display = (filterId || rqActiveSweepTab === 'expired') ? '' : 'none';
   document.getElementById('rq_updating_section').style.display = (filterId || rqActiveSweepTab === 'updating') ? '' : 'none';
@@ -1938,28 +1944,31 @@ function rqRenderSweepTables(){
   const possibleSection = document.getElementById('rq_possible_section');
   const possibleList = document.getElementById('rq_possible_results');
   if (possibleSection && possibleList){
-    const product = filterId ? products.find(p => p.id === filterId) : null;
-    const possible = (product && product.category_id)
-      ? rqAllPlants.filter(pl => {
-          if (pl.category_id !== product.category_id) return false;
-          const info = rqAllPlantProductPairs.get(pl.id + '|' + filterId);
-          if (!info) return true;
-          if (info.declined_at) return false;
-          return info.current_price == null && !info.last_requested_at;
-        })
-      : [];
+    // One list per picked product, same rule as before; a Product column only appears when more than one is picked.
+    const possible = filterIds.flatMap(pid => {
+      const product = products.find(p => p.id === pid);
+      if (!product || !product.category_id) return [];
+      return rqAllPlants.filter(pl => {
+        if (pl.category_id !== product.category_id) return false;
+        const info = rqAllPlantProductPairs.get(pl.id + '|' + pid);
+        if (!info) return true;
+        if (info.declined_at) return false;
+        return info.current_price == null && !info.last_requested_at;
+      }).map(pl => ({ pl, pid }));
+    });
     possibleSection.style.display = filterId ? '' : 'none';
     possibleList.innerHTML = possible.length
-      ? rqTableSection(possible.map(pl => `<tr>
+      ? rqTableSection(possible.map(({ pl, pid }) => `<tr>
+          ${plural ? `<td>${escapeHtml(rqProductName(pid))}</td>` : ''}
           <td>${escapeHtml(pl.name)}</td>
-          <td><button type="button" class="pkg-trigger-btn" onclick="rqAskPossiblePlant('${pl.id}','${filterId}')">Ask for Price →</button></td>
-        </tr>`).join(''), ['Plant', ''])
+          <td><button type="button" class="pkg-trigger-btn" onclick="rqAskPossiblePlant('${pl.id}','${pid}')">Ask for Price →</button></td>
+        </tr>`).join(''), plural ? ['Product', 'Plant', ''] : ['Plant', ''])
       : `<div class="empty">${filterId ? 'No other plants in this category to ask.' : ''}</div>`;
   }
   const chipWrap = document.getElementById('rq_filter_chip_wrap');
   if (chipWrap){
     chipWrap.style.display = filterId ? 'flex' : 'none';
-    if (filterId) document.getElementById('rq_filter_chip_label').textContent = rqProductName(filterId);
+    if (filterId) document.getElementById('rq_filter_chip_label').textContent = filterIds.map(rqProductName).join(' + ');
   }
   // Real ask 2026-09-12 ("pon a funcionar este boton para buscar producto"): Quote is a search-only
   // tab — on it with nothing searched yet, all 3 sections above are hidden (see the display logic
@@ -1981,13 +1990,23 @@ function rqFilterSweepByText(){
 // Real ask 2026-09-12 ("busco un producto en particular y ese producto me va a sacar las 3
 // versiones"): pure, read-only — sets which product to slice the 3 already-fetched arrays down
 // to and re-renders. No API call, nothing written, no auto-ask email, no last_requested_at stamp.
+// From a product name in a table row: show just that one product (replaces any picks).
 function rqFilterToProduct(productId){
-  rqActiveProductFilterId = productId;
+  rqActiveProductFilterIds = [productId];
   rqRenderSweepTables();
   renderRqStats();
 }
+// From a tile in the Find Product palette: add/remove it — the palette stays open so several can be picked; Done closes.
+function rqToggleProductFilter(productId){
+  const i = rqActiveProductFilterIds.indexOf(productId);
+  if (i === -1) rqActiveProductFilterIds.push(productId); else rqActiveProductFilterIds.splice(i, 1);
+  rqRenderSweepTables();
+  renderRqStats();
+  rqRenderGroupedResults();
+  rqUpdatePaletteDoneCount();
+}
 function rqClearProductFilter(){
-  rqActiveProductFilterId = null;
+  rqActiveProductFilterIds = [];
   rqRenderSweepTables();
   renderRqStats();
 }
@@ -2565,13 +2584,13 @@ async function rqRenderGroupedResults(){
       + `<div class="rq-result-grid">
           ${groups.flatMap(g => g.variants).map(v => {
             const spec = v.full_name_en || v.name_en || v.name;
-            const active = rqActiveProductFilterId === v.id;
+            const active = rqActiveProductFilterIds.includes(v.id);
             const frozen = rqTempIsFrozen(v);
             // Real ask 2026-09-13: the whole tile is the click target now, not just the small arrow
             // button — same exact action either way (rqFilterToProduct + close), the button is only
             // a visual affordance so tabindex="-1" keeps it out of the tab order (arrow-key nav
             // below, rqPaletteHandleKey, is how keyboard users reach it).
-            return `<div class="rq-result-variant${active ? ' picked' : ''}" data-key="${v.id}" onclick="rqFilterToProduct('${v.id}'); rqCloseSearchPalette();">
+            return `<div class="rq-result-variant${active ? ' picked' : ''}" data-key="${v.id}" onclick="rqToggleProductFilter('${v.id}')">
               <div class="rq-result-icon ${frozen ? 'frozen' : 'fresh'}">${frozen ? RQ_SNOWFLAKE_SVG : RQ_SUN_SVG}</div>
               <span class="rq-result-spec">${rqHighlightMatch(spec, term)}</span>
               <button type="button" class="rq-result-add-btn${active ? ' added' : ''}" title="View this product across Ready/Expired/Updating" tabindex="-1">${RQ_VIEW_ARROW_SVG}</button>
@@ -2600,7 +2619,7 @@ function rqSearchGo(){
   const input = document.getElementById('rq_product_name');
   if (!input.value.trim()){ input.focus(); rqRenderGroupedResults(); return; }
   const allVariants = rqGroupedSearchMatches(input.value).flatMap(g => g.variants);
-  if (allVariants.length === 1) rqFilterToProduct(allVariants[0].id);
+  if (allVariants.length === 1 && !rqActiveProductFilterIds.includes(allVariants[0].id)) rqToggleProductFilter(allVariants[0].id);
   // Enter commits the search — same "go see it" moment as picking a quick pick, so the palette
   // closes and the (already live-rendered) results in the board underneath become visible.
   rqCloseSearchPalette();
