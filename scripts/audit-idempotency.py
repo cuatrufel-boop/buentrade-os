@@ -56,6 +56,8 @@ FRONTEND_EXEMPT = {
 ACTION_EXEMPT = {
     ("messaging", "list"),               # read
     ("messaging", "draft"),              # upsert on (customer_id, reason_key)
+    ("messaging", "compose"),            # upsert on (customer_id, reason_key); the daily news scan is locked per day and unique per URL
+    ("messaging", "news"),               # read (+ the same once-a-day, unique-per-URL news scan)
     ("messaging", "quote_origin"),       # read
     ("messaging", "delete_note"),        # delete by id
     ("messaging", "set_loads"),          # update by id to a given value

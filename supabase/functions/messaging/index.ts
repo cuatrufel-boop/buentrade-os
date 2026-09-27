@@ -117,6 +117,16 @@ function shortWhy(b: any, text: string): string {
   }
   return text;
 }
+const MONTH_ES: Record<string, string> = { ene: "enero", feb: "febrero", mar: "marzo", abr: "abril", may: "mayo", jun: "junio", jul: "julio", ago: "agosto", sep: "septiembre", oct: "octubre", nov: "noviembre", dic: "diciembre" };
+// How to say WHEN a bulletin fact is from — written for the draft so it never turns old data into "esta semana".
+function whenEs(b: any, text: string): string {
+  const wk = text.match(/semana al (\d+) (\w{3})/);
+  if (wk) return `la semana al ${wk[1]} de ${MONTH_ES[wk[2].toLowerCase()] || wk[2]}`;
+  const mo = text.match(/en (\w+) de (\d{4})/);
+  if (mo) return `${mo[1]} de ${mo[2]}`;
+  if (/proyecta/.test(text)) return "proyección del boletín";
+  return "según el último boletín";
+}
 function marketCandidates(mf: any, c: any, myPids: Set<string>, mySpecies: Set<string>, shortByPid: Map<string, string>, alreadySent: (id: string) => boolean) {
   const out: any[] = [];
   for (const g of mf.product) {
@@ -260,13 +270,13 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
           reason_key: `market:${k.b.id}`, kind: "market", product_id: k.productId, note_id: null, bullet_ids: [k.b.id],
           why: k.short, source: `${k.text} — Market Flash, data as of ${String(mf.bulletin.as_of).slice(0, 10)} — ${k.b.source_note || k.scope}.`,
           score: k.score, is_new: (Date.now() - new Date(mf.bulletin.created_at).getTime()) / 86400000 < 1,
-          fact: { type: "market", fact_es: k.text, angle_es: k.angle, data_as_of: String(mf.bulletin.as_of).slice(0, 10), product_es: k.productEs, client_city: c.city, local: k.local },
+          fact: { type: "market", fact_es: k.text, when_es: whenEs(k.b, k.text), angle_es: k.angle, data_as_of: String(mf.bulletin.as_of).slice(0, 10), product_es: k.productEs, client_city: c.city, local: k.local },
         });
       }
     }
 
     // A message sent today stays on the list as Sent even if its reason has changed since (volume filled in, note used…).
-    const KIND: Record<string, Option["kind"]> = { cycle: "cycle", ask_volume: "ask_volume", personal: "personal", market: "market" };
+    const KIND: Record<string, any> = { cycle: "cycle", ask_volume: "ask_volume", personal: "personal", market: "market", season: "season", business: "business" };
     for (const [key, m] of sentTodayBy) {
       if (options.some((o) => o.reason_key === key)) continue;
       options.push({ reason_key: key, kind: KIND[m.reason_kind], product_id: m.product_id, note_id: m.note_id, bullet_ids: [],
@@ -343,6 +353,211 @@ ${regenerate && previous ? `The trader asked for a DIFFERENT version — do not 
   return { status: 200, payload };
 }
 
+// ---------------------------------------------------------------- news: real, dated, sourced (2026-09-27)
+// Your 3rd example ("4 estados cerrados por gripe aviar, pero estos están abiertos") and "lo que pasa en su ciudad" need
+// a source the bulletin doesn't have. Once a day, a web search per topic; the model returns facts, but a fact is KEPT only
+// if its URL really came back from the search (never a URL the model wrote) and it is dated within the last 14 days.
+const NEWS_DAYS = 14;
+const SPECIES_ES: Record<string, string> = { pork: "cerdo", chicken: "pollo", beef: "res", turkey: "pavo" };
+async function searchNews(topic: string, instruction: string, debug?: any): Promise<any[]> {
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
+  const today = new Date().toISOString().slice(0, 10);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: "claude-sonnet-5", max_tokens: 6000,
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
+      system: `You research news for a meat trader who sells US pork, chicken and beef to buyers in Mexico. Today is ${today}.
+Use web search. Report ONLY real news published in the last ${NEWS_DAYS} days that you actually found. Never guess, never fill gaps.
+Answer with ONLY a JSON array (no prose), up to 6 items: [{"headline_es": "...", "fact_es": "one factual sentence in Mexican Spanish with the exact numbers/places from the article, no opinion", "published_on": "YYYY-MM-DD (the article's date)", "url": "the exact article URL from the search results", "source": "outlet name", "mx_states": ["Mexican states it affects, in Spanish, e.g. Nuevo León"], "us_states": ["US states it affects, e.g. Iowa"], "proteins": ["pork"|"chicken"|"beef"|"turkey"]}]. Return [] if nothing qualifies.`,
+      messages: [{ role: "user", content: instruction }],
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`news search failed (${topic}): ${JSON.stringify(data).slice(0, 300)}`);
+  const found = new Set<string>();
+  for (const b of data.content || []) {
+    if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const x of b.content) if (x.url) found.add(String(x.url));
+    if (b.type === "text" && Array.isArray(b.citations)) for (const ci of b.citations) if (ci.url) found.add(String(ci.url));
+  }
+  const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+  const m = text.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  let items: any[] = [];
+  try { items = JSON.parse(m[0]); } catch { return []; }
+  const minDate = new Date(Date.now() - NEWS_DAYS * 86400000).toISOString().slice(0, 10);
+  if (debug) { debug.raw = items.map((it) => ({ date: it.published_on, url: it.url, urlFound: found.has(String(it.url)), fact: String(it.fact_es || "").slice(0, 120) })); debug.searchUrls = found.size; }
+  return items.filter((it) => it && found.has(String(it.url)) && /^\d{4}-\d{2}-\d{2}$/.test(String(it.published_on))
+      && it.published_on >= minDate && it.published_on <= today && String(it.fact_es || "").trim())
+    .map((it) => ({ ...it, topic }));
+}
+async function scanNews(): Promise<string> {
+  const states = (await sql`select distinct st.name_es from customers c join states st on st.id = c.state_id where st.name_es is not null`).map((r: any) => r.name_es);
+  const topics: [string, string][] = [
+    ["avian_flu", "Avian influenza (HPAI) in the United States in the last 2 weeks: which US states had new commercial poultry detections, and any Mexico (SENASICA) or trade restrictions on poultry from specific US states. Also which major producing states are currently clear."],
+    ["border", "Problems at US–Mexico commercial border crossings for trucks in the last 2 weeks (Laredo/Nuevo Laredo, Colombia, Reynosa/Pharr, Ciudad Juárez/El Paso, Nogales, Mexicali/Calexico, Tijuana/Otay): closures, blockades, long waits, inspections, strikes."],
+    ["mx_prices", `Meat prices and meat market news in Mexico in the last 2 weeks (pork, chicken, beef), especially in: ${states.join(", ")}. Price increases or decreases with numbers, shortages, local events affecting demand.`],
+    ["us_industry", "US pork, chicken and beef industry news in the last 2 weeks that affects supply or prices of exports to Mexico: packing plant closures or openings, production changes, price moves, export changes to Mexico."],
+  ];
+  // search results vary run to run — a topic that comes back empty is searched once more
+  const results = await Promise.allSettled(topics.map(async ([t, q]) => { const a = await searchNews(t, q); return a.length ? a : await searchNews(t, q); }));
+  const today = new Date().toISOString().slice(0, 10);
+  let kept = 0; const errors: string[] = [];
+  for (const r of results) {
+    if (r.status === "rejected") { errors.push(String(r.reason).slice(0, 200)); continue; }
+    for (const it of r.value) {
+      const arr = (v: any) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
+      const rows = await sql`insert into market_news (scan_date, topic, headline_es, fact_es, published_on, url, source, mx_states, us_states, proteins)
+        values (${today}, ${it.topic}, ${String(it.headline_es || it.fact_es).slice(0, 300)}, ${String(it.fact_es).slice(0, 600)}, ${it.published_on}, ${String(it.url)}, ${it.source ?? null},
+                ${arr(it.mx_states)}, ${arr(it.us_states)}, ${arr(it.proteins).filter((p: string) => SPECIES_ES[p])})
+        on conflict (url) do nothing returning id`;
+      kept += rows.length;
+    }
+  }
+  return `${kept} new items${errors.length ? `; errors: ${errors.join(" | ")}` : ""}`;
+}
+// One scan per day, shared by every caller: the first one runs it, the rest wait for it (up to ~2 min).
+async function ensureNewsToday(): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const [mine] = await sql`insert into market_news_scans (scan_date) values (${today}) on conflict (scan_date) do nothing returning scan_date`;
+  if (mine) {
+    try { const detail = await scanNews(); await sql`update market_news_scans set status = 'done', detail = ${detail}, finished_at = now() where scan_date = ${today}`; }
+    catch (e) { await sql`update market_news_scans set status = 'failed', detail = ${String(e).slice(0, 500)}, finished_at = now() where scan_date = ${today}`; }
+    return;
+  }
+  for (let i = 0; i < 40; i++) {
+    const [row] = await sql`select status from market_news_scans where scan_date = ${today}`;
+    if (!row || row.status !== "running") return;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+function norm(x: string) { return String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim(); }
+async function newsFor(c: any, species: string[]): Promise<any[]> {
+  const rows = await sql`select id, topic, headline_es, fact_es, published_on, url, source, mx_states, us_states, proteins from market_news
+    where published_on >= current_date - ${NEWS_DAYS}::int order by published_on desc limit 80`;
+  const st = norm(c.state), city = norm(c.city);
+  return rows.filter((n: any) => {
+    const proteinOk = !n.proteins.length || n.proteins.some((p: string) => species.includes(p));
+    const placeOk = !n.mx_states.length || n.mx_states.some((s: string) => { const x = norm(s); return x && (st.includes(x) || x.includes(st) || (city && x.includes(city))); });
+    return proteinOk && (placeOk || n.topic === "avian_flu" || n.topic === "us_industry" || n.topic === "border");
+  }).slice(0, 8).map((n: any) => ({ id: n.id, tema: n.topic, dato: n.fact_es, fecha: String(n.published_on).slice(0, 10), fuente: n.source, estados_mx: n.mx_states, estados_eeuu: n.us_states }));
+}
+
+// ---------------------------------------------------------------- compose: ONE powerful message per client (2026-09-27)
+// User: "mensajes poderosos… no son solo producto, todo lo que hablamos". One row per reason produced near-identical
+// "¿cómo vas de X?" lines (two loin variants = two messages). This writes ONE message per client from everything we know
+// about him — his business, his city, where he is in his buying month, what he told the trader, the bulletin facts that
+// touch his cuts, the upcoming calendar, what has worked with him — picking the single strongest angle.
+const MX_CALENDAR = [ // fixed-date events only (no guessing moveable dates)
+  { m: 9, d: 15, es: "Fiestas Patrias (15-16 de septiembre)" }, { m: 11, d: 1, es: "Día de Muertos (1-2 de noviembre)" },
+  { m: 12, d: 12, es: "Día de la Virgen de Guadalupe (12 de diciembre, arranca el Guadalupe-Reyes)" }, { m: 12, d: 24, es: "Navidad (24-25 de diciembre)" },
+  { m: 12, d: 31, es: "Año Nuevo" }, { m: 1, d: 6, es: "Día de Reyes (6 de enero)" }, { m: 2, d: 14, es: "San Valentín (14 de febrero)" },
+  { m: 5, d: 10, es: "Día de las Madres (10 de mayo)" },
+];
+function upcomingEvents(days = 45) {
+  const now = new Date(), out: string[] = [];
+  for (const e of MX_CALENDAR) {
+    let t = new Date(now.getFullYear(), e.m - 1, e.d);
+    if (t.getTime() < now.getTime() - 86400000) t = new Date(now.getFullYear() + 1, e.m - 1, e.d);
+    const inDays = Math.round((t.getTime() - now.getTime()) / 86400000);
+    if (inDays >= 0 && inDays <= days) out.push(`${e.es} — en ${inDays} días`);
+  }
+  return out;
+}
+const COMPOSE_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["message", "subject", "why_en", "angle", "used_bullet_id", "used_note_id", "used_news_id", "product"],
+  properties: { message: { type: "string" }, subject: { type: "string" }, why_en: { type: "string" }, angle: { type: "string", enum: ["personal", "market", "news", "rebuy", "season", "business", "volume"] },
+    used_bullet_id: { type: "string" }, used_note_id: { type: "string" }, used_news_id: { type: "string" }, product: { type: "string" } },
+};
+async function compose(body: any) {
+  const { customer_id, actor, regenerate, previous } = body;
+  if (!customer_id) return { status: 400, payload: { error: "customer_id is required" } };
+  const key = `compose:${new Date().toISOString().slice(0, 10)}`;
+  if (!regenerate) {
+    const [cached] = await sql`select draft from customer_message_drafts where customer_id = ${customer_id} and reason_key = ${key}
+      and (created_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date`;
+    if (cached) return { status: 200, payload: JSON.parse(cached.draft) };
+  }
+  await ensureNewsToday();
+  const all = await list(actor ?? "", customer_id);
+  const c = all.clients[0];
+  if (!c) return { status: 404, payload: { error: "unknown customer" } };
+  const speciesRows = await sql`select distinct cat.name_en from customer_products cp join products p on p.id = cp.product_id join categories cat on cat.id = p.category_id where cp.customer_id = ${customer_id}`;
+  const species = speciesRows.map((r: any) => ({ Pork: "pork", Chicken: "chicken", Beef: "beef", Turkey: "turkey" } as Record<string, string>)[r.name_en]).filter(Boolean);
+  const news = await newsFor(c, species);
+  const { dom, dim } = await todayParts();
+  const biz = c.business_type_id ? all.business_types.find((b: any) => b.id === c.business_type_id) : null;
+  const history = await sql`select message, reason_kind, sent_at, request_linked_at from customer_messages where customer_id = ${customer_id} order by sent_at desc limit 6`;
+  const mine = await sql`select draft, message from customer_messages where sent_by = ${actor ?? ""} order by sent_at desc limit 12`;
+  const todays = await sql`select draft from customer_message_drafts where reason_key = ${key} and customer_id <> ${customer_id}
+    and (created_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date limit 12`;
+  const usedToday = todays.map((t: any) => { try { return JSON.parse(t.draft).why_en; } catch { return ""; } }).filter(Boolean);
+  const openings = todays.map((t: any) => { try { return JSON.parse(t.draft).message.split(/[,.?¿!]/).slice(0, 2).join(" ").trim(); } catch { return ""; } }).filter(Boolean);
+  const dossier = {
+    cliente: `${c.first_name || c.trade_name} (${c.trade_name.trim()})`, ciudad: [c.city, c.state].filter(Boolean).join(", ") || null,
+    negocio: biz ? biz.name_es : null,
+    // What he buys and his TOTAL rhythm as he told the trader (all suppliers). Deliberately NOT what he bought from us or
+    // when — that must never appear in a message, and we don't know his last purchase anyway.
+    compra: c.products.map((p: any) => ({ producto: p.short_es, cuanto_compra_en_total: p.cadence ? `dice que compra ${p.cadence.replace("load", "carga").replace("loads", "cargas").replace("a month", "al mes").replace("every", "cada").replace("days", "días")} (a todos sus proveedores; no sabemos cuándo compró por última vez)` : "no sabemos cuánto compra" })),
+    dia_del_mes: `${dom} de ${dim}`,
+    lo_que_te_conto: c.notes.filter((n: any) => !n.used).map((n: any) => ({ id: n.id, nota: n.note, fecha: String(n.created_at).slice(0, 10) })),
+    boletin: c.options.filter((o: any) => o.kind === "market").map((o: any) => ({ id: o.bullet_ids[0], dato: o.fact.fact_es, cuando: o.fact.when_es, por_que_le_importa: o.fact.angle_es })),
+    datos_del_boletin_ya_usados_hoy_con_otros_clientes: usedToday,
+    noticias_recientes_con_fuente: news,
+    calendario_proximo: upcomingEvents(),
+    lo_que_le_ha_funcionado: c.works.map((w: any) => `${w.kind}: ${w.requests} de ${w.sent} terminaron en pedido`),
+    mensajes_recientes_a_este_cliente: history.map((h: any) => `${String(h.sent_at).slice(0, 10)} (${h.reason_kind}${h.request_linked_at ? ", pidió producto" : ""}): ${h.message}`),
+  };
+  const style = mine.map((m: any) => (m.draft && m.draft.trim() !== m.message.trim() ? `- propuesto: "${m.draft}" → él mandó: "${m.message}"` : `- él mandó: "${m.message}"`)).join("\n");
+  const system = `You are the best meat trader in Mexico writing ONE WhatsApp message to one client, in the trader's own voice.
+The client is busy and ignores greetings and price lists; he only answers what is relevant to HIM. Your job: the ONE message most likely to make him answer — ideally by asking you to look for a product.
+How to think: read everything in the dossier and pick the single strongest angle for THIS client TODAY. Strong angles: something he told the trader (people buy from who remembers them); a recent NEWS item that touches what he buys or where he is (sanitary closures, border, prices in his state) — say it plainly with its date; a bulletin fact about HIS cut or HIS city with why it matters to him as a buyer; the moment of his buying month (we never know what he bought from others — ask, never assume); an upcoming date that moves his kind of business; his business reality. You may connect a second element only if it makes the message stronger and still reads naturally.
+Rules (mandatory):
+- Mexican Spanish, "tú", starts with his first name. Max 2 short sentences, 30 words total. No emojis, links, prices, signatures.
+- Talk like a person who knows him, never like a template or a report. Never list products; one cut at most, by its common name (two variants of the same cut are the same cut).
+- Use ONLY facts in the dossier; keep numbers exactly. A bulletin fact is always said with its "cuando" (e.g. "la semana al 4 de septiembre", "en julio") — NEVER "esta semana", "este mes", "hoy" or "ahorita" for bulletin data.
+- NEVER mention how long since he bought, what or when he bought from us, or that we track anything. His "cuanto_compra_en_total" is only for asking how he's doing.
+- NEVER predict (no "va a subir", "se va a poner difícil", "antes de que escasee", "siga subiendo"). State the fact, then ask.
+- You may mention an upcoming calendar date only as context for a question — add NO claim about it (not what others do, not demand).
+- A bulletin fact about a whole protein (e.g. all US pork exports) must NOT be stated as a fact about one cut ("la papada anda apretada", "hay menos cachete"): give the general fact, then ask about his cut.
+- A fact that applies to every client the same way (e.g. total US pork exports to Mexico) is the WEAKEST angle — use it only if there is nothing specific to him. Prefer a different fact than the ones already used today with other clients (listed in the dossier).
+- End with ONE easy question.
+- Do not start like these other messages written today: ${openings.length ? openings.map((o: string) => `"${o}"`).join(", ") : "(none yet)"}.
+Return also: subject (2-5 words, for email), why_en (English, max 14 words: which facts you used, for the trader's screen), angle, used_bullet_id (the "id" of the bulletin fact you used, or ""), used_note_id (the "id" of the note you used, or ""), used_news_id (the "id" of the news item you used, or ""), product (the cut you mention in Spanish, or "").`;
+  const user = `Dossier: ${JSON.stringify(dossier)}
+${style ? `How this trader writes (match his tone; where he corrected a proposal, write like his correction):\n${style}` : "No examples from this trader yet — natural, short, direct."}
+${regenerate && previous ? `The trader wants a DIFFERENT angle than this one — do not reuse its angle or wording: "${previous}"` : ""}`;
+  // Guard: the rules above are also checked in code — a message that breaks them is rewritten once with the reason.
+  const BAD = [/anda(n)? (m[aá]s )?apretad/i, /hay menos \w+ disponible/i, /muchas plantas/i, /esta semana/i, /este mes/i, /\bhoy\b/i, /ahorita/i, /d[ií]as? (desde|sin)/i, /llevas .* sin/i, /tu [uú]ltim[oa] (pedido|compra|carga)/i, /va a (subir|escasear|faltar)/i, /se va a poner/i, /antes de que (escasee|suba|siga)/i, /siga subiendo/i];
+  // the model may think before answering; give it room, and retry once if it ran out before writing
+  const ask = async (u: string) => { try { return await callClaude(system, u, COMPOSE_SCHEMA, 8000); } catch (e) { if (/No text content|max_tokens/.test(String(e))) return await callClaude(system, u, COMPOSE_SCHEMA, 12000); throw e; } };
+  let out = await ask(user);
+  const broken = (m: string) => BAD.filter((re) => re.test(m)).map((re) => re.source);
+  const why1 = broken(String(out.message || ""));
+  if (why1.length) out = await ask(`${user}\nYour previous attempt broke these rules (${why1.join("; ")}): "${out.message}". Write it again without breaking any rule.`);
+  const payload = { message: String(out.message || "").trim(), subject: String(out.subject || "").trim(), why_en: String(out.why_en || "").trim(), angle: String(out.angle || "").trim(),
+    used_bullet_id: out.used_bullet_id || "", used_note_id: out.used_note_id || "", used_news_id: out.used_news_id || "", product: String(out.product || "").trim(), product_id: null as string | null,
+    news: null as any };
+  // the cut it talks about, as one of HIS products — what Quotes uses to ask "did this request come from a message?"
+  if (payload.product) {
+    const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const want = norm(payload.product);
+    const hit = c.products.find((p: any) => norm(p.short_es) === want) || c.products.find((p: any) => want.includes(norm(p.short_es)) || norm(p.short_es).includes(want));
+    payload.product_id = hit ? hit.product_id : null;
+  }
+  // only ids that really belong to this client's dossier
+  if (payload.used_note_id && !c.notes.some((n: any) => n.id === payload.used_note_id)) payload.used_note_id = "";
+  const n = news.find((x: any) => x.id === payload.used_news_id);
+  if (payload.used_news_id && !n) payload.used_news_id = "";
+  if (n) { const [row] = await sql`select url, source, published_on from market_news where id = ${n.id}`; payload.news = row ? { url: row.url, source: row.source, date: String(row.published_on).slice(0, 10) } : null; }
+  if (payload.used_bullet_id && !c.options.some((o: any) => o.kind === "market" && o.bullet_ids[0] === payload.used_bullet_id)) payload.used_bullet_id = "";
+  await sql`insert into customer_message_drafts (customer_id, reason_key, draft) values (${customer_id}, ${key}, ${JSON.stringify(payload)})
+    on conflict (customer_id, reason_key) do update set draft = excluded.draft, created_at = now()`;
+  return { status: 200, payload };
+}
+
 // ---------------------------------------------------------------- writes (idempotent, audited)
 async function send(body: any) {
   const { customer_id, reason_key, message, channel, actor, idempotency_key, draft: proposed, reason_why } = body;
@@ -352,12 +567,15 @@ async function send(body: any) {
   const [existing] = await sql`select * from customer_messages where idempotency_key = ${idempotency_key}`;
   if (existing) return { status: 200, payload: { message: existing, duplicate: true } };
   const kind = String(reason_key).split(":")[0];
-  const reason_kind = ({ cycle: "cycle", ask: "ask_volume", note: "personal", market: "market" } as Record<string, string>)[kind];
+  // compose (one message per client): the kind is the angle the message used
+  const ANGLE_KIND: Record<string, string> = { personal: "personal", market: "market", news: "market", rebuy: "cycle", volume: "ask_volume", season: "season", business: "business" };
+  const reason_kind = kind === "compose" ? (ANGLE_KIND[body.angle] || "business") : ({ cycle: "cycle", ask: "ask_volume", note: "personal", market: "market" } as Record<string, string>)[kind];
   if (!reason_kind) return { status: 400, payload: { error: "unknown reason_key" } };
   const part = String(reason_key).split(":")[1] || null;
-  const product_id = reason_kind === "cycle" || reason_kind === "ask_volume" ? part : (body.product_id ?? null);
-  const note_id = reason_kind === "personal" ? part : null;
-  const bullet_ids = reason_kind === "market" && part ? [part] : [];
+  const isCompose = kind === "compose";
+  const product_id = isCompose ? (body.product_id ?? null) : reason_kind === "cycle" || reason_kind === "ask_volume" ? part : (body.product_id ?? null);
+  const note_id = isCompose ? (body.used_note_id || null) : reason_kind === "personal" ? part : null;
+  const bullet_ids = isCompose ? (body.used_bullet_id ? [body.used_bullet_id] : []) : reason_kind === "market" && part ? [part] : [];
   const row = await sql.begin(async (tx: any) => {
     const [m] = await tx`
       insert into customer_messages (customer_id, reason_kind, reason_key, product_id, note_id, bullet_ids, draft, message, channel, sent_by, idempotency_key, reason_why)
@@ -452,10 +670,16 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const handlers: Record<string, (b: any) => Promise<{ status: number; payload: any }>> = {
-      draft, send, add_note: addNote, delete_note: deleteNote, set_loads: setLoads,
+      draft, compose, send, add_note: addNote, delete_note: deleteNote, set_loads: setLoads,
       quote_origin: quoteOrigin, link_origin: linkOrigin, dismiss_origin: dismissOrigin,
     };
     if (body.action === "list") return jsonResponse(await list(body.actor ?? ""));
+    // the news the messages can use (last NEWS_DAYS days), each with its source — shown on Quotes → Messaging → Sources
+    if (body.action === "news") { await ensureNewsToday(); return jsonResponse({ news: await sql`select topic, fact_es, published_on, url, source, mx_states, us_states from market_news where published_on >= current_date - ${NEWS_DAYS}::int order by published_on desc` }); }
+    // diagnostics: run one news topic and show what was found and why each item was kept or dropped (writes nothing)
+    // re-run today's news search (adds what's new; existing URLs are never duplicated)
+    if (body.action === "rescan_news") { const detail = await scanNews(); await sql`update market_news_scans set status = 'done', detail = ${detail}, finished_at = now() where scan_date = ${new Date().toISOString().slice(0, 10)}`; return jsonResponse({ detail }); }
+    if (body.action === "news_debug") { const dbg: any = {}; const kept = await searchNews("debug", String(body.instruction || ""), dbg); return jsonResponse({ kept: kept.length, ...dbg }); }
     const h = handlers[body.action];
     if (!h) return jsonResponse({ error: "unknown action" }, 400);
     const r = await h(body);

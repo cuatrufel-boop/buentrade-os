@@ -630,6 +630,8 @@
   .qm-note{width:100%;min-height:64px;resize:vertical;border-radius:10px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:#fff;font-family:inherit;font-size:13px;line-height:1.45;padding:9px 11px;box-sizing:border-box;}
   .qm-note-row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid rgba(255,255,255,.08);font-size:12.5px;line-height:1.4;}
   .qm-x{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:12px;padding:0 2px;}
+  #qPanel_messaging a{color:var(--blue-bright);text-decoration:none;}
+  #qPanel_messaging a:hover{text-decoration:underline;}
   /* Terms to teach (Market Flash) — same chip system as Plants' Pending Matches */
   .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
   .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:var(--card);color:var(--blue-bright);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;font-family:inherit;}
@@ -1626,25 +1628,26 @@ function setQuoteTab(tab){
 }
 
 // ============ MESSAGING (approved 2026-09-27) ============
-// Per client, every real reason to write today (their buying cycle from their TOTAL monthly volume, what they told
-// you, Market Flash, a volume we don't know yet), each already written in the trader's own style by the `messaging`
-// Edge Function. Grouped by reason in Quotes' own stat-card tabs; each row goes out through the SAME review modals as
-// every quote (rqOpenEmailModal / rqOpenWaModal) — edit there, send there. Nothing is ever sent automatically.
+// The goal (user's words): the client ignores "hola, buenos días" and only answers what is relevant to HIM — make him
+// feel known (his business, his city, how much he buys, what he told you) so he answers and asks for a product.
+// So: ONE message per client per day, written by the `messaging` Edge Function (action `compose`) from everything we
+// know about him — what he told you, dated news with its source (sanitary, border, prices in his state), the bulletin
+// facts about his cuts, his buying month, the calendar — picking the single strongest angle, in the trader's voice.
+// Each goes out through the SAME review modals as every quote (edit there, send there). Nothing is sent automatically.
+// A second message the same day (no reply by 1 pm) is "Another angle →", which asks for a different angle.
 const QM_TABS = [
-  { kind: 'cycle', label: 'Due to Buy', cls: 'warn', title: 'Due to buy again', sub: 'Their monthly volume (all suppliers) says they should be buying — ask how they’re doing.',
-    icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-  { kind: 'personal', label: 'Personal', cls: 'hero', title: 'What they told you', sub: 'Follow up on what they shared — the message that shows you remember.',
-    icon: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>' },
-  { kind: 'ask_volume', label: 'Ask Volume', cls: 'hero', title: 'Learn their volume', sub: 'One question per client — every answer makes the next messages stronger.',
-    icon: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>' },
-  { kind: 'market', label: 'Market', cls: 'hero', title: 'Market news that touches them', sub: 'From the latest Market Flash.',
-    icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
+  { kind: 'todo', label: 'To Message', cls: 'warn', title: 'Today’s messages', sub: 'One message per client, from what we know about them and what is happening that affects them. Click a row for the source and the client’s details.',
+    icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' },
   { kind: 'sent', label: 'Sent Today', cls: 'ok', title: 'Sent today', sub: 'No reply yet? Send another angle later in the day.',
     icon: '<path d="M20 6 9 17l-5-5"/>' },
+  { kind: 'market', label: 'Sources', cls: 'hero', title: 'What the messages are built from', sub: 'The Market Flash bulletin and today’s news, each with its source.',
+    icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
 ];
-const QM_KIND_LABEL = { cycle: 'Due to buy', personal: 'Personal', ask_volume: 'Ask volume', market: 'Market' };
-let qmData = null, qmLoading = false, qmTab = 'cycle', qmOpen = null, qmTabPicked = false; // qmOpen = `${clientId}|${reason_key}` expanded
-const qmDrafting = new Set();
+const QM_ANGLE_LABEL = { personal: 'Personal', news: 'News', market: 'Market', rebuy: 'Buying cycle', season: 'Calendar', business: 'Business', volume: 'Volume' };
+const QM_KIND_LABEL = { cycle: 'Buying cycle', personal: 'Personal', ask_volume: 'Volume', market: 'Market / News', season: 'Calendar', business: 'Business' };
+let qmData = null, qmLoading = false, qmTab = 'todo', qmOpen = null, qmTabPicked = false; // qmOpen = client id expanded
+let qmNews = null;
+const qmComposing = new Set();
 
 async function qmLoad(force){
   if (qmLoading || (qmData && !force)){ qmRender(); qmFetchDrafts(); return; }
@@ -1652,94 +1655,85 @@ async function qmLoad(force){
   try { qmData = await callApi('messaging', { action: 'list', actor: currentActor() }); }
   catch (e){ document.getElementById('qm_rows').innerHTML = `<div class="empty">Couldn't load Messaging: ${escapeHtml(e.message)}</div>`; qmLoading = false; return; }
   qmLoading = false;
-  // open on the first tab with something to send — unless the trader already picked one while this was loading
-  if (!force && !qmTabPicked){ const first = QM_TABS.find(t => t.kind !== 'sent' && qmItems(t.kind).some(x => !x.o.sent_at)); if (first) qmTab = first.kind; }
+  for (const c of qmData.clients){
+    // what already went out today (one message per client; a second one is "another angle")
+    c.sentToday = c.options.filter(o => o.sent_at && String(o.reason_key).startsWith('compose:')).sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at)));
+  }
   qmRender();
-  if (!force) qmFetchDrafts();
+  qmFetchDrafts();
 }
-// Every (client, reason) of one kind; for 'sent', everything sent today.
+function qmPending(c){ return c.compose && (!c.sentToday.length || c.compose.after_send); }
 function qmItems(kind){
   if (!qmData) return [];
-  const out = [];
-  for (const c of qmData.clients) for (const o of c.options) {
-    if (kind === 'sent' ? o.sent_at : (o.kind === kind && !o.sent_at)) out.push({ c, o });
-  }
-  return kind === 'sent' ? out.sort((a, b) => String(b.o.sent_at).localeCompare(String(a.o.sent_at)))
-    : out.sort((a, b) => b.o.score - a.o.score || a.c.trade_name.trim().localeCompare(b.c.trade_name.trim()));
-}
-function qmShortProduct(c, o){
-  const p = o.product_id && c.products.find(x => x.product_id === o.product_id);
-  return p ? p.name_en : '';
-}
-function qmWhyHtml(c, o){
-  const p = o.product_id && c.products.find(x => x.product_id === o.product_id);
-  if (o.kind === 'cycle' && p) return `<b>${escapeHtml(p.name_en)}</b><span class="muted" style="display:block;font-size:11.5px;">${escapeHtml(p.cadence)} · ${p.from_us_month} from us this month</span>`;
-  if (o.kind === 'ask_volume' && p) return `<b>${escapeHtml(p.name_en)}</b><span class="muted" style="display:block;font-size:11.5px;">Loads a month unknown</span>`;
-  if (o.kind === 'personal') return `<b>${escapeHtml(o.why.replace(/^Told you: /, ''))}</b>`;
-  if (o.kind === 'market') return `<b>${escapeHtml(o.why.replace(/^Market Flash \([^)]*\): /, ''))}</b><span class="muted" style="display:block;font-size:11.5px;">Market Flash</span>`;
-  return `<b>${escapeHtml(o.why)}</b>`;
+  const list = qmData.clients.filter(c => c.trade_name);
+  if (kind === 'sent') return list.filter(c => c.sentToday.length).sort((a, b) => String(b.sentToday[0].sent_at).localeCompare(String(a.sentToday[0].sent_at)));
+  if (kind === 'todo') return list.filter(c => !c.sentToday.length || (c.compose && c.compose.after_send)).sort((a, b) => b.score - a.score || a.trade_name.trim().localeCompare(b.trade_name.trim()));
+  return [];
 }
 const qmTime = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 function qmRender(){
   if (!qmData) return;
-  // stat cards = tabs (same component as Quotes' Find Product / Ready / Expired / Updating)
+  document.getElementById('qm_stats_row').style.gridTemplateColumns = '1.3fr 1fr 1fr';
   document.getElementById('qm_stats_row').innerHTML = QM_TABS.map(t => {
-    const n = qmItems(t.kind).length;
-    return `<div class="stat-card ${t.cls}${t.kind === qmTab ? ' active' : ''}" onclick="qmTab='${t.kind}';qmTabPicked=true;qmOpen=null;qmRender();qmFetchDrafts()" style="cursor:pointer;${n ? '' : 'opacity:.55;'}" title="Show ${t.label}">
+    const n = t.kind === 'market' ? (qmNews ? qmNews.length : '·') : qmItems(t.kind).length;
+    return `<div class="stat-card ${t.cls}${t.kind === qmTab ? ' active' : ''}" onclick="qmTab='${t.kind}';qmTabPicked=true;qmOpen=null;qmRender();qmFetchDrafts()" style="cursor:pointer;" title="Show ${t.label}">
       <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg></div>
       <div><div class="stat-value">${n}</div><div class="stat-label">${t.label}</div></div></div>`;
   }).join('');
-  const pendingAll = qmData.clients.reduce((n, c) => n + c.options.filter(o => !o.sent_at).length, 0);
+  const pendingAll = qmItems('todo').length;
   const badge = document.getElementById('qmTabCount');
   badge.style.display = pendingAll ? '' : 'none'; badge.textContent = pendingAll;
   document.getElementById('qm_notice').innerHTML = '';
   qmRenderSource();
-
   const tab = QM_TABS.find(t => t.kind === qmTab);
-  const items = qmItems(qmTab);
   document.getElementById('qm_title').textContent = tab.title;
   document.getElementById('qm_sub').textContent = tab.sub;
+  if (qmTab === 'market'){ qmRenderNews(); return; }
+  const items = qmItems(qmTab);
   document.getElementById('qm_count').textContent = `${items.length} client${items.length === 1 ? '' : 's'}`;
-  if (!items.length){ document.getElementById('qm_rows').innerHTML = `<div class="empty">${qmTab === 'sent' ? 'Nothing sent yet today.' : 'Nobody here today.'}</div>`; return; }
+  if (!items.length){ document.getElementById('qm_rows').innerHTML = `<div class="empty">${qmTab === 'sent' ? 'Nothing sent yet today.' : 'Everyone has their message for today.'}</div>`; return; }
+  const heads = qmTab === 'sent' ? ['Client', 'Why', 'Message sent', 'Sent', ''] : ['Client', 'Why', 'Message', 'Send'];
+  document.getElementById('qm_rows').innerHTML = rqTableSection(items.map(c => qmRowHtml(c, heads.length)).join(''), heads);
+}
 
-  const heads = qmTab === 'sent' ? ['Client', 'Why', 'Message', 'Sent', ''] : ['Client', 'Why', 'Message', 'Send'];
-  document.getElementById('qm_rows').innerHTML = rqTableSection(items.map(({ c, o }) => qmRowHtml(c, o, heads.length)).join(''), heads);
+function qmWhyCell(c){
+  const d = qmTab === 'sent' ? null : c.compose;
+  if (qmTab === 'sent'){ const s = c.sentToday[0]; return `<b>${escapeHtml(s.why || '')}</b>`; }
+  if (!d) return '<span class="muted">Reading everything we know…</span>';
+  return `<span class="rq-sheet-pill ${d.angle === 'personal' ? 'new' : d.angle === 'news' ? 'wait' : 'ok'}" style="margin-bottom:4px;">${escapeHtml(QM_ANGLE_LABEL[d.angle] || d.angle)}</span>
+    <span style="display:block;font-size:12px;line-height:1.35;">${escapeHtml(d.why_en || '')}</span>
+    ${d.news ? `<a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="muted" style="display:block;font-size:11px;margin-top:3px;">Source: ${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a>` : ''}`;
 }
-// One client row (+ its detail row when open). Kept separate so a draft arriving updates just its own row — never the
-// whole table under the trader's click.
-function qmRowHtml(c, o, cols){
-    const key = `${c.id}|${o.reason_key}`;
-    const open = qmOpen === key;
-    const clientCell = `<td style="min-width:170px;"><b>${escapeHtml(c.trade_name.trim())}</b><span class="muted" style="display:block;font-size:11.5px;">${escapeHtml([c.first_name, c.city].filter(Boolean).join(' · '))}</span></td>`;
-    const whyCell = `<td style="text-align:left;min-width:210px;max-width:280px;">${qmWhyHtml(c, o)}</td>`;
-    const text = qmTab === 'sent' ? o.sent_message : o.draft;
-    const msgCell = `<td style="text-align:left;max-width:380px;"><span class="${text ? '' : 'muted'}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;line-height:1.45;">${text ? escapeHtml(text) : 'Writing…'}</span></td>`;
-    let tail;
-    if (qmTab === 'sent'){
-      const next = c.options.find(x => !x.sent_at);
-      tail = `<td><span class="rq-sheet-pill ok">${o.sent_channel === 'email' ? 'Email' : 'WhatsApp'} · ${qmTime(o.sent_at)}</span></td>
-        <td>${next ? `<button type="button" class="pkg-trigger-btn" onclick="event.stopPropagation();qmTab='${next.kind}';qmOpen='${c.id}|${next.reason_key}';qmRender();qmFetchDrafts()">Another angle →</button>` : ''}</td>`;
-    } else {
-      const off = (t) => `style="padding:7px 10px;opacity:.35;cursor:default;" disabled title="${t}"`;
-      const ready = !!o.draft;
-      tail = `<td><div class="rq-sheet-actions" style="justify-content:center;">
-        <button type="button" class="rq-customer-bulk-btn email" ${!c.email ? off('No email on file') : !ready ? off('Writing the message…') : 'style="padding:7px 10px;" title="Review and send by email"'} onclick="event.stopPropagation();qmSendEmail('${c.id}','${o.reason_key}')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
-        <button type="button" class="rq-customer-bulk-btn whatsapp" ${!c.phone ? off('No WhatsApp on file') : !ready ? off('Writing the message…') : 'style="padding:7px 10px;" title="Review and open WhatsApp"'} onclick="event.stopPropagation();qmSendWa('${c.id}','${o.reason_key}')">${RQ_WA_ICON.replace('fill="#fff"', 'fill="currentColor"').replace('width:12px;height:12px', 'width:13px;height:13px')}</button>
-      </div></td>`;
-    }
-    return `<tr data-qm-key="${escapeHtml(key)}" style="cursor:pointer;${open ? 'background:rgba(90,170,255,.08);' : ''}" onclick="qmOpen=${open ? 'null' : `'${key}'`};qmRender()" title="Client details">${clientCell}${whyCell}${msgCell}${tail}</tr>
-      ${open ? `<tr data-qm-detail="${escapeHtml(key)}"><td colspan="${cols}" style="text-align:left;padding:14px 12px 18px;background:rgba(10,20,36,.35);">${qmDetailHtml(c, o)}</td></tr>` : ''}`;
+function qmRowHtml(c, cols){
+  const open = qmOpen === c.id;
+  const clientCell = `<td style="min-width:170px;"><b>${escapeHtml(c.trade_name.trim())}</b><span class="muted" style="display:block;font-size:11.5px;">${escapeHtml([c.first_name, c.city].filter(Boolean).join(' · '))}</span></td>`;
+  const whyCell = `<td style="text-align:left;min-width:220px;max-width:300px;">${qmWhyCell(c)}</td>`;
+  const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (c.compose && c.compose.message);
+  const msgCell = `<td style="text-align:left;max-width:400px;"><span class="${text ? '' : 'muted'}" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;line-height:1.45;">${text ? escapeHtml(text) : 'Writing…'}</span></td>`;
+  let tail;
+  if (qmTab === 'sent'){
+    const s = c.sentToday[0];
+    tail = `<td><span class="rq-sheet-pill ok">${s.sent_channel === 'email' ? 'Email' : 'WhatsApp'} · ${qmTime(s.sent_at)}</span>${c.sentToday.length > 1 ? `<span class="muted" style="display:block;font-size:11px;margin-top:3px;">${c.sentToday.length} today</span>` : ''}</td>
+      <td><button type="button" class="pkg-trigger-btn" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Another angle →</button></td>`;
+  } else {
+    const off = t => `style="padding:7px 10px;opacity:.35;cursor:default;" disabled title="${t}"`;
+    const ready = !!(c.compose && c.compose.message);
+    tail = `<td><div class="rq-sheet-actions" style="justify-content:center;">
+      <button type="button" class="rq-customer-bulk-btn email" ${!c.email ? off('No email on file') : !ready ? off('Writing the message…') : 'style="padding:7px 10px;" title="Review and send by email"'} onclick="event.stopPropagation();qmSendEmail('${c.id}')"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg></button>
+      <button type="button" class="rq-customer-bulk-btn whatsapp" ${!c.phone ? off('No WhatsApp on file') : !ready ? off('Writing the message…') : 'style="padding:7px 10px;" title="Review and open WhatsApp"'} onclick="event.stopPropagation();qmSendWa('${c.id}')">${RQ_WA_ICON.replace('fill="#fff"', 'fill="currentColor"').replace('width:12px;height:12px', 'width:13px;height:13px')}</button>
+    </div></td>`;
+  }
+  return `<tr data-qm-key="${escapeHtml(c.id)}" style="cursor:pointer;${open ? 'background:rgba(90,170,255,.08);' : ''}" onclick="qmOpen=${open ? 'null' : `'${c.id}'`};qmRender()" title="Client details">${clientCell}${whyCell}${msgCell}${tail}</tr>
+    ${open ? `<tr data-qm-detail="${escapeHtml(c.id)}"><td colspan="${cols}" style="text-align:left;padding:14px 12px 18px;background:rgba(10,20,36,.35);">${qmDetailHtml(c)}</td></tr>` : ''}`;
 }
-function qmRefreshRow(c, o){
-  const key = `${c.id}|${o.reason_key}`;
-  const tr = [...document.querySelectorAll('#qm_rows tr[data-qm-key]')].find(x => x.dataset.qmKey === key);
+function qmRefreshRow(c){
+  const tr = [...document.querySelectorAll('#qm_rows tr[data-qm-key]')].find(x => x.dataset.qmKey === c.id);
   if (!tr) return;
   const cols = tr.children.length;
-  const detail = tr.nextElementSibling && tr.nextElementSibling.dataset.qmDetail === key ? tr.nextElementSibling : null;
+  const detail = tr.nextElementSibling && tr.nextElementSibling.dataset.qmDetail === c.id ? tr.nextElementSibling : null;
   const holder = document.createElement('tbody');
-  holder.innerHTML = qmRowHtml(c, o, cols);
-  // keep a note being typed in the detail row
+  holder.innerHTML = qmRowHtml(c, cols);
   const typing = detail && detail.querySelector('textarea.qm-note');
   const typed = typing ? typing.value : null;
   if (detail) detail.replaceWith(...[...holder.children].slice(1));
@@ -1747,17 +1741,18 @@ function qmRefreshRow(c, o){
   if (typed){ const t = document.getElementById('qm_note_' + c.id); if (t) t.value = typed; }
 }
 
-// Row detail: the full message (with Rewrite) and everything we know about the client — volumes, what they told you,
-// what works. Business type is read-only here: it's set in the client's profile (Clients).
-function qmDetailHtml(c, o){
+// Row detail: the full message (+ another angle), where it comes from, and everything we know about the client.
+function qmDetailHtml(c){
   const biz = qmData.business_types.find(b => b.id === c.business_type_id);
-  const text = o.sent_at ? o.sent_message : o.draft;
+  const d = qmTab === 'sent' ? null : c.compose;
+  const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (d && d.message);
   return `<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:22px;">
     <div>
-      <div class="qm-sec">${o.sent_at ? 'Message sent' : 'Message'}</div>
+      <div class="qm-sec">${qmTab === 'sent' ? 'Message sent' : 'Message'}</div>
       <div style="font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">${text ? escapeHtml(text) : '<span class="muted">Writing…</span>'}</div>
-      <div class="muted" style="font-size:11.5px;margin-top:6px;">${o.sent_at ? '' : 'Edit it in the review window when you send — your edits teach the system how you write.'}</div>
-      ${o.sent_at ? '' : `<div style="margin-top:10px;display:flex;gap:8px;"><button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="event.stopPropagation();qmRewrite('${c.id}','${o.reason_key}')">Rewrite →</button></div>`}
+      ${d && d.news ? `<div class="muted" style="font-size:11.5px;margin-top:6px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener">${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
+      <div class="muted" style="font-size:11.5px;margin-top:6px;">${qmTab === 'sent' ? '' : 'Edit it in the review window when you send — your edits teach the system how you write.'}</div>
+      <div style="margin-top:10px;display:flex;gap:8px;"><button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Another angle →</button></div>
       <div class="qm-sec" style="margin-top:16px;">Business</div>
       <div style="font-size:13px;">${biz ? `${escapeHtml(biz.name_en)}<span class="muted" style="display:block;font-size:11px;">${escapeHtml(biz.name_es || '')}</span>` : '<span class="muted">Not set — set it in the client’s profile (Clients)</span>'}</div>
     </div>
@@ -1777,70 +1772,104 @@ function qmDetailHtml(c, o){
   </div>`;
 }
 
-// Drafts are written on demand for the rows on screen (4 at a time) and kept for the day.
+// One composed message per client, written on demand (4 at a time) and kept for the day.
 async function qmFetchDrafts(){
-  const queue = qmItems(qmTab).filter(({ c, o }) => !o.sent_at && o.draft == null && !qmDrafting.has(`${c.id}|${o.reason_key}`));
+  if (!qmData) return;
+  const queue = qmItems('todo').filter(c => !c.compose && !qmComposing.has(c.id));
   let i = 0;
-  const worker = async () => { while (i < queue.length){ const { c, o } = queue[i++]; const k = `${c.id}|${o.reason_key}`; qmDrafting.add(k);
-    try { const d = await callApi('messaging', { action: 'draft', actor: currentActor(), customer_id: c.id, reason_key: o.reason_key }); o.draft = d.message; o.subject = d.subject; }
-    catch (e){ o.draft = ''; console.error('draft failed', e); } finally { qmDrafting.delete(k); }
-    qmRefreshRow(c, o); } };
+  const worker = async () => { while (i < queue.length){ const c = queue[i++]; qmComposing.add(c.id);
+    try { c.compose = await callApi('messaging', { action: 'compose', actor: currentActor(), customer_id: c.id }); }
+    catch (e){ c.compose = { message: '', why_en: `Couldn't write it: ${e.message}` }; console.error('compose failed', e); }
+    finally { qmComposing.delete(c.id); }
+    qmRefreshRow(c); } };
   await Promise.all([worker(), worker(), worker(), worker()]);
+  qmRender();
 }
-function qmFind(cid, key){ const c = qmData.clients.find(x => x.id === cid); return { c, o: c && c.options.find(x => x.reason_key === key) }; }
-async function qmRewrite(cid, key){
-  const { c, o } = qmFind(cid, key); if (!o) return;
-  const previous = o.draft || '';
-  o.draft = null; qmRender();
-  try { const d = await callApi('messaging', { action: 'draft', actor: currentActor(), customer_id: cid, reason_key: key, regenerate: true, previous }); o.draft = d.message; o.subject = d.subject; }
-  catch (e){ o.draft = previous; rqShowNotice(`Couldn't rewrite: ${e.message}`); }
+function qmFind(cid){ return qmData.clients.find(x => x.id === cid); }
+async function qmAnotherAngle(cid){
+  const c = qmFind(cid); if (!c) return;
+  const previous = (c.compose && c.compose.message) || (c.sentToday[0] && c.sentToday[0].sent_message) || '';
+  const afterSend = !!c.sentToday.length;
+  c.compose = null; if (afterSend){ qmTab = 'todo'; qmOpen = cid; }
+  qmRender();
+  try { c.compose = await callApi('messaging', { action: 'compose', actor: currentActor(), customer_id: cid, regenerate: true, previous }); c.compose.after_send = afterSend; }
+  catch (e){ rqShowNotice(`Couldn't write another angle: ${e.message}`); }
   qmRender();
 }
 function qmToday(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-async function qmLogSend(c, o, message, channel){
+async function qmLogSend(c, message, channel){
+  const d = c.compose;
+  const n = c.sentToday.length + 1; // a later "another angle" is its own message
   const r = await callApi('messaging', {
-    action: 'send', actor: currentActor(), customer_id: c.id, reason_key: o.reason_key, product_id: o.product_id,
-    message, draft: o.draft, reason_why: o.why, channel, idempotency_key: `messaging|${c.id}|${o.reason_key}|${qmToday()}|${channel}`,
+    action: 'send', actor: currentActor(), customer_id: c.id, reason_key: `compose:${qmToday()}:${n}`, angle: d.angle, product_id: d.product_id,
+    used_bullet_id: d.used_bullet_id, used_note_id: d.used_note_id, message, draft: d.message, reason_why: d.why_en, channel,
+    idempotency_key: `messaging|${c.id}|compose:${qmToday()}:${n}|${channel}`,
   });
-  o.sent_at = r.message.sent_at; o.sent_channel = channel; o.sent_message = r.message.message;
+  c.sentToday.unshift({ sent_at: r.message.sent_at, sent_channel: channel, sent_message: r.message.message, why: d.why_en });
+  c.compose = null;
   qmOpen = null;
   qmRender();
 }
-// Same review modals every quote goes through: the text is editable there, and only its own Send / Open WhatsApp
-// sends it. What was actually sent (after any edit) is what gets recorded.
-function qmSendEmail(cid, key){
-  const { c, o } = qmFind(cid, key); if (!o || !c.email || !o.draft) return;
-  const item = { id: c.id, label: c.trade_name.trim(), to: c.email, subject: o.subject || '', body: o.draft, fromAlias: 'offers' };
+// Same review modals every quote goes through: editable there, and what was actually sent is what gets recorded.
+function qmSendEmail(cid){
+  const c = qmFind(cid); const d = c && c.compose; if (!d || !c.email || !d.message) return;
+  const item = { id: c.id, label: c.trade_name.trim(), to: c.email, subject: d.subject || '', body: d.message, fromAlias: 'offers' };
   const edited = () => ((rqEmailModalItems.find(x => x.id === c.id) || item).body || '').trim(); // the modal edits its own copy
-  item.onSent = async () => { try { await qmLogSend(c, o, edited(), 'email'); } catch (e){ rqShowNotice(`Sent, but it couldn't be recorded: ${e.message}`); } };
+  item.onSent = async () => { try { await qmLogSend(c, edited(), 'email'); } catch (e){ rqShowNotice(`Sent, but it couldn't be recorded: ${e.message}`); } };
   rqOpenEmailModal(`Email — ${c.trade_name.trim()}`, [item], true, 'Send');
 }
-function qmSendWa(cid, key){
-  const { c, o } = qmFind(cid, key); if (!o || !c.phone || !o.draft) return;
-  const item = { id: c.id, label: c.trade_name.trim(), phone: String(c.phone).replace(/\D/g, ''), body: o.draft };
+function qmSendWa(cid){
+  const c = qmFind(cid); const d = c && c.compose; if (!d || !c.phone || !d.message) return;
+  const item = { id: c.id, label: c.trade_name.trim(), phone: String(c.phone).replace(/\D/g, ''), body: d.message };
   const edited = () => ((rqWaModalItems.find(x => x.id === c.id) || item).body || '').trim(); // the modal edits its own copy
-  item.onOpened = async () => { try { await qmLogSend(c, o, edited(), 'whatsapp'); } catch (e){ rqShowNotice(`WhatsApp opened, but it couldn't be recorded: ${e.message}`); } };
+  item.onOpened = async () => { try { await qmLogSend(c, edited(), 'whatsapp'); } catch (e){ rqShowNotice(`WhatsApp opened, but it couldn't be recorded: ${e.message}`); } };
   rqOpenWaModal(`WhatsApp — ${c.trade_name.trim()}`, [item], false);
+}
+async function qmReloadKeepingDrafts(){
+  const kept = new Map((qmData ? qmData.clients : []).map(c => [c.id, c.compose]));
+  await qmLoad(true);
+  for (const c of qmData.clients) if (kept.get(c.id)) c.compose = kept.get(c.id);
+  qmRender();
 }
 async function qmAddNote(cid){
   const el = document.getElementById('qm_note_' + cid); const note = el ? el.value.trim() : '';
   if (!note) return;
   try {
-    const r = await callApi('messaging', { action: 'add_note', actor: currentActor(), customer_id: cid, note, idempotency_key: `note|${cid}|${note}|${qmToday()}` });
-    await qmLoad(true);
-    if (r.note){ qmTab = 'personal'; qmOpen = `${cid}|note:${r.note.id}`; qmRender(); qmFetchDrafts(); }
+    await callApi('messaging', { action: 'add_note', actor: currentActor(), customer_id: cid, note, idempotency_key: `note|${cid}|${note}|${qmToday()}` });
+    await qmReloadKeepingDrafts();
+    // what they just told you is usually the strongest angle — rewrite this client's message with it
+    const c = qmFind(cid); if (c && !c.sentToday.length){ qmOpen = cid; qmAnotherAngle(cid); }
   } catch (e){ rqShowNotice(`Couldn't save the note: ${e.message}`); }
 }
 async function qmDeleteNote(id){
-  try { await callApi('messaging', { action: 'delete_note', actor: currentActor(), id }); await qmLoad(true); qmFetchDrafts(); }
+  try { await callApi('messaging', { action: 'delete_note', actor: currentActor(), id }); await qmReloadKeepingDrafts(); }
   catch (e){ rqShowNotice(`Couldn't delete the note: ${e.message}`); }
 }
 async function qmSetLoads(linkId, value){
   const v = String(value).trim();
   if (v && !(Number(v) > 0 && Number.isInteger(Number(v)))){ rqShowNotice('Loads a month must be a whole number (or empty).'); return; }
-  try { await callApi('messaging', { action: 'set_loads', actor: currentActor(), link_id: linkId, loads_month: v === '' ? null : Number(v) }); await qmLoad(true); qmFetchDrafts(); }
+  try { await callApi('messaging', { action: 'set_loads', actor: currentActor(), link_id: linkId, loads_month: v === '' ? null : Number(v) }); await qmReloadKeepingDrafts(); }
   catch (e){ rqShowNotice(`Couldn't save: ${e.message}`); }
 }
+// Sources tab: today's news (each with its link) under the bulletin strip — what the messages are built from.
+async function qmRenderNews(){
+  const el = document.getElementById('qm_rows');
+  if (!qmNews){
+    el.innerHTML = '<div class="empty">Loading today’s news…</div>';
+    try { qmNews = (await callApi('messaging', { action: 'news', actor: currentActor() })).news || []; } catch (e){ qmNews = []; }
+    if (qmTab !== 'market') return;
+    qmRender(); return;
+  }
+  document.getElementById('qm_count').textContent = `${qmNews.length} news item${qmNews.length === 1 ? '' : 's'} (last 14 days)`;
+  const TOPIC = { avian_flu: 'Avian flu', border: 'Border', mx_prices: 'Mexico prices', us_industry: 'US industry' };
+  el.innerHTML = qmNews.length ? rqTableSection(qmNews.map(n => `<tr>
+      <td style="white-space:nowrap;"><span class="rq-sheet-pill ${n.topic === 'avian_flu' ? 'exp' : n.topic === 'border' ? 'wait' : 'ok'}">${escapeHtml(TOPIC[n.topic] || n.topic)}</span></td>
+      <td style="text-align:left;font-size:12.5px;line-height:1.45;">${escapeHtml(n.fact_es)}<span class="muted" style="display:block;font-size:11px;">${escapeHtml([...(n.mx_states || []), ...(n.us_states || [])].join(', '))}</span></td>
+      <td class="num">${escapeHtml(String(n.published_on).slice(0, 10))}</td>
+      <td><a href="${escapeHtml(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.source || 'article')} ↗</a></td></tr>`).join(''), ['Topic', 'What happened', 'Date', 'Source'])
+    : '<div class="empty">No news found in the last 14 days yet.</div>';
+}
+
 // ---- Market Flash as a Messaging source (2026-09-27: "no necesita ser un módulo… es una de las fuentes de datos de
 // messaging") — on the Market tab: the bulletin's status, Upload PDF (it also arrives by email on its own, every
 // 15 min), and the terms it printed that the system doesn't know yet, taught once and learned for good (same
