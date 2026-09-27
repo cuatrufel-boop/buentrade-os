@@ -50,6 +50,20 @@ FRONTEND_EXEMPT = {
     ("provider-rates-create", "providers.html"),  # addRateRow() — every blank row is identical
 }
 
+# Action-keyed functions (one slug, several actions — the function-cap pattern): only the actions that INSERT need an
+# idempotency_key from the caller. These are reads, or writes that are idempotent by nature (update/delete by id, or an
+# upsert on a natural key) — the reason is listed next to each.
+ACTION_EXEMPT = {
+    ("messaging", "list"),               # read
+    ("messaging", "draft"),              # upsert on (customer_id, reason_key)
+    ("messaging", "quote_origin"),       # read
+    ("messaging", "delete_note"),        # delete by id
+    ("messaging", "set_business_type"),  # update by id to a given value
+    ("messaging", "set_loads"),          # update by id to a given value
+    ("messaging", "link_origin"),        # update by id, only when not linked yet
+    ("messaging", "dismiss_origin"),     # update by ids, only when not dismissed yet
+}
+
 
 def find_functions_that_insert():
     results = {}
@@ -105,6 +119,9 @@ def find_frontend_calls(function_names):
         for name in function_names:
             for m in re.finditer(r"callApi\(\s*['\"]" + re.escape(name) + r"['\"]", text):
                 if (name, html_file.name) in FRONTEND_EXEMPT:
+                    continue
+                action = re.search(r"action:\s*['\"]([a-z_]+)['\"]", text[m.start():m.start() + 400])
+                if action and (name, action.group(1)) in ACTION_EXEMPT:
                     continue
                 start = m.start()
                 window = enclosing_function_body(text, start)

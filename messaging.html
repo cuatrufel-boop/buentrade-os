@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BuenTrade Trading OS — Messaging</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+<link rel="shortcut icon" href="/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A2547; --navy-2:#0E3D8F; --blue:#1E6ADB; --blue-bright:#5AAAFF; --blue-light:rgba(90,170,255,.14);
+    --bg:#0A2547; --card:rgba(255,255,255,.08); --line:rgba(255,255,255,.18);
+    --ink:#FFFFFF; --ink-soft:rgba(255,255,255,.55);
+    --red:#C4432E; --green:#0F8A5F; --green-bright:#3DDC97; --amber:#FFC876; --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,
+      linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:0 24px 40px;}
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:20px 32px 20px;margin-bottom:24px;position:relative;}
+  header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,#E8B54C 25%,#E8B54C 75%,transparent);opacity:.55;}
+  .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1;}
+  .brand-word span{color:var(--blue-bright);}
+  .top-row{display:flex;justify-content:space-between;align-items:center;min-height:44px;position:relative;}
+  .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
+  .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
+  .nav-pill.active{color:var(--blue-bright);}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden;}
+  .empty{color:var(--ink-soft);text-align:center;padding:24px;}
+  .muted{color:var(--ink-soft);}
+  /* Same .btn recipe as orders.html's Active Loads (the BuenTrade design reference). */
+  .btn{font-family:inherit;font-size:12px;font-weight:700;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--blue);background:transparent;color:var(--blue-bright);white-space:nowrap;}
+  .btn:hover{background:var(--blue-light);}
+  .btn.small{font-size:11px;padding:5px 10px;}
+  .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;background:transparent;}
+  .link-btn{background:none;border:none;padding:0;color:var(--blue-bright);font-size:11.5px;font-family:inherit;cursor:pointer;text-decoration:underline;}
+  /* Same pill recipe as orders.html's .payment-badge. */
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
+  .badge.active{color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  .badge.ok{color:#6FD3A8;border-color:rgba(15,138,95,.4);}
+  .badge.due{color:var(--amber);border-color:rgba(255,200,118,.4);}
+  .badge.hot{color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  .badge.soft{color:var(--ink-soft);border-color:var(--line);}
+  .head-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+  .counts{display:flex;gap:8px;flex-wrap:wrap;}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--ink-soft);}
+  .toolbar .bt-select-wrap{width:auto;min-width:230px;}
+  .notice{font-size:12.5px;color:var(--amber);border:1px solid rgba(255,200,118,.35);border-radius:10px;padding:9px 12px;margin-bottom:14px;}
+  .newdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#E5533D;margin-right:5px;vertical-align:1px;}
+
+  .cl-body{display:grid;grid-template-columns:260px 1fr;}
+  .cl-body > div{padding:16px 18px;min-width:0;}
+  .who{border-right:1px solid var(--line);}
+  .who .name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;}
+  .who .meta{color:var(--ink-soft);font-size:12px;margin-top:3px;}
+  .sec-l{font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin:14px 0 6px;}
+  .cons-row{display:grid;grid-template-columns:1fr 50px;gap:2px 8px;align-items:center;margin-bottom:7px;font-size:12px;}
+  .cons-row .pn{line-height:1.35;}
+  .cons-row .pn.missing{color:var(--amber);}
+  .cons-row input{width:50px;border-radius:6px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:#fff;padding:4px 5px;font-size:12px;text-align:center;font-family:'IBM Plex Mono',monospace;}
+  .cons-row input:focus{outline:none;border-color:var(--blue-bright);}
+  .cons-row .cov{grid-column:1 / -1;font-size:11px;color:var(--ink-soft);}
+  .note-item{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;line-height:1.45;margin-bottom:4px;}
+  .note-item .x{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:13px;padding:0 2px;line-height:1.2;}
+  .note-item .x:hover{color:#FF9C8A;}
+  .note-add{display:flex;gap:6px;margin-top:6px;}
+  .note-add input{flex:1;min-width:0;border-radius:8px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:#fff;padding:6px 8px;font-size:12px;font-family:inherit;}
+  .note-add input:focus{outline:none;border-color:var(--blue-bright);}
+  .works{font-size:12px;line-height:1.7;}
+  .works b{font-family:'IBM Plex Mono',monospace;font-weight:600;color:#6FD3A8;}
+
+  .cl-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;color:var(--ink-soft);}
+  .opts{display:flex;flex-direction:column;gap:6px;}
+  .opt{display:grid;grid-template-columns:118px 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer;}
+  .opt:hover{background:rgba(255,255,255,.04);}
+  .opt.sel{border-color:var(--blue-bright);background:rgba(30,106,219,.14);}
+  .opt .why{font-size:12.5px;color:rgba(255,255,255,.88);line-height:1.4;}
+  .opt.done .why{color:var(--ink-soft);}
+  .opt .badge{text-align:center;}
+  .draft{margin-top:10px;}
+  .src{margin-top:6px;font-size:12px;color:var(--ink-soft);border-left:2px solid var(--blue-bright);padding:4px 10px;background:rgba(255,255,255,.03);border-radius:0 6px 6px 0;}
+  textarea.msg{width:100%;min-height:78px;resize:vertical;border-radius:10px;border:1.5px solid rgba(90,170,255,.4);background:rgba(10,20,36,.55);color:#fff;font-family:inherit;font-size:14px;line-height:1.5;padding:10px 12px;margin-top:8px;}
+  textarea.msg:focus{outline:none;border-color:var(--blue-bright);}
+  textarea.msg:disabled{opacity:.75;}
+  .draft-foot{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+  .draft-foot .hint{font-size:11.5px;color:var(--ink-soft);margin-right:auto;}
+  .draft-foot .hint.edited{color:var(--amber);}
+  @media (max-width:860px){ .cl-body{grid-template-columns:1fr;} .who{border-right:none;border-bottom:1px solid var(--line);} .opt{grid-template-columns:1fr auto;} .opt .badge:first-child{grid-column:1 / -1;justify-self:start;} }
+
+  /* Shared review modal (js/email-modal.js) — same classes/look as every other page. */
+  .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:6500;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .email-modal-box{background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
+  .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .email-modal-field{margin-bottom:12px;}
+  .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
+  .email-modal-field textarea{min-height:130px;resize:vertical;}
+  .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+
+  .bt-select-wrap{position:relative;display:block;width:100%;}
+  /* Real ask 2026-09-18 ("te los mande para que lo hagas mismo diseno buentrade"): same flat
+     blue-glass .btn recipe as every search box/category dropdown now, replacing the plain
+     var(--line)-bordered "generic form field" look every one of these selects had. */
+  .bt-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;height:38px;padding:0 12px;border-radius:8px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-weight:700;font-size:13px;font-family:'Inter',sans-serif;cursor:pointer;text-align:left;transition:background .18s,border-color .18s;}
+  .bt-select-trigger:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
+  .bt-select-wrap.open .bt-select-trigger{border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.2);}
+  .bt-select-trigger:disabled{opacity:.5;cursor:default;}
+  .bt-select-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+  .bt-select-chevron{width:14px;height:14px;flex-shrink:0;color:var(--ink-soft);transition:transform .15s ease;}
+  .bt-select-wrap.open .bt-select-chevron{transform:rotate(180deg);}
+  .bt-select-panel{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;width:max-content;max-width:320px;background:rgba(20,40,74,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1.5px solid rgba(232,181,76,.4);border-radius:12px;box-shadow:0 24px 60px rgba(4,12,26,.5);padding:6px;z-index:80;max-height:280px;overflow-y:auto;}
+  .bt-select-search{width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font-size:12.5px;font-family:inherit;}
+  .bt-select-search::placeholder{color:var(--ink-soft);}
+  .bt-select-option{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:8px 10px;border:none;background:none;color:#fff;font-size:13px;font-family:'Inter',sans-serif;font-weight:500;text-align:left;border-radius:8px;cursor:pointer;white-space:nowrap;}
+  .bt-select-option:hover{background:rgba(232,181,76,.1);}
+  .bt-select-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
+  .bt-select-option .bt-select-check{width:13px;flex-shrink:0;visibility:hidden;}
+  .bt-select-option.selected .bt-select-check{visibility:visible;}
+  .bt-select-empty{padding:10px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
+
+  #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#0B2545 0%,#123A6B 100%);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;}
+  .auth-box{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:32px 30px;box-shadow:0 20px 60px rgba(0,0,0,.35);--ink:#0F1F33;--ink-soft:#64748B;}
+  .auth-logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .auth-logo .word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#0B2545;}
+  .auth-logo .word span{color:#1B6FC9;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12px;font-weight:600;color:#5B6B82;margin-bottom:5px;}
+  .auth-field input{width:100%;padding:10px 12px;border:1.5px solid #E1E6ED;border-radius:8px;font-size:14px;font-family:inherit;}
+  .auth-field input:focus{outline:none;border-color:#1B6FC9;}
+  .auth-submit{width:100%;padding:11px;border:none;border-radius:8px;background:#1B6FC9;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:9px 11px;border-radius:8px;line-height:1.4;display:none;}
+  .auth-msg.err{background:#FCEBE7;color:#B23A22;display:block;}
+  .auth-note{font-size:11px;color:#9AABC2;text-align:center;margin-top:16px;line-height:1.5;}
+
+</style>
+</head>
+<body>
+
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="30" height="30"><circle cx="22" cy="22" r="21" fill="#123A6B" stroke="#3E7BC4" stroke-width="1.2"/><path d="M6,25 C13,19 17,29 24,23 C30,18 34,24 38,20" stroke="#5FA8E8" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="16" y="14" width="13" height="8" rx="1.4" fill="#00A9A0"/></svg>
+      <div class="word">Buen<span>Trade</span> Trading OS</div>
+    </div>
+    <form id="formSignIn" onsubmit="return doSignIn(event)">
+      <div class="auth-field"><label>Work email</label><input type="email" id="siEmail" required placeholder="name@buentradegroup.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="siPass" required></div>
+      <button class="auth-submit" type="submit">Sign In</button>
+    </form>
+    <div id="authMsg" class="auth-msg"></div>
+    <div class="auth-note">Accounts are created from the Trading Tool. Same login works here.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyApz__ZGeVwgt1ObJYCQ6elVa9KXFZA3tM",
+  authDomain: "buentrade-fc841.firebaseapp.com",
+  projectId: "buentrade-fc841",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+// STAGING Trading OS API — every read/write goes through an Edge Function (here: `messaging`).
+const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
+
+async function callApi(fn, body){
+  const res = await fetch(API_ROOT + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.message || data.error || res.status); err.data = data; throw err; }
+  return data;
+}
+function currentActor(){ return (auth.currentUser && auth.currentUser.email) || 'unknown'; }
+
+function showAuthMsg(text){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg err';
+}
+function doSignIn(e){
+  e.preventDefault();
+  auth.signInWithEmailAndPassword(document.getElementById('siEmail').value, document.getElementById('siPass').value)
+    .then(cred => { if(!cred.user.emailVerified){ showAuthMsg('Please verify your email first.'); auth.signOut(); } })
+    .catch(err => showAuthMsg(err.message));
+  return false;
+}
+function logout(){ auth.signOut(); }
+
+// Load once per tab — Firebase refires onAuthStateChanged on silent token refreshes (same guard as every page).
+let btAuthLoaded = false;
+auth.onAuthStateChanged(user => {
+  const gate = document.getElementById('authGate');
+  const app = document.getElementById('appContent');
+  if (user && user.emailVerified) {
+    gate.style.display = 'none';
+    app.style.display = 'block';
+    document.getElementById('userBadge').textContent = user.email;
+    if (!btAuthLoaded) { btAuthLoaded = true; loadMessaging(); }
+  } else {
+    gate.style.display = 'flex';
+    app.style.display = 'none';
+  }
+});
+</script>
+
+<div id="appContent" style="display:none;">
+<header>
+  <div class="top-row">
+    <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Go to Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
+    <a href="market-flash-admin.html" class="hdr-flash" style="position:absolute;right:32px;top:50%;transform:translateY(-50%);" title="Market Flash"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5AAAFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Market Flash</a>
+  </div>
+  <div id="userChip" style="position:absolute;right:32px;bottom:24px;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:3px 5px 3px 3px;">
+    <span id="userAvatar" style="width:19px;height:19px;border-radius:50%;background:#1E6ADB;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;flex-shrink:0;"></span>
+    <span id="userBadge" style="display:none;"></span>
+    <button type="button" class="hdr-logout" onclick="logout()" title="Log Out" aria-label="Log Out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+  </div>
+  <nav class="nav-row">
+    <a href="customers.html" class="nav-pill">Clients</a>
+    <a href="providers.html" class="nav-pill">Logistics</a>
+    <a href="plants.html" class="nav-pill">Plants</a>
+    <a href="products.html" class="nav-pill">Products</a>
+    <a href="messaging.html" class="nav-pill active">Messaging</a>
+    <a href="quotes.html" class="nav-pill">Quotes</a>
+    <a href="offers.html" class="nav-pill">Offers</a>
+    <a href="orders.html" class="nav-pill">Orders</a>
+    <a href="collections.html" class="nav-pill">Collections</a>
+    <a href="payments.html" class="nav-pill">Payments</a>
+  </nav>
+</header>
+<script src="js/header-chip.js"></script>
+<script src="js/email-modal.js"></script>
+
+<div class="wrap">
+  <div class="head-row">
+    <h1>Messaging</h1>
+    <div class="counts"><span class="badge active" id="cPending"></span><span class="badge ok" id="cSent"></span><span class="badge due" id="cAsked"></span></div>
+  </div>
+  <div class="toolbar">
+    <span>Order</span>
+    <select id="msgSort" onchange="renderAll()">
+      <option value="strong">Strongest reason first</option>
+      <option value="month">Most of the month still uncovered</option>
+      <option value="az">A → Z</option>
+    </select>
+    <span><span class="newdot"></span>new today</span>
+  </div>
+  <div id="msgNotice"></div>
+  <div id="msgList"><div class="empty">Loading…</div></div>
+</div>
+</div>
+
+<script>
+// ============ MESSAGING (approved 2026-09-27) ============
+// Per client: every real reason to write today, each already written in the trader's own style. The trader picks one,
+// edits it if he wants and sends it — nothing is ever sent automatically. See supabase/functions/messaging.
+const KIND_LABEL = { cycle: 'Buying cycle', ask_volume: 'Ask volume', personal: 'Personal', market: 'Market' };
+const KIND_BADGE = { cycle: 'due', ask_volume: 'soft', personal: 'hot', market: 'active' };
+const FROM_ALIAS = 'offers';
+const FROM_DISPLAY = 'Offers BuenTrade <offers@buentradegroup.com>';
+let msgData = { clients: [], business_types: [], bulletin: null };
+const msgSel = {};        // clientId -> selected reason_key
+const msgText = {};       // `${clientId}|${reason_key}` -> text currently in the box (keeps edits across re-renders)
+const msgSrcOpen = {};    // clientId -> source line open
+const msgShowAll = {};    // clientId -> show every product
+const msgDrafting = new Set();
+
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function todayKey(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function hhmm(ts){ const d = new Date(ts); return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+
+async function loadMessaging(){
+  try {
+    msgData = await callApi('messaging', { action: 'list', actor: currentActor() });
+  } catch (e){
+    document.getElementById('msgList').innerHTML = `<div class="empty">Couldn't load Messaging: ${esc(e.message)}</div>`;
+    return;
+  }
+  for (const c of msgData.clients){
+    const pending = c.options.filter(o => !o.sent_at);
+    if (!msgSel[c.id] || !c.options.some(o => o.reason_key === msgSel[c.id])) msgSel[c.id] = (pending[0] || c.options[0] || {}).reason_key || null;
+  }
+  renderAll();
+  fetchMissingDrafts();
+}
+
+function clientOption(c, key){ return c.options.find(o => o.reason_key === key) || null; }
+
+function renderAll(){
+  const b = msgData.bulletin;
+  document.getElementById('msgNotice').innerHTML = b && !b.fresh
+    ? `<div class="notice">Market Flash: the latest bulletin (${esc(String(b.as_of).slice(0,10))}) is older than 21 days, so there are no market messages today. They come back as soon as a new bulletin arrives.</div>`
+    : (!b ? `<div class="notice">Market Flash: no bulletin yet — market messages will appear once one arrives.</div>` : '');
+  const sort = document.getElementById('msgSort').value;
+  const list = msgData.clients.filter(c => c.options.length).sort((a, c2) =>
+    sort === 'az' ? a.trade_name.trim().localeCompare(c2.trade_name.trim())
+    : sort === 'month' ? (c2.uncovered - a.uncovered) || (c2.score - a.score)
+    : (c2.score - a.score) || a.trade_name.trim().localeCompare(c2.trade_name.trim()));
+  let pending = 0, sent = 0;
+  msgData.clients.forEach(c => c.options.forEach(o => o.sent_at ? sent++ : pending++));
+  document.getElementById('cPending').textContent = `${pending} pending`;
+  document.getElementById('cSent').textContent = `${sent} sent today`;
+  const asked = msgData.clients.reduce((n, c) => n + (c.asked_today || 0), 0);
+  document.getElementById('cAsked').style.display = asked ? '' : 'none';
+  document.getElementById('cAsked').textContent = `${asked} asked for product`;
+  document.getElementById('msgList').innerHTML = list.length ? list.map(clientCardHtml).join('') : '<div class="empty">Nothing to tell any client today.</div>';
+  document.querySelectorAll('#msgList select, .toolbar select').forEach(s => { if (typeof btEnhanceSelect === 'function') btEnhanceSelect(s); });
+}
+
+function clientCardHtml(c){
+  const key = msgSel[c.id];
+  const o = clientOption(c, key);
+  const sentCount = c.options.filter(x => x.sent_at).length;
+  const place = [c.city, c.state].filter(Boolean).join(', ');
+  const products = msgShowAll[c.id] ? c.products : c.products.slice(0, 6);
+  const bizOpts = `<option value="">— Business type —</option>` + msgData.business_types.map(b => `<option value="${b.id}" ${b.id === c.business_type_id ? 'selected' : ''}>${esc(b.name_en)}</option>`).join('');
+  const worksHtml = c.works.length
+    ? c.works.map(w => `<div>${esc(KIND_LABEL[w.kind] || w.kind)} · <b>${w.requests} of ${w.sent}</b> led to a request</div>`).join('')
+    : '<div class="muted">Learning — nothing sent yet</div>';
+  return `<div class="card" id="cl_${c.id}"><div class="cl-body">
+    <div class="who">
+      <div class="name">${esc(c.trade_name.trim())}</div>
+      <div class="meta">${esc([c.first_name && c.contact_name ? c.contact_name : '', place].filter(Boolean).join(' · '))}</div>
+      <div class="sec-l">Business</div>
+      <select onchange="msgSetBusiness('${c.id}', this.value)" ${msgData.business_types.length ? '' : 'disabled'}>${msgData.business_types.length ? bizOpts : '<option value="">No business types yet</option>'}</select>
+      <div class="sec-l">Loads / month (all suppliers)</div>
+      ${products.map(p => `<div class="cons-row">
+          <span class="pn ${p.cadence ? '' : 'missing'}">${esc(p.name_en)}</span>
+          <input type="number" min="1" step="1" value="${p.monthly_input ?? ''}" placeholder="?" title="Loads a month, from all suppliers" onchange="msgSetLoads('${c.id}','${p.link_id}', this.value)">
+          <span class="cov">${p.cadence ? `${esc(p.cadence)} · from us this month: ${p.from_us_month}` : 'Unknown'}</span>
+        </div>`).join('')}
+      ${c.products.length > 6 ? `<button class="link-btn" onclick="msgShowAll['${c.id}']=!msgShowAll['${c.id}'];renderAll()">${msgShowAll[c.id] ? 'Show fewer' : `Show all ${c.products.length}`}</button>` : ''}
+      <div class="sec-l">What they told you</div>
+      ${c.notes.length ? c.notes.map(n => `<div class="note-item"><span style="flex:1;">${esc(n.note)} <span class="muted">· ${esc(String(n.created_at).slice(0,10))}</span></span><button class="x" title="Delete note" onclick="msgDeleteNote('${n.id}')">✕</button></div>`).join('') : '<div class="muted" style="font-size:12px;">Nothing yet</div>'}
+      <div class="note-add"><input id="note_${c.id}" placeholder="e.g. building a new plant" onkeydown="if(event.key==='Enter')msgAddNote('${c.id}')"><button class="btn small" onclick="msgAddNote('${c.id}')">Save</button></div>
+      <div class="sec-l">What works</div>
+      <div class="works">${worksHtml}</div>
+    </div>
+    <div>
+      <div class="cl-head"><span>${c.options.length} thing${c.options.length === 1 ? '' : 's'} to tell ${esc(c.first_name || c.trade_name.trim())} · pick one</span>
+        <span><span class="badge active">${c.options.length - sentCount} pending</span> <span class="badge ok">${sentCount} sent</span></span></div>
+      <div class="opts">${c.options.map(x => `
+        <div class="opt ${x.reason_key === key ? 'sel' : ''} ${x.sent_at ? 'done' : ''}" onclick="msgPick('${c.id}', '${esc(x.reason_key)}')">
+          <span class="badge ${KIND_BADGE[x.kind]}">${KIND_LABEL[x.kind]}</span>
+          <span class="why">${x.is_new && !x.sent_at ? '<span class="newdot"></span>' : ''}${esc(x.why)}</span>
+          ${x.sent_at ? `<span class="badge ok">Sent ${hhmm(x.sent_at)}</span>` : '<span class="badge soft">Pending</span>'}
+        </div>`).join('')}</div>
+      ${o ? draftHtml(c, o) : ''}
+    </div>
+  </div></div>`;
+}
+
+function draftHtml(c, o){
+  const tk = `${c.id}|${o.reason_key}`;
+  const sent = !!o.sent_at;
+  const text = sent ? o.sent_message : (msgText[tk] ?? o.draft ?? '');
+  const writing = !sent && o.draft == null;
+  const edited = !sent && o.draft != null && msgText[tk] != null && msgText[tk].trim() !== o.draft.trim();
+  const noPhone = !c.phone, noEmail = !c.email;
+  return `<div class="draft">
+    <button class="link-btn" onclick="msgSrcOpen['${c.id}']=!msgSrcOpen['${c.id}'];renderAll()">Where does this come from?</button>
+    ${msgSrcOpen[c.id] ? `<div class="src">${esc(o.source)}</div>` : ''}
+    <textarea class="msg" id="msg_${c.id}" ${sent || writing ? 'disabled' : ''} placeholder="${writing ? 'Writing…' : ''}" oninput="msgText['${tk}']=this.value;msgMarkEdited('${c.id}')">${esc(writing ? '' : text)}</textarea>
+    <div class="draft-foot">
+      <span class="hint ${edited ? 'edited' : ''}" id="hint_${c.id}">${sent ? `Sent by ${o.sent_channel === 'email' ? 'email' : 'WhatsApp'} at ${hhmm(o.sent_at)}` : edited ? 'Edited — your version teaches the system how you write' : 'Written in your style — edit anything before sending'}</span>
+      ${sent ? '' : `<button class="btn small" onclick="msgRewrite('${c.id}')" ${writing ? 'disabled' : ''}>Rewrite</button>
+      <button class="btn" onclick="msgSendWhatsApp('${c.id}')" ${writing || noPhone ? 'disabled' : ''} title="${noPhone ? 'No WhatsApp or phone on file' : 'Opens WhatsApp with this text'}">WhatsApp</button>
+      <button class="btn secondary" onclick="msgSendEmail('${c.id}')" ${writing || noEmail ? 'disabled' : ''} title="${noEmail ? 'No email on file' : 'Review and send by email'}">Email</button>`}
+    </div>
+  </div>`;
+}
+
+function msgMarkEdited(cid){
+  const c = msgData.clients.find(x => x.id === cid); const o = c && clientOption(c, msgSel[cid]);
+  const el = document.getElementById('hint_' + cid);
+  if (!o || !el) return;
+  const t = msgText[`${cid}|${o.reason_key}`];
+  const edited = o.draft != null && t != null && t.trim() !== o.draft.trim();
+  el.className = 'hint' + (edited ? ' edited' : '');
+  el.textContent = edited ? 'Edited — your version teaches the system how you write' : 'Written in your style — edit anything before sending';
+}
+
+function msgPick(cid, key){ msgSel[cid] = key; renderAll(); fetchMissingDrafts(); }
+
+// Drafts are written on demand for the option each client has selected (4 at a time), and kept for the day.
+async function fetchMissingDrafts(){
+  const queue = msgData.clients.map(c => [c, clientOption(c, msgSel[c.id])]).filter(([c, o]) => o && !o.sent_at && o.draft == null && !msgDrafting.has(`${c.id}|${o.reason_key}`));
+  let i = 0;
+  async function worker(){
+    while (i < queue.length){
+      const [c, o] = queue[i++];
+      const tk = `${c.id}|${o.reason_key}`;
+      msgDrafting.add(tk);
+      try {
+        const d = await callApi('messaging', { action: 'draft', actor: currentActor(), customer_id: c.id, reason_key: o.reason_key });
+        o.draft = d.message; o.subject = d.subject;
+      } catch (e){
+        o.draft = ''; o.subject = '';
+        console.error('draft failed', e);
+      } finally { msgDrafting.delete(tk); }
+      if (msgSel[c.id] === o.reason_key) rerenderClient(c.id);
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+function rerenderClient(cid){
+  const el = document.getElementById('cl_' + cid);
+  const c = msgData.clients.find(x => x.id === cid);
+  if (!el || !c) return;
+  const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement.id : null;
+  el.outerHTML = clientCardHtml(c);
+  document.querySelectorAll(`#cl_${cid} select`).forEach(s => btEnhanceSelect(s));
+  if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+}
+
+async function msgRewrite(cid){
+  const c = msgData.clients.find(x => x.id === cid); const o = c && clientOption(c, msgSel[cid]);
+  if (!o) return;
+  o.draft = null; delete msgText[`${cid}|${o.reason_key}`];
+  rerenderClient(cid);
+  try {
+    const d = await callApi('messaging', { action: 'draft', actor: currentActor(), customer_id: cid, reason_key: o.reason_key, regenerate: true });
+    o.draft = d.message; o.subject = d.subject;
+  } catch (e){ o.draft = ''; await btAlert(`Couldn't rewrite: ${e.message}`); }
+  rerenderClient(cid);
+}
+
+function currentMessage(cid){
+  const box = document.getElementById('msg_' + cid);
+  return box ? box.value.trim() : '';
+}
+async function logSend(c, o, message, channel){
+  const r = await callApi('messaging', {
+    action: 'send', actor: currentActor(), customer_id: c.id, reason_key: o.reason_key, product_id: o.product_id,
+    message, draft: o.draft, channel, idempotency_key: `messaging|${c.id}|${o.reason_key}|${todayKey()}|${channel}`,
+  });
+  o.sent_at = r.message.sent_at; o.sent_channel = channel; o.sent_message = r.message.message;
+  const next = c.options.find(x => !x.sent_at);
+  if (next) msgSel[c.id] = next.reason_key;
+  renderAll();
+  fetchMissingDrafts();
+}
+
+// WhatsApp can only be pre-filled, never sent for the trader: this opens the chat with the text (on the click itself,
+// so the browser doesn't block it) and records it as sent — same rule as every other WhatsApp button in the app.
+async function msgSendWhatsApp(cid){
+  const c = msgData.clients.find(x => x.id === cid); const o = c && clientOption(c, msgSel[cid]);
+  const message = currentMessage(cid);
+  if (!o || !message || !c.phone) return;
+  bcConfirmWaSend(c.phone, message, null);
+  try { await logSend(c, o, message, 'whatsapp'); } catch (e){ await btAlert(`WhatsApp opened, but it couldn't be recorded: ${e.message}`); }
+}
+async function msgSendEmail(cid){
+  const c = msgData.clients.find(x => x.id === cid); const o = c && clientOption(c, msgSel[cid]);
+  const message = currentMessage(cid);
+  if (!o || !message || !c.email) return;
+  try {
+    await bcSendEmailApi({ fromAlias: FROM_ALIAS, fromDisplay: FROM_DISPLAY, to: c.email, subject: o.subject || '', text: message });
+  } catch (e){
+    if (e.cancelled) return;
+    await btAlert(`Email not sent: ${e.message}`); return;
+  }
+  const finalText = (document.getElementById('emailModalBody') || {}).value || message;
+  try { await logSend(c, o, finalText.trim(), 'email'); } catch (e){ await btAlert(`Email sent, but it couldn't be recorded: ${e.message}`); }
+}
+
+async function msgAddNote(cid){
+  const input = document.getElementById('note_' + cid);
+  const note = input ? input.value.trim() : '';
+  if (!note) return;
+  input.disabled = true;
+  try {
+    const r = await callApi('messaging', { action: 'add_note', actor: currentActor(), customer_id: cid, note, idempotency_key: `note|${cid}|${note}|${todayKey()}` });
+    if (r.note) msgSel[cid] = `note:${r.note.id}`; // what they just told you is what you'll most likely want to write about
+    await loadMessaging();
+  } catch (e){ input.disabled = false; await btAlert(`Couldn't save the note: ${e.message}`); }
+}
+async function msgDeleteNote(id){
+  try { await callApi('messaging', { action: 'delete_note', actor: currentActor(), id }); await loadMessaging(); }
+  catch (e){ await btAlert(`Couldn't delete the note: ${e.message}`); }
+}
+async function msgSetBusiness(cid, value){
+  try { await callApi('messaging', { action: 'set_business_type', actor: currentActor(), customer_id: cid, business_type_id: value || null }); const c = msgData.clients.find(x => x.id === cid); if (c) c.business_type_id = value || null; }
+  catch (e){ await btAlert(`Couldn't save: ${e.message}`); }
+}
+async function msgSetLoads(cid, linkId, value){
+  const v = String(value).trim();
+  if (v && !(Number(v) > 0 && Number.isInteger(Number(v)))){ await btAlert('Loads a month must be a whole number (or empty).'); return; }
+  try { await callApi('messaging', { action: 'set_loads', actor: currentActor(), link_id: linkId, loads_month: v === '' ? null : Number(v) }); await loadMessaging(); }
+  catch (e){ await btAlert(`Couldn't save: ${e.message}`); }
+}
+
+// BuenTrade dropdown — same generic <select> enhancer every page with a dropdown uses, copied verbatim.
+function btEnhanceSelect(selectEl){
+  if (!selectEl || selectEl.dataset.btEnhanced) return;
+  selectEl.dataset.btEnhanced = '1';
+  const savedStyle = selectEl.getAttribute('style') || '';
+  selectEl.removeAttribute('style');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'bt-select-wrap';
+  if (savedStyle) wrap.setAttribute('style', savedStyle);
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+  selectEl.style.display = 'none';
+
+  wrap.insertAdjacentHTML('afterbegin', `
+    <button type="button" class="bt-select-trigger">
+      <span class="bt-select-label"></span>
+      <svg class="bt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="bt-select-panel" style="display:none;"></div>`);
+  const trigger = wrap.querySelector('.bt-select-trigger');
+  const label = wrap.querySelector('.bt-select-label');
+  const panel = wrap.querySelector('.bt-select-panel');
+  if (selectEl.disabled) trigger.disabled = true;
+
+  const escBt = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let searchTerm = '';
+
+  function renderPanel(){
+    const opts = [...selectEl.options];
+    const showSearch = opts.length > 8;
+    const q = searchTerm.trim().toLowerCase();
+    const filtered = q ? opts.filter(o => o.textContent.toLowerCase().includes(q)) : opts;
+    panel.innerHTML = (showSearch ? `<input type="text" class="bt-select-search" placeholder="Search…" value="${escBt(searchTerm)}">` : '')
+      + (filtered.length ? filtered.map(o => `
+          <button type="button" class="bt-select-option${o.value === selectEl.value ? ' selected' : ''}" data-value="${escBt(o.value)}">
+            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escBt(o.textContent)}
+          </button>`).join('')
+        : `<div class="bt-select-empty">No matches</div>`);
+    panel.querySelectorAll('.bt-select-option').forEach(btn => {
+      btn.onclick = () => {
+        selectEl.value = btn.dataset.value;
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        searchTerm = '';
+        close();
+        sync();
+      };
+    });
+    const search = panel.querySelector('.bt-select-search');
+    if (search){
+      search.addEventListener('click', e => e.stopPropagation());
+      search.addEventListener('input', () => {
+        searchTerm = search.value;
+        const pos = search.selectionStart;
+        renderPanel();
+        const ns = panel.querySelector('.bt-select-search');
+        if (ns){ ns.focus(); ns.setSelectionRange(pos, pos); }
+      });
+    }
+  }
+  function sync(){
+    const opt = selectEl.options[selectEl.selectedIndex];
+    label.textContent = opt ? opt.textContent : '';
+  }
+  function open(){ searchTerm = ''; renderPanel(); panel.style.display = 'block'; wrap.classList.add('open'); const s = panel.querySelector('.bt-select-search'); if (s) s.focus(); }
+  function close(){ panel.style.display = 'none'; wrap.classList.remove('open'); }
+  trigger.onclick = e => { e.stopPropagation(); if (selectEl.disabled) return; panel.style.display === 'none' ? open() : close(); };
+  document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
+  new MutationObserver(sync).observe(selectEl, { childList: true, subtree: true });
+  // Real bug found live 2026-09-18 (products.html/plants.html): the MutationObserver above only
+  // catches <option> nodes being added/removed — setting selectEl.value programmatically (any
+  // form-population code) changes no DOM structure at all, so the visible label never updated even
+  // though the real underlying value was set correctly. A 'change' listener plus this exposed
+  // resync method cover both cases.
+  selectEl.addEventListener('change', sync);
+  selectEl.btSync = sync;
+  sync();
+}
+
+document.addEventListener('DOMContentLoaded', () => btEnhanceSelect(document.getElementById('msgSort')));
+if (document.readyState !== 'loading') btEnhanceSelect(document.getElementById('msgSort'));
+</script>
+</body>
+</html>

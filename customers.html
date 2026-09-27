@@ -397,6 +397,7 @@ auth.onAuthStateChanged(user => {
     <a href="providers.html" class="nav-pill">Logistics</a>
     <a href="plants.html" class="nav-pill">Plants</a>
     <a href="products.html" class="nav-pill">Products</a>
+    <a href="messaging.html" class="nav-pill">Messaging</a>
     <a href="quotes.html" class="nav-pill">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
@@ -857,8 +858,8 @@ function applyCurrencies(){
 
 let incoterms = [];
 async function loadIncoterms(){
-  const res = await callApi('incoterms-search', {});
-  incoterms = res.results || [];
+  const res = await callApi('lookups-search', {}); // incoterms (the old one-table incoterms-search was folded into this bundle)
+  incoterms = res.incoterms || [];
   const sel = document.getElementById('usual_incoterm_id');
   sel.innerHTML = '<option value="">—</option>' + incoterms.map(i => `<option value="${i.id}">${escapeHtml(i.code)}</option>`).join('');
 }
@@ -956,10 +957,10 @@ async function fetchAllCustProducts(){
   if (allCustProducts) return allCustProducts;
   const [prodRes, tempRes] = await Promise.all([
     callApi('products-search', {}),
-    callApi('temperature-search', {}),
+    callApi('lookups-search', {}), // temperatures (the old one-table temperature-search was folded into this bundle)
   ]);
   allCustProducts = (prodRes.results || []).slice().sort((a, b) => custProductLabel(a).localeCompare(custProductLabel(b)));
-  temperaturesForCust = tempRes.results || [];
+  temperaturesForCust = tempRes.temperatures || [];
   return allCustProducts;
 }
 

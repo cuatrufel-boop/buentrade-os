@@ -81,6 +81,7 @@ export async function applyPlantProductMatch(
     await tx`
       insert into price_history (plant_id, product_id, price, price_currency_id, price_date)
       values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${toDateOnly(price_date) ?? new Date().toISOString().slice(0, 10)})
+      on conflict (plant_id, product_id, price, price_currency_id, price_date) do nothing -- same price, same day = already in the history (2026-09-27)
     `;
 
     const [alias] = learn

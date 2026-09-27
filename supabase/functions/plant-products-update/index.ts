@@ -60,6 +60,7 @@ Deno.serve(async (req) => {
         await tx`
           insert into price_history (plant_id, product_id, price, price_currency_id, price_date)
           values (${link.plant_id}, ${link.product_id}, ${link.current_price}, ${link.price_currency_id}, ${toDateOnly(link.price_date)})
+          on conflict (plant_id, product_id, price, price_currency_id, price_date) do nothing -- same price, same day = already in the history (2026-09-27)
         `;
       }
       return link;

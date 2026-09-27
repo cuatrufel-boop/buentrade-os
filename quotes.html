@@ -1038,6 +1038,7 @@ auth.onAuthStateChanged(user => {
     <a href="providers.html" class="nav-pill">Logistics</a>
     <a href="plants.html" class="nav-pill">Plants</a>
     <a href="products.html" class="nav-pill">Products</a>
+    <a href="messaging.html" class="nav-pill">Messaging</a>
     <a href="quotes.html" class="nav-pill active">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
@@ -1196,6 +1197,8 @@ auth.onAuthStateChanged(user => {
     <!-- Offer Sheet (approved 2026-09-26): shown instead of the four sections below while products are picked in Find
          Product — see rqRenderSheet. Same stat-card / table / button components as the rest of this page. -->
     <div id="rq_sheet_section" style="display:none;padding-top:12px;">
+      <!-- Messaging (2026-09-27): "did this search come from a message?" — asked right here, no extra step. -->
+      <div id="rq_msg_origin"></div>
       <div class="stats-row" id="rq_sheet_pipeline" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px;"></div>
       <div class="rq-sheet-grid">
         <div class="card qbucket">
@@ -2194,9 +2197,58 @@ function rqSheetOutbox(rows){
   });
 }
 
+// Messaging (approved 2026-09-27): when the trader looks up a product that a client was messaged about in the last
+// 24 hours, ask here — in the search itself, no extra step — whether that client's request came from the message.
+// One click links it (it feeds Messaging's "What works"); "Not from a message" dismisses it. Nothing else changes.
+const rqMsgOrigin = { key: null, messages: [], linked: null };
+async function rqLoadMsgOrigin(){
+  const key = rqActiveProductFilterIds.slice().sort().join(',');
+  if (rqMsgOrigin.key === key) return rqRenderMsgOrigin();
+  rqMsgOrigin.key = key; rqMsgOrigin.messages = []; rqMsgOrigin.linked = null;
+  rqRenderMsgOrigin();
+  if (!key) return;
+  try {
+    const r = await callApi('messaging', { action: 'quote_origin', product_ids: rqActiveProductFilterIds });
+    if (rqMsgOrigin.key === key) rqMsgOrigin.messages = r.messages || [];
+  } catch (e){ console.error('messaging origin lookup failed', e); }
+  rqRenderMsgOrigin();
+}
+function rqRenderMsgOrigin(){
+  const el = document.getElementById('rq_msg_origin');
+  if (!el) return;
+  if (rqMsgOrigin.linked){
+    el.innerHTML = `<div class="card qbucket" style="padding:12px 16px;margin-bottom:14px;"><div class="rq-sheet-bar" style="margin-top:0;justify-content:flex-start;">✓ Linked: your message → ${escapeHtml(rqMsgOrigin.linked)} asked → this quote.</div></div>`;
+    return;
+  }
+  const msgs = rqMsgOrigin.messages;
+  if (!msgs.length){ el.innerHTML = ''; return; }
+  const t = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  el.innerHTML = `<div class="card qbucket" style="padding:12px 16px;margin-bottom:14px;"><div class="rq-sheet-bar" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap;">
+    <span>You messaged about this product. Did the request come from one of these?</span>
+    ${msgs.map(m => `<button type="button" class="pkg-trigger-btn" onclick="rqLinkMsgOrigin('${m.id}')">${escapeHtml(String(m.trade_name).trim())} · ${t(m.sent_at)}</button>`).join('')}
+    <button type="button" class="pkg-trigger-btn" onclick="rqDismissMsgOrigin()">Not from a message</button>
+  </div></div>`;
+}
+async function rqLinkMsgOrigin(messageId){
+  const m = rqMsgOrigin.messages.find(x => x.id === messageId);
+  try {
+    await callApi('messaging', { action: 'link_origin', actor: currentActor(), message_id: messageId });
+    rqMsgOrigin.linked = m ? String(m.trade_name).trim() : 'client';
+    rqRenderMsgOrigin();
+  } catch (e){ rqShowNotice(`Couldn't link it: ${e.message}`); }
+}
+async function rqDismissMsgOrigin(){
+  const ids = rqMsgOrigin.messages.map(m => m.id);
+  rqMsgOrigin.messages = [];
+  rqRenderMsgOrigin();
+  try { await callApi('messaging', { action: 'dismiss_origin', actor: currentActor(), message_ids: ids }); }
+  catch (e){ console.error('dismiss origin failed', e); }
+}
+
 function rqRenderSheet(){
   const wrap = document.getElementById('rq_sheet_section');
   if (!wrap) return;
+  rqLoadMsgOrigin();
   if (rqSheetState.key !== rqSheetKey()){
     if (!rqSheetState.loading || rqSheetState.pendingKey !== rqSheetKey()){ rqSheetState.pendingKey = rqSheetKey(); rqSheetLoad(); }
     document.getElementById('rq_sheet_rows').innerHTML = '<div class="empty">Loading…</div>';
@@ -4417,8 +4469,13 @@ function rqConfirmBullets(customerId, channel){
   return mfLogSends(callApi, rqMarketNoteByCustomer[customerId], customerId, channel, currentActor());
 }
 
+// Real ask 2026-09-27: "las quotes deben ir cortas y claras, mayor a menor por marca con specs y foto" — Market Flash
+// bullets, cadence and market lines no longer go inside a quote (they belong to the separate greeting, not the price
+// list). Every quote send still calls this; it now always returns '' so the quote is greeting + brand lines only.
+const RQ_QUOTE_SIGNAL_LINES = false;
 async function rqFetchCustomerSignalLine(customerId, full){
   rqMarketNoteByCustomer[customerId] = null;
+  if (!RQ_QUOTE_SIGNAL_LINES) return '';
   const productIds = [...new Set((full || []).map(({ plant }) => plant.rqProductId).filter(Boolean))];
   if (!productIds.length) return '';
   let signals = [];
