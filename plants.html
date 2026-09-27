@@ -3091,6 +3091,13 @@ function detectTempPackFromLine(line){
     const fresh = temperatures.find(t => (t.name_en || '').toLowerCase() === 'fresh');
     if (combo && fresh && packagingId === combo.id) tempId = fresh.id;
   }
+  // Rule confirmed 2026-09-27 — same as the server matcher (supabase/functions/_shared/productMatcher.ts): VAC / Poly /
+  // Wax / IWP is what's inside the box; in BuenTrade language a boxed cut is ONE product, "…, Box".
+  const detectedPack = packagingId ? packagings.find(p => p.id === packagingId) : null;
+  if (detectedPack && ['vac', 'poly', 'poly bag', 'wax', 'iwp'].includes((detectedPack.name_en || '').toLowerCase())){
+    const box = packagings.find(p => (p.name_en || '').toLowerCase() === 'box');
+    if (box) packagingId = box.id;
+  }
   return { tempId, packagingId };
 }
 

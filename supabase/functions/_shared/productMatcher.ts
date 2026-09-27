@@ -123,6 +123,17 @@ function detectTempPackFromLine(
     if (box) packagingId = box.id;
   }
 
+  // Rule confirmed by the user 2026-09-27: VAC / Poly / Wax / IWP is what is INSIDE the box — in BuenTrade language a
+  // boxed cut is ONE product, "…, Box" (catalog merged the same day, migration 20260927100000). Whatever the plant wrote
+  // (VAC, Cryovac, Poly, Wax, IWP, or only Box), it connects to that Box product. Anything still unclear goes to
+  // Pending Matches as always.
+  const INNER_PACKS = new Set(["vac", "poly", "poly bag", "wax", "iwp"]);
+  const detected = packagingId ? packagings.find((p) => p.id === packagingId) : null;
+  if (detected && INNER_PACKS.has((detected.name_en || "").toLowerCase())) {
+    const box = packagings.find((p) => (p.name_en || "").toLowerCase() === "box");
+    if (box) packagingId = box.id;
+  }
+
   return { tempId, packagingId };
 }
 
