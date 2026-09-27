@@ -31,6 +31,24 @@ export function extractMxPorkPrices(pages: string[]): ExtractResult {
     const fx = lines.slice(headIdx, headIdx + 4).find((l) => /Peso\s*\/\s*1\s*USD/.test(l));
     const fxNums = fx ? (fx.match(NUM_RE) || []).map(parseFloat) : [];
 
+    // Pass 1 — is a region's "Anterior" column trustworthy this week? Sep 18's CDMX column repeated 2.65 for six cuts
+    // and 3.24 for four: different cuts can't all have had the same price. Such a column gives no week-over-week move.
+    const prevCounts: Array<Map<number, number>> = [new Map(), new Map()];
+    { let st = false;
+      for (let i = headIdx + 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (/Fuente:/.test(line)) break;
+        const lab = line.slice(0, 26).trim();
+        if (/^Pie LAB Rastro$/i.test(lab)) { st = true; continue; }
+        if (!st || !lab) continue;
+        for (const m of line.matchAll(/-?\d+\.\d+/g)) {
+          if ((m.index || 0) < 20) continue;
+          const right = (m.index || 0) + m[0].length;
+          [1, 4].forEach((ci, ri) => { if (Math.abs(cols[ci] - right) <= 5) { const v = parseFloat(m[0]); if (v > 0) prevCounts[ri].set(v, (prevCounts[ri].get(v) || 0) + 1); } });
+        }
+      } }
+    const prevColumnBad = prevCounts.map((mp) => [...mp.values()].some((n) => n >= 3));
+
     let started = false;
     for (let i = headIdx + 1; i < lines.length; i++) {
       const line = lines[i];
@@ -59,6 +77,16 @@ export function extractMxPorkPrices(pages: string[]): ExtractResult {
         if (last == null) continue; // this region has no quote for this item this week
         if (last <= 0) { drop(`${region}: printed 0.00 (no quote this week)`); continue; }
         if (prev != null && chg != null && Math.abs(last - prev - chg) > 0.02) { drop(`${region}: Cambio ${chg} ≠ Ultimo ${last} − Anterior ${prev}`); continue; }
+        // The table is in USD but SNIIM quotes in pesos: a USD "change" is mostly the exchange rate (Sep 18: NL prices flat
+        // in pesos showed −1.5% only because the peso went 16.96 → 17.23). Measure the move in PESOS (2026-09-27).
+        const fxLast = fxNums[off === 0 ? 0 : 2] ?? null, fxPrev = fxNums[off === 0 ? 1 : 3] ?? null;
+        let pesoPct = prev != null && prev > 0 && fxLast && fxPrev ? Math.round(((last * fxLast) / (prev * fxPrev) - 1) * 1000) / 10 : null;
+        if (prev != null && prevColumnBad[off === 0 ? 0 : 1]) { drop(`${region}: previous-week column repeats the same price across 3+ cuts — not reliable this week, no change stated`); continue; }
+        // prices are printed to the cent: a move smaller than that rounding (large on a 0.23 USD/kg item) is no move at all
+        if (pesoPct != null && prev != null && Math.abs(pesoPct) <= (0.01 / Math.min(last, prev)) * 100 + 0.5) pesoPct = 0;
+        // A price can't double in a week: Sep 18's CDMX "Anterior" column repeats the same value (2.65) for six different
+        // cuts, giving +50–97% moves — a source error. Never let such a figure reach a client.
+        if (pesoPct != null && Math.abs(pesoPct) > 40) { drop(`${region}: implausible move (${pesoPct}% in pesos in one week) — likely an error in the source's previous-week column`); continue; }
         facts.push({
           key: `mx_pork_price|${label}|${region}`,
           kind: "mx_pork_price", species: "pork", market: "MX", entity: label, page,
@@ -66,7 +94,7 @@ export function extractMxPorkPrices(pages: string[]): ExtractResult {
           values: {
             region, unit: "USD/kg", week_end: weekEnd,
             price: last, prev_price: prev, change: chg, // change exactly as printed (the bulletin rounds from unrounded prices)
-            fx_pesos_per_usd: fxNums[off === 0 ? 0 : 2] ?? null,
+            fx_pesos_per_usd: fxLast, fx_prev_pesos_per_usd: fxPrev, peso_change_pct: pesoPct,
           },
         });
       }

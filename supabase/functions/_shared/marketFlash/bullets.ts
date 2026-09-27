@@ -103,9 +103,11 @@ export function buildBullets(facts: Fact[], bulletinDate: string): Bullet[] {
         break;
       case "mx_pork_price": {
         if (v.prev_price == null) break; // no previous week printed → no percentage can be stated
-        const p = v.change === 0 ? 0 : chg(v.price, v.prev_price); // a printed "Cambio 0.00" stays "sin cambio" even if rounded prices differ by a cent
-        const t = `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: ${versus(p, "la semana anterior")} (SNIIM).`;
-        out.push(base(f, bulletinDate, { levels: ["product", "protein", "market"], product_entity: f.entity, text_es: t, computed: v.change !== 0 }));
+        // the move in PESOS (the exchange rate removed); under half a percent is "sin cambio"
+        const pp = v.peso_change_pct as number | null;
+        const p = pp != null ? (Math.abs(pp) < 0.5 ? 0 : pp) : (v.change === 0 ? 0 : chg(v.price, v.prev_price));
+        const t = `${labelEs(f)!.text}, semana al ${fmtDate(v.week_end)}: ${versus(p, "la semana anterior")}${pp != null ? " en pesos" : ""} (SNIIM).`;
+        out.push(base(f, bulletinDate, { levels: ["product", "protein", "market"], product_entity: f.entity, text_es: t, computed: p !== 0 }));
         break;
       }
       case "prod_weekly": {
