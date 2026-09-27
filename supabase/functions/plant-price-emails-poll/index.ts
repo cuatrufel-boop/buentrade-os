@@ -629,6 +629,7 @@ Deno.serve(async (req) => {
               price_currency_id: usdCurrencyId, price_date: messagePriceDate,
               docs_included: plant.docs_included === true, freight_included: item.freightIncluded,
               location_name: item.locationName || null,
+              learn: false, // the system's own match — saves the price, never teaches (only the trader teaches)
             });
             if ("applied" in applyResult && applyResult.plant_product.last_requested_at) {
               resolvedForTrader.push({ name: matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name, price: item.price });

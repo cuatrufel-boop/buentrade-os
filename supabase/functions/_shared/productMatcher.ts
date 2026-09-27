@@ -343,7 +343,13 @@ export async function matchProductFromPlantText(
       const lineVariations = new Set([...detectVariationNamesFromLine(raw_text, variationNames), ...taughtVariationNamesFromLine(raw_text)]);
       const productVariations = candidateVariationSet(product, variationNames);
       const variationConflict = [...lineVariations].some((v) => !productVariations.has(v));
-      if (!tempConflict && !packConflict && !variationConflict) {
+      // Rule confirmed by the user 2026-09-27: aliases now come ONLY from the trader confirming a match (see
+      // applyPlantProductMatch's `learn`), and "once I confirm it, next time it goes straight through." So the trader's
+      // own confirmation wins over what the line-reading guesses about packaging or variation (e.g. "natural fall bulk"
+      // confirmed as a Box product, "miscut wings" confirmed as Misscut Wings kept going back to Pending). The one check
+      // kept: Fresh and Frozen never cross (standing rule).
+      void packConflict; void variationConflict;
+      if (!tempConflict) {
         return { matched: true, source: "alias", product: productSummary(product) };
       }
     }

@@ -18,11 +18,15 @@ export async function applyPlantProductMatch(
   {
     actor, plant_id, product_id, raw_text, price,
     price_currency_id = null, price_date = null, docs_included = null, notes = null,
-    location_name = null, freight_included = false,
+    location_name = null, freight_included = false, learn = true,
   }: {
     actor: string; plant_id: string; product_id: string; raw_text: string; price: number;
     price_currency_id?: string | null; price_date?: string | null; docs_included?: boolean | null;
     notes?: string | null; location_name?: string | null; freight_included?: boolean;
+    // Rule confirmed by the user 2026-09-27: the system learns ONLY from the trader. A price the system matched on its
+    // own (plant email) is saved, but it never teaches an alias — only a person confirming (Pending Matches, or applying
+    // a list they reviewed in Plants) does. Before this, 148 aliases had been "learned" from the system's own guesses.
+    learn?: boolean;
   },
 ): Promise<ApplyMatchResult> {
   if (!actor || !plant_id || !product_id || !raw_text || price == null) {
@@ -79,12 +83,14 @@ export async function applyPlantProductMatch(
       values (${plant_id}, ${product_id}, ${price}, ${price_currency_id}, ${toDateOnly(price_date) ?? new Date().toISOString().slice(0, 10)})
     `;
 
-    const [alias] = await tx`
-      insert into plant_product_aliases (plant_id, product_id, raw_text)
-      values (${plant_id}, ${product_id}, ${raw_text})
-      on conflict (plant_id, raw_text) do update set product_id = excluded.product_id
-      returning *
-    `;
+    const [alias] = learn
+      ? await tx`
+          insert into plant_product_aliases (plant_id, product_id, raw_text)
+          values (${plant_id}, ${product_id}, ${raw_text})
+          on conflict (plant_id, raw_text) do update set product_id = excluded.product_id
+          returning *
+        `
+      : [null];
 
     await writeAuditLog(tx, hmacSecret, {
       actor, action: "update", table_name: "plant_products", record_id: plantProduct.id,
