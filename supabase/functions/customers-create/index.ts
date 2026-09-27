@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
       payment_days = null, payment_method = null, preferred_exchange_rate_mode = null,
       payments_contact_name = null, payments_contact_email = null, payments_contact_phone = null,
       payments_contact_whatsapp = null, customs_agency_provider_id = null, credit_limit = null,
-      usual_incoterm_id = null, usual_incoterm_place = null,
+      usual_incoterm_id = null, usual_incoterm_place = null, business_type_id = null,
       override_duplicate_check = false, idempotency_key = null,
     } = body;
 
@@ -71,6 +71,15 @@ Deno.serve(async (req) => {
       const [incoterm] = await sql`select id from incoterms where id = ${usual_incoterm_id}`;
       if (!incoterm) return jsonResponse({ error: "unknown usual_incoterm_id" }, 400);
     }
+    // Business type (Messaging, 2026-09-27): part of the profile from the first save — required once the trader's list
+    // of business types exists, and it must be one of them.
+    const [{ n: businessTypeCount }] = await sql`select count(*)::int as n from business_types`;
+    if (business_type_id) {
+      const [bt] = await sql`select id from business_types where id = ${business_type_id}`;
+      if (!bt) return jsonResponse({ error: "unknown business_type_id" }, 400);
+    } else if (businessTypeCount > 0) {
+      return jsonResponse({ error: "missing required fields", missing: ["business_type_id"] }, 400);
+    }
 
     const customer = await sql.begin(async (tx) => {
       const [customer] = await tx`
@@ -80,14 +89,14 @@ Deno.serve(async (req) => {
           preferred_currency_id, usual_delivery_type, usual_destination,
           payment_days, payment_method, preferred_exchange_rate_mode,
           payments_contact_name, payments_contact_email, payments_contact_phone, payments_contact_whatsapp,
-          customs_agency_provider_id, credit_limit, usual_incoterm_id, usual_incoterm_place, idempotency_key
+          customs_agency_provider_id, credit_limit, usual_incoterm_id, usual_incoterm_place, business_type_id, idempotency_key
         ) values (
           ${trade_name}, ${legal_name}, ${country_id}, ${city_id}, ${state_id}, ${state}, ${address}, ${postal_code},
           ${contact_name}, ${contact_role}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc}, ${website}, ${notes},
           ${preferred_currency_id}, ${usual_delivery_type}, ${usual_destination},
           ${payment_days}, ${payment_method}, ${preferred_exchange_rate_mode},
           ${payments_contact_name}, ${payments_contact_email}, ${payments_contact_phone}, ${payments_contact_whatsapp},
-          ${customs_agency_provider_id}, ${credit_limit}, ${usual_incoterm_id}, ${usual_incoterm_place}, ${idempotency_key}
+          ${customs_agency_provider_id}, ${credit_limit}, ${usual_incoterm_id}, ${usual_incoterm_place}, ${business_type_id}, ${idempotency_key}
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customers", record_id: customer.id, after: customer });

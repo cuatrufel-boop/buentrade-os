@@ -163,6 +163,9 @@
   .bt-select-option:hover{background:rgba(232,181,76,.1);}
   .bt-select-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
   .bt-select-option .bt-select-check{width:13px;flex-shrink:0;visibility:hidden;}
+  /* An option may carry a small translation under it (data-sub) — the app is English, the Spanish is only a guide. */
+  .bt-select-two{display:flex;flex-direction:column;gap:1px;white-space:normal;}
+  .bt-select-sub{font-size:11px;font-weight:400;color:var(--ink-soft);}
   .bt-select-option.selected .bt-select-check{visibility:visible;}
   .bt-select-empty{padding:10px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
@@ -486,6 +489,7 @@ auth.onAuthStateChanged(user => {
       </div>
       <div class="section-title">Commercial profile</div>
       <div class="grid3" style="row-gap:10px;">
+        <div><label class="view-label">Business Type</label><span id="v_business_type">—</span></div>
         <div><label class="view-label">Currency</label><span id="v_preferred_currency">—</span></div>
         <div><label class="view-label">Delivery Type</label><span id="v_usual_delivery_type">—</span></div>
         <div><label class="view-label">Payment Days</label><span id="v_payment_days">—</span></div>
@@ -555,6 +559,10 @@ auth.onAuthStateChanged(user => {
 
       <div class="section-title">Commercial profile</div>
       <div class="grid5">
+        <!-- Messaging (2026-09-27): what kind of business the client is — set from the first save of the profile. -->
+        <div class="field"><label>Business type *</label>
+          <select id="business_type_id" onchange="updateCustomerProfile()"><option value="">—</option></select>
+        </div>
         <div class="field"><label>Preferred currency</label>
           <select id="preferred_currency" onchange="updateCustomerProfile()"><option value="">—</option><option>USD</option><option>MXN</option><option>Other</option></select>
         </div>
@@ -626,6 +634,7 @@ auth.onAuthStateChanged(user => {
         <div class="profile-row"><span class="view-label">City</span><span class="profile-row-value" id="cv_city">—</span></div>
         <div class="profile-row"><span class="view-label">Street Address</span><span class="profile-row-value" id="cv_address">—</span></div>
         <div class="profile-row"><span class="view-label">Zip / Postal Code</span><span class="profile-row-value" id="cv_postal_code">—</span></div>
+        <div class="profile-row"><span class="view-label">Business Type</span><span class="profile-row-value" id="cv_business_type">—</span></div>
         <div class="profile-row"><span class="view-label">Preferred Currency</span><span class="profile-row-value" id="cv_preferred_currency">—</span></div>
         <div class="profile-row"><span class="view-label">Usual Delivery Type</span><span class="profile-row-value" id="cv_usual_delivery_type">—</span></div>
         <div class="profile-row"><span class="view-label">Payment Terms</span><span class="profile-row-value" id="cv_payment_terms">—</span></div>
@@ -698,7 +707,7 @@ function openForm(customer){
   const fields = ['custId','trade_name','legal_name','country_id','state','city','address','postal_code','contact_name',
     'contact_role','email','email_cc','website',
     'payments_contact_name','payments_contact_email','payments_contact_whatsapp',
-    'preferred_currency','usual_delivery_type',
+    'business_type_id','preferred_currency','usual_delivery_type',
     'usual_destination','usual_incoterm_id','usual_incoterm_place','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes','credit_limit'];
   fields.forEach(f => document.getElementById(f).value = '');
   document.getElementById('whatsapp_number').value = '';
@@ -773,6 +782,7 @@ function updateCustomerProfile(){
   setV('cv_city', document.getElementById('city').value);
   setV('cv_address', document.getElementById('address').value);
   setV('cv_postal_code', document.getElementById('postal_code').value);
+  setV('cv_business_type', selText(document.getElementById('business_type_id')));
   const currSel = document.getElementById('preferred_currency');
   setV('cv_preferred_currency', currSel.value === 'other' ? 'Other' : selText(currSel));
   setV('cv_usual_delivery_type', selText(document.getElementById('usual_delivery_type')));
@@ -857,9 +867,20 @@ function applyCurrencies(){
 }
 
 let incoterms = [];
+// Reference tables (currencies, countries, states, incoterms, temperatures, business types) come from ONE lookups-search
+// call per page load, shared by every loader below — each call pays the same fixed connection cost.
+let lookupsPromise = null;
+function loadLookupsOnce(){
+  if (!lookupsPromise) lookupsPromise = callApi('lookups-search', {}).catch(e => { lookupsPromise = null; throw e; });
+  return lookupsPromise;
+}
+let businessTypes = [];
 async function loadIncoterms(){
-  const res = await callApi('lookups-search', {}); // incoterms (the old one-table incoterms-search was folded into this bundle)
+  const res = await loadLookupsOnce();
   incoterms = res.incoterms || [];
+  businessTypes = res.business_types || [];
+  const biz = document.getElementById('business_type_id');
+  biz.innerHTML = '<option value="">—</option>' + businessTypes.map(b => `<option value="${b.id}" data-sub="${escapeHtml(b.name_es || '')}">${escapeHtml(b.name_en)}</option>`).join('');
   const sel = document.getElementById('usual_incoterm_id');
   sel.innerHTML = '<option value="">—</option>' + incoterms.map(i => `<option value="${i.id}">${escapeHtml(i.code)}</option>`).join('');
 }
@@ -908,7 +929,7 @@ function applyCountries(){
 // pays the same ~1-1.5s Postgres connection cost regardless of query size (measured 2026-08-31),
 // so three small lookups on every page load were paying that fixed cost three times over.
 async function loadCurrenciesCountriesStates(){
-  const res = await callApi('lookups-search', {});
+  const res = await loadLookupsOnce();
   currencies = res.currencies || [];
   countries = res.countries || [];
   allStates = res.states || [];
@@ -957,7 +978,7 @@ async function fetchAllCustProducts(){
   if (allCustProducts) return allCustProducts;
   const [prodRes, tempRes] = await Promise.all([
     callApi('products-search', {}),
-    callApi('lookups-search', {}), // temperatures (the old one-table temperature-search was folded into this bundle)
+    loadLookupsOnce(), // temperatures (the old one-table temperature-search was folded into this bundle)
   ]);
   allCustProducts = (prodRes.results || []).slice().sort((a, b) => custProductLabel(a).localeCompare(custProductLabel(b)));
   temperaturesForCust = tempRes.temperatures || [];
@@ -1342,6 +1363,8 @@ function viewCustomer(id){
   document.getElementById('v_payments_contact_name').textContent = c.payments_contact_name || '—';
   document.getElementById('v_payments_contact_email').textContent = c.payments_contact_email || '—';
   document.getElementById('v_payments_contact_phone').textContent = c.payments_contact_whatsapp || c.payments_contact_phone || '—';
+  const biz = businessTypes.find(x => x.id === c.business_type_id);
+  document.getElementById('v_business_type').innerHTML = biz ? `${escapeHtml(biz.name_en)}${biz.name_es ? `<span style="display:block;font-size:11px;color:var(--ink-soft);">${escapeHtml(biz.name_es)}</span>` : ''}` : '—';
   const curr = currencies.find(x => x.id === c.preferred_currency_id);
   document.getElementById('v_preferred_currency').textContent = curr ? curr.code : '—';
   const deliveryLabels = { 'Border': 'Picked up (FOB)', 'Delivered Mexico': 'Delivered' };
@@ -1453,6 +1476,7 @@ async function saveCustomer(forceOverride){
     payments_contact_email: document.getElementById('payments_contact_email').value || null,
     payments_contact_phone: document.getElementById('payments_contact_whatsapp').value || null,
     payments_contact_whatsapp: document.getElementById('payments_contact_whatsapp').value || null,
+    business_type_id: document.getElementById('business_type_id').value || null,
     preferred_currency_id: (currencyVal && currencyVal !== 'other') ? currencyVal : null,
     usual_delivery_type: document.getElementById('usual_delivery_type').value || null,
     payment_days: (() => {
@@ -1472,6 +1496,10 @@ async function saveCustomer(forceOverride){
   };
   if (!payload.trade_name){
     document.getElementById('formMsg').textContent = 'Trade name is required.';
+    return;
+  }
+  if (!payload.business_type_id && businessTypes.length){
+    document.getElementById('formMsg').textContent = 'Business type is required.';
     return;
   }
   // Real ask 2026-09-13 ("blindar mejor los formularios... para que el input no quede con
@@ -1600,7 +1628,7 @@ function btEnhanceSelect(selectEl){
     panel.innerHTML = (showSearch ? `<input type="text" class="bt-select-search" placeholder="Search…" value="${escBt(searchTerm)}">` : '')
       + (filtered.length ? filtered.map(o => `
           <button type="button" class="bt-select-option${o.value === selectEl.value ? ' selected' : ''}" data-value="${escBt(o.value)}">
-            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escBt(o.textContent)}
+            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${o.dataset.sub ? `<span class="bt-select-two"><span>${escBt(o.textContent)}</span><span class="bt-select-sub">${escBt(o.dataset.sub)}</span></span>` : escBt(o.textContent)}
           </button>`).join('')
         : `<div class="bt-select-empty">No matches</div>`);
     panel.querySelectorAll('.bt-select-option').forEach(btn => {

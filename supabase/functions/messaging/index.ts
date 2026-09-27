@@ -67,7 +67,7 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
                (sent_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date as today,
                (request_linked_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date as asked_today
         from customer_messages order by sent_at desc`,
-    sql`select id, name_en from business_types order by name_en`,
+    sql`select id, name_en, name_es from business_types order by sort_order, name_en`,
     // loads delivered by us this calendar month, per client + product (one delivery date = one load)
     sql`select so.customer_id, so.product_id, count(*)::int as loads
         from sales_orders so, jsonb_array_elements_text(so.delivery_dates) d
@@ -234,7 +234,7 @@ async function draft(body: any) {
   const examples = mine.map((m: any) => (m.draft && m.draft.trim() !== m.message.trim()
     ? `- (${m.reason_kind}) the system proposed: "${m.draft}" → he actually sent: "${m.message}"`
     : `- (${m.reason_kind}) he sent: "${m.message}"`)).join("\n");
-  const bizName = client.business_type_id ? (all.business_types.find((b: any) => b.id === client.business_type_id)?.name_en ?? null) : null;
+  const bizName = client.business_type_id ? (all.business_types.find((b: any) => b.id === client.business_type_id)?.name_es ?? null) : null; // the trader's own Spanish wording
 
   const system = `You write ONE short WhatsApp/email message from a meat trader (BuenTrade) to one of his clients in Mexico, in the trader's own voice.
 Purpose: the client is busy and ignores generic greetings and price lists; he only answers what is relevant to HIM. The message must make him answer — ideally by asking the trader to look for a product.

@@ -15,7 +15,7 @@ const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max:
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
-    const [temperatures, packagings, categories, countries, states, currencies, incoterms, [seq]] = await Promise.all([
+    const [temperatures, packagings, categories, countries, states, currencies, incoterms, business_types, [seq]] = await Promise.all([
       sql`select * from temperature order by name`,
       sql`select * from packaging order by name`,
       sql`select * from categories order by name`,
@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
       // 2026-09-27 function-cap cleanup: incoterms-search / countries-search / temperature-search were one-table copies
       // of what this bundle already returns — their callers read it from here now and those three slugs were deleted.
       sql`select * from incoterms order by code`,
+      sql`select * from business_types order by sort_order, name_en`, // client business types (Messaging, 2026-09-27)
       // Real ask 2026-09-21: "deberia decir cual es el siguiente consecutivo" on trading-tool.html's
       // Create Order confirm — a non-consuming peek at order_number_seq (last_value bumped by 1
       // only when is_called, matching what the next real next_order_number() call would return).
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
       sql`select last_value + (case when is_called then 1 else 0 end) as next_val from order_number_seq`,
     ]);
     const next_order_number_preview = `${new Date().getUTCFullYear()}-${seq.next_val}`;
-    return jsonResponse({ temperatures, packagings, categories, countries, states, currencies, incoterms, next_order_number_preview });
+    return jsonResponse({ temperatures, packagings, categories, countries, states, currencies, incoterms, business_types, next_order_number_preview });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }

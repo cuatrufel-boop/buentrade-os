@@ -38,7 +38,7 @@
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
   .nav-pill.active{color:var(--blue-bright);}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0;}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;} /* no overflow:hidden — the Business dropdown must open past the card's edge */
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .muted{color:var(--ink-soft);}
   /* Same .btn recipe as orders.html's Active Loads (the BuenTrade design reference). */
@@ -131,6 +131,9 @@
   .bt-select-option:hover{background:rgba(232,181,76,.1);}
   .bt-select-option.selected{background:rgba(232,181,76,.16);color:#E8B54C;font-weight:700;}
   .bt-select-option .bt-select-check{width:13px;flex-shrink:0;visibility:hidden;}
+  /* An option may carry a small translation under it (data-sub) — the app is English, the Spanish is only a guide. */
+  .bt-select-two{display:flex;flex-direction:column;gap:1px;white-space:normal;}
+  .bt-select-sub{font-size:11px;font-weight:400;color:var(--ink-soft);}
   .bt-select-option.selected .bt-select-check{visibility:visible;}
   .bt-select-empty{padding:10px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
 
@@ -336,7 +339,7 @@ function clientCardHtml(c){
   const sentCount = c.options.filter(x => x.sent_at).length;
   const place = [c.city, c.state].filter(Boolean).join(', ');
   const products = msgShowAll[c.id] ? c.products : c.products.slice(0, 6);
-  const bizOpts = `<option value="">— Business type —</option>` + msgData.business_types.map(b => `<option value="${b.id}" ${b.id === c.business_type_id ? 'selected' : ''}>${esc(b.name_en)}</option>`).join('');
+  const bizOpts = `<option value="">— Business type —</option>` + msgData.business_types.map(b => `<option value="${b.id}" data-sub="${esc(b.name_es || '')}" ${b.id === c.business_type_id ? 'selected' : ''}>${esc(b.name_en)}</option>`).join('');
   const worksHtml = c.works.length
     ? c.works.map(w => `<div>${esc(KIND_LABEL[w.kind] || w.kind)} · <b>${w.requests} of ${w.sent}</b> led to a request</div>`).join('')
     : '<div class="muted">Learning — nothing sent yet</div>';
@@ -549,7 +552,7 @@ function btEnhanceSelect(selectEl){
     panel.innerHTML = (showSearch ? `<input type="text" class="bt-select-search" placeholder="Search…" value="${escBt(searchTerm)}">` : '')
       + (filtered.length ? filtered.map(o => `
           <button type="button" class="bt-select-option${o.value === selectEl.value ? ' selected' : ''}" data-value="${escBt(o.value)}">
-            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escBt(o.textContent)}
+            <svg class="bt-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${o.dataset.sub ? `<span class="bt-select-two"><span>${escBt(o.textContent)}</span><span class="bt-select-sub">${escBt(o.dataset.sub)}</span></span>` : escBt(o.textContent)}
           </button>`).join('')
         : `<div class="bt-select-empty">No matches</div>`);
     panel.querySelectorAll('.bt-select-option').forEach(btn => {

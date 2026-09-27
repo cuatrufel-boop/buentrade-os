@@ -14,7 +14,7 @@ const UPDATABLE_FIELDS = [
   "preferred_currency_id", "usual_delivery_type", "usual_destination",
   "payment_days", "payment_method", "preferred_exchange_rate_mode",
   "payments_contact_name", "payments_contact_email", "payments_contact_phone", "payments_contact_whatsapp",
-  "customs_agency_provider_id", "credit_limit", "usual_incoterm_id", "usual_incoterm_place",
+  "customs_agency_provider_id", "credit_limit", "usual_incoterm_id", "usual_incoterm_place", "business_type_id",
 ];
 
 Deno.serve(async (req) => {
@@ -40,6 +40,15 @@ Deno.serve(async (req) => {
     if (merged.usual_incoterm_id) {
       const [incoterm] = await sql`select id from incoterms where id = ${merged.usual_incoterm_id}`;
       if (!incoterm) return jsonResponse({ error: "unknown usual_incoterm_id" }, 400);
+    }
+    // Business type (Messaging, 2026-09-27): part of the profile from the first save — required once the trader's list
+    // of business types exists, and it must be one of them.
+    const [{ n: businessTypeCount }] = await sql`select count(*)::int as n from business_types`;
+    if (merged.business_type_id) {
+      const [bt] = await sql`select id from business_types where id = ${merged.business_type_id}`;
+      if (!bt) return jsonResponse({ error: "unknown business_type_id" }, 400);
+    } else if (businessTypeCount > 0) {
+      return jsonResponse({ error: "missing required fields", missing: ["business_type_id"] }, 400);
     }
 
     const others = (await sql`select * from customers`).filter((c: any) => c.id !== id);
@@ -71,6 +80,7 @@ Deno.serve(async (req) => {
           payments_contact_phone = ${merged.payments_contact_phone}, payments_contact_whatsapp = ${merged.payments_contact_whatsapp},
           customs_agency_provider_id = ${merged.customs_agency_provider_id}, credit_limit = ${merged.credit_limit},
           usual_incoterm_id = ${merged.usual_incoterm_id}, usual_incoterm_place = ${merged.usual_incoterm_place},
+          business_type_id = ${merged.business_type_id},
           updated_at = now()
         where id = ${id} returning *
       `;
