@@ -450,10 +450,11 @@ function rerenderClient(cid){
 async function msgRewrite(cid){
   const c = msgData.clients.find(x => x.id === cid); const o = c && clientOption(c, msgSel[cid]);
   if (!o) return;
+  const previous = (document.getElementById('msg_' + cid) || {}).value || o.draft || '';
   o.draft = null; delete msgText[`${cid}|${o.reason_key}`];
   rerenderClient(cid);
   try {
-    const d = await callApi('messaging', { action: 'draft', actor: currentActor(), customer_id: cid, reason_key: o.reason_key, regenerate: true });
+    const d = await callApi('messaging', { action: 'draft', actor: currentActor(), customer_id: cid, reason_key: o.reason_key, regenerate: true, previous });
     o.draft = d.message; o.subject = d.subject;
   } catch (e){ o.draft = ''; await btAlert(`Couldn't rewrite: ${e.message}`); }
   rerenderClient(cid);
@@ -466,7 +467,7 @@ function currentMessage(cid){
 async function logSend(c, o, message, channel){
   const r = await callApi('messaging', {
     action: 'send', actor: currentActor(), customer_id: c.id, reason_key: o.reason_key, product_id: o.product_id,
-    message, draft: o.draft, channel, idempotency_key: `messaging|${c.id}|${o.reason_key}|${todayKey()}|${channel}`,
+    message, draft: o.draft, reason_why: o.why, channel, idempotency_key: `messaging|${c.id}|${o.reason_key}|${todayKey()}|${channel}`,
   });
   o.sent_at = r.message.sent_at; o.sent_channel = channel; o.sent_message = r.message.message;
   const next = c.options.find(x => !x.sent_at);

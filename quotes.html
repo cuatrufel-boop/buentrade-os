@@ -2231,21 +2231,24 @@ async function rqLoadMsgOrigin(){
   } catch (e){ console.error('messaging origin lookup failed', e); }
   rqRenderMsgOrigin();
 }
+// The sheet re-renders often (polls, price loads) and calls this each time — only touch the DOM when the content really
+// changed, so a button is never swapped out from under the trader's click.
+function rqSetMsgOriginHtml(el, html){ if (el.dataset.html !== html){ el.dataset.html = html; el.innerHTML = html; } }
 function rqRenderMsgOrigin(){
   const el = document.getElementById('rq_msg_origin');
   if (!el) return;
   if (rqMsgOrigin.linked){
-    el.innerHTML = `<div class="card qbucket" style="padding:12px 16px;margin-bottom:14px;"><div class="rq-sheet-bar" style="margin-top:0;justify-content:flex-start;">✓ Linked: your message → ${escapeHtml(rqMsgOrigin.linked)} asked → this quote.</div></div>`;
+    rqSetMsgOriginHtml(el, `<div class="card qbucket" style="padding:12px 16px;margin-bottom:14px;"><div class="rq-sheet-bar" style="margin-top:0;justify-content:flex-start;">✓ Linked: your message → ${escapeHtml(rqMsgOrigin.linked)} asked → this quote.</div></div>`);
     return;
   }
   const msgs = rqMsgOrigin.messages;
-  if (!msgs.length){ el.innerHTML = ''; return; }
+  if (!msgs.length){ rqSetMsgOriginHtml(el, ''); return; }
   const t = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  el.innerHTML = `<div class="card qbucket" style="padding:12px 16px;margin-bottom:14px;"><div class="rq-sheet-bar" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap;">
+  rqSetMsgOriginHtml(el, `<div class="card qbucket" style="padding:12px 16px;margin-bottom:14px;"><div class="rq-sheet-bar" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap;">
     <span>You messaged about this product. Did the request come from one of these?</span>
     ${msgs.map(m => `<button type="button" class="pkg-trigger-btn" onclick="rqLinkMsgOrigin('${m.id}')">${escapeHtml(String(m.trade_name).trim())} · ${t(m.sent_at)}</button>`).join('')}
     <button type="button" class="pkg-trigger-btn" onclick="rqDismissMsgOrigin()">Not from a message</button>
-  </div></div>`;
+  </div></div>`);
 }
 async function rqLinkMsgOrigin(messageId){
   const m = rqMsgOrigin.messages.find(x => x.id === messageId);

@@ -63,7 +63,7 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
     sql`select n.id, n.customer_id, n.note, n.created_at, n.created_by,
                exists (select 1 from customer_messages m where m.note_id = n.id) as used
         from customer_notes n order by n.created_at desc`,
-    sql`select id, customer_id, reason_kind, reason_key, product_id, note_id, message, channel, sent_at,
+    sql`select id, customer_id, reason_kind, reason_key, product_id, note_id, message, channel, sent_at, reason_why,
                (sent_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date as today,
                (request_linked_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date as asked_today
         from customer_messages order by sent_at desc`,
@@ -190,6 +190,14 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
       if (b) pushBullet(b, c.country === "Mexico" ? "Mexico market" : "US market", 1.5, null);
     }
 
+    // A message sent today stays on the list as Sent even if its reason has changed since (volume filled in, note used…).
+    const KIND: Record<string, Option["kind"]> = { cycle: "cycle", ask_volume: "ask_volume", personal: "personal", market: "market" };
+    for (const [key, m] of sentTodayBy) {
+      if (options.some((o) => o.reason_key === key)) continue;
+      options.push({ reason_key: key, kind: KIND[m.reason_kind], product_id: m.product_id, note_id: m.note_id, bullet_ids: [],
+        why: m.reason_why || "Sent earlier today", source: "Sent earlier today.", score: 0, is_new: false,
+        sent_at: m.sent_at, sent_channel: m.channel, sent_message: m.message, draft: null, subject: null, fact: {} });
+    }
     options.sort((a, b) => Number(!!a.sent_at) - Number(!!b.sent_at) || b.score - a.score);
     const pending = options.filter((o) => !o.sent_at);
     return {
@@ -216,7 +224,7 @@ const DRAFT_SCHEMA = {
 };
 
 async function draft(body: any) {
-  const { customer_id, actor, regenerate } = body;
+  const { customer_id, actor, regenerate, previous } = body;
   const optionKey = body.reason_key;
   if (!customer_id || !optionKey) return { status: 400, payload: { error: "customer_id and reason_key are required" } };
   if (!regenerate) {
@@ -251,7 +259,7 @@ Also return an email subject of 2-5 words (no "Cotización", no prices).`;
   const user = `Client: ${client.first_name || client.trade_name} (${client.trade_name})${client.city ? `, ${client.city}${client.state ? `, ${client.state}` : ""}` : ""}${bizName ? ` — ${bizName}` : ""}.
 Reason: ${option.kind}
 Fact: ${JSON.stringify(option.fact)}
-${examples ? `How this trader actually writes (learn his tone, length and words from these; when he corrected a proposal, write like his correction):\n${examples}` : "No examples from this trader yet — keep it natural, short and direct."}`;
+${regenerate && previous ? `The trader asked for a DIFFERENT version — do not repeat this one, change the angle and the wording (same fact, same rules): "${previous}"\n` : ""}${examples ? `How this trader actually writes (learn his tone, length and words from these; when he corrected a proposal, write like his correction):\n${examples}` : "No examples from this trader yet — keep it natural, short and direct."}`;
 
   const out = await callClaude(system, user, DRAFT_SCHEMA, 400);
   const payload = { message: String(out.message || "").trim(), subject: String(out.subject || "").trim() };
@@ -262,7 +270,7 @@ ${examples ? `How this trader actually writes (learn his tone, length and words 
 
 // ---------------------------------------------------------------- writes (idempotent, audited)
 async function send(body: any) {
-  const { customer_id, reason_key, message, channel, actor, idempotency_key, draft: proposed } = body;
+  const { customer_id, reason_key, message, channel, actor, idempotency_key, draft: proposed, reason_why } = body;
   const missing = ["customer_id", "reason_key", "message", "channel", "actor", "idempotency_key"].filter((k) => !body[k]);
   if (missing.length) return { status: 400, payload: { error: "missing required fields", missing } };
   if (!["whatsapp", "email"].includes(channel)) return { status: 400, payload: { error: "channel must be whatsapp or email" } };
@@ -277,8 +285,8 @@ async function send(body: any) {
   const bullet_ids = reason_kind === "market" && part ? [part] : [];
   const row = await sql.begin(async (tx: any) => {
     const [m] = await tx`
-      insert into customer_messages (customer_id, reason_kind, reason_key, product_id, note_id, bullet_ids, draft, message, channel, sent_by, idempotency_key)
-      values (${customer_id}, ${reason_kind}, ${reason_key}, ${product_id}, ${note_id}, ${JSON.stringify(bullet_ids)}::jsonb, ${proposed ?? null}, ${message}, ${channel}, ${actor}, ${idempotency_key})
+      insert into customer_messages (customer_id, reason_kind, reason_key, product_id, note_id, bullet_ids, draft, message, channel, sent_by, idempotency_key, reason_why)
+      values (${customer_id}, ${reason_kind}, ${reason_key}, ${product_id}, ${note_id}, ${JSON.stringify(bullet_ids)}::jsonb, ${proposed ?? null}, ${message}, ${channel}, ${actor}, ${idempotency_key}, ${reason_why ?? null})
       on conflict (idempotency_key) do nothing returning *`;
     if (!m) return null;
     // a Market Flash bullet reaches a client once — same log Quotes used, so Market Flash's "sent to N" stays true
