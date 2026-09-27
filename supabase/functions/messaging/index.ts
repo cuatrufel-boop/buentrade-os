@@ -19,6 +19,34 @@
 //
 // Learning (only from the trader): the draft prompt carries the trader's own recent messages, and for the ones he
 // edited, what the system proposed next to what he actually sent — so drafts drift toward how he writes.
+// ================================= RULES (codified 2026-09-28 — the user's, from long sessions; do not relax) =============
+// PURPOSE: the client ignores "hola, buenos días" and price lists; he answers only what is relevant to HIM. A message
+//   must make him feel known (his business, his city, how much he buys, what he told us) so he answers — ideally asking
+//   for a product. Never a "mandadero de precios".
+// SENDING: nothing is ever sent automatically. The trader reviews each message in the same review modal as quotes,
+//   edits if he wants, sends. What was actually sent (after edits) is what is recorded.
+// ONE message per client per day; a second one the same day is a DIFFERENT angle ("Another angle"). No daily cap.
+// VOICE: Mexican Spanish, "tú", first name, ≤30 words, ends in ONE easy question, no emojis/links/prices/signature. It
+//   must sound like the trader; drafts learn ONLY from the trader's own sent messages and his edits (draft vs sent).
+// FACTS — only real, dated, sourced; enforced in code (BAD[] guard + one retry), not just asked of the model:
+//   • every bulletin fact is said with its date ("la semana al 18 de septiembre", "en julio") — never "esta semana/este mes/hoy";
+//   • never predict ("va a subir", "antes de que escasee"); state the fact, then ask;
+//   • never say how long since he bought, what/when he bought from us, or that we track anything;
+//   • a whole-protein fact (all US pork exports) is never stated about one cut;
+//   • our own prices/costs: direction only ("me bajó el precio"), never numbers;
+//   • FRESH/FROZEN NEVER CROSS: "fresco" only for a product that is Fresh (checked in code against his frozen products);
+//   • news: kept only if its URL really came back from the web search and it is ≤14 days old; the trader sees the link;
+//   • Mexican prices (SNIIM): moves in PESOS (USD table = exchange-rate noise), a corrupted previous-week column (same
+//     price for 3+ cuts) states no move, rounding-sized moves are "sin cambio", >40% in a week is dropped (mxPorkPrices.ts).
+// CONSUMPTION: loads/month is what he buys from ALL suppliers (customer_products cadence, the trader's figure) — never
+//   inferred from our own sales; we don't know his last purchase, so we ASK ("¿cómo vas de…?"), never assert.
+// SELECTION: strongest angle for HIM: what he told you > news touching his cut/place > bulletin fact on his cut/place >
+//   our side (price down / new availability / his last load / unanswered quote) > buying month > calendar > business.
+//   A fact identical for every client is the weakest; the day's messages must vary (angle counts + closings passed in).
+// LEARNING (matching, bulletin terms, style): the system recognizes word by word; when in doubt it goes to Pending /
+//   Terms to teach; ONLY the trader's confirmation teaches, and once taught it goes straight through next time. The
+//   system never learns from its own guesses; suggestions are shown, never pre-selected.
+// =========================================================================================================================
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 import { callClaude } from "../_shared/marketFlash/claude.ts";
@@ -217,6 +245,7 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
       const cadence = !l.frequency_days ? null : l.frequency_days === 30 ? `${l.loads_per_cycle ?? 1} load${(l.loads_per_cycle ?? 1) === 1 ? "" : "s"} a month`
         : `${l.loads_per_cycle ?? 1} load${(l.loads_per_cycle ?? 1) === 1 ? "" : "s"} every ${l.frequency_days} days`;
       return { link_id: l.link_id, product_id: l.product_id, name_es: l.full_name_es, name_en: l.full_name_en, short_es: productShortEs(l),
+        temp_es: /\bfrozen\b/i.test(l.full_name_en || "") ? "congelado" : /\bfresh\b/i.test(l.full_name_en || "") ? "fresco" : null,
         loads_month: loadsMonth, monthly_input: l.frequency_days === 30 ? l.loads_per_cycle : null, cadence,
         from_us_month: fromUsBy.get(`${c.id}|${l.product_id}`) || 0 };
     });
@@ -276,7 +305,7 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
     }
 
     // A message sent today stays on the list as Sent even if its reason has changed since (volume filled in, note used…).
-    const KIND: Record<string, any> = { cycle: "cycle", ask_volume: "ask_volume", personal: "personal", market: "market", season: "season", business: "business" };
+    const KIND: Record<string, any> = { cycle: "cycle", ask_volume: "ask_volume", personal: "personal", market: "market", season: "season", business: "business", news: "news", offer: "offer", followup: "followup" };
     for (const [key, m] of sentTodayBy) {
       if (options.some((o) => o.reason_key === key)) continue;
       options.push({ reason_key: key, kind: KIND[m.reason_kind], product_id: m.product_id, note_id: m.note_id, bullet_ids: [],
@@ -466,9 +495,47 @@ function upcomingEvents(days = 45) {
   }
   return out;
 }
+// What is happening on OUR side with this client's products (2026-09-28: "productos, mercado, proteína, fletes… el
+// sistema debe saberlos procesar y disparar"). All from our own data — never guessed:
+//   precio      our best (lowest) plant price for his cut in the last 7 days vs 8–30 days ago (price_history), direction only
+//   llegó       a plant sent a fresh price for his cut in the last 3 days (plant_products.price_date)
+//   flete       a freight rate from a plant that sells his cuts changed in the last 14 days (provider_rate_history)
+//   su_carga    his last load, picked up / delivered in the last 21 days (shipments → sent_offers)
+//   cotización  a quote we sent him in the last 10 days that is still open or expired unanswered (sent_offers)
+async function ourSide(customerId: string, products: any[]) {
+  const pids = products.map((p: any) => p.product_id);
+  const nameOf = (id: string) => { const p = products.find((x: any) => x.product_id === id); return p ? `${p.short_es}${p.temp_es ? ` (${p.temp_es})` : ""}` : null; };
+  if (!pids.length) return {};
+  const [moves, fresh, freight, loads, quotes] = await Promise.all([
+    sql`with recent as (select product_id, min(price) p from price_history where product_id = any(${pids}) and price_date >= current_date - 7 group by 1),
+             before as (select product_id, min(price) p from price_history where product_id = any(${pids}) and price_date between current_date - 30 and current_date - 8 group by 1)
+        select r.product_id, r.p as now_p, b.p as before_p from recent r join before b using (product_id)`,
+    sql`select pp.product_id, pl.name as plant, pp.price_date from plant_products pp join plants pl on pl.id = pp.plant_id
+        where pp.product_id = any(${pids}) and pp.current_price is not null and pp.declined_at is null and pp.price_date >= current_date - 3 order by pp.price_date desc`,
+    sql`select distinct on (h.rate_id) pl.name as plant, h.origin, h.destination, h.old_rate, h.new_rate, h.changed_at
+        from provider_rate_history h join plants pl on pl.id = h.plant_id
+        where h.old_rate is not null and h.changed_at >= now() - interval '14 days'
+          and h.plant_id in (select plant_id from plant_products where product_id = any(${pids}) and current_price is not null)
+        order by h.rate_id, h.changed_at desc`,
+    sql`select so.product_id, so.plant_name, sh.status, coalesce(sh.delivered_at, sh.picked_up_at) as at from shipments sh join sent_offers so on so.id = sh.sent_offer_id
+        where sh.customer_id = ${customerId} and sh.status in ('picked_up', 'delivered') and coalesce(sh.delivered_at, sh.picked_up_at) >= now() - interval '21 days'
+        order by at desc limit 3`,
+    sql`select product_id, status, sent_at from sent_offers where customer_id = ${customerId} and status in ('sent', 'expired') and sent_at >= now() - interval '10 days' order by sent_at desc limit 3`,
+  ]);
+  const day = (d: any) => String(d instanceof Date ? d.toISOString() : d).slice(0, 10);
+  return {
+    precio: moves.map((m: any) => ({ producto: nameOf(m.product_id), direccion: m.now_p < m.before_p ? "bajó" : m.now_p > m.before_p ? "subió" : "igual", pct: Math.round((m.now_p / m.before_p - 1) * 1000) / 10 }))
+      .filter((m: any) => Math.abs(m.pct) >= 2).map((m: any) => ({ producto: m.producto, nuestro_mejor_precio: m.direccion, frente_a: "hace 2 a 4 semanas" })),
+    llego: fresh.map((f: any) => ({ producto: nameOf(f.product_id), planta: f.plant, fecha: day(f.price_date) })).slice(0, 4),
+    flete: freight.map((f: any) => ({ planta: f.plant, ruta: [f.origin, f.destination].filter(Boolean).join(" → "), direccion: Number(f.new_rate) < Number(f.old_rate) ? "bajó" : "subió", fecha: day(f.changed_at) })),
+    su_carga: loads.map((l: any) => ({ producto: nameOf(l.product_id), planta: l.plant_name, estado: l.status === "delivered" ? "entregada" : "en camino", fecha: day(l.at) })),
+    cotizacion: quotes.map((q: any) => ({ producto: nameOf(q.product_id), estado: q.status === "sent" ? "abierta, sin respuesta" : "venció sin respuesta", enviada: day(q.sent_at) })),
+  };
+}
+
 const COMPOSE_SCHEMA = {
   type: "object", additionalProperties: false, required: ["message", "subject", "why_en", "angle", "used_bullet_id", "used_note_id", "used_news_id", "product"],
-  properties: { message: { type: "string" }, subject: { type: "string" }, why_en: { type: "string" }, angle: { type: "string", enum: ["personal", "market", "news", "rebuy", "season", "business", "volume"] },
+  properties: { message: { type: "string" }, subject: { type: "string" }, why_en: { type: "string" }, angle: { type: "string", enum: ["personal", "market", "news", "offer", "followup", "rebuy", "season", "business", "volume"] },
     used_bullet_id: { type: "string" }, used_note_id: { type: "string" }, used_news_id: { type: "string" }, product: { type: "string" } },
 };
 async function compose(body: any) {
@@ -494,18 +561,22 @@ async function compose(body: any) {
   const todays = await sql`select draft from customer_message_drafts where reason_key = ${key} and customer_id <> ${customer_id}
     and (created_at at time zone ${TZ})::date = (now() at time zone ${TZ})::date limit 12`;
   const usedToday = todays.map((t: any) => { try { return JSON.parse(t.draft).why_en; } catch { return ""; } }).filter(Boolean);
+  const angleCounts: Record<string, number> = {};
+  const closings: string[] = [];
+  for (const t of todays) { try { const j = JSON.parse(t.draft); angleCounts[j.angle] = (angleCounts[j.angle] || 0) + 1; const q = String(j.message).match(/¿[^?]*\?\s*$/); if (q) closings.push(q[0].trim()); } catch { /* skip */ } }
   const openings = todays.map((t: any) => { try { return JSON.parse(t.draft).message.split(/[,.?¿!]/).slice(0, 2).join(" ").trim(); } catch { return ""; } }).filter(Boolean);
   const dossier = {
     cliente: `${c.first_name || c.trade_name} (${c.trade_name.trim()})`, ciudad: [c.city, c.state].filter(Boolean).join(", ") || null,
     negocio: biz ? biz.name_es : null,
     // What he buys and his TOTAL rhythm as he told the trader (all suppliers). Deliberately NOT what he bought from us or
     // when — that must never appear in a message, and we don't know his last purchase anyway.
-    compra: c.products.map((p: any) => ({ producto: p.short_es, cuanto_compra_en_total: p.cadence ? `dice que compra ${p.cadence.replace("load", "carga").replace("loads", "cargas").replace("a month", "al mes").replace("every", "cada").replace("days", "días")} (a todos sus proveedores; no sabemos cuándo compró por última vez)` : "no sabemos cuánto compra" })),
+    compra: c.products.map((p: any) => ({ producto: p.short_es, temperatura: p.temp_es, cuanto_compra_en_total: p.cadence ? `dice que compra ${p.cadence.replace("load", "carga").replace("loads", "cargas").replace("a month", "al mes").replace("every", "cada").replace("days", "días")} (a todos sus proveedores; no sabemos cuándo compró por última vez)` : "no sabemos cuánto compra" })),
     dia_del_mes: `${dom} de ${dim}`,
     lo_que_te_conto: c.notes.filter((n: any) => !n.used).map((n: any) => ({ id: n.id, nota: n.note, fecha: String(n.created_at).slice(0, 10) })),
     boletin: c.options.filter((o: any) => o.kind === "market").map((o: any) => ({ id: o.bullet_ids[0], dato: o.fact.fact_es, cuando: o.fact.when_es, por_que_le_importa: o.fact.angle_es })),
     datos_del_boletin_ya_usados_hoy_con_otros_clientes: usedToday,
     noticias_recientes_con_fuente: news,
+    de_nuestro_lado: await ourSide(customer_id, c.products),
     calendario_proximo: upcomingEvents(),
     lo_que_le_ha_funcionado: c.works.map((w: any) => `${w.kind}: ${w.requests} de ${w.sent} terminaron en pedido`),
     mensajes_recientes_a_este_cliente: history.map((h: any) => `${String(h.sent_at).slice(0, 10)} (${h.reason_kind}${h.request_linked_at ? ", pidió producto" : ""}): ${h.message}`),
@@ -513,17 +584,22 @@ async function compose(body: any) {
   const style = mine.map((m: any) => (m.draft && m.draft.trim() !== m.message.trim() ? `- propuesto: "${m.draft}" → él mandó: "${m.message}"` : `- él mandó: "${m.message}"`)).join("\n");
   const system = `You are the best meat trader in Mexico writing ONE WhatsApp message to one client, in the trader's own voice.
 The client is busy and ignores greetings and price lists; he only answers what is relevant to HIM. Your job: the ONE message most likely to make him answer — ideally by asking you to look for a product.
-How to think: read everything in the dossier and pick the single strongest angle for THIS client TODAY. Strong angles: something he told the trader (people buy from who remembers them); a recent NEWS item that touches what he buys or where he is (sanitary closures, border, prices in his state) — say it plainly with its date; a bulletin fact about HIS cut or HIS city with why it matters to him as a buyer; the moment of his buying month (we never know what he bought from others — ask, never assume); an upcoming date that moves his kind of business; his business reality. You may connect a second element only if it makes the message stronger and still reads naturally.
+How to think: read everything in the dossier and pick the single strongest angle for THIS client TODAY. Strong angles: something he told the trader (people buy from who remembers them); something on OUR side for his cut ("de_nuestro_lado": our best price for his cut just went down, a plant just sent fresh availability, a freight change, the load we just delivered him — ask how it came out —, a quote he didn't answer — ask lightly, no pressure); a recent NEWS item that touches what he buys or where he is (sanitary closures, border, prices in his state) — say it plainly with its date; a bulletin fact about HIS cut or HIS city with why it matters to him as a buyer; the moment of his buying month (we never know what he bought from others — ask, never assume); an upcoming date that moves his kind of business; his business reality. You may connect a second element only if it makes the message stronger and still reads naturally.
 Rules (mandatory):
 - Mexican Spanish, "tú", starts with his first name. Max 2 short sentences, 30 words total. No emojis, links, prices, signatures.
 - Talk like a person who knows him, never like a template or a report. Never list products; one cut at most, by its common name (two variants of the same cut are the same cut).
 - Use ONLY facts in the dossier; keep numbers exactly. A bulletin fact is always said with its "cuando" (e.g. "la semana al 4 de septiembre", "en julio") — NEVER "esta semana", "este mes", "hoy" or "ahorita" for bulletin data.
 - NEVER mention how long since he bought, what or when he bought from us, or that we track anything. His "cuanto_compra_en_total" is only for asking how he's doing.
+- Our own prices/costs: NEVER give numbers or percentages — say it plainly ("me bajó el precio del codillo", "me llegó lomo de Smithfield"). Name the plant only if it is in the dossier.
 - NEVER predict (no "va a subir", "se va a poner difícil", "antes de que escasee", "siga subiendo"). State the fact, then ask.
 - You may mention an upcoming calendar date only as context for a question — add NO claim about it (not what others do, not demand).
 - A bulletin fact about a whole protein (e.g. all US pork exports) must NOT be stated as a fact about one cut ("la papada anda apretada", "hay menos cachete"): give the general fact, then ask about his cut.
 - A fact that applies to every client the same way (e.g. total US pork exports to Mexico) is the WEAKEST angle — use it only if there is nothing specific to him. Prefer a different fact than the ones already used today with other clients (listed in the dossier).
 - End with ONE easy question.
+- Angles already used today for other clients: ${JSON.stringify(angleCounts)}. If one angle is already used for 3+ clients, prefer another strong angle for this one — the day's messages must not all sound the same.
+- Do not end with the same question as these (vary the closing): ${closings.length ? closings.slice(0, 12).map((q: string) => `"${q}"`).join(", ") : "(none yet)"}.
+- Our own offer ("de_nuestro_lado": price went down, new availability) must NOT read like a price-list push ("me llegó X, ¿te armo carga?" alone is what clients ignore). Use it only when it truly serves him, tied to his reality, and phrase it as useful information.
+- The word "fresco/fresca" means FRESH meat (vs frozen) — use it ONLY for a product whose temperatura is "fresco". A new price is "me llegó precio" or "me llegó disponibilidad", never "fresco" for a frozen product.
 - Do not start like these other messages written today: ${openings.length ? openings.map((o: string) => `"${o}"`).join(", ") : "(none yet)"}.
 Return also: subject (2-5 words, for email), why_en (English, max 14 words: which facts you used, for the trader's screen), angle, used_bullet_id (the "id" of the bulletin fact you used, or ""), used_note_id (the "id" of the note you used, or ""), used_news_id (the "id" of the news item you used, or ""), product (the cut you mention in Spanish, or "").`;
   const user = `Dossier: ${JSON.stringify(dossier)}
@@ -534,8 +610,14 @@ ${regenerate && previous ? `The trader wants a DIFFERENT angle than this one —
   // the model may think before answering; give it room, and retry once if it ran out before writing
   const ask = async (u: string) => { try { return await callClaude(system, u, COMPOSE_SCHEMA, 8000); } catch (e) { if (/No text content|max_tokens/.test(String(e))) return await callClaude(system, u, COMPOSE_SCHEMA, 12000); throw e; } };
   let out = await ask(user);
-  const broken = (m: string) => BAD.filter((re) => re.test(m)).map((re) => re.source);
-  const why1 = broken(String(out.message || ""));
+  const frozenNames = c.products.filter((p: any) => p.temp_es === "congelado").map((p: any) => norm(p.short_es));
+  const broken = (m: string) => {
+    const out = BAD.filter((re) => re.test(m)).map((re) => re.source);
+    // Fresh/Frozen never cross: "fresco" next to a product he only buys frozen is a false statement
+    if (/\bfresc[oa]s?\b/i.test(m) && frozenNames.some((f: string) => f && norm(m).includes(f.split(" ")[0]))) out.push("used 'fresco' for a product he buys frozen");
+    return out;
+  };
+  let why1 = broken(String(out.message || ""));
   if (why1.length) out = await ask(`${user}\nYour previous attempt broke these rules (${why1.join("; ")}): "${out.message}". Write it again without breaking any rule.`);
   const payload = { message: String(out.message || "").trim(), subject: String(out.subject || "").trim(), why_en: String(out.why_en || "").trim(), angle: String(out.angle || "").trim(),
     used_bullet_id: out.used_bullet_id || "", used_note_id: out.used_note_id || "", used_news_id: out.used_news_id || "", product: String(out.product || "").trim(), product_id: null as string | null,
@@ -555,7 +637,8 @@ ${regenerate && previous ? `The trader wants a DIFFERENT angle than this one —
   if (payload.used_bullet_id && !c.options.some((o: any) => o.kind === "market" && o.bullet_ids[0] === payload.used_bullet_id)) payload.used_bullet_id = "";
   await sql`insert into customer_message_drafts (customer_id, reason_key, draft) values (${customer_id}, ${key}, ${JSON.stringify(payload)})
     on conflict (customer_id, reason_key) do update set draft = excluded.draft, created_at = now()`;
-  return { status: 200, payload };
+  // diagnostics: body.debug returns the dossier the message was written from (to verify every fact it could use)
+  return { status: 200, payload: body.debug ? { ...payload, dossier } : payload };
 }
 
 // ---------------------------------------------------------------- writes (idempotent, audited)
@@ -568,7 +651,7 @@ async function send(body: any) {
   if (existing) return { status: 200, payload: { message: existing, duplicate: true } };
   const kind = String(reason_key).split(":")[0];
   // compose (one message per client): the kind is the angle the message used
-  const ANGLE_KIND: Record<string, string> = { personal: "personal", market: "market", news: "market", rebuy: "cycle", volume: "ask_volume", season: "season", business: "business" };
+  const ANGLE_KIND: Record<string, string> = { personal: "personal", market: "market", news: "news", offer: "offer", followup: "followup", rebuy: "cycle", volume: "ask_volume", season: "season", business: "business" };
   const reason_kind = kind === "compose" ? (ANGLE_KIND[body.angle] || "business") : ({ cycle: "cycle", ask: "ask_volume", note: "personal", market: "market" } as Record<string, string>)[kind];
   if (!reason_kind) return { status: 400, payload: { error: "unknown reason_key" } };
   const part = String(reason_key).split(":")[1] || null;
