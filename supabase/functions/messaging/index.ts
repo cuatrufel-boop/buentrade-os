@@ -22,7 +22,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 import { callClaude } from "../_shared/marketFlash/claude.ts";
-import { FRESHNESS_DAYS, listMarketFlash } from "../_shared/marketFlash/store.ts";
+import { listMarketFlash } from "../_shared/marketFlash/store.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -46,6 +46,95 @@ async function todayParts() {
   const [r] = await sql`select (now() at time zone ${TZ})::date as today, extract(day from (now() at time zone ${TZ}))::int as dom,
     extract(day from (date_trunc('month', (now() at time zone ${TZ})) + interval '1 month - 1 day'))::int as dim`;
   return r as { today: string; dom: number; dim: number };
+}
+
+// ---------------------------------------------------------------- relevance: which bulletin facts matter to a client
+// The bulletin is raw statistics. A fact is worth a message only if it is about something the client buys (his exact cut
+// first, then his protein), in his place when the data is regional (SNIIM: CDMX / Nuevo León), and it actually moved.
+// Each pick carries an `angle` — why it matters to him as a buyer — which the draft turns into a question.
+const MONTHS = "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre";
+function pctOf(text: string, tail: string): number | null {
+  const m = text.match(new RegExp(`(\\d+(?:\\.\\d+)?)% (más|menos) ${tail}`));
+  return m ? (m[2] === "menos" ? -1 : 1) * parseFloat(m[1]) : null;
+}
+function regionIsLocal(region: string | null, c: any): boolean {
+  if (!region) return false;
+  const st = String(c.state || "").toLowerCase(), city = String(c.city || "").toLowerCase();
+  if (/distrito federal|zona metropolitana/i.test(region)) return /ciudad de méxico|estado de méxico|cdmx/.test(st + " " + city);
+  return st && region.toLowerCase().includes(st);
+}
+function angleFor(b: any, text: string, c: any): { angle: string; weight: number; local: boolean } | null {
+  const week = pctOf(text, "que la semana anterior"), year = pctOf(text, "que hace un año");
+  if (b.kind === "cut_price_forecast_month" || b.kind === "cut_price_forecast_week") {
+    const months = [...text.matchAll(new RegExp(`(${MONTHS}) (\\d+(?:\\.\\d+)?)% (más|menos)`, "g"))].map((m) => ({ m: m[1], v: (m[3] === "menos" ? -1 : 1) * parseFloat(m[2]) }));
+    const vals = months.length ? months.map((x) => x.v) : (year != null ? [year] : []);
+    if (!vals.length) return null;
+    const low = Math.min(...vals);
+    if (months.length > 1 && months[months.length - 1].v - months[0].v >= 3)
+      return { angle: `el boletín proyecta que este corte suba hacia ${months[months.length - 1].m} — conviene asegurar antes`, weight: 3 + Math.min(2, (months[months.length - 1].v - months[0].v) / 10), local: false };
+    if (low <= -10) return { angle: `precio muy por debajo del año pasado (hasta ${Math.abs(low)}% menos, según la proyección) — buen momento para abastecerse`, weight: 3 + Math.min(2, Math.abs(low) / 15), local: false };
+    return null;
+  }
+  if (b.kind === "cut_price_weekly") {
+    if (week != null && Math.abs(week) >= 3) return { angle: week < 0 ? `bajó ${Math.abs(week)}% en la semana — buen momento de compra` : `subió ${week}% en la semana — asegurar antes de que siga`, weight: 2.6 + Math.min(2, Math.abs(week) / 5), local: false };
+    if (year != null && year <= -10) return { angle: `${Math.abs(year)}% más barato que hace un año`, weight: 2.3 + Math.min(2, Math.abs(year) / 15), local: false };
+    return null;
+  }
+  if (b.kind === "mx_pork_price") {
+    if (week == null || week === 0) return null; // "sin cambio" is not news
+    const region = (text.match(/ en (.+?), semana/) || [])[1] || null;
+    const local = regionIsLocal(region, c);
+    const where = /distrito federal/i.test(region || "") ? "CDMX" : region;
+    return { angle: `en ${where} el precio local ${week > 0 ? "subió" : "bajó"} ${Math.abs(week)}% en la semana (SNIIM)${week > 0 ? " — el producto de EE.UU. puede salirle mejor" : ""}`, weight: (local ? 2.8 : 1.4) + Math.min(1.5, Math.abs(week) / 5), local };
+  }
+  // Volume only: a drop in dollar VALUE is not "less product" (July: chicken to Mexico fell in value but rose in tons).
+  if (b.kind === "export_change" && /a México/.test(text) && /toneladas métricas/.test(text)) {
+    const less = / menos /.test(text);
+    return { angle: less ? "está entrando menos producto de EE.UU. a México — la oferta se aprieta" : "está entrando más producto de EE.UU. a México", weight: less ? 1.7 : 1.5, local: false };
+  }
+  return null;
+}
+function shortWhy(b: any, text: string): string {
+  const sign = (v: number | null) => v == null ? "" : `${v > 0 ? "+" : ""}${v}%`;
+  const week = pctOf(text, "que la semana anterior"), year = pctOf(text, "que hace un año");
+  const wk = (text.match(/semana al (\d+ \w+)\.?/) || [])[1];
+  if (b.kind === "mx_pork_price") {
+    const region = (text.match(/ en (.+?), semana/) || [])[1] || "";
+    return `${/distrito federal/i.test(region) ? "CDMX" : region} local price ${sign(week)}${wk ? ` · week of ${wk}` : ""} (SNIIM)`;
+  }
+  if (b.kind === "cut_price_weekly") return `US price ${week != null ? `${sign(week)} on the week` : ""}${year != null ? `${week != null ? ", " : ""}${sign(year)} vs a year ago` : ""}${wk ? ` · week of ${wk}` : ""}`;
+  if (b.kind === "cut_price_forecast_month" || b.kind === "cut_price_forecast_week") {
+    const months = [...text.matchAll(new RegExp(`(${MONTHS}) (\\d+(?:\\.\\d+)?)% (más|menos)`, "g"))].map((m) => `${m[1].slice(0, 3)} ${m[3] === "menos" ? "-" : "+"}${m[2]}%`);
+    return `Forecast vs a year ago: ${months.length ? months.join(", ") : sign(year)}`;
+  }
+  if (b.kind === "export_change") {
+    const t = text.match(/de (carne de \w+|pavo|variety meats de \w+)[^:]*a México en (\w+) de \d+: ([\d,]+) toneladas métricas (más|menos)/);
+    return t ? `US ${t[1].replace("carne de ", "")} exports to Mexico ${t[4] === "menos" ? "-" : "+"}${t[3]} t vs a year ago (${t[2]})` : "US exports to Mexico";
+  }
+  return text;
+}
+function marketCandidates(mf: any, c: any, myPids: Set<string>, mySpecies: Set<string>, shortByPid: Map<string, string>, alreadySent: (id: string) => boolean) {
+  const out: any[] = [];
+  for (const g of mf.product) {
+    const pid = g.product_ids.find((id: string) => myPids.has(id));
+    if (!pid) continue;
+    for (const b of g.bullets) {
+      if (alreadySent(b.id)) continue;
+      const a = angleFor(b, b.text_es, c);
+      if (a) out.push({ b, text: b.text_es, short: `${g.label_en.split(" — ").slice(1).join(" ") || g.label_en} — ${shortWhy(b, b.text_es)}`, angle: a.angle, score: a.weight, local: a.local, productId: pid, productEs: shortByPid.get(pid) || g.label_es, scope: `about ${g.label_en}`, entity: g.label_es });
+    }
+  }
+  for (const sp of mySpecies) for (const b of (mf.protein[sp]?.bullets || [])) {
+    // protein-wide: only supply into Mexico — the analyst's general commentary often names cuts this client doesn't buy
+    if (alreadySent(b.id) || b.kind !== "export_change") continue;
+    const a = angleFor(b, b.text_es, c);
+    if (a && (b.kind !== "export_change" || c.country === "Mexico")) out.push({ b, text: b.text_es, short: shortWhy(b, b.text_es), angle: a.angle, score: a.weight, local: false, productId: null, productEs: null, scope: `${sp} market`, entity: b.kind === "export_change" ? "exports" : `protein:${sp}:${b.kind}` });
+  }
+  // the strongest fact per product/topic, then the best two overall
+  out.sort((x, y) => y.score - x.score);
+  const seen = new Set<string>(), picks: any[] = [];
+  for (const x of out) { if (seen.has(x.entity)) continue; seen.add(x.entity); picks.push(x); if (picks.length === 2) break; }
+  return picks;
 }
 
 // ---------------------------------------------------------------- list
@@ -79,15 +168,13 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
         from customer_messages group by 1, 2`,
   ]);
 
-  // Market Flash: the latest bulletin's bullets, only while fresh (same FRESHNESS_DAYS + valid_until rules as quotes used).
+  // Market Flash: always the LATEST bulletin (2026-09-27: it arrives late — the Sep 5 edition landed Sep 25 — so a fixed
+  // freshness window left Messaging with nothing). Each message says when its data is from; forecasts look ahead anyway.
   const mf = await listMarketFlash(sql);
-  const bulletinFresh = !!mf.bulletin && (Date.now() - new Date(mf.bulletin.as_of).getTime()) / 86400000 <= FRESHNESS_DAYS;
-  const today = new Date().toISOString().slice(0, 10);
-  const valid = (b: any) => !b.valid_until || String(b.valid_until).slice(0, 10) >= today;
-  const bulletSends = bulletinFresh ? await sql`select bullet_id, customer_id from market_flash_bullet_sends` : [];
+  const bulletSends = mf.bulletin ? await sql`select bullet_id, customer_id from market_flash_bullet_sends` : [];
   const sentBullet = new Set(bulletSends.map((r: any) => `${r.bullet_id}|${r.customer_id}`));
   const speciesByProduct = new Map<string, string>();
-  if (bulletinFresh) for (const g of mf.product) for (const pid of g.product_ids) speciesByProduct.set(pid, g.species);
+  for (const g of mf.product) for (const pid of g.product_ids) speciesByProduct.set(pid, g.species);
   const catSpecies = await sql`select p.id, c.name_en from products p join categories c on c.id = p.category_id`;
   const SPECIES: Record<string, string> = { Pork: "pork", Beef: "beef", Chicken: "chicken", Turkey: "turkey" };
   for (const r of catSpecies) if (SPECIES[r.name_en]) speciesByProduct.set(r.id, SPECIES[r.name_en]);
@@ -158,36 +245,20 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
       });
     }
 
-    // market — product-level bullets for his products first, then one protein-wide and one market-wide bullet
-    if (bulletinFresh) {
+    // market — the bulletin facts that matter to THIS client, strongest first (see marketCandidates)
+    if (mf.bulletin) {
       const myPids = new Set(products.map((p: any) => p.product_id));
-      const mySpecies = new Set([...myPids].map((pid) => speciesByProduct.get(pid as string)).filter(Boolean));
-      const seen = new Set<string>();
-      const pushBullet = (b: any, scope: string, score: number, productId: string | null) => {
-        if (seen.has(b.id) || !valid(b)) return;
-        const wasSent = sentBullet.has(`${b.id}|${c.id}`);
-        if (wasSent && !sentTodayBy.has(`market:${b.id}`)) return;
-        seen.add(b.id);
+      const mySpecies = new Set([...myPids].map((pid) => speciesByProduct.get(pid as string)).filter(Boolean) as string[]);
+      const shortByPid = new Map(products.map((p: any) => [p.product_id, p.short_es]));
+      const picks = marketCandidates(mf, c, myPids, mySpecies, shortByPid, (id: string) => sentBullet.has(`${id}|${c.id}`) && !sentTodayBy.has(`market:${id}`));
+      for (const k of picks) {
         add({
-          reason_key: `market:${b.id}`, kind: "market", product_id: productId, note_id: null, bullet_ids: [b.id],
-          why: `Market Flash (${mf.bulletin.as_of}): ${b.text_es}`, source: `Market Flash bulletin ${mf.bulletin.as_of} — ${b.source_note || scope}.`,
-          score, is_new: (Date.now() - new Date(mf.bulletin.created_at).getTime()) / 86400000 < 1,
-          fact: { type: "market", bullet_es: b.text_es, scope, country: c.country },
+          reason_key: `market:${k.b.id}`, kind: "market", product_id: k.productId, note_id: null, bullet_ids: [k.b.id],
+          why: k.short, source: `${k.text} — Market Flash, data as of ${String(mf.bulletin.as_of).slice(0, 10)} — ${k.b.source_note || k.scope}.`,
+          score: k.score, is_new: (Date.now() - new Date(mf.bulletin.created_at).getTime()) / 86400000 < 1,
+          fact: { type: "market", fact_es: k.text, angle_es: k.angle, data_as_of: String(mf.bulletin.as_of).slice(0, 10), product_es: k.productEs, client_city: c.city, local: k.local },
         });
-      };
-      for (const g of mf.product) {
-        const pid = g.product_ids.find((id: string) => myPids.has(id));
-        if (!pid) continue;
-        const b = g.bullets.find((x: any) => valid(x) && (!sentBullet.has(`${x.id}|${c.id}`) || sentTodayBy.has(`market:${x.id}`)));
-        if (b) pushBullet(b, `about ${g.label_en}`, 2.5, pid);
       }
-      for (const sp of mySpecies) {
-        const b = (mf.protein[sp as string]?.bullets || []).find((x: any) => valid(x) && (!sentBullet.has(`${x.id}|${c.id}`) || sentTodayBy.has(`market:${x.id}`)));
-        if (b) pushBullet(b, `${sp} market`, 1.8, null);
-      }
-      const mkt = c.country === "Mexico" ? mf.market.MX : mf.market.US;
-      const b = (mkt?.bullets || []).find((x: any) => valid(x) && (!sentBullet.has(`${x.id}|${c.id}`) || sentTodayBy.has(`market:${x.id}`)));
-      if (b) pushBullet(b, c.country === "Mexico" ? "Mexico market" : "US market", 1.5, null);
     }
 
     // A message sent today stays on the list as Sent even if its reason has changed since (volume filled in, note used…).
@@ -212,7 +283,7 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
 
   return {
     business_types: businessTypes,
-    bulletin: mf.bulletin ? { as_of: mf.bulletin.as_of, fresh: bulletinFresh } : null,
+    bulletin: mf.bulletin ? { as_of: mf.bulletin.as_of, created_at: mf.bulletin.created_at } : null,
     clients,
   };
 }
@@ -248,13 +319,13 @@ async function draft(body: any) {
 Purpose: the client is busy and ignores generic greetings and price lists; he only answers what is relevant to HIM. The message must make him answer — ideally by asking the trader to look for a product.
 Rules (all mandatory):
 - Mexican Spanish, always "tú" (never "usted", never Argentine voseo like "comprás"). Start with the client's first name. Don't assume the client's gender: avoid gendered adjectives about them unless the name makes it unambiguous.
-- At most 2 short sentences (under 35 words). Sound like a person who knows him, never like a template, a newsletter or a bot. No emojis, no links, no prices, no signature.
-- Use ONLY the fact given. Never add facts, numbers, places, news or claims that are not in it. His city/business may be mentioned only as who he is.
+- At most 2 short sentences, 30 words maximum in total. Sound like a person who knows him, never like a template, a newsletter or a bot. No emojis, no links, no prices, no signature.
+- Use ONLY the fact given. Never add facts, numbers, places (e.g. \"la frontera\"), news or claims that are not in it. His city/business may be mentioned only as who he is.
 - End with a question that is easy to answer (yes/no or a product).
 - cycle: we do NOT know what he bought from other suppliers — ASK how he is doing with that product / if he already needs more, and offer to look for it. Never claim he ran out, never mention that we track his purchases or numbers.
 - ask_volume: ask, with genuine interest in his business, how many loads of that product he moves a month.
 - personal: a warm, human question about what he told us. Do not push product unless the note itself is about his business.
-- market: tell him the fact in plain words as something useful for him, then ask how it affects him / if he wants you to secure product.
+- market: in plain words, give the fact AND its angle (why it matters to him as a buyer — the angle_es field), say when the data is from as the fact says it (e.g. "la semana del 4 de septiembre", "el boletín proyecta para octubre") — never "esta semana" unless the fact says so — then ask one easy question (how it's affecting him / if he wants you to secure product). Keep numbers exactly as given.
 Also return an email subject of 2-5 words (no "Cotización", no prices).`;
   const user = `Client: ${client.first_name || client.trade_name} (${client.trade_name})${client.city ? `, ${client.city}${client.state ? `, ${client.state}` : ""}` : ""}${bizName ? ` — ${bizName}` : ""}.
 Reason: ${option.kind}

@@ -201,8 +201,14 @@ export async function listMarketFlash(sql: any) {
     if (bl.levels.includes("protein") && bl.species) (protein[bl.species] ||= []).push(item);
     if (bl.levels.includes("market")) (market[bl.market] ||= []).push(item);
   }
-  const pending = [...pendingMap.values()].map((p: any) => ({ term: p.term, species: p.species, kinds: [...p.kinds], bullet_count: p.count, example: p.example, no_catalog: !!p.no_catalog, suggested_keys: p.no_catalog ? [] : suggest(p.term, p.species, cat) }))
-    .sort((a, b) => Number(a.no_catalog) - Number(b.no_catalog) || b.bullet_count - a.bullet_count);
+  // Teach first what pays first (2026-09-27): each term shows how many of OUR clients buy one of its suggested products,
+  // and the list is ordered by that — teaching those few terms is what unlocks bulletin facts for real buyers.
+  const familyByKey = new Map<string, Family>([...cat.families, ...cat.names].map((f) => [f.key, f]));
+  const buyersFor = (keys: string[]) => new Set(links.filter((l: any) => keys.some((k) => familyByKey.get(k)?.product_ids.includes(l.product_id))).map((l: any) => l.customer_id)).size;
+  const pending = [...pendingMap.values()].map((p: any) => {
+    const suggested_keys = p.no_catalog ? [] : suggest(p.term, p.species, cat);
+    return { term: p.term, species: p.species, kinds: [...p.kinds], bullet_count: p.count, example: p.example, no_catalog: !!p.no_catalog, suggested_keys, buyers: buyersFor(suggested_keys.slice(0, 2)) };
+  }).sort((a, b) => Number(a.no_catalog) - Number(b.no_catalog) || b.buyers - a.buyers || b.bullet_count - a.bullet_count);
   const mx = allCustomers.filter((c: any) => c.country === "Mexico").map((c: any) => c.trade_name);
   return {
     bulletin: { id: b.id, as_of: b.as_of, created_at: b.created_at, source: b.source, per_source: b.per_source, dropped_count: (b.dropped || []).length },
