@@ -3061,7 +3061,8 @@ function detectTempPackFromLine(line){
   }
   for (const p of packagings){
     const words = [p.name, p.name_en].filter(Boolean);
-    if (words.some(w => wordBoundary(w).test(norm))){ packagingId = p.id; break; }
+    // Plural too ("72 trim combos" is still Combo) — same as the server matcher.
+    if (words.some(w => wordBoundary(w).test(norm) || wordBoundary(w + 's').test(norm))){ packagingId = p.id; break; }
   }
   // Plant shorthand that never matches a catalog row's own name: "FZ" is the trader-confirmed
   // industry abbreviation for Frozen, and "COV" is Cryovac's own abbreviation for vacuum

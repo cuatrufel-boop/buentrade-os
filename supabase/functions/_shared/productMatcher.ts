@@ -62,7 +62,9 @@ function detectTempPackFromLine(
   }
   for (const p of packagings) {
     const words = [p.name, p.name_en].filter(Boolean) as string[];
-    if (words.some((w) => wordBoundary(w).test(norm))) { packagingId = p.id; break; }
+    // Plural too (confirmed live 2026-09-27, Tyson writes "72 trim combos"): "combos" is still Combo. Without this the
+    // line had no packaging, defaulted to Box, and every trader-confirmed Combo alias for it was rejected as a conflict.
+    if (words.some((w) => wordBoundary(w).test(norm) || wordBoundary(w + "s").test(norm))) { packagingId = p.id; break; }
   }
 
   if (!tempId && wordBoundary("FZ").test(norm)) {
@@ -177,7 +179,10 @@ function detectVariationNamesFromLine(line: string, variationNames: string[]): S
     // pending row on every future email instead of ever learning it. A percent variation's bare
     // number only ever appears as a genuinely standalone number ("72 trim combos"), never
     // slash-adjacent, so exclude a digit sitting next to "/" on either side.
-    if (bareNumber && wordBoundary(bareNumber).test(norm) && !new RegExp(`/\\s*${bareNumber}\\b|\\b${bareNumber}\\s*/`).test(norm)) {
+    // Same bug class, confirmed live 2026-09-27 on a real Wholestone line ("backrib poly 2.5-3.0 lbs"): the "5" of the
+    // weight 2.5 read as the "5%" trim variation, so a trader-confirmed alias kept going back to Pending. A decimal part
+    // ("2.5", "5.0") is never a percent variation either — exclude a number touching "." next to another digit.
+    if (bareNumber && wordBoundary(bareNumber).test(norm) && !new RegExp(`/\\s*${bareNumber}\\b|\\b${bareNumber}\\s*/|\\d\\.${bareNumber}(?!\\d)|(?<!\\d)${bareNumber}\\.\\d`).test(norm)) {
       matched.add(name.toLowerCase());
     }
   }
@@ -317,9 +322,17 @@ export async function matchProductFromPlantText(
   const inCategory = (p: any) => !plantCategoryId || p.category_id === plantCategoryId;
 
   const key = normalizeForMatch(raw_text);
+  // Real bug 2026-09-27, proven on staging (23 of 285 learned aliases could never be found): aliases are SAVED by
+  // several callers with a lighter normalize (lowercase + spaces), but looked up here with normalizeForMatch (which also
+  // drops "%" and turns "-" into a space) — so anything taught with a "-" or "%" ("bone-in sirloin cov", "15% breast
+  // trim") went back to Pending on every email even after the trader confirmed it. The stored side is now normalized the
+  // exact same way normalizeForMatch does, so every confirmed match is recognized next time, however it was saved.
   const [aliasRow] = await sql`
     select product_id from plant_product_aliases
-    where plant_id = ${plant_id} and lower(raw_text) = ${key}
+    where plant_id = ${plant_id}
+      and trim(regexp_replace(regexp_replace(replace(lower(trim(raw_text)), '%', ''), '-', ' ', 'g'), '[[:space:]]+', ' ', 'g')) = ${key}
+    order by created_at desc
+    limit 1
   `;
   if (aliasRow) {
     const [product] = await sql`select * from products where id = ${aliasRow.product_id}`;
