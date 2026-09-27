@@ -338,7 +338,6 @@ function renderAll(){
   document.getElementById('cAsked').style.display = asked ? '' : 'none';
   document.getElementById('cAsked').textContent = `${asked} asked for product`;
   document.getElementById('msgList').innerHTML = list.length ? list.map(clientCardHtml).join('') : '<div class="empty">Nothing to tell any client today.</div>';
-  document.querySelectorAll('#msgList select, .toolbar select').forEach(s => { if (typeof btEnhanceSelect === 'function') btEnhanceSelect(s); });
 }
 
 function clientCardHtml(c){
@@ -347,7 +346,8 @@ function clientCardHtml(c){
   const sentCount = c.options.filter(x => x.sent_at).length;
   const place = [c.city, c.state].filter(Boolean).join(', ');
   const products = msgShowAll[c.id] ? c.products : c.products.slice(0, 6);
-  const bizOpts = `<option value="">— Business type —</option>` + msgData.business_types.map(b => `<option value="${b.id}" data-sub="${esc(b.name_es || '')}" ${b.id === c.business_type_id ? 'selected' : ''}>${esc(b.name_en)}</option>`).join('');
+  // Business type is set in the client's profile (Clients) — shown here read-only, English with the Spanish as a guide.
+  const biz = msgData.business_types.find(b => b.id === c.business_type_id);
   const worksHtml = c.works.length
     ? c.works.map(w => `<div>${esc(KIND_LABEL[w.kind] || w.kind)} · <b>${w.requests} of ${w.sent}</b> led to a request</div>`).join('')
     : '<div class="muted">Learning — nothing sent yet</div>';
@@ -356,7 +356,8 @@ function clientCardHtml(c){
       <div class="name">${esc(c.trade_name.trim())}</div>
       <div class="meta">${esc([c.first_name && c.contact_name ? c.contact_name : '', place].filter(Boolean).join(' · '))}</div>
       <div class="sec-l">Business</div>
-      <select onchange="msgSetBusiness('${c.id}', this.value)" ${msgData.business_types.length ? '' : 'disabled'}>${msgData.business_types.length ? bizOpts : '<option value="">No business types yet</option>'}</select>
+      ${biz ? `<div style="font-size:12.5px;line-height:1.35;">${esc(biz.name_en)}${biz.name_es ? `<span style="display:block;font-size:11px;color:var(--ink-soft);">${esc(biz.name_es)}</span>` : ''}</div>`
+            : '<div class="muted" style="font-size:12px;">Not set — set it in the client\'s profile (Clients)</div>'}
       <div class="sec-l">Loads / month (all suppliers)</div>
       ${products.map(p => `<div class="cons-row">
           <span class="pn ${p.cadence ? '' : 'missing'}">${esc(p.name_en)}</span>
@@ -443,7 +444,6 @@ function rerenderClient(cid){
   if (!el || !c) return;
   const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement.id : null;
   el.outerHTML = clientCardHtml(c);
-  document.querySelectorAll(`#cl_${cid} select`).forEach(s => btEnhanceSelect(s));
   if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
 }
 
@@ -513,10 +513,6 @@ async function msgAddNote(cid){
 async function msgDeleteNote(id){
   try { await callApi('messaging', { action: 'delete_note', actor: currentActor(), id }); await loadMessaging(); }
   catch (e){ await btAlert(`Couldn't delete the note: ${e.message}`); }
-}
-async function msgSetBusiness(cid, value){
-  try { await callApi('messaging', { action: 'set_business_type', actor: currentActor(), customer_id: cid, business_type_id: value || null }); const c = msgData.clients.find(x => x.id === cid); if (c) c.business_type_id = value || null; }
-  catch (e){ await btAlert(`Couldn't save: ${e.message}`); }
 }
 async function msgSetLoads(cid, linkId, value){
   const v = String(value).trim();

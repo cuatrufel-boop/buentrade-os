@@ -326,19 +326,6 @@ async function deleteNote(body: any) {
   return { status: 200, payload: { deleted: true } };
 }
 
-async function setBusinessType(body: any) {
-  const { customer_id, business_type_id, actor } = body;
-  if (!customer_id || !actor) return { status: 400, payload: { error: "customer_id and actor are required" } };
-  const r = await sql.begin(async (tx: any) => {
-    const [before] = await tx`select id, business_type_id from customers where id = ${customer_id}`;
-    if (!before) return null;
-    const [after] = await tx`update customers set business_type_id = ${business_type_id || null} where id = ${customer_id} returning id, business_type_id`;
-    await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "customers", record_id: customer_id, before, after });
-    return after;
-  });
-  return r ? { status: 200, payload: { customer: r } } : { status: 404, payload: { error: "unknown customer" } };
-}
-
 // Monthly volume, written in the SAME existing cadence fields Clients uses (every 30 days, N loads).
 async function setLoads(body: any) {
   const { link_id, loads_month, actor } = body;
@@ -390,7 +377,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const handlers: Record<string, (b: any) => Promise<{ status: number; payload: any }>> = {
-      draft, send, add_note: addNote, delete_note: deleteNote, set_business_type: setBusinessType, set_loads: setLoads,
+      draft, send, add_note: addNote, delete_note: deleteNote, set_loads: setLoads,
       quote_origin: quoteOrigin, link_origin: linkOrigin, dismiss_origin: dismissOrigin,
     };
     if (body.action === "list") return jsonResponse(await list(body.actor ?? ""));

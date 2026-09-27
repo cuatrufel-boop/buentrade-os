@@ -58,7 +58,6 @@ ACTION_EXEMPT = {
     ("messaging", "draft"),              # upsert on (customer_id, reason_key)
     ("messaging", "quote_origin"),       # read
     ("messaging", "delete_note"),        # delete by id
-    ("messaging", "set_business_type"),  # update by id to a given value
     ("messaging", "set_loads"),          # update by id to a given value
     ("messaging", "link_origin"),        # update by id, only when not linked yet
     ("messaging", "dismiss_origin"),     # update by ids, only when not dismissed yet
