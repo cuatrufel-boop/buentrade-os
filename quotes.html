@@ -1038,7 +1038,6 @@ auth.onAuthStateChanged(user => {
     <a href="providers.html" class="nav-pill">Logistics</a>
     <a href="plants.html" class="nav-pill">Plants</a>
     <a href="products.html" class="nav-pill">Products</a>
-    <a href="messaging.html" class="nav-pill">Messaging</a>
     <a href="quotes.html" class="nav-pill active">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
@@ -1054,6 +1053,9 @@ auth.onAuthStateChanged(user => {
 
   <div class="tab-row">
     <button type="button" class="tab-btn active" id="qTabBtn_request" onclick="setQuoteTab('request')">Quotes<span id="qPendingCount" class="tab-count" style="display:none;"></span></button>
+    <!-- Messaging (2026-09-27): lives inside Quotes, not as another top-nav module ("no queremos poner tantos módulos") —
+         the morning messages that get clients to ask, right next to where their request gets quoted. -->
+    <button type="button" class="tab-btn" id="qTabBtn_messaging" onclick="setQuoteTab('messaging')">Messaging</button>
     <button type="button" class="tab-btn" id="qTabBtn_coverage" onclick="setQuoteTab('coverage')">Product Coverage</button>
     <button type="button" class="tab-btn" id="qTabBtn_quotingtool" onclick="setQuoteTab('quotingtool')">Quoting Tool</button>
     <!-- Real ask 2026-09-22 ("ya no caben más pestañas arriba, méteme Market Flash como pestaña en
@@ -1256,6 +1258,12 @@ auth.onAuthStateChanged(user => {
       <div id="qCovResults"></div>
       <div id="qCovEmpty" class="empty" style="display:none;">Type a product name above to see every catalog row that matches and which plants have priced it.</div>
     </div>
+  </div>
+
+  <!-- messaging.html?embed=1 (its own header hidden). Fixed height with its own scroll, same as Quoting Tool: its review
+       modals are position:fixed inside the frame, so the frame must be the size of what's on screen for them to show. -->
+  <div id="qPanel_messaging" style="display:none;">
+    <iframe id="qMessagingFrame" style="width:100%;height:85vh;border:none;display:block;background:transparent;" title="Messaging"></iframe>
   </div>
 
   <div id="qPanel_quotingtool" style="display:none;">
@@ -1520,6 +1528,7 @@ async function loadQuotesPage(){
   }
   loadPendingPrices();
   rqRenderOpenSheets();
+  if (new URLSearchParams(location.search).get('tab') === 'messaging') setQuoteTab('messaging');
 
   // Explicit ask 2026-09-03: "y refresh" — the Dashboard only ever updated on a manual reload or
   // re-entering Quotes, so a price the API had already filled in from a plant's reply sat unseen
@@ -1563,9 +1572,11 @@ function rqReturnCustomersWrapHome(){
 // that teardown is needed here any more.
 function setQuoteTab(tab){
   document.getElementById('qTabBtn_request').classList.toggle('active', tab === 'request');
+  document.getElementById('qTabBtn_messaging').classList.toggle('active', tab === 'messaging');
   document.getElementById('qTabBtn_coverage').classList.toggle('active', tab === 'coverage');
   document.getElementById('qTabBtn_quotingtool').classList.toggle('active', tab === 'quotingtool');
   document.getElementById('qPanel_request').style.display = tab === 'request' ? 'block' : 'none';
+  document.getElementById('qPanel_messaging').style.display = tab === 'messaging' ? 'block' : 'none';
   document.getElementById('qPanel_coverage').style.display = tab === 'coverage' ? 'block' : 'none';
   document.getElementById('qPanel_quotingtool').style.display = tab === 'quotingtool' ? 'block' : 'none';
   if (tab === 'request') renderRqPlants();
@@ -1576,10 +1587,17 @@ function setQuoteTab(tab){
   // Same frozen trading-tool.html the per-plant overlay already embeds elsewhere (embed=1 hides
   // its own header/nav) — set once, lazily, so the calculator isn't loaded until the trader
   // actually opens this tab, and never reloaded (losing whatever's in progress) on tab-switching.
+  if (tab === 'messaging') qLoadMessagingFrame();
   if (tab === 'quotingtool'){
     const frame = document.getElementById('qQuotingToolFrame');
     if (!frame.src) frame.src = 'trading-tool.html?embed=1&v=' + Date.now();
   }
+}
+
+// Loaded once, lazily (same as Quoting Tool), and kept — switching tabs never loses a message being edited.
+function qLoadMessagingFrame(){
+  const frame = document.getElementById('qMessagingFrame');
+  if (!frame.src) frame.src = 'messaging.html?embed=1';
 }
 
 // Real ask 2026-09-09, explicit and final ("asi debe quedar quotes... 1 sobre otra deben estar
