@@ -108,7 +108,20 @@ def enclosing_function_body(text, call_start):
     covers every variable the call site could possibly be referencing."""
     fn_starts = [m.start() for m in re.finditer(r"\basync\s+function\b|\bfunction\b", text[:call_start])]
     body_start = fn_starts[-1] if fn_starts else max(0, call_start - 1500)
-    return text[body_start:call_start + 200]
+    # Through the END of the callApi(...) call itself (balanced parentheses), not a fixed 200 characters — a long
+    # payload put the key past that cut-off and was reported as missing (2026-09-27, messaging.html logSend).
+    depth, i, end = 0, call_start, min(len(text), call_start + 200)
+    while i < len(text):
+        ch = text[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+        i += 1
+    return text[body_start:max(end, call_start + 200)]
 
 
 def find_frontend_calls(function_names):
