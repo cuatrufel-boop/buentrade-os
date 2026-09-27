@@ -94,22 +94,26 @@ function angleFor(b: any, text: string, c: any): { angle: string; weight: number
   }
   return null;
 }
+const EN_MONTH: Record<string, string> = { ene: "Jan", feb: "Feb", mar: "Mar", abr: "Apr", may: "May", jun: "Jun", jul: "Jul", ago: "Aug", sep: "Sep", oct: "Oct", nov: "Nov", dic: "Dec" };
+const EN_SPECIES: Record<string, string> = { cerdo: "pork", pollo: "chicken", res: "beef", pavo: "turkey" };
+const enDate = (d: string) => { const m = d.match(/(\d+) (\w{3})/); return m ? `${EN_MONTH[m[2].toLowerCase()] || m[2]} ${m[1]}` : d; };
 function shortWhy(b: any, text: string): string {
   const sign = (v: number | null) => v == null ? "" : `${v > 0 ? "+" : ""}${v}%`;
   const week = pctOf(text, "que la semana anterior"), year = pctOf(text, "que hace un año");
   const wk = (text.match(/semana al (\d+ \w+)\.?/) || [])[1];
   if (b.kind === "mx_pork_price") {
     const region = (text.match(/ en (.+?), semana/) || [])[1] || "";
-    return `${/distrito federal/i.test(region) ? "CDMX" : region} local price ${sign(week)}${wk ? ` · week of ${wk}` : ""} (SNIIM)`;
+    return `${/distrito federal/i.test(region) ? "CDMX" : region} local price ${sign(week)}${wk ? ` · week of ${enDate(wk)}` : ""} (SNIIM)`;
   }
-  if (b.kind === "cut_price_weekly") return `US price ${week != null ? `${sign(week)} on the week` : ""}${year != null ? `${week != null ? ", " : ""}${sign(year)} vs a year ago` : ""}${wk ? ` · week of ${wk}` : ""}`;
+  if (b.kind === "cut_price_weekly") return `US price ${week != null ? `${sign(week)} on the week` : ""}${year != null ? `${week != null ? ", " : ""}${sign(year)} vs a year ago` : ""}${wk ? ` · week of ${enDate(wk)}` : ""}`;
   if (b.kind === "cut_price_forecast_month" || b.kind === "cut_price_forecast_week") {
-    const months = [...text.matchAll(new RegExp(`(${MONTHS}) (\\d+(?:\\.\\d+)?)% (más|menos)`, "g"))].map((m) => `${m[1].slice(0, 3)} ${m[3] === "menos" ? "-" : "+"}${m[2]}%`);
+    const months = [...text.matchAll(new RegExp(`(${MONTHS}) (\\d+(?:\\.\\d+)?)% (más|menos)`, "g"))].map((m) => `${EN_MONTH[m[1].slice(0, 3)] || m[1]} ${m[3] === "menos" ? "-" : "+"}${m[2]}%`);
     return `Forecast vs a year ago: ${months.length ? months.join(", ") : sign(year)}`;
   }
   if (b.kind === "export_change") {
     const t = text.match(/de (carne de \w+|pavo|variety meats de \w+)[^:]*a México en (\w+) de \d+: ([\d,]+) toneladas métricas (más|menos)/);
-    return t ? `US ${t[1].replace("carne de ", "")} exports to Mexico ${t[4] === "menos" ? "-" : "+"}${t[3]} t vs a year ago (${t[2]})` : "US exports to Mexico";
+    const sp = t ? t[1].replace("carne de ", "").replace("variety meats de ", "") : "";
+    return t ? `US ${t[1].startsWith("variety") ? `${EN_SPECIES[sp] || sp} variety meats` : EN_SPECIES[sp] || sp} exports to Mexico ${t[4] === "menos" ? "-" : "+"}${t[3]} t vs a year ago (${EN_MONTH[t[2].slice(0, 3)] || t[2]})` : "US exports to Mexico";
   }
   return text;
 }
