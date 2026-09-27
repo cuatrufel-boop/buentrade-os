@@ -9,16 +9,15 @@
 //   ingest_market_flash      reads the WHOLE bulletin automatically (tables by deterministic self-validating parsers,
 //                            narrative by an audited literal-translation step) and stores every Spanish bullet.
 //                            Idempotent by the sha-256 of the PDF (computed here): the same PDF/email twice = one bulletin.
-//   list_market_flash        the three tabs (Product / Protein / Market) + Pending Matches, read-only.
+//   list_market_flash        the bulletin's bullets + the terms still to teach, read-only (used by Quotes → Messaging → Market).
 //   poll_market_flash_emails / process_market_flash_inbox  the bulletin arriving by email (cron every 15 min).
 //   teach_market_flash_term  Pending Matches → "this printed term means this catalog product/family" (learned once,
 //                            applies to every stored and future bulletin). Idempotent upsert.
 // Mutually exclusive with each other and with the default read below.
-// The read-only default also returns the bulletin's bullets that apply to this product as `market_note`
-// (same shape products.html already renders), so what a trader sees here never disagrees with what a quote sends.
+// 2026-09-27: the default read no longer returns Market Flash bullets — the bulletin is only a source for Messaging.
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse } from "../_shared/matching.ts";
-import { ingestBulletin, listMarketFlash, pickBulletsForCustomerProduct, teachTerm } from "../_shared/marketFlash/store.ts";
+import { ingestBulletin, listMarketFlash, teachTerm } from "../_shared/marketFlash/store.ts";
 import { diagnoseInbox, dumpXlsx, pollBulletinEmails, processInboxMessage } from "../_shared/marketFlash/emailInbox.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
@@ -44,12 +43,6 @@ Deno.serve(async (req) => {
       return jsonResponse(await processInboxMessage(sql, body.process_market_flash_inbox.message_id));
     }
 
-    // Cheap: only the latest bulletin's identity — the header's red dot (every page) asks this on load.
-    if (body.market_flash_status) {
-      const [b] = await sql`select id, as_of, created_at, source from market_flash_bulletins order by as_of desc, created_at desc limit 1`;
-      return jsonResponse({ bulletin: b ?? null });
-    }
-
     if (body.list_market_flash) return jsonResponse(await listMarketFlash(sql));
 
     if (body.teach_market_flash_term) {
@@ -72,13 +65,7 @@ Deno.serve(async (req) => {
 
     const trend = await computeProductPriceSignal(sql, product_id);
 
-    const bullets = await pickBulletsForCustomerProduct(sql, null, product_id, 3);
-    const [latest] = bullets.length ? await sql`select as_of from market_flash_bulletins order by as_of desc limit 1` : [];
-    const marketNote = bullets.length
-      ? { trend_pct: null, note: bullets.map((b: any) => b.text).join(" "), note_date: latest?.as_of ?? null, mx_benchmark_price_usd_kg: null, mx_benchmark_region: null }
-      : null;
-
-    return jsonResponse({ results, trend, market_note: marketNote });
+    return jsonResponse({ results, trend });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }

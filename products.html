@@ -391,7 +391,6 @@ auth.onAuthStateChanged(user => {
 <header>
   <div class="top-row">
     <a href="dashboard.html" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);text-align:center;text-decoration:none;" title="Go to Dashboard"><div class="brand-word">Buen<span>Trade</span><div style="font-size:14px;letter-spacing:0.1em;color:rgba(255,255,255,.75);margin-top:5px;"><b style="font-weight:800;color:var(--blue-bright);">O</b>perating <b style="font-weight:800;color:var(--blue-bright);">S</b>ystem</div></div></a>
-    <a href="market-flash-admin.html" class="hdr-flash" style="position:absolute;right:32px;top:50%;transform:translateY(-50%);" title="Market Flash"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5AAAFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Market Flash</a>
   </div>
   <div id="userChip" style="position:absolute;right:32px;bottom:24px;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:3px 5px 3px 3px;">
     <span id="userAvatar" style="width:19px;height:19px;border-radius:50%;background:#1E6ADB;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;flex-shrink:0;"></span>
@@ -1470,30 +1469,13 @@ async function togglePriceHistory(productId){
   let data;
   try { data = await callApi('price-history-search', { product_id: productId }); }
   catch (e) { panel.innerHTML = `<div class="prod-name-es">Error: ${escapeHtml(e.message)}</div>`; return; }
-  renderPriceHistoryPanel(productId, data.results || [], data.trend || null, data.market_note || null);
+  renderPriceHistoryPanel(productId, data.results || [], data.trend || null);
 }
 
-// Real correction 2026-09-22 ("nunca ir a mano a un producto"): read-only display now — loading,
-// teaching, and reviewing Market Flash data all live in market-flash.html instead.
-function marketNoteSectionHtml(marketNote){
-  if (!marketNote) return `<div style="padding:10px 4px;border-top:1px solid var(--line);margin-top:10px;"><div style="font-weight:600;font-size:12.5px;margin-bottom:6px;">Industry bulletin — market note for this product</div><div class="prod-name-es">No market note on file. Loaded from Market Flash.</div></div>`;
-  const bits = [];
-  if (marketNote.trend_pct != null) bits.push(`${marketNote.trend_pct > 0 ? '+' : ''}${marketNote.trend_pct}%`);
-  if (marketNote.note) bits.push(escapeHtml(marketNote.note));
-  if (marketNote.mx_benchmark_price_usd_kg != null) bits.push(`MX ref: $${marketNote.mx_benchmark_price_usd_kg}/kg (${escapeHtml(marketNote.mx_benchmark_region || '—')})`);
-  const asOf = new Date(marketNote.note_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `
-    <div style="padding:10px 4px;border-top:1px solid var(--line);margin-top:10px;">
-      <div style="font-weight:600;font-size:12.5px;margin-bottom:6px;">Industry bulletin — market note for this product</div>
-      <div class="prod-name-es">As of ${asOf}: ${bits.join(' · ') || '(no data)'}</div>
-    </div>`;
-}
-
-function renderPriceHistoryPanel(productId, rows, signal, marketNote){
+function renderPriceHistoryPanel(productId, rows, signal){
   const panel = document.getElementById('price_history_panel_' + productId);
-  const noteSection = marketNoteSectionHtml(marketNote);
   if (!rows.length){
-    panel.innerHTML = `<div style="padding:10px 4px;" class="prod-name-es">No price recorded for this product since price history started (2026-09-16).</div>${noteSection}`;
+    panel.innerHTML = `<div style="padding:10px 4px;" class="prod-name-es">No price recorded for this product since price history started (2026-09-16).</div>`;
     return;
   }
   const shown = rows.slice(0, PRICE_HISTORY_DISPLAY_COUNT);
@@ -1509,8 +1491,7 @@ function renderPriceHistoryPanel(productId, rows, signal, marketNote){
         </tbody>
       </table>
       ${hiddenCount > 0 ? `<div class="prod-name-es" style="margin-top:6px;">+ ${hiddenCount} older price${hiddenCount === 1 ? '' : 's'} on file, not shown.</div>` : ''}
-    </div>
-    ${noteSection}`;
+    </div>`;
 }
 
 // Grade numbers (#2), percentages (42%), and size ranges (13/15, 4/5KG) — the exact kind of

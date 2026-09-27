@@ -4,7 +4,6 @@
 // One copy, imported everywhere, so a fix or a rule change happens once, not once per function.
 
 import { createHmac } from "node:crypto";
-import { pickBulletsForCustomerProduct } from "./marketFlash/store.ts";
 
 // Real bug caught live 2026-09-16, same class already hit once in plants.html (toDateOnly) and
 // documented there: a `date` column comes back from postgres.js as a JS Date object, and
@@ -284,21 +283,10 @@ export async function computeCustomerProductSignal(
     ? { pctChange: priceSignal.trend.pctChange }
     : null;
 
-  // Market Flash v2 (2026-09-25): the bulletin is read automatically and stored as Spanish bullets
-  // (see _shared/marketFlash/store.ts). This picks up to 2 that apply to THIS customer and product —
-  // most specific first (this product, then its protein, then the market) — and never one this customer
-  // was already sent. It only READS: a bullet is marked as sent (log_market_flash_sends) when the message
-  // really goes out, so previewing a quote never burns a bullet. `note` keeps the shape older consumers read.
-  // A failure here must never take down cadence/price/credit signals or a quote — log it, return no note.
-  const picked = await pickBulletsForCustomerProduct(sql, customerId, productId, 2).catch((e: unknown) => { console.error("market flash pick failed", e); return []; });
-  const marketNote = picked.length
-    ? {
-        trendPct: null, note: picked.map((b) => b.text).join(" "),
-        mxBenchmarkPriceUsdKg: null, mxBenchmarkRegion: null,
-        line: `Según el último reporte de mercado (Steiner Consulting): ${picked.map((b) => b.text).join(" ")}`,
-        bulletIds: picked.map((b) => b.id),
-      }
-    : null;
+  // 2026-09-27 (user): Market Flash is ONLY a source for Messaging — short messages that get a client to answer — never
+  // pasted into quotes, the QT price confirmation or the Orders thank-you. So no bulletin line here any more; the
+  // bullets reach clients only through the Messaging tab in Quotes. (Field kept, always null, so callers still work.)
+  const marketNote = null;
 
   const exposure = await computeCustomerExposure(sql, customerId);
   const overCreditLimit = !!(exposure && exposure.outstanding > exposure.creditLimit);
