@@ -192,8 +192,8 @@ async function recordMoney(body: Record<string, any>) {
 // poder adherirlos y saber al final del corte cuanto se le paga... igual que aduanas"): one
 // order_extra_costs row on the load (so profit already counts it, like every extra cost) marked
 // with the bill it belongs to — the carrier's freight bill or the customs bill.
-// cost_type is a closed list: the Trading Tool's own extra-cost names, or "Other" with a note.
-const SURCHARGE_TYPES = ["Customs Processing", "US Warehouse Handling", "Lumper fee", "INBOND Release", "Labels", "Plastic wrap", "IN-LIEU",
+// cost_type is a closed list: the Trading Tool's own cost names (inspection + extra costs), or "Other" with a note.
+const SURCHARGE_TYPES = ["Inspection — Cases", "Inspection — Combos", "Customs Processing", "US Warehouse Handling", "Lumper fee", "INBOND Release", "Labels", "Plastic wrap", "IN-LIEU",
   "Storage — Overnight", "Storage — Weekend", "Storage — Short term", "Storage — Mid term", "Storage — Long term", "Storage — Extra long",
   "Fresh to Frozen conversion", "Other"];
 async function addSurcharge(body: Record<string, any>) {
