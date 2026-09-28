@@ -226,7 +226,7 @@ async function flowStep(body: Record<string, any>) {
   const { actor, order_number, step, detail = null, idempotency_key } = body;
   const missing = ["actor", "order_number", "step", "idempotency_key"].filter((k) => body[k] == null);
   if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-  if (!["freight_confirmed", "customer_reminder_sent"].includes(step)) return jsonResponse({ error: "step must be freight_confirmed or customer_reminder_sent" }, 400);
+  if (!["freight_confirmed", "customer_reminder_sent", "customs_deferred"].includes(step)) return jsonResponse({ error: "step must be freight_confirmed, customer_reminder_sent or customs_deferred" }, 400);
   const [sh] = await sql`select id from shipments where order_number = ${order_number}`;
   if (!sh) return jsonResponse({ error: "unknown order_number" }, 404);
   const [done] = await sql`select * from shipment_flow_steps where shipment_id = ${sh.id} and step = ${step}`;
