@@ -21,8 +21,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
 
   try {
+    const body = await req.json().catch(() => ({}));
     const [{ value: rateStr }] = await sql`select value from app_settings where key = 'collections_interest_rate_annual'`;
     const annualRate = parseFloat(rateStr ?? "0.15");
+    if (body.view === "pay_receive") return jsonResponse(await payReceive(annualRate));
 
     const shipments = await sql`
       select
@@ -140,3 +142,43 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: String(err) }, 500);
   }
 });
+
+// Pay & Receive (Collections + Payments merged, approved 2026-09-28) — every load still moving
+// money, straight from Orders, plus every money record already made on it. The page builds each
+// load's money steps from these facts (who pays whom, how much, when); nothing here is re-asked.
+//   - plant payment / Summar wire: Orders steps (plant_paid_at / summar_payment_sent_at)
+//   - freight + customs we pay at delivery, Summar remanente it pays us at delivery:
+//     shipment_money_records
+//   - customer invoice payments (direct loads): payment_applications, same as always
+async function payReceive(annualRate: number) {
+  const loads = await sql`
+    select sh.id, sh.order_number, sh.status, sh.customer_id, c.trade_name as customer_name, c.credit_limit, c.payment_days as customer_payment_days,
+      c.email as customer_email, c.whatsapp as customer_whatsapp, c.contact_name as customer_contact_name,
+      po.plant_name, coalesce(so_.product_spec, so_.product_name) as product, po.financing_method, po.payment_days as summar_payment_days,
+      sh.sale_amount, po.total_cost as plant_cost, so_.total_cost as offer_cost, so_.cost_per_lb, sales.real_weight,
+      so_.us_freight_amount, coalesce(so_.tramite_aduanal_amount, 0) as tramite_aduanal_amount, coalesce(so_.inspection_amount, 0) as inspection_amount,
+      coalesce((select sum(amount) from order_extra_costs where order_number = sh.order_number), 0) as extra_costs_total,
+      (select min(d::date) from purchase_orders p2, jsonb_array_elements_text(p2.delivery_dates) d where p2.order_number = sh.order_number) as delivery_date,
+      sh.pickup_date, sh.plant_paid_at, sh.summar_payment_sent_at, sh.picked_up_at, sh.delivered_at, sh.invoice_sent_at, sh.payment_due_date,
+      sh.paid_at, sh.amount_paid, sh.net_profit, sh.interest_amount,
+      fo.carrier_name, fo.freight_rate
+    from shipments sh
+    left join customers c on c.id = sh.customer_id
+    left join purchase_orders po on po.order_number = sh.order_number
+    left join sent_offers so_ on so_.id = sh.sent_offer_id
+    left join sales_orders sales on sales.order_number = sh.order_number
+    left join lateral (
+      select pr.name as carrier_name, coalesce(f.actual_rate, f.quoted_rate) as freight_rate
+      from freight_orders f left join providers pr on pr.id = f.carrier_provider_id
+      where f.order_number = sh.order_number order by f.created_at desc limit 1
+    ) fo on true
+    order by sh.order_number
+  `;
+  const records = await sql`select * from shipment_money_records order by created_at`;
+  const customerPayments = await sql`
+    select pa.*, c.trade_name as customer_name from payment_applications pa
+    left join customers c on c.id = pa.customer_id order by pa.applied_at
+  `;
+  return { loads, records, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toISOString().slice(0, 10) };
+}
+

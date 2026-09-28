@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
+    if (body.kind && body.kind !== "customer") return await recordMoney(body);
     const missing = ["actor", "customer_id", "amount", "bank_entry_date", "collection_account"].filter((k) => body[k] == null);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
     const {
@@ -56,6 +57,9 @@ Deno.serve(async (req) => {
     const openShipments = await sql`
       select * from shipments
       where customer_id = ${customer_id} and paid_at is null and (sale_amount - amount_paid) > 0
+        -- Pay & Receive 2026-09-28: a Summar-financed load is paid by the customer TO SUMMAR, never
+        -- to us — it can never be one of "this customer's open invoices" for a payment we received.
+        and not exists (select 1 from purchase_orders po where po.order_number = shipments.order_number and po.financing_method = 'summar')
       order by coalesce(invoice_sent_at, delivered_at, created_at) asc
     `;
 
@@ -128,3 +132,55 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: String(err) }, 500);
   }
 });
+
+// Pay & Receive (2026-09-28): the load money that is not a customer invoice — freight and customs
+// we pay at delivery, the Summar remanente Summar pays us at delivery. One bank movement can cover
+// several loads (allocations), exactly like a customer payment; each slice is one
+// shipment_money_records row, all sharing one payment_batch_id. The page computes the split and
+// shows it before saving; this only validates and stores it.
+const KINDS: Record<string, "in" | "out"> = { freight: "out", customs: "out", summar_remanente: "in" };
+async function recordMoney(body: Record<string, any>) {
+  const { actor, kind, party_name = null, bank_entry_date, collection_account, payment_method = null, payment_reference = null, idempotency_key, allocations } = body;
+  const missing = ["actor", "kind", "bank_entry_date", "collection_account", "idempotency_key", "allocations"].filter((k) => body[k] == null);
+  if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
+  if (!KINDS[kind]) return jsonResponse({ error: "kind must be one of: customer, " + Object.keys(KINDS).join(", ") }, 400);
+  if (!COLLECTION_ACCOUNTS.includes(collection_account)) return jsonResponse({ error: "collection_account must be one of: " + COLLECTION_ACCOUNTS.join(", ") }, 400);
+  if (!Array.isArray(allocations) || !allocations.length || allocations.some((a: any) => !a.shipment_id || !(Number(a.amount) > 0) || typeof a.settles !== "boolean")) {
+    return jsonResponse({ error: "allocations must be a non-empty list of { shipment_id, amount > 0, settles: true|false }" }, 400);
+  }
+
+  const existing = await sql`select * from shipment_money_records where idempotency_key like ${idempotency_key + ':%'}`;
+  if (existing.length) return jsonResponse({ recorded: true, idempotent_replay: true, records: existing });
+
+  const ids = allocations.map((a: any) => a.shipment_id);
+  const ships = await sql`
+    select sh.id, sh.order_number, po.financing_method from shipments sh
+    left join purchase_orders po on po.order_number = sh.order_number where sh.id = any(${ids})
+  `;
+  const byId = new Map(ships.map((r: Record<string, any>) => [r.id, r]));
+  for (const a of allocations) {
+    const sh = byId.get(a.shipment_id);
+    if (!sh) return jsonResponse({ error: `unknown shipment ${a.shipment_id}` }, 400);
+    if (kind === "summar_remanente" && sh.financing_method !== "summar") return jsonResponse({ error: `${sh.order_number} is not a Summar load — it has no Summar remanente` }, 400);
+  }
+
+  const batchId = crypto.randomUUID();
+  const records = await sql.begin(async (tx) => {
+    const out: Record<string, any>[] = [];
+    for (const a of allocations) {
+      const sh = byId.get(a.shipment_id);
+      const [row] = await tx`
+        insert into shipment_money_records
+          (shipment_id, order_number, kind, direction, party_name, amount, settles, bank_entry_date, account, payment_method, payment_reference, payment_batch_id, actor, idempotency_key)
+        values
+          (${sh.id}, ${sh.order_number}, ${kind}, ${KINDS[kind]}, ${party_name}, ${Number(a.amount)}, ${a.settles}, ${bank_entry_date}, ${collection_account}, ${payment_method}, ${payment_reference}, ${batchId}, ${actor}, ${idempotency_key + ':' + sh.id})
+        returning *
+      `;
+      await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "shipment_money_records", record_id: row.id, before: null, after: row });
+      out.push(row);
+    }
+    return out;
+  });
+  return jsonResponse({ recorded: true, records, payment_batch_id: batchId });
+}
+

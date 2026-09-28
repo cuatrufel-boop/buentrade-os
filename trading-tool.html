@@ -691,8 +691,7 @@ if (FIREBASE_READY) {
     <a href="quotes.html" class="nav-pill">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
-    <a href="collections.html" class="nav-pill">Collections</a>
-      <a href="payments.html" class="nav-pill">Payments</a>
+    <a href="collections.html" class="nav-pill">Pay &amp; Receive</a>
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
@@ -2522,7 +2521,7 @@ async function markInvoiceSentFallback(){
   if (!ctx) return;
   await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
   const msgEl = document.getElementById('invoiceMsg');
-  if (msgEl) msgEl.innerHTML = 'Invoice marked sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
+  if (msgEl) msgEl.innerHTML = 'Invoice marked sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Pay &amp; Receive →</a>';
 }
 async function sendInvoicePreviewEmail(){
   const ctx = invoicePreviewCtx;
@@ -2537,7 +2536,7 @@ async function sendInvoicePreviewEmail(){
     // Collections module (2026-09-08): "el flujo debe llevarme a collections" — the order now has
     // an invoice, so it just became a real Collections item; give the trader the direct link
     // instead of leaving them to remember to go look for it.
-    msgEl.innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
+    msgEl.innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Pay &amp; Receive →</a>';
   } catch (e) {
     if (e.cancelled) return;
     const url = gmailComposeUrl(ctx.emails, ctx.subject, ctx.body + EMAIL_SIGNATURE);
@@ -2558,7 +2557,7 @@ async function sendInvoicePreviewWhatsApp(){
   window.open('https://wa.me/' + ctx.waPhone.replace(/\D/g, '') + '?text=' + encodeURIComponent(ctx.waMessage), '_blank');
   try {
     await callApi('shipments-mark-doc-sent', { actor: currentActor(), order_number: ctx.orderNumber, doc_type: 'invoice' });
-    document.getElementById('invoiceMsg').innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Collections →</a>';
+    document.getElementById('invoiceMsg').innerHTML = 'Invoice sent — pending customer signature. <a href="collections.html" target="_blank" style="color:var(--blue);font-weight:700;">View in Pay &amp; Receive →</a>';
   } catch (e) { /* best-effort — the WhatsApp send itself already went out above regardless */ }
 }
 function openInvoiceDocPreview(ctx){

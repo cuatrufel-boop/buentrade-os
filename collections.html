@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>BuenTrade Trading OS — Collections</title>
+<title>BuenTrade Trading OS — Pay &amp; Receive</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
 <link rel="shortcut icon" href="/icons/favicon.ico">
@@ -28,10 +28,12 @@
     --ink-soft:rgba(255,255,255,.55);
     --red:#C4432E;
     --green:#0F8A5F;
+    --green-bright:#3DDC97;
     --amber:#FFC876;
     --radius:8px;
   }
   *{box-sizing:border-box;}
+  input,select,textarea{background:var(--card);color:var(--ink);}
   body{
     margin:0;color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;
     background:
@@ -50,23 +52,386 @@
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 16px;}
   h2{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0 0 12px;font-weight:700;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  /* Real ask 2026-09-08: "quiero tener en orders renglones visibles... igual que esta en
+     collections" — same table language as collections.html: outline .btn (transparent fill,
+     solid border, bright text), never solid-filled. This was dead CSS before (no button in this
+     file used the .btn class) — now the table's "View" button does. */
+  .btn{font-family:inherit;font-size:12px;font-weight:700;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--blue);background:transparent;color:var(--blue-bright);}
+  .btn:hover{background:var(--blue-light);}
+  .btn.small{font-size:11px;padding:5px 10px;}
+  .btn.secondary{background:var(--card);color:var(--blue);border:1.5px solid var(--blue);}
+  .btn svg{width:13px;height:13px;flex-shrink:0;vertical-align:-2px;}
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
-  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
-
-  .stats-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
-  .stat-card{background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));border:1px solid rgba(232,181,76,.55);border-radius:12px;box-shadow:0 3px 12px -3px rgba(232,181,76,.4), inset 0 1px 0 rgba(255,255,255,.1);padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
-  .stat-icon{width:38px;height:38px;border-radius:10px;background:rgba(232,181,76,.15);border:1.5px solid rgba(232,181,76,.55);color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-  .stat-icon svg{width:18px;height:18px;}
-  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;}
-  .stat-label{font-size:11px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;}
-  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
-
+  /* Same table conventions as collections.html's Invoiced Orders table — uppercase muted headers,
+     hairline row dividers, near-invisible hover, mono/tabular numbers where relevant. */
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:center;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding:0 10px 8px;}
   th:first-child{text-align:left;}
   td{padding:10px;border-top:1px solid var(--line);vertical-align:middle;text-align:center;}
   td:first-child{text-align:left;}
   tr:hover td{background:rgba(255,255,255,.03);}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .muted{color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto;}
+  .toast-stack{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+  /* Real bug found 2026-09-06: this sat BELOW #urgentQueueOverlay (z-index 6000) — harmless while
+     the two never appeared together, but now that a ?focus= deep link auto-triggers the real send
+     action (shareCustoms/etc.) from inside the urgent queue screen, this modal has to render ON
+     TOP of it or the trader sees a dark overlay with no visible way to actually send. */
+  .email-modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.45);z-index:6500;display:flex;align-items:center;justify-content:center;padding:20px;}
+  /* Ported from offers.html's toggleTT/ttOverlay — real ask 2026-09-06: "debe sacarme el QT y
+     volver a grabarlo" — Mark Delivered opens the same Real Costs panel here instead of a plain
+     prompt() for the real weight. z-index above everything else in this file since it's the most
+     active screen whenever it's open. */
+  .tt-overlay{position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:7000;display:none;flex-direction:column;}
+  .tt-overlay-head{display:grid;grid-template-columns:1fr minmax(0,auto) 1fr;align-items:center;gap:14px;padding:12px 20px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);flex-shrink:0;box-shadow:0 2px 10px rgba(10,37,71,.25);}
+  .tt-overlay-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  /* Real ask 2026-09-26 ("el close es mediocre", picked option D): icon-only round close in Market Flash's bright blue —
+     blue ring + tinted glass, fills solid blue with a glow on hover. Same rule on every page that has it. */
+  .tt-overlay-close{width:36px;height:36px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:rgba(30,106,219,.25);border:1.5px solid #5AAAFF;color:#5AAAFF;transition:background .18s,box-shadow .18s,color .18s;}
+  .tt-overlay-close svg{width:15px;height:15px;display:block;}
+  .tt-overlay-close:hover{background:#1E6ADB;color:#fff;box-shadow:0 0 16px 3px rgba(90,170,255,.55);}
+  .tt-overlay-close:active{transform:scale(.94);}
+  .tt-overlay-close:focus-visible{outline:2px solid #5AAAFF;outline-offset:2px;}
+  .tt-overlay-body{flex:1;min-height:0;position:relative;}
+  .tt-logo-inline{width:auto;max-width:52px;height:32px;object-fit:contain;background:#fff;border-radius:7px;padding:4px;box-sizing:border-box;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+  .tt-overlay-body iframe{width:100%;height:100%;border:none;display:block;}
+  /* Real preview screen for PO/SO/FO — same tt-overlay shell the Trading Tool iframe already uses
+     (full-screen dark header + body), not a new container. Ported from offers.html's doc preview,
+     which showed this never had an orders.html copy at all — every send here skipped straight to
+     the plain email-edit modal with no look at the actual PDF first. */
+  .doc-preview-loading{color:var(--ink-soft);font-size:13px;display:flex;align-items:center;gap:10px;}
+  .doc-preview-loading::before{content:'';width:16px;height:16px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--blue);animation:docSpin .7s linear infinite;}
+  @keyframes docSpin{to{transform:rotate(360deg);}}
+  /* Real bug found live 2026-09-11: .tt-overlay's own z-index (7000) sits ABOVE .email-modal-overlay
+     (6500) — the Email button inside this preview opens that same modal, which needs to render ON
+     TOP of the preview, not hidden behind it. ID selector here wins over the .tt-overlay class rule
+     without touching tt-overlay's own (correct, unrelated) stacking elsewhere in this file. */
+  #docPreviewOverlay{z-index:6200;}
+  .email-modal-box{background:rgba(15,31,51,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1.5px solid rgba(232,181,76,.4);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px 24px;box-shadow:0 24px 60px rgba(4,12,26,.45);color:var(--ink);}
+  .email-modal-box h3{margin:0 0 4px;font-size:16px;font-family:'Space Grotesk',sans-serif;}
+  .email-modal-from{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .email-modal-field{margin-bottom:12px;}
+  .email-modal-field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .email-modal-field input,.email-modal-field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--ink);}
+  .email-modal-field textarea{min-height:130px;resize:vertical;}
+  .email-modal-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .email-modal-chip{background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
+  .email-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+  .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);animation:toastIn .25s ease-out;--ink:#0F1F33;--ink-soft:#64748B;}
+  .toast.error{border-left-color:var(--red);}
+  .toast-icon{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .toast.error .toast-icon{background:var(--red);}
+  .toast-icon svg{width:12px;height:12px;}
+  .toast-text{font-size:13px;color:var(--ink);line-height:1.35;}
+  .toast-text b{display:block;font-size:13px;margin-bottom:1px;}
+  @keyframes toastIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
+  .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{
+    background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));
+    border:1px solid rgba(232,181,76,.55); border-radius:12px;
+    box-shadow:0 3px 12px -3px rgba(232,181,76,.4), inset 0 1px 0 rgba(255,255,255,.1);
+    padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:box-shadow .15s,transform .15s;
+  }
+  .stat-card:hover{box-shadow:0 6px 20px -4px rgba(232,181,76,.5), inset 0 1px 0 rgba(255,255,255,.12); transform:translateY(-1px);}
+  .stat-icon{width:38px;height:38px;border-radius:10px;background:rgba(232,181,76,.15);border:1.5px solid rgba(232,181,76,.55);color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;background:#E8B54C;box-shadow:0 0 7px 1.5px rgba(232,181,76,.8);flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .load-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:14px;}
+  .load-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
+  .load-product-row{display:flex;align-items:center;gap:14px;}
+  .load-product-icon{width:52px;height:52px;border-radius:10px;background:var(--blue-light);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .load-product-icon svg{width:26px;height:26px;}
+  .load-product-name{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:var(--ink);line-height:1.25;}
+  .load-product-spec{font-size:12.5px;color:var(--ink-soft);margin-top:1px;}
+  .load-route{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin:14px 0;font-size:13px;}
+  .load-route-node{display:flex;align-items:center;gap:7px;min-width:0;}
+  .load-route-node svg{width:15px;height:15px;color:var(--ink-soft);flex-shrink:0;}
+  .load-route-node .rname{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .load-route-arrow{color:var(--line);flex-shrink:0;}
+  .load-route-arrow svg{width:16px;height:16px;display:block;}
+  .stepper{display:flex;align-items:flex-start;margin:24px 4px 18px;}
+  .step{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:104px;position:relative;}
+  .step-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--line);color:var(--ink-soft);transition:all .25s;flex-shrink:0;}
+  .step-icon svg{width:18px;height:18px;}
+  .step.actionable{cursor:pointer;}
+  .step.actionable .step-icon{border-color:var(--blue);color:var(--blue);}
+  .step.actionable .step-label{color:var(--blue);}
+  .step.actionable:hover .step-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
+  .step.actionable.urgent .step-icon{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  .step.actionable.urgent .step-label{color:#FF9C8A;}
+  /* Real ask 2026-09-20: "debe estar blinking y en rojo... no puede llegar el dia del PU sin estar
+     confirmado" — Release # gets its own always-on urgent treatment (not gated behind blink-now's
+     "one thing blinks per card" rule) once pickup is a day away or has already passed with no
+     release number on file, same red pulse the main timeline step already uses elsewhere. */
+  .u-mini.urgent .u-mini-btn{border-color:var(--red);color:#FF9C8A;animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  .u-mini.urgent .u-mini-label{color:#FF9C8A;font-weight:700;}
+  .step.done .step-icon{background:var(--green);border-color:var(--green);color:#fff;}
+  .step.current .step-icon{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-light);animation:stepPulse 1.8s ease-in-out infinite;}
+  @keyframes stepPulse{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 4px var(--blue-light);}50%{opacity:.55;transform:scale(1.2);box-shadow:0 0 0 7px rgba(30,106,219,.22);}}
+  .step-label{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-top:8px;text-align:center;line-height:1.3;}
+  .step-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
+  .step.done .step-label,.step.current .step-label{color:var(--ink);}
+  .step-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;}
+  .step-line.done{background:var(--green);}
+  .load-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+  /* Real ask 2026-09-21: "un solo flujo" — ONE prominent, real button for whatever's next on this
+     order, built from the exact same computed entry that blinks on the timeline above (see
+     nextActionEntry) so it can never disagree with it. Gold accent = "this needs you now", same
+     semantic the rest of this file already uses for pending/urgent state. */
+  .load-next-action{display:flex;align-items:center;gap:14px;background:rgba(232,181,76,.08);border:1.5px solid rgba(232,181,76,.45);border-radius:12px;padding:14px 18px;margin:14px 0;}
+  .load-next-action-icon{width:40px;height:40px;border-radius:50%;background:rgba(232,181,76,.15);border:2px solid #E8B54C;color:#E8B54C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .load-next-action-icon svg{width:18px;height:18px;}
+  .load-next-action-text{flex:1;min-width:0;}
+  .load-next-action-eyebrow{font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.08em;font-weight:700;}
+  .load-next-action-label{font-size:15px;font-weight:700;color:var(--ink);}
+  .load-next-action.done{background:transparent;border-style:dashed;justify-content:center;padding:16px;}
+  /* Real ask 2026-09-21: "despliegue de docs quitalo dejalos mostrando... siempre algo bonito
+     centrado bien organizados" — no more collapse toggle (always rendered, see
+     renderOrderDocsPanel), and the rows move from one long stacked list into a centered 2-column
+     grid of cards; same .doc-row content/actions inside, just a different container. */
+  .docs-panel-heading{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.07em;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:6px;}
+  .docs-panel-heading svg{width:14px;height:14px;flex-shrink:0;}
+  .docs-panel-grid{margin:14px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;}
+  .doc-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12.5px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);}
+  .doc-row-span{grid-column:1 / -1;}
+  .doc-row-label{font-weight:600;color:var(--ink);flex-shrink:0;}
+  .doc-row-link{color:var(--blue-bright);text-decoration:underline;flex-shrink:0;}
+  .doc-row-btn{padding:4px 9px !important;font-size:11px !important;flex-shrink:0;}
+  .doc-row-btn svg{width:13px;height:13px;flex-shrink:0;}
+  .doc-row-status{margin-left:auto;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
+  .doc-row-status.sent{color:#5FE097;}
+  .doc-row-empty{color:var(--ink-soft);font-size:12px;padding:11px 14px;text-align:center;}
+  @media (max-width:680px){ .docs-panel-grid{grid-template-columns:1fr;} }
+  .wa-btn{background:rgba(255,255,255,.05);color:#5FE097;border:1.5px solid rgba(95,224,151,.4);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background .18s,border-color .18s,color .18s;}
+  .wa-btn:hover{background:rgba(29,168,81,.18);color:#5FE097;border-color:#5FE097;}
+  .wa-btn:active{background:rgba(29,168,81,.28);}
+  .wa-btn svg{width:12px;height:12px;flex-shrink:0;fill:currentColor;}
+  .wa-btn.outline{background:var(--card);color:#1DA851;border:1.5px solid #1DA851;box-shadow:none;}
+  .wa-btn.outline:hover{background:rgba(29,168,81,.18);box-shadow:none;transform:none;}
+  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
+  .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
+  .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
+  .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  .payment-badge.active{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  /* Real ask 2026-09-08: "en next action ponlo como esta en collections... 3 steps una blinking
+     la que esta pendiente" — ported verbatim from collections.html's per-order mini timeline
+     (renderOrderTimeline): small stroke-icon circles connected by dashed lines, the pending one
+     pulsing. Here it shows the step just done, the pending one (blinking), and the one after it —
+     not a single bare text badge. */
+  .c-timeline{display:flex;align-items:center;gap:0;}
+  .c-node{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;}
+  .c-node svg{width:13px;height:13px;}
+  .c-node.done{border-color:var(--green);color:var(--green);background:rgba(15,138,95,.14);}
+  .c-node.current{animation:cNodePulse 1.5s ease-in-out infinite;}
+  @keyframes cNodePulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.55;transform:scale(1.15);}}
+  .c-line{width:16px;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);flex-shrink:0;}
+  .c-line.done{background:var(--green);}
+  /* Real ask 2026-09-07, redone after the flat chip row was rejected as "tirado ahí" — a real
+     timeline spread across time, each milestone a clickable button, with the real pickup city and
+     the border as Point A / Point B, like a real freight-tracking route. */
+  .route-track{display:flex;align-items:center;gap:10px;margin:14px 0 4px;}
+  .route-point{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;flex-shrink:0;}
+  .route-point.faded{color:var(--ink-soft);font-weight:600;}
+  .route-bar{position:relative;flex:1 1 auto;height:3px;background:var(--line);border-radius:2px;overflow:visible;}
+  .route-bar-fill{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,#0F8A5F,#5FE097);border-radius:2px;transition:width .3s;}
+  .route-bar-truck{position:absolute;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:var(--navy-2,#0E3D8F);border:2px solid var(--blue-bright);color:var(--blue-bright);display:flex;align-items:center;justify-content:center;transition:left .3s;box-shadow:0 0 0 4px var(--blue-light);}
+  .route-bar-truck svg{width:11px;height:11px;}
+
+  /* Real ask 2026-09-07 (2nd revision): "debe ser en ingles y botones repartidos en el timing de
+     pickup" — the milestone buttons (PO/SO/FO/Payment/Pickup Docs/Customs/Invoice/Signature) no
+     longer sit in their own disconnected row; they're interleaved into the SAME timeline as the
+     4 main stages (Pending Pickup/Picked Up/Unloading/Delivered) in real chronological order, one
+     continuous connected line. Main stages keep their original bigger/animated markup (.u-main*
+     mirrors .step* exactly); milestones use a smaller icon-only button (.u-mini*). See
+     renderUnifiedTimeline().  */
+  /* Real bug found live 2026-09-07: only scrollbar-width (Firefox) was set — Chrome/Safari/Edge
+     fell back to the raw OS scrollbar, a stark white/grey bar slashing across the dark card. */
+  /* Real bug found live 2026-09-07: "se corta el blinking con la tabla" — setting overflow-x:auto
+     alone forces the browser to compute overflow-y as auto too (CSS spec behavior, not a typo
+     here), which clips anything that extends above the row — the radar-ping ring and the walker/
+     truck riding above the line. padding-top gives them real room instead of getting cropped; the
+     outer margin-top is reduced by the same amount so the visual gap above the row is unchanged. */
+  .utimeline{display:flex;align-items:flex-start;gap:0;margin:2px 0 10px;padding-top:20px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;}
+  /* Real bug found live 2026-09-08: "se corta el muneco" — the walker/truck's fixed top:-30px/-24px
+     clearance was sized for a flat line; when it rides a curved segment (either end raised), the
+     curve itself already eats into that space and the raised icon sits closer still, so the
+     traveler's own legs/wheels visually overlapped the raised circle. Only cards where the
+     traveler actually lands on a curve get the extra clearance — everyone else keeps the normal
+     20px so most cards don't grow taller for no reason. */
+  .utimeline.needs-curve-clearance{padding-top:48px;}
+  .u-line-curve .u-walker-ride{top:-46px;}
+  .u-line-curve .u-truck-ride{top:-40px;}
+  .utimeline::-webkit-scrollbar{display:none;}
+  /* Real ask 2026-09-12: "eso no se parece nada con la C" — rebuilt to actually match the picked
+     mockup (Milestone Map): one card, a progress ring + "X of Y done" summary, then every real
+     entry as ONE continuous flat route (no separate phase cards, no raised/curved connectors) with
+     only the last stop (always Signature) enlarged into a glowing "destination" pin. See
+     renderUnifiedTimeline()'s renderMapRow() — same entries/blinkIdx/travelerLineIdx, only the
+     grouping/connectors changed. */
+  .utimeline-lanes{display:flex;flex-direction:column;gap:10px;}
+  /* Real ask 2026-09-21: "agrupado horizontal... entre menos tenga que bajar mejor" — the 13
+     milestones group into 4 real business phases (Documentación/Pago y liberación/Logística/
+     Cierre), shown as a segmented-control tab bar; only the active phase's row of stops renders,
+     so the card never grows past one row no matter how many milestones an order has. Reuses each
+     entry's own already-computed e.html (real onclick, blink-now, urgent — all untouched) inside
+     whichever phase row is active, so this is purely a grouping/display change, not new logic. */
+  .phase-tabs{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:4px;gap:3px;margin:14px 0 0;}
+  .phase-tab{flex:1;text-align:center;padding:9px 6px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:background .15s,color .15s;user-select:none;}
+  .phase-tab:hover{color:var(--ink);}
+  .phase-tab.active{background:rgba(232,181,76,.15);color:#E8B54C;}
+  .phase-tab.tdone:not(.active){color:#5FE097;}
+  .phase-tab-count{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;margin-top:2px;opacity:.75;}
+  .phase-row{justify-content:center;}
+  .utimeline-lane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px 10px;}
+  .utimeline-lane .utimeline{justify-content:flex-start;margin-bottom:0;}
+  .uring-wrap{display:flex;align-items:center;gap:16px;padding:2px 4px 4px;}
+  .uring{width:60px;height:60px;flex-shrink:0;position:relative;}
+  .uring svg{width:100%;height:100%;}
+  .uring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12.5px;color:var(--ink);}
+  .uring-h{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--ink);}
+  .uring-sub{font-family:'Inter',sans-serif;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  /* Real ask 2026-09-12: "no quiero tener que hacer scroll hacia los lados" — replaces the
+     scrolling row (and the fade-edge affordance built for it) entirely. Every stop now shrinks to
+     fit the card's own width via flex, so the row never exceeds it and never needs to scroll no
+     matter how many milestones a given order has. min-width keeps stops legible at the worst case
+     (~14 stops); max-width stops them stretching too wide when an order has few. */
+  .lane-map-row{padding-top:18px;overflow-x:visible;}
+  .lane-map-row .u-main,.lane-map-row .u-mini{width:auto;flex:1 1 44px;min-width:40px;max-width:64px;}
+  .lane-map-row .u-main-icon,.lane-map-row .u-mini-btn{width:32px;height:32px;font-size:13px;}
+  .lane-map-row .u-main-label,.lane-map-row .u-mini-label{font-size:10px;min-height:24px;margin-top:6px;}
+  .lane-map-row .u-main-date,.lane-map-row .u-mini-date{font-size:9px;}
+  .lane-map-row .u-line{margin-top:15px;flex:1 1 14px;min-width:6px;}
+  /* Flat route, not the raised/curved treatment used elsewhere — matches the picked mockup's single
+     straight dashed line. */
+  .lane-map-row .u-mini.raised,.lane-map-row .u-main.raised{transform:none;}
+  .lane-map-row .u-walker-ride{top:-20px;width:14px;height:19px;}
+  .lane-map-row .u-truck-ride{top:-15px;width:15px;height:15px;}
+  /* Real ask 2026-09-12: "quiero que la unica que este grande y blinking sea la que va en el
+     proceso no solo signature" — Signature and Pick Up used to always render oversized regardless
+     of state (see git history); that's gone. The ONE entry actually in progress right now
+     (.blink-now — same single leftmost-actionable entry computed once in renderUnifiedTimeline,
+     already the only one that pulses via the existing .blink-now animation rules below) is now
+     also the only one sized up. Every other stop, Signature and Pick Up included, stays the plain
+     compact size above until it's their turn. */
+  .lane-map-row .blink-now{flex:1.6 1 64px;min-width:64px;max-width:104px;}
+  .lane-map-row .u-mini.blink-now .u-mini-btn{width:50px;height:50px;font-size:20px;border-width:2.5px;}
+  .lane-map-row .u-mini.blink-now .u-mini-label{font-size:12.5px;font-weight:700;margin-top:8px;}
+  .lane-map-row .u-main.blink-now .u-main-icon{width:46px;height:46px;font-size:19px;border-width:2.5px;}
+  .lane-map-row .u-main.blink-now .u-main-label{font-size:12.5px;font-weight:700;margin-top:8px;}
+  .utimeline-lane-title{font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft);margin:0 0 2px;}
+  .u-line{position:relative;flex:1 1 auto;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 13px);margin-top:19px;transition:background .25s;overflow:visible;min-width:6px;}
+  .u-line.done{background:var(--green-bright);}
+  /* Real ask 2026-09-07: "un hombre andando hasta el pickup. un camion desde el pickup hasta la
+     entrega en movimiento" — rebuilt 2026-09-07 (2nd pass) after "no tenemos colores llenos en
+     buentrade todo son transparencias bordes... un verde lleno que no sale con nada... logo
+     pasado de moda": stroke-only line icons (same fill:none/stroke:currentColor/stroke-width:2
+     language as every STEP_ICONS/DOC_ICON on this card), single accent color, no filled shapes. */
+  .u-walker-ride{position:absolute;top:-30px;left:50%;transform:translateX(-50%);width:19px;height:27px;z-index:2;color:var(--blue-bright);filter:drop-shadow(0 2px 3px rgba(4,12,26,.55));}
+  .u-walker-ride svg{width:100%;height:100%;animation:uWalkBob .5s ease-in-out infinite;}
+  .u-walker-ride .uw-leg-back{animation:uWalkLegBack .5s ease-in-out infinite;transform-origin:12px 19px;}
+  .u-walker-ride .uw-leg-front{animation:uWalkLegFront .5s ease-in-out infinite;transform-origin:12px 19px;}
+  .u-walker-ride .uw-arm-back{animation:uWalkArmBack .5s ease-in-out infinite;transform-origin:12px 14px;}
+  .u-walker-ride .uw-arm-front{animation:uWalkArmFront .5s ease-in-out infinite;transform-origin:12px 14px;}
+  @keyframes uWalkBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
+  @keyframes uWalkLegBack{0%,100%{transform:rotate(22deg);}50%{transform:rotate(-22deg);}}
+  @keyframes uWalkLegFront{0%,100%{transform:rotate(-22deg);}50%{transform:rotate(22deg);}}
+  @keyframes uWalkArmBack{0%,100%{transform:rotate(-18deg);}50%{transform:rotate(18deg);}}
+  @keyframes uWalkArmFront{0%,100%{transform:rotate(18deg);}50%{transform:rotate(-18deg);}}
+  .u-truck-ride{position:absolute;top:-24px;left:50%;transform:translateX(-50%);width:22px;height:22px;z-index:2;color:var(--blue-bright);filter:drop-shadow(0 2px 3px rgba(4,12,26,.55));animation:uTruckBounce .4s ease-in-out infinite;}
+  .u-truck-ride svg{width:100%;height:100%;}
+  .u-truck-ride.idle{animation:none;color:var(--ink-soft);}
+  @keyframes uTruckBounce{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-1.5px);}}
+  .u-main{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:80px;position:relative;cursor:pointer;}
+  .u-main-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--blue);color:var(--blue);transition:all .25s;flex-shrink:0;font-size:16px;}
+  .u-main-icon svg{width:18px;height:18px;}
+  .u-main.actionable{cursor:pointer;}
+  .u-main.actionable .u-main-icon{border-color:var(--blue);color:var(--blue);}
+  .u-main.actionable .u-main-label{color:var(--blue);}
+  .u-main.actionable:hover .u-main-icon{background:var(--blue-light);box-shadow:0 0 0 4px var(--blue-light);}
+  .u-main.actionable.urgent .u-main-icon{border-color:var(--red);color:#FF9C8A;}
+  .u-main.actionable.urgent .u-main-label{color:#FF9C8A;}
+  /* Real correction 2026-09-07: "no tenemos colores llenos en buentrade todo son transparencias
+     bordes... me sales con un verde lleno que no sale con nada" — every real state elsewhere in
+     this app (the "now" amber state included) is a translucent fill + a solid colored border +
+     colored icon, never an opaque fill with a white icon. done/current now follow that exact
+     pattern instead of standing out as solid blocks. */
+  .u-main.done .u-main-icon{background:rgba(15,138,95,.14);border-color:var(--green-bright);color:var(--green-bright);}
+  /* Real correction 2026-09-07: "cuando te dije blinking varios al mismo tiempo? no necesito
+     colores para saber que falta solo blinking el que falta... el flujo es el munequito yendo de
+     izquierda a derecha" — the radar-ping here duplicated the walker/truck traveler, which already
+     marks physical position by riding the line. Removed; "current" is still colored, just static.
+     Exactly ONE thing blinks per card now — see .blink-now below, applied to the single leftmost
+     actionable item (mini "now" or main "isNext"), computed once in renderUnifiedTimeline. */
+  .u-main.current .u-main-icon{background:var(--blue-light);border-color:var(--blue);color:var(--blue-bright);}
+  .u-main-label{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;color:var(--ink-soft);margin-top:8px;text-align:center;line-height:1.3;min-height:31px;}
+  .u-main-date{font-size:10px;color:var(--ink-soft);opacity:.75;margin-top:2px;text-align:center;font-family:'IBM Plex Mono',monospace;}
+  .u-main.done .u-main-label,.u-main.current .u-main-label{color:var(--ink);}
+  .u-fob-confirm{margin-top:5px;background:rgba(255,200,118,.14);border:1px solid var(--amber);color:var(--amber);border-radius:12px;padding:2px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;font-family:inherit;}
+  .u-fob-confirm:hover{background:rgba(255,200,118,.28);}
+  .u-mini{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:58px;position:relative;}
+  /* Real ask 2026-09-08: "una sola para po so fo curva... si no aplica fo no salga y si si aplica
+     salga arriba" — FO is the only optional one of the three, so it's the one that floats up into
+     a small curve when it exists; PO/SO never move. */
+  .u-mini.raised,.u-main.raised{transform:translateY(-18px);}
+  .u-line-curve{position:relative;flex:1 1 auto;height:2px;margin-top:19px;min-width:6px;overflow:visible;}
+  .u-line-curve svg{position:absolute;top:-18px;left:0;width:100%;height:20px;overflow:visible;}
+  .u-mini-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--blue);color:var(--blue);flex-shrink:0;cursor:default;padding:0;font-size:15px;transition:all .2s;}
+  .u-mini-btn svg{width:18px;height:18px;}
+  .u-mini-label{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;color:var(--ink-soft);margin-top:7px;text-align:center;line-height:1.3;min-height:29px;}
+  .u-mini-date{font-size:10px;color:var(--ink-soft);opacity:.7;margin-top:1px;font-family:'IBM Plex Mono',monospace;}
+  .u-mini.done .u-mini-btn{background:rgba(15,138,95,.14);border-color:var(--green-bright);color:var(--green-bright);cursor:pointer;}
+  .u-mini.done .u-mini-label{color:var(--ink);}
+  .u-mini.now .u-mini-btn{cursor:pointer;background:rgba(255,200,118,.14);border-color:var(--amber);color:var(--amber);}
+  .u-mini.now .u-mini-label{color:var(--amber);}
+  .u-mini.now:hover .u-mini-btn{background:rgba(255,200,118,.28);}
+  .u-mini.wait .u-mini-btn{cursor:pointer;}
+  @keyframes mstopPulse{0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 rgba(255,200,118,.35);}50%{opacity:.55;transform:scale(1.2);box-shadow:0 0 0 6px rgba(255,200,118,.22);}}
+  /* Real correction 2026-09-07: "no necesito colores para saber que falta solo blinking el que
+     falta... cuando te dije blinking varios al mismo tiempo?" — exactly one element blinks per
+     card: the single leftmost actionable item (mini "now" or main "isNext"), picked once in
+     renderUnifiedTimeline. Every other now/actionable item keeps its color, not its animation.
+     Real ask 2026-09-07: "el que esta blinking se agranda cuando blinking" — the blinking icon
+     scales UP (1 -> 1.2), not down, at the pulse's peak. */
+  .u-mini.blink-now .u-mini-btn{animation:mstopPulse 1s ease-in-out infinite;}
+  .u-main.blink-now .u-main-icon{animation:stepPulse 1s ease-in-out infinite;}
+  .u-main.blink-now.urgent .u-main-icon{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+  @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
+  #urgentQueueBox{animation:urgentQueueBlink 1.1s ease-in-out infinite;}
+
+  /* ============ ORDER DETAIL MODAL ============ Real ask 2026-09-08: "renglones visibles con
+     cada consecutivo de orden en lugar de eso tan grande... si le das click en un boton te salga
+     grande y puedas ver que estas haciendo" — the full card (product row, route, unified timeline,
+     docs panel) moves in here, opened on demand per order, instead of always rendering for every
+     order at once. Same solid modal-box convention as collections.html's #customerProfileBox
+     (solid bg, not translucent — a modal needs full legibility over the dark overlay). */
+  /* Real ask 2026-09-21: "una sola pagina en vez de esa ventana emergente" — was a centered,
+     max-width:1040px floating card (a modal-on-modal when a further action like Pay via Summar
+     opened on top of it); now a genuine full-screen page, same positioning + background recipe as
+     this file's own .tt-overlay (ttOverlay/docPreviewOverlay) — one real full-page pattern reused,
+     not a new one invented. Kept as its own id (not the .tt-overlay class) only so its z-index can
+     stay below ttOverlay/docPreviewOverlay (7000) — a QT or doc preview opened from inside this
+     page still layers on top of it, same stacking order as before.  */
+  #orderDetailOverlay{display:none;position:fixed;inset:0;background:repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 26px) fixed,linear-gradient(180deg, #0E3D8F 0%, #0A2547 18%, #111A2C 45%, #0A0E17 100%) fixed;z-index:6200;flex-direction:column;}
+  #orderDetailBox{flex:1;min-height:0;overflow-y:auto;padding:22px clamp(16px, 4vw, 48px) 48px;max-width:1040px;width:100%;margin:0 auto;box-sizing:border-box;}
+  /* Real ask 2026-09-16: "SEARCH unificado diseno buentrade" — glass-pill search shipped on
+     Products/Quotes/Plants/Offers (see plants.html's own comment on this exact block), scoped
+     "st-" for this page. Real ask 2026-09-18 ("new plant tiene diseno buentrade hazlo en...
+     search etc"): that glass-pill look is now replaced everywhere with the flat blue-glass .btn
+     recipe instead — same system-wide change described in plants.html's own comment on this
+     block. */
+  .st-search-wrap{position:relative;width:160px;height:36px;border-radius:999px;overflow:hidden;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);transition:background .18s,border-color .18s;}
+  .st-search-wrap:focus-within{background:rgba(90,170,255,.12);border-color:var(--blue-bright);box-shadow:0 0 0 3px rgba(90,170,255,.25);}
+  .st-search-ico{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:rgba(255,255,255,.55);pointer-events:none;}
+  .st-search-input{width:100%;height:100%;padding:0 14px 0 38px;border:none;background:transparent;color:#fff;font-size:13px;font-family:inherit;}
+  .st-search-input::placeholder{color:rgba(255,255,255,.5);}
+  .st-search-input:focus{outline:none;}
   /* Real ask 2026-09-09 ("las cargas que estan pasadas de 30 dias deben estar notablemente
      blinking... generan muchos intereses y necesitan accion inmediata"): a real, visible pulse on
      the whole row for anything over 30 days overdue (aging_bucket 31-60/61-90/90+) — not just a
@@ -84,63 +449,41 @@
      which has never had one either. A silent static-color fallback would defeat the one thing
      that was explicitly asked for. */
   .ct-row-overdue30{animation:ctOverdueRowBlink 1.3s ease-in-out infinite;}
-  .mono{font-family:'IBM Plex Mono',monospace;}
-  /* Real bug found live 2026-09-18 ("ese error de guiones"): the − (U+2212 minus sign) used for
-     negative amounts is a valid line-break point to the browser, same as a hyphen — a narrow
-     numeric column would wrap "−$20.22" into "−" on its own line and "$20.22" below it, each
-     centered independently by the header-alignment rule. Currency values must never wrap. */
-  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;}
-  .muted{color:var(--ink-soft);}
-  .table-scroll{overflow-x:auto;}
-
   .gauge-track{width:100%;min-width:90px;height:8px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;}
-  .gauge-fill{height:100%;border-radius:4px;}
-
-  .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
-  .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
-  .payment-badge.due-soon{background:transparent;color:var(--amber);border-color:rgba(255,200,118,.4);}
-  .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
-
-  .btn{font-family:inherit;font-size:12px;font-weight:700;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--blue);background:transparent;color:var(--blue-bright);}
-  .btn:hover{background:var(--blue-light);}
-  .btn.small{font-size:11px;padding:5px 10px;}
-
-  /* Per-order mini timeline — "un flujo para vision de este flujo en el tiempo de cada carga" —
-     same visual language as orders.html's unified timeline (transparent fill + colored border +
-     stroke icon, never a solid fill), scaled down for a table cell. */
-  .c-timeline{display:flex;align-items:center;gap:0;}
-  .c-node{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;}
-  .c-node svg{width:13px;height:13px;}
-  .c-node.done{border-color:var(--green);color:var(--green);background:rgba(15,138,95,.14);}
-  .c-node.current{animation:cNodePulse 1.5s ease-in-out infinite;}
-  @keyframes cNodePulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.55;transform:scale(1.15);}}
-  .c-line{width:16px;height:2px;background:repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px);flex-shrink:0;}
-  .c-line.done{background:var(--green);}
-
-  #urgentQueueOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6000;align-items:center;justify-content:center;padding:20px;}
-  #urgentQueueBox{background:var(--card);border:2px solid var(--red);border-radius:16px;padding:32px;max-width:480px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(4,12,26,.6);animation:urgentQueueBlink 1.1s ease-in-out infinite;}
-  @keyframes urgentQueueBlink{0%,100%{border-color:var(--red);box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 0 rgba(196,67,46,.55);}50%{border-color:#FF9C8A;box-shadow:0 24px 60px rgba(4,12,26,.6),0 0 0 14px rgba(196,67,46,0);}}
-  #customerProfileOverlay{display:none;position:fixed;inset:0;background:rgba(4,12,26,.85);z-index:6500;align-items:center;justify-content:center;padding:20px;}
-  #customerProfileBox{background:#0F2B52;border:1px solid var(--line);border-radius:16px;padding:26px 28px;max-width:760px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(4,12,26,.6);}
-  .cust-name{cursor:pointer;color:var(--blue-bright);}
-  .cust-name:hover{text-decoration:underline;}
-
-  .toast-stack{position:fixed;bottom:20px;right:20px;z-index:7000;display:flex;flex-direction:column;gap:10px;}
-  .toast{background:#fff;border-radius:10px;box-shadow:0 10px 28px rgba(15,31,51,.2);padding:13px 16px;display:flex;align-items:center;gap:11px;min-width:260px;max-width:380px;border-left:4px solid var(--green);--ink:#0F1F33;--ink-soft:#64748B;}
-  .toast.error{border-left-color:var(--red);}
-  .toast-icon{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-  .toast.error .toast-icon{background:var(--red);}
-  .toast-icon svg{width:12px;height:12px;}
-  .toast-text{font-size:13px;color:var(--ink);line-height:1.35;}
-  .toast-text b{display:block;font-size:13px;margin-bottom:1px;}
-  /* Real ask 2026-09-26 ("el close es mediocre", picked option D): icon-only round close in Market Flash's bright blue —
-     blue ring + tinted glass, fills solid blue with a glow on hover. Same rule on every page that has it. */
-  .tt-overlay-close{width:36px;height:36px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:rgba(30,106,219,.25);border:1.5px solid #5AAAFF;color:#5AAAFF;transition:background .18s,box-shadow .18s,color .18s;}
-  .tt-overlay-close svg{width:15px;height:15px;display:block;}
-  .tt-overlay-close:hover{background:#1E6ADB;color:#fff;box-shadow:0 0 16px 3px rgba(90,170,255,.55);}
-  .tt-overlay-close:active{transform:scale(.94);}
-  .tt-overlay-close:focus-visible{outline:2px solid #5AAAFF;outline-offset:2px;}
+  .order-num,.btn{white-space:nowrap;}
+  .toast-stack{top:auto;bottom:20px;z-index:7500;}
+  /* Pay & Receive layout (2026-09-28, "no esta bien alineado"): 5 tab-cards must never clip their
+     number — every card the same value size (hero here is only a color, not a bigger number),
+     whole dollars on the cards (cents stay in the tables), and the text column may shrink. */
+  .stats-row.pr-cards{grid-template-columns:repeat(5,minmax(0,1fr));}
+  .pr-cards .stat-card{padding:14px 14px;gap:10px;}
+  .pr-cards .stat-card > div:last-child{min-width:0;}
+  .pr-cards .stat-value,.pr-cards .stat-card.hero .stat-value{font-size:20px;white-space:nowrap;}
+  .pr-cards .stat-label{line-height:1.25;}
+  @media (max-width:980px){ .stats-row.pr-cards{grid-template-columns:repeat(3,minmax(0,1fr));} }
+  @media (max-width:700px){ .stats-row.pr-cards{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  /* row actions: same green action button as Orders, sized to the table row so every row is the same height */
+  .pr-aging th,.pr-aging td{white-space:nowrap;padding-left:7px;padding-right:7px;}
+  td .wa-btn,td .btn{min-width:120px;text-align:center;padding:4px 11px;font-size:11.5px;line-height:1.4;white-space:nowrap;text-decoration:none;display:inline-block;}
+  .pr-aging td,.pr-table td{height:46px;}
+  .pr-product{max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pr-table td .payment-badge{white-space:nowrap;}
+  /* Pay & Receive: each stat card is a tab — same colors + active ring as quotes.html ("cada boton una pestana") */
+  .stat-card.hero{background:linear-gradient(135deg, rgba(90,170,255,.32), rgba(90,170,255,.08));border:1px solid rgba(90,170,255,.55);box-shadow:0 3px 12px -3px rgba(90,170,255,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.hero .stat-icon{background:rgba(90,170,255,.15);border:1.5px solid rgba(90,170,255,.55);color:#5AAAFF;}
+  .stat-card.hero .stat-label::before{background:#5AAAFF;box-shadow:0 0 7px 1.5px rgba(90,170,255,.8);}
+  .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
+  .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
+  .stat-card.danger{background:linear-gradient(135deg, rgba(196,67,46,.32), rgba(196,67,46,.08));border:1px solid rgba(255,156,138,.55);box-shadow:0 3px 12px -3px rgba(196,67,46,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.danger .stat-icon{background:rgba(196,67,46,.18);border:1.5px solid rgba(255,156,138,.55);color:#FF9C8A;}
+  .stat-card.danger .stat-label::before{background:#FF9C8A;box-shadow:0 0 7px 1.5px rgba(255,156,138,.8);}
+  .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
+  .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
+  .stat-card.active{box-shadow:0 0 0 2px rgba(255,255,255,.4), 0 3px 14px -2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);}
 </style>
+
 </head>
 <body>
 
@@ -281,368 +624,488 @@ auth.onAuthStateChanged(user => {
     <a href="quotes.html" class="nav-pill">Quotes</a>
     <a href="offers.html" class="nav-pill">Offers</a>
     <a href="orders.html" class="nav-pill">Orders</a>
-    <a href="collections.html" class="nav-pill active">Collections</a>
-      <a href="payments.html" class="nav-pill">Payments</a>
+    <a href="collections.html" class="nav-pill active">Pay &amp; Receive</a>
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
 
 <div class="wrap">
-  <h1>Collections</h1>
-  <div class="stats-row" id="collStats"></div>
-
-  <div class="card">
-    <h2 style="display:flex;align-items:center;justify-content:space-between;">Aging report <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Current</th><th>0-30 days</th><th>31-60 days</th><th>61-90 days</th><th>90+ days</th></tr></thead>
-        <tbody id="agingBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Customers — Credit & Balance</h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Customer</th><th>Credit Limit</th><th>Owes</th><th>Available</th><th style="width:140px;">Credit Used</th><th>Oldest Due</th></tr></thead>
-        <tbody id="customersBody"></tbody>
-      </table>
-    </div>
-    <div class="empty" id="customersEmpty" style="display:none;">No customers with pending invoices.</div>
-  </div>
-
-  <div class="card">
-    <h2>Invoiced Orders</h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Invoiced</th><th>Due</th><th>Status</th><th>Balance</th><th>Interest</th><th>Profit</th><th></th></tr></thead>
-        <tbody id="ordersBody"></tbody>
-      </table>
-    </div>
-    <div class="empty" id="ordersEmpty" style="display:none;">No invoiced orders yet.</div>
-  </div>
+  <h1>Pay &amp; Receive</h1>
+  <div id="prView"><div class="empty">Loading…</div></div>
 </div>
 </div>
 
-<!-- ============ URGENT QUEUE — day-29 preventive + overdue, same blocking pattern as Orders ============ -->
-<div id="urgentQueueOverlay">
-  <div id="urgentQueueBox">
-    <div id="urgentQueueProgress" style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;"></div>
-    <div class="order-num" id="urgentQueueOrderNum" style="font-size:15px;margin-bottom:8px;"></div>
-    <div id="urgentQueueText" style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;margin-bottom:24px;line-height:1.35;"></div>
-    <div id="urgentQueueActions" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;"></div>
+<!-- Full-page load / customer view — same head as Orders' order detail (tt-overlay-head) -->
+<div id="orderDetailOverlay">
+  <div class="tt-overlay-head">
+    <div></div>
+    <div class="tt-overlay-title" id="orderDetailTitle" style="text-align:center;"></div>
+    <div style="display:flex;justify-content:flex-end;"><button class="tt-overlay-close" onclick="closeDetail()" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  </div>
+  <div id="orderDetailBox"></div>
+</div>
+
+<!-- Apply Payment (money in) / Record Paid (money out): one bank movement spread over open items -->
+<div id="rpOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:620px;">
+    <h3 id="rpTitle">Apply Payment</h3>
+    <div class="email-modal-from" id="rpHelp"></div>
+    <div class="email-modal-field"><label id="rpFromLabel">From</label><select id="rpFrom" onchange="rpRender()" style="width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;"></select></div>
+    <div class="email-modal-field"><label id="rpAmtLabel">Amount received (USD)</label><input id="rpAmt" class="mono" type="number" min="0" step="0.01" placeholder="0.00" oninput="rpRender()"></div>
+    <div class="email-modal-field"><label>Bank date</label><input id="rpDate" type="date"></div>
+    <div class="email-modal-field"><label>Account</label><select id="rpAccount" style="width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;"><option value="">Select account...</option><option value="Buentrade">Buentrade</option><option value="Summar">Summar</option></select></div>
+    <div class="email-modal-field"><label>Method (optional)</label><input id="rpMethod" placeholder="Wire, check..."></div>
+    <div class="email-modal-field"><label>Reference (optional)</label><input id="rpRef" placeholder="Reference number"></div>
+    <div id="rpAlloc"></div>
+    <div id="rpMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    <div class="email-modal-actions"><button class="btn secondary" onclick="rpClose()">Cancel</button><button class="wa-btn" id="rpSaveBtn" onclick="rpSave()">Apply Payment</button></div>
   </div>
 </div>
 
-<!-- ============ CUSTOMER PROFILE — "un dashboard por el perfil de cada cliente debe saber en el
-     tiempo cuanto le debe el cliente" — a real per-customer view, not just a table row. ============ -->
-<div id="customerProfileOverlay">
-  <div id="customerProfileBox"></div>
+<!-- Customer payment confirmation — approved copy 2026-09-13 (moved here from payments.html, unchanged). Never auto-sent. -->
+<div id="confirmOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:600px;">
+    <h3>Let <span id="confirmCustomer"></span> know the payment was received</h3>
+    <div class="email-modal-from">Nothing is sent automatically — pick a channel below.</div>
+    <pre id="confirmPreview" style="white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink-soft);background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0;"></pre>
+    <div class="email-modal-actions"><button class="btn secondary" onclick="closeConfirm()">Dismiss</button><button class="btn" id="confirmEmailBtn" onclick="sendConfirmEmail()">✉ Send Email</button><button class="wa-btn" id="confirmWaBtn" onclick="sendConfirmWhatsapp()">💬 Send WhatsApp</button></div>
+  </div>
 </div>
 
 <div class="toast-stack" id="toastStack"></div>
 
 <script>
-let collData = null;
+// ============ PAY & RECEIVE — Collections + Payments in one screen (approved 2026-09-28) ============
+// Every load's money comes from Orders (collections-search view:'pay_receive'); nothing is re-asked.
+// Each top card is a tab (same pattern as Quotes / Messaging): To Collect, To Pay, Overdue,
+// Open Loads, Payments Recorded — one table at a time. Money a load moves:
+//   Direct: plant payment (Orders) → freight + customs at delivery (here) → customer pays us (here)
+//   Summar: wire = cost − 80% of sale (Orders) → Summar pays the plant (info) → freight + customs at
+//           delivery (here) → Summar remanente at delivery (here) → customer pays Summar (watch only)
+const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
+const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
+const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+const DOC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+const PREVIEW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const MONEY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
+const CLIP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+const CUSTOMS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+const RECEIPT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg>';
+const SIGN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+const PIN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
 
-function fmtMoney(n){
-  const v = Number(n || 0);
-  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtDateStr(d){
-  if (!d) return '';
-  const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
-  return dt.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-}
-function escapeHtml(str){
-  return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
+const TRUCK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="15" height="10" rx="1"/><path d="M16 10h3.5L22 14v3h-6z"/><circle cx="6" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+// Summar Financial LLC factoring terms — same three numbers as trading-tool.html's SUMMAR_RATES
+// (signed 2026-09-19). Used only to estimate the fee Summar keeps from the remanente.
+const SUMMAR_RATES = { transitFeePct: 0.234, factoringBaseFeePct: 1.20, extraDayFeePct: 0.0417 };
 
-const TOAST_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-const TOAST_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+let prData = null, LOADS = [], TODAY = null, INTEREST_ANNUAL = 0.15;
+
+function fmtMoney(n){ const v = Number(n || 0); return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtWhole(n){ const v = Math.round(Number(n || 0)); return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US'); }
+function fmtDateStr(d){ if (!d) return ''; const dt = d instanceof Date ? d : new Date(String(d).slice(0, 10) + 'T00:00:00'); return dt.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }); }
+function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function jsArg(s){ return escapeHtml(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
+const day = d => d ? new Date(String(d).slice(0, 10) + 'T00:00:00') : null;
+const addDays = (d, n) => d ? new Date(d.getTime() + n * 86400000) : null;
 function showToast(title, detail, isError){
-  const stack = document.getElementById('toastStack');
-  const el = document.createElement('div');
-  el.className = 'toast' + (isError ? ' error' : '');
-  el.innerHTML = `<span class="toast-icon">${isError ? TOAST_X : TOAST_CHECK}</span><span class="toast-text"><b>${escapeHtml(title)}</b>${detail ? escapeHtml(detail) : ''}</span>`;
-  stack.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, isError ? 6000 : 4000);
+  const el = document.createElement('div'); el.className = 'toast' + (isError ? ' error' : '');
+  el.innerHTML = `<span class="toast-icon">${isError ? X_ICON : CHECK_ICON}</span><span class="toast-text"><b>${escapeHtml(title)}</b>${detail ? escapeHtml(detail) : ''}</span>`;
+  document.getElementById('toastStack').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, isError ? 7000 : 6000);
 }
 
 async function loadCollections(){
-  collData = await callApi('collections-search', {});
-  renderStats();
-  renderAging();
-  renderCustomers();
-  renderOrders();
-}
-
-const AGING_LABEL = { current: 'Current', '0-30': '0-30 days', '31-60': '31-60 days', '61-90': '61-90 days', '90+': '90+ days' };
-const AGING_COLOR = { current: '#6FD3A8', '0-30': 'var(--amber)', '31-60': '#F0904D', '61-90': '#FF9C8A', '90+': '#FF6B57' };
-function renderAging(){
-  document.getElementById('agingBody').innerHTML = `<tr>${collData.aging.map(a => `
-    <td>
-      <div class="num" style="font-size:16px;font-weight:700;color:${AGING_COLOR[a.bucket]};">${fmtMoney(a.amount)}</div>
-      <div class="muted" style="font-size:11.5px;margin-top:2px;">${a.count} order${a.count === 1 ? '' : 's'}</div>
-    </td>`).join('')}</tr>`;
-}
-
-// Standard AR aging report export — "Reporte de aging exportable", approved suggestion.
-function exportAgingCsv(){
-  const header = ['Order', 'Customer', 'Product', 'Invoiced', 'Due', 'Bucket', 'Days Overdue', 'Balance', 'Interest', 'Profit'];
-  const rows = collData.shipments.map(s => [
-    s.order_number, s.customer_trade_name || '', (s.product_spec || s.product_spec_es || s.product_name || s.product_name_es),
-    fmtDateStr(s.invoice_sent_at), fmtDateStr(s.payment_due_date),
-    s.paid_at ? 'paid' : (AGING_LABEL[s.aging_bucket] || ''),
-    s.days_overdue || 0, s.balance,
-    s.paid_at ? s.interest_amount : s.interest_so_far,
-    s.paid_at ? s.net_profit : s.profit_so_far,
-  ]);
-  const csv = [header, ...rows].map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `collections-aging-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function renderStats(){
-  const stats = [
-    { value: collData.dso != null ? Math.round(collData.dso) + 'd' : '—', label: 'DSO (days to collect)',
-      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
-    { value: fmtMoney(collData.total_outstanding), label: 'Total Outstanding',
-      icon: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
-    { value: fmtMoney(collData.total_overdue), label: 'Overdue Today',
-      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>' },
-    { value: fmtMoney(collData.total_realized_profit), label: 'Realized Profit (Paid)',
-      icon: '<path d="M20 6 9 17l-5-5"/>' },
-  ];
-  document.getElementById('collStats').innerHTML = stats.map(s => `
-    <div class="stat-card">
-      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${s.icon}</svg></div>
-      <div><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>
-    </div>`).join('');
-}
-
-function renderCustomers(){
-  const body = document.getElementById('customersBody');
-  const rows = collData.customers.filter(c => c.outstanding > 0).sort((a, b) => b.outstanding - a.outstanding);
-  document.getElementById('customersEmpty').style.display = rows.length ? 'none' : 'block';
-  body.innerHTML = rows.map(c => {
-    const hasLimit = c.credit_limit != null;
-    const pctUsed = hasLimit ? Math.min(100, (c.outstanding / Number(c.credit_limit)) * 100) : null;
-    const gaugeColor = pctUsed == null ? 'var(--line)' : pctUsed >= 100 ? 'var(--red)' : pctUsed >= 80 ? 'var(--amber)' : 'var(--green)';
-    return `<tr>
-      <td><span class="cust-name" onclick="openCustomerProfile('${c.customer_id}')">${escapeHtml(c.customer_name || '—')}</span></td>
-      <td class="num">${hasLimit ? fmtMoney(c.credit_limit) : '<span class="muted">No limit</span>'}</td>
-      <td class="num" style="color:#FF9C8A;">${fmtMoney(c.outstanding)}</td>
-      <td class="num" style="color:${hasLimit ? (c.available_credit < 0 ? '#FF9C8A' : '#6FD3A8') : 'inherit'};">${hasLimit ? fmtMoney(c.available_credit) : '—'}</td>
-      <td>${hasLimit ? `<div class="gauge-track"><div class="gauge-fill" style="width:${pctUsed}%;background:${gaugeColor};"></div></div>` : ''}</td>
-      <td class="mono">${c.oldest_due_date ? fmtDateStr(c.oldest_due_date) : '—'}${c.overdue_count > 0 ? ` <span class="payment-badge overdue">${c.overdue_count} overdue</span>` : ''}</td>
-    </tr>`;
-  }).join('');
-}
-
-const CT_ICON_INVOICE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><path d="M9 13h6M9 17h6"/></svg>';
-const CT_ICON_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>';
-const CT_ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
-
-// Real ask (twice, word-for-word): "en una linea de tiempo debe ver cuando debe cobrarle" /
-// "un flujo para vision de este flujo en el tiempo de cada carga que viene de invoices" — a real
-// visual timeline per order (Invoiced -> Due -> Paid), same visual language as orders.html's own
-// timeline (transparent fill, colored border, stroke icon, the single "current" step pulses),
-// not just a text badge.
-function renderOrderTimeline(s){
-  const invoicedNode = `<div class="c-node done" title="Invoiced ${fmtDateStr(s.invoice_sent_at)}">${CT_ICON_INVOICE}</div>`;
-  let dueClass = 'c-node', dueColor = 'var(--line)', dueTitle = `Due ${fmtDateStr(s.payment_due_date)}`;
-  if (!s.paid_at){
-    if (s.is_overdue){ dueColor = AGING_COLOR[s.aging_bucket]; dueTitle = `${s.days_overdue}d overdue (${AGING_LABEL[s.aging_bucket]})`; }
-    else { dueColor = 'var(--blue-bright)'; dueTitle = `Due ${fmtDateStr(s.payment_due_date)} — ${s.days_since_invoice}d since invoice`; }
-  }
-  const dueNode = `<div class="c-node${!s.paid_at ? ' current' : ' done'}" style="border-color:${s.paid_at ? '' : dueColor};color:${s.paid_at ? '' : dueColor};" title="${escapeHtml(dueTitle)}">${CT_ICON_CLOCK}</div>`;
-  const paidNode = `<div class="c-node${s.paid_at ? ' done' : ''}" title="${s.paid_at ? 'Paid ' + fmtDateStr(s.paid_at) : 'Not paid yet'}">${CT_ICON_CHECK}</div>`;
-  const line1 = `<div class="c-line done"></div>`;
-  const line2 = `<div class="c-line${s.paid_at ? ' done' : ''}"></div>`;
-  return `<div class="c-timeline">${invoicedNode}${line1}${dueNode}${line2}${paidNode}</div>`;
-}
-
-function renderOrders(){
-  const body = document.getElementById('ordersBody');
-  const rows = [...collData.shipments].sort((a, b) => {
-    if (!!a.paid_at !== !!b.paid_at) return a.paid_at ? 1 : -1;
-    return (b.days_overdue || 0) - (a.days_overdue || 0);
-  });
-  document.getElementById('ordersEmpty').style.display = rows.length ? 'none' : 'block';
-  body.innerHTML = rows.map(s => {
-    const statusBadge = renderOrderTimeline(s);
-    const interest = s.paid_at ? s.interest_amount : s.interest_so_far;
-    const profit = s.paid_at ? s.net_profit : s.profit_so_far;
-    // Real ask 2026-09-09: unpaid and more than 30 days overdue (31-60/61-90/90+ buckets) needs
-    // to visibly blink — interest keeps accruing and it needs immediate action, not something to
-    // notice only by reading the Balance/Interest columns closely.
-    const rowClass = (!s.paid_at && s.is_overdue && (s.days_overdue || 0) > 30) ? ' class="ct-row-overdue30"' : '';
-    return `<tr${rowClass}>
-      <td class="order-num">${escapeHtml(s.order_number)}</td>
-      <td>${s.customer_id ? `<span class="cust-name" onclick="openCustomerProfile('${s.customer_id}')">${escapeHtml(s.customer_trade_name || '—')}</span>` : escapeHtml(s.customer_trade_name || '—')}</td>
-      <td class="muted">${escapeHtml((s.product_spec || s.product_spec_es || s.product_name || s.product_name_es) || '—')}</td>
-      <td class="mono">${fmtDateStr(s.invoice_sent_at)}</td>
-      <td class="mono">${fmtDateStr(s.payment_due_date)}</td>
-      <td>${statusBadge}</td>
-      <td class="num">${fmtMoney(s.balance)}</td>
-      <td class="num" style="color:#FF9C8A;">${interest != null ? '−' + fmtMoney(interest) : '—'}</td>
-      <td class="num" style="color:${profit != null && profit >= 0 ? '#6FD3A8' : '#FF9C8A'};">${profit != null ? fmtMoney(profit) : '—'}</td>
-      <td>${s.paid_at ? '' : `<a class="btn small" style="text-decoration:none;display:inline-block;" href="payments.html?customer=${s.customer_id}">Payment</a>`}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ============ CUSTOMER PROFILE ============
-// "un dashboard por el perfil de cada cliente debe saber en el tiempo cuanto le debe el cliente y
-// cuanto mas le puede vender dependiendo de su cupo" — a real per-customer view: their credit
-// standing plus every one of their invoiced orders, oldest first, so the trader sees how they've
-// actually paid OVER TIME, not just today's snapshot.
-function openCustomerProfile(customerId){
-  const c = collData.customers.find(x => x.customer_id === customerId);
-  const orders = collData.shipments.filter(s => s.customer_id === customerId)
-    .sort((a, b) => new Date(a.invoice_sent_at || 0) - new Date(b.invoice_sent_at || 0));
-  const name = (c && c.customer_name) || (orders[0] && orders[0].customer_trade_name) || 'Customer';
-  const hasLimit = c && c.credit_limit != null;
-  const pctUsed = hasLimit ? Math.min(100, (c.outstanding / Number(c.credit_limit)) * 100) : null;
-  const gaugeColor = pctUsed == null ? 'var(--line)' : pctUsed >= 100 ? 'var(--red)' : pctUsed >= 80 ? 'var(--amber)' : 'var(--green)';
-  const totalRealizedForCustomer = orders.filter(s => s.paid_at).reduce((sum, s) => sum + Number(s.net_profit || 0), 0);
-
-  document.getElementById('customerProfileBox').innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-      <div>
-        <h2 style="margin:0 0 4px;">${escapeHtml(name)}</h2>
-        <div class="muted" style="font-size:12.5px;">${c ? c.payment_days + '-day credit terms' : ''}</div>
-      </div>
-      <button class="tt-overlay-close" onclick="closeCustomerProfile()" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
-    ${c ? `
-    <div class="stat-row" style="margin-top:0;">
-      <div class="stat"><div class="k">Credit Limit</div><div class="v">${hasLimit ? fmtMoney(c.credit_limit) : 'No limit'}</div></div>
-      <div class="stat bad"><div class="k">Owes Now</div><div class="v">${fmtMoney(c.outstanding)}</div></div>
-      <div class="stat good"><div class="k">Available Credit</div><div class="v">${hasLimit ? fmtMoney(c.available_credit) : '—'}</div></div>
-      <div class="stat good"><div class="k">Realized Profit (all time)</div><div class="v">${fmtMoney(totalRealizedForCustomer)}</div></div>
-    </div>
-    ${hasLimit ? `<div class="gauge-wrap" style="margin-top:16px;"><div class="gauge-track"><div class="gauge-fill" style="width:${pctUsed}%;background:${gaugeColor};"></div></div><div class="gauge-caption">${Math.round(pctUsed)}% of credit used</div></div>` : ''}
-    <div style="margin-top:6px;"><a class="btn small" style="text-decoration:none;display:inline-block;" href="payments.html?customer=${customerId}">Apply Payment</a></div>
-    ` : ''}
-    <h2 style="margin-top:22px;">Order history (${orders.length})</h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Order</th><th>Invoiced</th><th>Due</th><th>Timeline</th><th>Balance</th><th>Profit</th></tr></thead>
-        <tbody>
-          ${orders.map(s => `<tr${(!s.paid_at && s.is_overdue && (s.days_overdue || 0) > 30) ? ' class="ct-row-overdue30"' : ''}>
-            <td class="order-num">${escapeHtml(s.order_number)}</td>
-            <td class="mono">${fmtDateStr(s.invoice_sent_at)}</td>
-            <td class="mono">${fmtDateStr(s.payment_due_date)}</td>
-            <td>${renderOrderTimeline(s)}</td>
-            <td class="num">${fmtMoney(s.balance)}</td>
-            <td class="num" style="color:${(s.paid_at ? s.net_profit : s.profit_so_far) >= 0 ? '#6FD3A8' : '#FF9C8A'};">${(s.paid_at ? s.net_profit : s.profit_so_far) != null ? fmtMoney(s.paid_at ? s.net_profit : s.profit_so_far) : '—'}</td>
-          </tr>`).join('') || `<tr><td colspan="6" class="empty">No invoiced orders yet.</td></tr>`}
-        </tbody>
-      </table>
-    </div>
-  `;
-  document.getElementById('customerProfileOverlay').style.display = 'flex';
-}
-function closeCustomerProfile(){
-  document.getElementById('customerProfileOverlay').style.display = 'none';
-}
-
-// ============ URGENT QUEUE — day-29 preventive + overdue escalation ============
-// Placeholder copy — real text pending approval, same as every other customer-facing message in
-// this module (confirmed explicitly: "ponle cualquier mensaje despues lo ponemos bien").
-function computeCollectionsAttentionItems(){
-  const items = [];
-  if (!collData) return items;
-  collData.shipments.filter(s => !s.paid_at).forEach(s => {
-    if (!s.payment_due_date) return;
-    const dueDate = new Date(String(s.payment_due_date).slice(0, 10) + 'T00:00:00');
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const daysUntilDue = Math.round((dueDate - today) / 86400000);
-    const label = `${s.order_number} — ${s.customer_trade_name || 'customer'}`;
-    if (s.is_overdue){
-      // Real ask: "aprobadas" — escalating dunning cadence, gentle -> firm -> urgent tone, never
-      // the same message repeated. Message copy stays Spanish (customer-facing, same established
-      // rule as every other automated send in this app — customers are Spanish speakers) and is
-      // still explicit placeholder text pending approval ("ponle cualquier mensaje despues lo
-      // ponemos bien", confirmed) — only the tiering/escalation structure itself was approved.
-      // Everything the TRADER reads (labels, buttons) is English, per "en ingles todo".
-      const tier = s.days_overdue <= 7 ? 'gentle' : s.days_overdue <= 20 ? 'firm' : 'urgent';
-      const tierMeta = {
-        gentle: { icon: '⏰', label: 'Reminder', color: 'var(--amber)', msg: `Recordatorio amistoso: tu pago de la orden ${s.order_number} venció hace ${s.days_overdue} día${s.days_overdue === 1 ? '' : 's'}. ¿Nos confirmas cuándo podrías realizarlo?` },
-        firm:   { icon: '📌', label: 'Second Notice', color: '#F0904D', msg: `Seguimos sin recibir el pago de la orden ${s.order_number}, vencido hace ${s.days_overdue} días. Por favor confírmanos una fecha de pago esta semana.` },
-        urgent: { icon: '🚨', label: 'Urgent Notice', color: 'var(--red)', msg: `El pago de la orden ${s.order_number} lleva ${s.days_overdue} días vencido. Necesitamos confirmación de pago de inmediato para mantener tu línea de crédito activa.` },
-      }[tier];
-      const reminderBtn = s.customer_email
-        ? `<button class="btn" style="border-color:${tierMeta.color};color:${tierMeta.color};" onclick="urgentQueueActionTaken=true;sendCollectionsReminder('${escapeHtml(s.customer_email)}','${escapeHtml(s.customer_contact_name || s.customer_trade_name || '').replace(/'/g, "\\'")}','${escapeHtml(tierMeta.msg).replace(/'/g, "\\'")}','${s.order_number}')">${tierMeta.icon} Send Reminder</button>`
-        : '';
-      items.push({
-        orderNumber: label, order_number: s.order_number,
-        text: `${tierMeta.icon} ${tierMeta.label} — ${s.days_overdue} day${s.days_overdue === 1 ? '' : 's'} overdue — ${fmtMoney(s.balance)}`,
-        btn: reminderBtn + `<a class="btn" style="background:${tierMeta.color};color:#fff;border-color:${tierMeta.color};text-decoration:none;display:inline-block;" href="payments.html?customer=${s.customer_id}">Confirm Payment</a>`,
-      });
-    } else if (daysUntilDue === 1){
-      items.push({
-        orderNumber: label, order_number: s.order_number,
-        text: `Reminder: due tomorrow — ${fmtMoney(s.balance)}. Confirm with the customer.`,
-        btn: '',
-      });
-    }
-  });
-  return items;
-}
-// Real correction 2026-09-16: "no todos igual... que funcionen que esten bien el flujo con api" —
-// this used to go straight to a Gmail compose link, the one send in this module that never
-// attempted the real API at all, no comment justifying it (unlike quotes.html's deliberate
-// Gmail-first customer-offer send). Unified to the same API-first pattern as PO/SO/FO/Invoice
-// elsewhere: try the real send (Resend) first, only fall back to Gmail if that actually fails.
-async function sendCollectionsReminder(email, contactName, message, orderNumber){
-  const subject = `${orderNumber} — Recordatorio de pago`;
-  const body = `Hola${contactName ? ' ' + contactName : ''},\n\n${message}\n\nGracias,\nBuenTrade Team`;
   try {
-    const res = await fetch('/.netlify/functions/send-email', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'offers', to: email, subject, text: body }),
-    });
-    if (!res.ok){ const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Send failed'); }
-    showToast('Recordatorio enviado', email);
+    prData = await callApi('collections-search', { view: 'pay_receive' });
   } catch (e) {
-    window.open(`https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: email, su: subject, body }).toString()}`, '_blank');
-    showToast('Envío automático falló', e.message + ' — se abrió Gmail', true);
-  }
-}
-let urgentQueue = [];
-let urgentQueueIndex = 0;
-let urgentQueueActionTaken = false;
-async function runUrgentQueueOnLogin(){
-  await loadCollections();
-  urgentQueue = computeCollectionsAttentionItems();
-  urgentQueueIndex = 0;
-  if (urgentQueue.length) showUrgentQueueStep();
-}
-function showUrgentQueueStep(){
-  const it = urgentQueue[urgentQueueIndex];
-  urgentQueueActionTaken = !it.btn;
-  document.getElementById('urgentQueueProgress').textContent = `${urgentQueueIndex + 1} of ${urgentQueue.length} — Collections`;
-  document.getElementById('urgentQueueOrderNum').textContent = it.orderNumber;
-  document.getElementById('urgentQueueText').textContent = it.text;
-  document.getElementById('urgentQueueActions').innerHTML = it.btn + `<button class="btn" style="background:var(--blue);color:#fff;" onclick="urgentQueueAdvance()">✓ Done</button>`;
-  document.getElementById('urgentQueueOverlay').style.display = 'flex';
-}
-function urgentQueueAdvance(){
-  urgentQueueIndex++;
-  if (urgentQueueIndex >= urgentQueue.length){
-    document.getElementById('urgentQueueOverlay').style.display = 'none';
+    document.getElementById('prView').innerHTML = `<div class="card"><div class="empty">Could not load: ${escapeHtml(e.message)}</div></div>`;
     return;
   }
-  showUrgentQueueStep();
+  TODAY = day(prData.today); INTEREST_ANNUAL = Number(prData.interest_rate_annual || 0.15);
+  LOADS = prData.loads.map(r => ({
+    id: r.id, order_number: r.order_number, status: r.status,
+    customer_id: r.customer_id, client: (r.customer_name || '').trim(), credit_limit: r.credit_limit, client_days: r.customer_payment_days,
+    customer_email: r.customer_email, customer_whatsapp: r.customer_whatsapp, customer_contact_name: r.customer_contact_name,
+    plant: (r.plant_name || '').trim(), product: r.product, fin: r.financing_method === 'summar' ? 'summar' : 'direct', payment_days: r.summar_payment_days,
+    sale: r.sale_amount != null ? Number(r.sale_amount) : null,
+    cost: r.plant_cost != null ? Number(r.plant_cost) : (r.offer_cost != null ? Number(r.offer_cost) : null),
+    offer_cost: r.offer_cost, cost_per_lb: r.cost_per_lb, real_weight: r.real_weight,
+    us_freight_amount: r.us_freight_amount, extra_costs_total: Number(r.extra_costs_total || 0),
+    freight: r.freight_rate != null ? { carrier: r.carrier_name, rate: Number(r.freight_rate) } : null,
+    customs: Number(r.tramite_aduanal_amount || 0), inspection: Number(r.inspection_amount || 0),
+    delivery_date: r.delivery_date ? String(r.delivery_date).slice(0, 10) : null, pickup_date: r.pickup_date,
+    plant_paid_at: r.plant_paid_at, summar_payment_sent_at: r.summar_payment_sent_at, picked_up_at: r.picked_up_at, delivered_at: r.delivered_at,
+    invoice_sent_at: r.invoice_sent_at, payment_due_date: r.payment_due_date, paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
+    interest_amount: r.interest_amount,
+  }));
+  draw(); renderDetail();
 }
+
+// ---------- the money steps of one load ----------
+function stageLabel(L){
+  if (L.paid_at) return { t: 'Paid', cls: 'ok' };
+  if (L.invoice_sent_at) return { t: 'Invoiced', cls: 'active' };
+  if (L.delivered_at || L.status === 'delivered') return { t: 'Delivered', cls: 'active' };
+  if (L.picked_up_at) return { t: 'Picked Up', cls: 'active' };
+  return { t: 'Confirm PU', cls: 'active' };
+}
+function recordsFor(L, kind){ return prData.records.filter(r => r.shipment_id === L.id && r.kind === kind); }
+function summarFee(L){ if (!L.sale) return null; const days = L.payment_days || L.client_days || 30; return L.sale * (SUMMAR_RATES.transitFeePct + SUMMAR_RATES.factoringBaseFeePct + Math.max(0, days - 30) * SUMMAR_RATES.extraDayFeePct) / 100; }
+function steps(L){
+  const out = [];
+  const delivery = day(L.delivered_at) || day(L.delivery_date);
+  const beforePickup = day(L.pickup_date) || (day(L.delivery_date) ? addDays(day(L.delivery_date), -2) : null);
+  const clientDue = day(L.payment_due_date) || (delivery ? addDays(delivery, L.client_days || 30) : null);
+  const add = (key, dir, where, label, who, icon, amount, due, done, note, recs) => {
+    const paid = (recs || []).reduce((n, r) => n + Number(r.amount), 0);
+    out.push({ id: L.order_number + '|' + key, key, L, dir, where, label, who, icon, due, done: !!done, note, recs: recs || [], recorded: paid,
+      amount: done || amount == null ? amount : Math.max(0, Math.round((amount - paid) * 100) / 100) });
+  };
+  if (L.fin === 'summar'){
+    const gap = (L.cost && L.sale) ? Math.max(0, Math.round((L.cost - 0.8 * L.sale) * 100) / 100) : null;
+    add('gap', 'out', 'orders', 'Wire to Summar', 'Summar', MONEY_ICON, gap, beforePickup, gap === 0 || L.summar_payment_sent_at, gap === 0 ? 'Not needed — Summar\u2019s 80% covers the cost' : 'Cost − 80% of sale · done in Orders');
+    add('plant', 'info', 'orders', 'Summar pays plant', L.plant || 'Plant', PLANT_ICON, L.cost, beforePickup, L.plant_paid_at, 'Summar\u2019s money, shown for reference');
+  } else {
+    add('plant', 'out', 'orders', 'Plant payment', L.plant || 'Plant', PLANT_ICON, L.cost, beforePickup, L.plant_paid_at, 'Done in Orders');
+  }
+  if (L.freight && L.freight.rate){ const r = recordsFor(L, 'freight'); add('freight', 'out', 'here', 'Freight', L.freight.carrier || 'Carrier not assigned', TRUCK_ICON, L.freight.rate, delivery, r.some(x => x.settles), 'Paid at delivery', r); }
+  const customs = L.customs + L.inspection;
+  if (customs > 0){ const r = recordsFor(L, 'customs'); add('customs', 'out', 'here', 'Customs', 'Customs broker', CUSTOMS_ICON, customs, delivery, r.some(x => x.settles), 'Paid at delivery', r); }
+  if (L.fin === 'summar'){
+    const fee = summarFee(L), r = recordsFor(L, 'summar_remanente');
+    add('rem', 'in', 'here', 'Summar remanente', 'Summar', RECEIPT_ICON, L.sale ? Math.round((0.2 * L.sale - fee) * 100) / 100 : null, delivery, r.some(x => x.settles), '20% of sale − fee est. ' + fmtMoney(fee), r);
+    add('client', 'info', 'watch', 'Client pays Summar', L.client, RECEIPT_ICON, L.sale, clientDue, false, 'Summar collects — watch only');
+  } else {
+    const owed = L.sale != null ? L.sale - L.amount_paid : null;
+    out.push({ id: L.order_number + '|client', key: 'client', L, dir: 'in', where: 'here', label: 'Client payment', who: L.client, icon: RECEIPT_ICON,
+      amount: L.paid_at ? L.sale : owed, due: clientDue, done: !!L.paid_at || (owed != null && owed <= 0.005), note: `Invoice · ${L.client_days || 0}-day terms` + (L.amount_paid ? ` · paid so far ${fmtMoney(L.amount_paid)}` : ''), recs: [], recorded: L.amount_paid });
+  }
+  return out;
+}
+function status(x){
+  if (x.done) return { cls: 'ok', t: x.amount === 0 ? 'Not needed' : 'Done' };
+  if (x.amount == null) return { cls: 'overdue', t: 'Missing data' };
+  if (!x.due) return { cls: 'active', t: 'No date yet' };
+  const d = Math.round((x.due - TODAY) / 86400000);
+  if (d < 0) return { cls: 'overdue', t: `${-d}d overdue`, days: -d };
+  if (d <= 7) return { cls: 'due-soon', t: d === 0 ? 'Today' : `In ${d}d` };
+  return { cls: 'active', t: fmtDateStr(x.due) };
+}
+const allSteps = () => LOADS.flatMap(steps);
+const sum = a => a.reduce((n, x) => n + (x.amount || 0), 0);
+const pend = (L, dir) => steps(L).filter(x => x.dir === dir && !x.done && x.amount !== 0);
+const amtCell = (items, color) => !items.length ? '<span class="muted">—</span>' : items.some(x => x.amount == null) && !sum(items) ? '<span class="payment-badge overdue">Missing data</span>' : `<span style="color:${color};">${fmtMoney(sum(items))}</span>`;
+const isClosed = L => !pend(L, 'in').length && !pend(L, 'out').length;
+const nextStep = L => [...pend(L, 'in'), ...pend(L, 'out')].sort((a, b) => (a.due || 9e15) - (b.due || 9e15))[0];
+const delivered = L => !!(L.delivered_at || L.status === 'delivered');
+// Owed now vs coming: customer / Summar money and freight / customs are owed once the load is
+// delivered; plant payment and the Summar wire are advance steps (Orders), owed before pickup.
+const owedNow = x => x.where === 'orders' ? true : delivered(x.L);
+// Profit — same formula collections-search / finalizeShipmentPaid already use (sale − purchase
+// cost − freight − inspection − extra costs − interest), with two things only this screen knows:
+// the freight / customs amount really paid replaces the estimate once recorded, and a Summar load
+// carries Summar's fee instead of our own interest.
+function profitOf(L){
+  if (!L.sale) return null;
+  const purchase = (L.real_weight != null && L.cost_per_lb != null) ? Number(L.real_weight) * Number(L.cost_per_lb) : (L.offer_cost != null ? Number(L.offer_cost) : L.cost);
+  if (purchase == null) return null;
+  const st = steps(L), paidOf = k => { const x = st.find(s => s.key === k); return x && x.done && x.recs.length ? x.recorded : null; };
+  const freight = paidOf('freight') ?? Number(L.us_freight_amount ?? (L.freight ? L.freight.rate : 0));
+  const customs = paidOf('customs') ?? L.inspection;
+  let finance;
+  if (L.fin === 'summar') finance = summarFee(L) || 0;
+  else if (L.paid_at && L.interest_amount != null) finance = Number(L.interest_amount);
+  else { const inv = day(L.invoice_sent_at); finance = inv ? L.sale * (INTEREST_ANNUAL / 365) * Math.max(0, Math.round((TODAY - inv) / 86400000)) : 0; }
+  return { profit: L.sale - purchase - freight - customs - L.extra_costs_total - finance, purchase, freight, customs, finance };
+}
+function stageBadge(L){ const s = stageLabel(L); return `<span class="payment-badge ${s.cls}" style="display:inline-flex;align-items:center;gap:5px;"><svg viewBox="0 0 24 24" style="width:12px;height:12px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${PIN_ICON.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg> ${s.t}</span>`; }
+const finBadge = L => `<span class="payment-badge ${L.fin === 'summar' ? 'due-soon' : 'active'}" style="margin-left:6px;">${L.fin === 'summar' ? 'Summar' : 'Direct'}</span>`;
+const IC = { in: '<path d="M12 5v14M19 12l-7 7-7-7"/>', out: '<path d="M12 19V5M5 12l7-7 7 7"/>', warn: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>', check: '<path d="M20 6 9 17l-5-5"/>', truck: '<rect x="1" y="7" width="15" height="10" rx="1"/><path d="M16 10h3.5L22 14v3h-6z"/><circle cx="6" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/>' };
+
+function bucketOf(x){ if (!owedNow(x)) return 'coming'; const d = status(x).days || 0; return !d ? 'current' : d <= 30 ? '1-30' : d <= 60 ? '31-60' : d <= 90 ? '61-90' : '90+'; }
+const BUCKETS = [['current', 'Current', '#6FD3A8'], ['1-30', '1-30 days', 'var(--amber)'], ['31-60', '31-60 days', '#F0904D'], ['61-90', '61-90 days', '#FF9C8A'], ['90+', '90+ days', '#FF6B57']];
+const openItems = dir => allSteps().filter(x => x.dir === dir && !x.done && x.amount !== 0);
+const summarWatch = () => allSteps().filter(x => x.key === 'client' && x.dir === 'info' && delivered(x.L));
+function groupBy(items, keyFn){ const m = new Map(); for (const x of items){ const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; }
+const payerKey = x => x.key === 'rem' ? 'Summar' : x.who;
+const payeeKey = x => x.who;
+
+// ---------- the 5 tabs ----------
+let tab = 'collect';
+function cards(){
+  const ci = openItems('in').filter(owedNow), co = openItems('out').filter(owedNow);
+  const over = [...ci, ...co].filter(x => x.due && x.due < TODAY);
+  const C = [
+    { k: 'collect', cls: 'ok', v: fmtWhole(sum(ci)), l: 'To Collect', icon: IC.in },
+    { k: 'pay', cls: 'warn', v: fmtWhole(sum(co)), l: 'To Pay', icon: IC.out },
+    { k: 'overdue', cls: 'danger', v: String(over.length), l: 'Overdue', icon: IC.warn },
+    { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Open Loads', icon: IC.truck },
+    { k: 'ledger', cls: '', v: String(ledgerRows().length), l: 'Payments Recorded', icon: IC.check },
+  ];
+  return `<div class="stats-row pr-cards">${C.map(c => `<div class="stat-card ${c.cls}${tab === c.k ? ' active' : ''}" style="cursor:pointer;" onclick="tab='${c.k}';draw()"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${c.icon}</svg></div><div><div class="stat-value">${c.v}</div><div class="stat-label">${c.l}</div></div></div>`).join('')}</div>`;
+}
+function howTo(from, action, impact){ const r = (k, v, c) => `<div style="display:flex;gap:8px;"><b style="color:${c};min-width:108px;flex-shrink:0;">${k}</b><span class="muted">${v}</span></div>`;
+  return `<div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;margin:-2px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);">${r('Comes from', from, 'var(--blue-bright)')}${r('You do', action, '#E8B54C')}${impact ? r('Then it changes', impact, '#6FD3A8') : ''}</div>`; }
+
+let lastAging = null;
+function agingTable(groups, dir){
+  const rows = [...groups.entries()].map(([name, items]) => { const b = { coming: 0 }; for (const [k] of BUCKETS) b[k] = 0;
+    for (const x of items) b[bucketOf(x)] += x.amount || 0;
+    const owed = BUCKETS.reduce((n, [k]) => n + b[k], 0), worst = [...BUCKETS].reverse().find(([k]) => b[k] > 0);
+    return { name, items, b, owed, worst: worst ? BUCKETS.indexOf(worst) : -1, hasMissing: items.some(x => x.amount == null), L: items[0].L }; })
+    .sort((a, b) => b.worst - a.worst || b.owed - a.owed);
+  lastAging = { dir, rows };
+  const tot = { coming: rows.reduce((n, r) => n + r.b.coming, 0) }; for (const [k] of BUCKETS) tot[k] = rows.reduce((n, r) => n + r.b[k], 0);
+  const cell = (v, c) => `<td class="num" style="color:${v ? c : 'var(--ink-soft)'};${v ? 'font-weight:700;' : ''}">${v ? fmtMoney(v) : '—'}</td>`;
+  return `<div class="table-scroll"><table class="pr-aging"><thead><tr><th>${dir === 'in' ? 'Who owes us' : 'Who we owe'}</th>${BUCKETS.map(([, l]) => `<th>${l}</th>`).join('')}<th>Total Owed</th>${dir === 'in' ? '<th>Credit Left</th>' : ''}<th title="Loads not delivered yet — not owed until delivery">Coming</th><th></th></tr></thead><tbody>
+    ${rows.map(r => { const isCustomer = dir === 'in' && r.name !== 'Summar', lim = isCustomer ? r.L.credit_limit : null, left = lim != null ? Number(lim) - r.owed : null, blink = dir === 'in' && r.worst >= 2;
+      const canRecord = r.items.some(x => x.where === 'here' && owedNow(x) && x.amount);
+      const action = canRecord ? `<button class="wa-btn" onclick="event.stopPropagation();payOpen('${dir}','${jsArg(r.name)}')">${dir === 'in' ? 'Apply Payment' : 'Record Paid'}</button>`
+        : (dir === 'out' && r.owed ? '<a class="btn small" href="orders.html" onclick="event.stopPropagation()">Pay in Orders →</a>' : '');
+      return `<tr${blink ? ' class="ct-row-overdue30"' : ''} style="cursor:pointer;" onclick="openParty('${dir}','${jsArg(r.name)}')">
+        <td><span style="color:var(--blue-bright);font-weight:600;">${escapeHtml(r.name)}</span>${r.name === 'Summar' ? ` <span class="muted" style="font-size:11px;">${dir === 'in' ? 'remanentes' : 'wire (cost − 80% of sale)'}</span>` : ''}</td>
+        ${BUCKETS.map(([k, , c]) => cell(r.b[k], c)).join('')}
+        <td class="num" style="font-weight:700;">${r.owed ? fmtMoney(r.owed) : r.hasMissing ? '<span class="payment-badge overdue" title="Cost or sale missing in Orders">Missing data</span>' : '—'}</td>
+        ${dir === 'in' ? `<td class="num" style="color:${left == null ? 'var(--ink-soft)' : left < 0 ? '#FF9C8A' : '#6FD3A8'};">${!isCustomer ? '—' : left == null ? 'No limit' : fmtMoney(left)}</td>` : ''}
+        <td class="num muted">${r.b.coming ? fmtMoney(r.b.coming) : '—'}</td><td>${action}</td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">Nothing ${dir === 'in' ? 'to collect' : 'to pay'}.</td></tr>`}
+    <tr><td style="font-weight:700;">Total</td>${BUCKETS.map(([k, , c]) => cell(tot[k], c)).join('')}<td class="num" style="font-weight:700;">${fmtMoney(BUCKETS.reduce((n, [k]) => n + tot[k], 0))}</td>${dir === 'in' ? '<td></td>' : ''}<td class="num muted">${fmtMoney(tot.coming)}</td><td></td></tr>
+    </tbody></table></div>`;
+}
+function exportAgingCsv(){
+  if (!lastAging) return;
+  const header = [lastAging.dir === 'in' ? 'Who owes us' : 'Who we owe', ...BUCKETS.map(b => b[1]), 'Total Owed', 'Coming (not delivered)'];
+  const rows = lastAging.rows.map(r => [r.name, ...BUCKETS.map(([k]) => r.b[k].toFixed(2)), r.owed.toFixed(2), r.b.coming.toFixed(2)]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `${lastAging.dir === 'in' ? 'to-collect' : 'to-pay'}-aging-${prData.today}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+function tabCollect(){
+  const w = summarWatch();
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Collect — by customer <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
+    ${howTo('every load in Orders — a customer owes us from delivery (direct loads); Summar owes us the remanente at delivery (Summar loads). <b>Coming</b> = loads not delivered yet.', 'when money arrives, click <b>Apply Payment</b> on that row. Click a name to see its loads.', 'the invoice (or remanente) is marked paid → that customer\u2019s balance and aging go down and their credit left goes up → To Collect drops → the payment goes to Payments Recorded → in Orders the load shows <b>Paid</b> → when nothing is left to pay or collect, the load moves to Closed with its real profit.')}
+    ${agingTable(groupBy(openItems('in'), payerKey), 'in')}
+    <div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;"><b>Customers paying Summar</b> <span class="muted">— Summar collects; shown so you see the risk.</span> ${w.length ? w.map(x => `<span class="payment-badge ${status(x).cls}" style="margin:4px 4px 0 0;">${escapeHtml(x.who)} · ${fmtMoney(x.amount)} · ${status(x).t}</span>`).join('') : '<span class="muted">None right now (no Summar load delivered yet).</span>'}</div></div>`;
+}
+function tabPay(){
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Pay — by carrier, customs, plant <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
+    ${howTo('every load in Orders — freight and customs are owed at delivery; plant payment and Summar wire are paid from Orders before pickup. <b>Coming</b> = loads not delivered yet.', 'when you pay freight or customs, click <b>Record Paid</b> on that row. Plant / Summar: pay in Orders, it shows here by itself.', 'that bill is marked paid → To Pay drops → the amount you really paid replaces the estimate in the load\u2019s profit → it goes to Payments Recorded → when nothing is left, the load closes with its real profit.')}
+    ${agingTable(groupBy(openItems('out'), payeeKey), 'out')}</div>`;
+}
+function tabOverdue(){
+  const items = [...openItems('in'), ...openItems('out')].filter(x => owedNow(x) && x.due && x.due < TODAY).sort((a, b) => a.due - b.due);
+  return `<div class="card"><h2>Overdue — act today</h2>
+    ${howTo('the same loads, only what is past due (money in and money out).', 'work down the list, oldest first — each row has its action.', 'the row leaves this list as soon as it is recorded (same effect as in To Collect / To Pay).')}
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>In / Out</th><th>Who</th><th>What</th><th>Was Due</th><th>Late</th><th>Amount</th><th></th></tr></thead><tbody>
+    ${items.map(x => { const s = status(x), act = x.where === 'orders' ? '<a class="btn small" href="orders.html">Pay in Orders →</a>' : `<button class="wa-btn" onclick="payOpen('${x.dir}','${jsArg(x.dir === 'in' ? payerKey(x) : payeeKey(x))}')">${x.dir === 'in' ? 'Apply Payment' : 'Record Paid'}</button>`;
+      return `<tr${x.dir === 'in' && s.days > 30 ? ' class="ct-row-overdue30"' : ''}><td class="order-num" style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td><span class="payment-badge ${x.dir === 'in' ? 'ok' : 'due-soon'}">${x.dir === 'in' ? 'IN' : 'OUT'}</span></td><td>${escapeHtml(x.who)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due)}</td><td><span class="payment-badge overdue">${s.t}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td><td>${act}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing overdue.</td></tr>'}</tbody></table></div></div>`;
+}
+let loadFilter = 'open';
+function tabLoads(){
+  const closed = LOADS.filter(isClosed), rows = loadFilter === 'closed' ? closed : LOADS.filter(L => !isClosed(L));
+  return `<div class="card"><h2>Loads — money per load</h2>
+    ${howTo('Orders — the stage and every payment already done there.', 'click a load to see all its money in and out and record what is missing there.', 'each record updates To Collect / To Pay and the load\u2019s profit; with nothing left, the load moves to <b>Closed · profit</b> with its real profit.')}
+    <div class="phase-tabs" style="margin:0 0 12px;max-width:340px;">${[['open', 'Open', LOADS.length - closed.length], ['closed', 'Closed · profit', closed.length]].map(t => `<div class="phase-tab${loadFilter === t[0] ? ' active' : ''}" onclick="loadFilter='${t[0]}';draw()">${t[1]}<span class="phase-tab-count">${t[2]}</span></div>`).join('')}</div>
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>To Collect</th><th>To Pay</th><th>Next Money</th><th>${loadFilter === 'closed' ? 'Real Profit' : 'Stage'}</th></tr></thead>
+    <tbody>${rows.map(L => { const nx = nextStep(L), pi = pend(L, 'in'), po = pend(L, 'out'), p = profitOf(L);
+      return `<tr style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}</td><td style="white-space:nowrap;">${escapeHtml(L.client)}</td><td class="muted pr-product" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</td>
+        <td class="num">${amtCell(pi, '#6FD3A8')}</td><td class="num">${amtCell(po, 'var(--amber)')}</td>
+        <td>${nx ? `<div style="font-size:12px;white-space:nowrap;margin-bottom:3px;">${escapeHtml(nx.label)}</div><span class="payment-badge ${owedNow(nx) ? status(nx).cls : 'active'}">${owedNow(nx) ? status(nx).t : 'At delivery'}</span>` : '<span class="payment-badge ok">Settled</span>'}</td>
+        <td>${loadFilter === 'closed' ? `<span class="num" style="color:${p && p.profit >= 0 ? '#6FD3A8' : '#FF9C8A'};">${p ? fmtMoney(p.profit) : '—'}</span>` : stageBadge(L)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No closed loads yet — record the money of a load and it closes here with its real profit.</td></tr>'}</tbody></table></div></div>`;
+}
+// One row per bank movement: customer payments (payment_applications) + freight / customs /
+// remanente records (shipment_money_records), both grouped by payment_batch_id.
+function ledgerRows(){
+  if (!prData) return [];
+  const m = new Map();
+  for (const p of prData.customer_payments){ const k = 'c' + (p.payment_batch_id || p.id);
+    if (!m.has(k)) m.set(k, { date: p.bank_entry_date, at: p.applied_at, dir: 'in', who: (p.customer_name || '').trim(), amount: 0, applied: [], account: p.collection_account, method: p.payment_method, ref: p.payment_reference });
+    const r = m.get(k); r.amount += Number(p.amount_applied); r.applied.push(p.order_number); }
+  for (const p of prData.records){ const k = 'r' + p.payment_batch_id;
+    if (!m.has(k)) m.set(k, { date: p.bank_entry_date, at: p.created_at, dir: p.direction, who: p.party_name || '', what: { freight: 'Freight', customs: 'Customs', summar_remanente: 'Summar remanente' }[p.kind], amount: 0, applied: [], account: p.account, method: p.payment_method, ref: p.payment_reference });
+    const r = m.get(k); r.amount += Number(p.amount); r.applied.push(p.order_number); }
+  return [...m.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+function tabLedger(){
+  const rows = ledgerRows();
+  return `<div class="card"><h2>Payments Recorded — in & out</h2>
+    ${howTo('what you record with Apply Payment / Record Paid (customer payments, freight, customs, Summar remanentes).', 'nothing — it is the history, to check a payment.', '')}
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Bank Date</th><th>In / Out</th><th>Who</th><th>Amount</th><th>Applied to</th><th>Account</th><th>Method / Ref</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td class="mono">${fmtDateStr(r.date)}</td><td><span class="payment-badge ${r.dir === 'in' ? 'ok' : 'due-soon'}">${r.dir === 'in' ? 'IN' : 'OUT'}</span></td><td>${escapeHtml(r.who)}${r.what ? `<div class="muted" style="font-size:11.5px;">${r.what}</div>` : ''}</td><td class="num">${fmtMoney(r.amount)}</td><td class="mono">${escapeHtml(r.applied.join(', '))}</td><td>${escapeHtml(r.account || '—')}</td><td class="muted">${escapeHtml([r.method, r.ref].filter(Boolean).join(' · ') || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No payments recorded yet.</td></tr>'}</tbody></table></div></div>`;
+}
+
+// ---------- customer / payee page and load page (full page, same as Orders' order detail) ----------
+let detailOrder = null, detailParty = null;
+function openParty(dir, name){ detailParty = { dir, name }; detailOrder = null; renderDetail(); document.getElementById('orderDetailOverlay').style.display = 'flex'; }
+function openDetail(n){ detailOrder = n; detailParty = null; renderDetail(); document.getElementById('orderDetailOverlay').style.display = 'flex'; }
+function closeDetail(){ detailOrder = null; detailParty = null; document.getElementById('orderDetailOverlay').style.display = 'none'; }
+function renderDetail(){
+  if (detailParty) return renderParty();
+  if (!detailOrder) return;
+  const L = LOADS.find(x => x.order_number === detailOrder); if (!L) return closeDetail();
+  const st = steps(L), nx = nextStep(L), p = profitOf(L);
+  document.getElementById('orderDetailTitle').textContent = `${L.order_number} — ${L.client}`;
+  const nodes = st.map((x, i) => { const isNext = nx && nx.id === x.id, cls = x.done ? 'done' : isNext ? 'now blink-now' : x.dir === 'info' ? '' : 'wait';
+    return (i ? `<div class="u-line${x.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${cls}" style="width:84px;"><div class="u-mini-btn">${x.icon}</div><div class="u-mini-label">${escapeHtml(x.label)}</div><div class="u-mini-date">${x.due ? fmtDateStr(x.due) : ''}</div></div>`; }).join('');
+  const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
+  const act = x => x.done || !x.amount ? '' : x.where === 'orders' ? '<a class="btn small" href="orders.html">Pay in Orders →</a>' : x.where === 'watch' ? '' : !owedNow(x) ? '<span class="muted" style="font-size:11.5px;">At delivery</span>' : `<button class="btn small" onclick="payOpen('${x.dir}','${jsArg(x.dir === 'in' ? payerKey(x) : payeeKey(x))}','${x.id}')">${x.dir === 'in' ? 'Record Received' : 'Record Paid'}</button>`;
+  document.getElementById('orderDetailBox').innerHTML = `
+    <div class="load-card">
+      <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}</div></div></div>
+      ${nx ? `<div class="load-next-action"><div class="load-next-action-icon">${nx.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">Next Money</div><div class="load-next-action-label">${escapeHtml(nx.label)} — ${nx.amount == null ? 'missing cost/sale in Orders' : fmtMoney(nx.amount)} · ${owedNow(nx) ? status(nx).t : 'at delivery'}</div></div>${nx.where === 'here' && nx.amount && owedNow(nx) ? `<button class="wa-btn" onclick="payOpen('${nx.dir}','${jsArg(nx.dir === 'in' ? payerKey(nx) : payeeKey(nx))}','${nx.id}')">${nx.dir === 'in' ? 'Record Received' : 'Record Paid'} →</button>` : nx.where === 'orders' ? `<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>` : '<span class="muted" style="font-size:12px;">At delivery</span>'}</div>` : ''}
+      <div class="utimeline" style="justify-content:center;">${nodes}</div>
+      <div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
+      <div class="docs-panel-grid">${st.map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${x.done || owedNow(x) ? s.cls : 'active'}">${x.done || owedNow(x) ? s.t : 'At delivery'}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
+      <div class="docs-panel-heading">Profit</div>
+      <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (L.extra_costs_total ? line('Extra costs', -L.extra_costs_total) : '') + line(L.fin === 'summar' ? 'Summar fee (est.)' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
+    </div>`;
+}
+function renderParty(){
+  const { dir, name } = detailParty;
+  const items = openItems(dir).filter(x => (dir === 'in' ? payerKey(x) : payeeKey(x)) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
+  const L0 = items[0] && items[0].L, isCustomer = dir === 'in' && name !== 'Summar' && L0;
+  document.getElementById('orderDetailTitle').textContent = name;
+  document.getElementById('orderDetailBox').innerHTML = `<div class="load-card">
+    ${isCustomer ? `<div class="muted" style="font-size:12.5px;margin-bottom:12px;">Credit limit: <b style="color:var(--ink);">${L0.credit_limit != null ? fmtMoney(L0.credit_limit) : 'No limit'}</b> · Terms: <b style="color:var(--ink);">${L0.client_days != null ? L0.client_days + ' days' : '—'}</b></div>` : ''}
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>What</th><th>Due</th><th>Status</th><th>Amount</th></tr></thead><tbody>
+    ${items.map(x => { const own = owedNow(x), s = status(x);
+      return `<tr style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')"><td class="order-num">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due) || '—'}</td><td><span class="payment-badge ${own ? s.cls : 'active'}">${own ? s.t : 'Coming · at delivery'}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">Nothing open.</td></tr>'}</tbody></table></div>
+    <div style="margin-top:16px;">${items.some(x => x.where === 'here' && owedNow(x) && x.amount) ? `<button class="wa-btn" onclick="payOpen('${dir}','${jsArg(name)}')">${dir === 'in' ? 'Apply Payment' : 'Record Paid'}</button>` : items.some(x => x.where === 'orders') ? '<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>' : ''}</div></div>`;
+}
+
+// ---------- Apply Payment (in) / Record Paid (out) ----------
+// One bank movement spread over that party's open items: an exact match first, otherwise oldest
+// first — same rule shipments-apply-payment always used for customers. The split is shown before
+// saving. Opened from one item (load page) it goes to that item only, and that item is closed with
+// the real amount paid (replaces the estimate).
+let payDir = 'in', payPlan = [], payOnly = null, payKey = null;
+function payItems(dir, name){ return openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here' && (dir === 'in' ? payerKey(x) : payeeKey(x)) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15)); }
+function payOpen(dir, name, onlyId){
+  payDir = dir; payOnly = onlyId || null; payKey = `pr-${dir}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const names = [...new Set(openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here').map(dir === 'in' ? payerKey : payeeKey))];
+  document.getElementById('rpTitle').textContent = dir === 'in' ? 'Apply Payment' : 'Record Payment Sent';
+  document.getElementById('rpHelp').textContent = payOnly ? 'This payment goes to this one item and closes it with the amount you enter.'
+    : dir === 'in' ? 'An exact match first, otherwise the oldest open item first. You see the split before saving.' : 'The amount you paid goes to this party\u2019s oldest open items first. You see the split before saving.';
+  document.getElementById('rpFromLabel').textContent = dir === 'in' ? 'From' : 'To';
+  document.getElementById('rpAmtLabel').textContent = dir === 'in' ? 'Amount received (USD)' : 'Amount paid (USD)';
+  const sel = document.getElementById('rpFrom');
+  sel.innerHTML = names.map(k => `<option value="${escapeHtml(k)}"${k === name ? ' selected' : ''}>${escapeHtml(k)}</option>`).join('');
+  sel.disabled = !!payOnly;
+  const only = payOnly && allSteps().find(x => x.id === payOnly);
+  document.getElementById('rpAmt').value = only ? only.amount : '';
+  document.getElementById('rpDate').value = prData.today;
+  document.getElementById('rpAccount').value = dir === 'out' ? 'Buentrade' : '';
+  document.getElementById('rpMethod').value = ''; document.getElementById('rpRef').value = ''; document.getElementById('rpMsg').textContent = '';
+  document.getElementById('rpSaveBtn').textContent = dir === 'in' ? 'Apply Payment' : 'Record Paid';
+  document.getElementById('rpSaveBtn').disabled = false;
+  rpRender(); document.getElementById('rpOverlay').style.display = 'flex';
+}
+function rpClose(){ document.getElementById('rpOverlay').style.display = 'none'; }
+function rpRender(){
+  const who = document.getElementById('rpFrom').value, amt = parseFloat(document.getElementById('rpAmt').value) || 0;
+  const open = payOnly ? allSteps().filter(x => x.id === payOnly) : payItems(payDir, who), ex = open.find(x => Math.abs(x.amount - amt) < 0.01);
+  let left = amt;
+  payPlan = payOnly ? open.map(x => { const a = amt; left = 0; return { x, a, settles: true }; })
+    : (ex ? [ex, ...open.filter(x => x !== ex)] : open).map(x => { const a = Math.min(left, x.amount); left -= a; return { x, a, settles: a >= x.amount - 0.005 }; });
+  document.getElementById('rpAlloc').innerHTML = `<table><thead><tr><th>Order</th><th>What</th><th>Due</th><th>Owed</th><th>Applying</th></tr></thead><tbody>${payPlan.map(p => `<tr><td class="order-num">${escapeHtml(p.x.L.order_number)}</td><td class="muted">${escapeHtml(p.x.label)}</td><td class="mono">${fmtDateStr(p.x.due) || '—'}</td><td class="num">${fmtMoney(p.x.amount)}</td><td class="num" style="color:${p.a ? '#6FD3A8' : 'var(--ink-soft)'};">${fmtMoney(p.a)}${p.a && !p.settles ? ' <span class="muted" style="font-size:11px;">partial</span>' : ''}</td></tr>`).join('')}</tbody></table>${payOnly ? '' : `<div class="muted" style="font-size:12px;margin-top:8px;">Unapplied: ${fmtMoney(Math.max(0, left))}</div>`}`;
+}
+async function rpSave(){
+  const msg = document.getElementById('rpMsg'), who = document.getElementById('rpFrom').value, amount = parseFloat(document.getElementById('rpAmt').value);
+  const bankDate = document.getElementById('rpDate').value, account = document.getElementById('rpAccount').value;
+  const method = document.getElementById('rpMethod').value.trim() || null, reference = document.getElementById('rpRef').value.trim() || null;
+  const err = t => { msg.textContent = t; msg.style.color = '#FF9C8A'; };
+  if (!(amount > 0)) return err('Enter a valid amount.');
+  if (!bankDate) return err('Enter the bank date.');
+  if (!account) return err('Select the account.');
+  const plan = payPlan.filter(p => p.a > 0);
+  if (!plan.length) return err('Nothing to apply.');
+  msg.textContent = 'Saving…'; msg.style.color = 'var(--ink-soft)'; document.getElementById('rpSaveBtn').disabled = true;
+  const before = { owed: sum(payItems(payDir, who)) };
+  try {
+    const customerPlan = plan.filter(p => p.x.key === 'client');
+    if (customerPlan.length){
+      const L = customerPlan[0].x.L;
+      const res = await callApi('shipments-apply-payment', { idempotency_key: payKey + '-customer', actor: currentActor(), customer_id: L.customer_id, amount: customerPlan.reduce((n, p) => n + p.a, 0),
+        bank_entry_date: bankDate, collection_account: account, payment_method: method, payment_reference: reference,
+        allocations: customerPlan.map(p => ({ shipment_id: p.x.L.id, amount: Math.round(p.a * 100) / 100 })) });
+      confirmAfter = { L, amount: customerPlan.reduce((n, p) => n + p.a, 0), applied: res.applications.map(a => ({ order_number: a.order_number, amount_applied: Number(a.amount_applied) })) };
+    }
+    const byKind = groupBy(plan.filter(p => p.x.key !== 'client'), p => ({ freight: 'freight', customs: 'customs', rem: 'summar_remanente' })[p.x.key]);
+    for (const [kind, ps] of byKind){
+      await callApi('shipments-apply-payment', { kind, idempotency_key: payKey + '-' + kind, actor: currentActor(), party_name: who,
+        bank_entry_date: bankDate, collection_account: account, payment_method: method, payment_reference: reference,
+        allocations: ps.map(p => ({ shipment_id: p.x.L.id, amount: Math.round(p.a * 100) / 100, settles: p.settles })) });
+    }
+    rpClose();
+    const touched = [...new Set(plan.map(p => p.x.L.order_number))];
+    await loadCollections();
+    const left = sum(payItems(payDir, who));
+    const closedNow = touched.map(n => LOADS.find(L => L.order_number === n)).filter(L => L && isClosed(L));
+    showToast(payDir === 'in' ? 'Payment applied' : 'Payment recorded',
+      (payDir === 'in' ? `${who} still owes us ${fmtMoney(left)} (was ${fmtMoney(before.owed)})` : `We still owe ${who} ${fmtMoney(left)} (was ${fmtMoney(before.owed)})`)
+      + (closedNow.length ? ' · ' + closedNow.map(L => `${L.order_number} closed, profit ${fmtMoney(profitOf(L).profit)}`).join(' · ') : ''));
+    if (confirmAfter) openConfirm();
+  } catch (e) {
+    err('Error: ' + e.message); document.getElementById('rpSaveBtn').disabled = false;
+  }
+}
+
+// ---------- customer confirmation (approved copy 2026-09-13, same text payments.html sent) ----------
+let confirmAfter = null, confirmState = null;
+function gmailComposeUrl(emails, subject, body){ return `https://mail.google.com/mail/?${new URLSearchParams({ view: 'cm', to: emails.join(','), su: subject, body }).toString()}`; }
+function buildPaymentConfirmationCopy(contact, amount, appliedList, remainingOpen){
+  const name = contact.customer_contact_name || contact.client || '';
+  const appliedStr = appliedList.map(a => `${a.order_number} (${fmtMoney(a.amount_applied)})`).join(', ');
+  const balanceTotal = remainingOpen.reduce((s, x) => s + x.amount, 0);
+  let emailBalanceBlock, waBalanceBlock;
+  if (remainingOpen.length){
+    const lines = remainingOpen.map(x => `- ${x.L.order_number} — vence ${fmtDateStr(x.due)} — ${fmtMoney(x.amount)}`).join('\n');
+    emailBalanceBlock = `Tu saldo pendiente actual es ${fmtMoney(balanceTotal)}, correspondiente a:\n${lines}`;
+    const waLines = remainingOpen.map(x => `${x.L.order_number}: ${fmtMoney(x.amount)}, vence ${fmtDateStr(x.due)}`).join('; ');
+    waBalanceBlock = `Saldo pendiente: ${fmtMoney(balanceTotal)} — ${waLines}.`;
+  } else {
+    emailBalanceBlock = 'No tienes facturas pendientes en este momento.';
+    waBalanceBlock = 'No tienes saldo pendiente.';
+  }
+  const subject = 'Confirmación de pago recibido — BuenTrade';
+  const emailBody = `Hola ${name},\n\nConfirmamos la recepción de tu pago por ${fmtMoney(amount)}.\n\nAplicado a: ${appliedStr}\n\n${emailBalanceBlock}\n\nGracias por tu pago.\n\nSaludos,\nBuentrade Team`;
+  const waMessage = `Hola ${name}! Confirmamos tu pago de ${fmtMoney(amount)}, aplicado a: ${appliedStr}. ${waBalanceBlock} ¡Gracias!`;
+  return { subject, emailBody, waMessage };
+}
+function openConfirm(){
+  const { L, amount, applied } = confirmAfter; confirmAfter = null;
+  const contact = LOADS.find(x => x.customer_id === L.customer_id) || L;
+  const remainingOpen = openItems('in').filter(x => x.key === 'client' && x.L.customer_id === L.customer_id && owedNow(x) && x.amount);
+  const copy = buildPaymentConfirmationCopy(contact, amount, applied, remainingOpen);
+  confirmState = { contact, copy };
+  document.getElementById('confirmCustomer').textContent = contact.client || '—';
+  document.getElementById('confirmPreview').textContent = copy.emailBody;
+  document.getElementById('confirmEmailBtn').disabled = !contact.customer_email;
+  document.getElementById('confirmWaBtn').disabled = !contact.customer_whatsapp;
+  document.getElementById('confirmOverlay').style.display = 'flex';
+}
+function sendConfirmEmail(){ const { contact, copy } = confirmState; window.open(gmailComposeUrl([contact.customer_email], copy.subject, copy.emailBody), '_blank'); }
+function sendConfirmWhatsapp(){ const { contact, copy } = confirmState; window.open('https://wa.me/' + contact.customer_whatsapp.replace(/\D/g, '') + '?text=' + encodeURIComponent(copy.waMessage), '_blank'); }
+function closeConfirm(){ document.getElementById('confirmOverlay').style.display = 'none'; confirmState = null; }
+
+function draw(){
+  document.getElementById('prView').innerHTML = cards() + ({ collect: tabCollect, pay: tabPay, overdue: tabOverdue, loads: tabLoads, ledger: tabLedger }[tab])();
+}
+
+// Links from other pages (payments.html redirect, Collections links): ?customer=<id> opens Apply Payment for them.
+function applyQueryAfterLoad(){
+  const id = new URLSearchParams(location.search).get('customer');
+  if (!id) return;
+  const L = LOADS.find(x => x.customer_id === id);
+  if (L && payItems('in', L.client).length) payOpen('in', L.client);
+  else if (L) openParty('in', L.client);
+}
+const _loadOnce = loadCollections;
+loadCollections = async function(){ await _loadOnce(); if (!window._prQueryDone){ window._prQueryDone = true; applyQueryAfterLoad(); } };
 </script>
 
 </body>
