@@ -683,7 +683,7 @@ auth.onAuthStateChanged(user => {
 //   Direct: plant payment (Orders) → customs at delivery, freight 30 days after delivery (here) → customer pays us (here)
 //   Summar: wire = cost − 80% of sale (Orders) → Summar pays the plant (info) → customs at delivery,
 //           freight 30 days after delivery (here) → Summar remanente at delivery (here) → customer
-//           pays Summar, collected from day 30 (tracked here until it is recorded)
+//           pays Summar, collected from day 29 (tracked here until it is recorded)
 const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
 const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
 const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
@@ -704,8 +704,10 @@ const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 // Summar Financial LLC factoring terms — same three numbers as trading-tool.html's SUMMAR_RATES
 // (signed 2026-09-19). Used only to estimate the fee Summar keeps from the remanente.
 // Terms confirmed by the user 2026-09-28: the customer's term is 30 days (we plan 40 in the QT/PO),
-// collecting starts on day 30; carriers are paid 30 days after delivery; customs at delivery.
-const COLLECT_FROM_DAY = 30, FREIGHT_DAYS = 30;
+// we collect from the customer on day 29 ("vamos a cobrar el dia 29" — never mentioning Summar to
+// the customer); Summar's per-day fee still starts after day 30; carriers are paid 30 days after
+// delivery; customs at delivery.
+const COLLECT_FROM_DAY = 29, FREIGHT_DAYS = 30;
 const SUMMAR_RATES = { transitFeePct: 0.234, factoringBaseFeePct: 1.20, extraDayFeePct: 0.0417 };
 
 let prData = null, LOADS = [], TODAY = null, INTEREST_ANNUAL = 0.15;
@@ -942,7 +944,7 @@ function tabSummar(){
     ${rows.map(({ L, x, sd }) => { const deliv = day(L.delivered_at), freeUntil = deliv ? addDays(deliv, COLLECT_FROM_DAY) : null, planned = deliv ? addDays(deliv, L.payment_days || L.client_days || 30) : null, days = sd.real ? sd.days : sd.soFar;
       const fee = deliv ? summarFeeFor(L, sd.real ? sd.days : sd.soFar) : summarFeeFor(L, sd.planned);
       const st = x.done ? `<span class="payment-badge ok">Paid ${fmtDateStr(sd.paidOn)}</span>` : !deliv ? `<span class="payment-badge active">${L.delivery_date ? 'Delivery ' + fmtDateStr(L.delivery_date).slice(0, 5) : 'Not delivered'}</span>`
-        : days > 30 ? `<span class="payment-badge overdue">+${fmtMoney(summarPerDay(L))}/day</span>` : `<span class="payment-badge ${30 - days <= 7 ? 'due-soon' : 'active'}">Collect in ${30 - days}d</span>`;
+        : days > 30 ? `<span class="payment-badge overdue">+${fmtMoney(summarPerDay(L))}/day</span>` : (days >= COLLECT_FROM_DAY ? `<span class="payment-badge due-soon">Collect now</span>` : `<span class="payment-badge ${COLLECT_FROM_DAY - days <= 7 ? 'due-soon' : 'active'}">Collect in ${COLLECT_FROM_DAY - days}d</span>`);
       return `<tr${!x.done && days > 30 ? ' class="ct-row-overdue30"' : ''} style="cursor:pointer;" onclick="openDetail('${L.order_number}')">
         <td class="order-num">${escapeHtml(L.order_number)}</td><td>${escapeHtml(L.client)}</td><td class="num">${L.sale ? fmtMoney(L.sale) : '<span class="payment-badge overdue">Missing data</span>'}</td>
         <td class="mono">${deliv ? fmtDateStr(deliv) : '—'}</td><td class="mono">${freeUntil ? fmtDateStr(freeUntil) : '—'}</td><td class="mono">${planned ? fmtDateStr(planned) : `<span class="muted">${L.payment_days || L.client_days || 30} days</span>`}</td>
@@ -1023,7 +1025,7 @@ function summarBox(L){
   if (!L.sale) return '';
   const line = !deliv ? `Not delivered yet — planned ${sd.planned} days → Summar fee ${fmtMoney(summarFeeFor(L, sd.planned))}.`
     : x.done ? `Customer paid Summar ${fmtDateStr(sd.paidOn)} — ${sd.days} days from delivery → real Summar fee <b>${fmtMoney(summarFee(L))}</b>.`
-    : `Day <b>${sd.soFar}</b> since delivery · fee so far <b style="color:${sd.soFar > 30 ? '#FF9C8A' : 'var(--ink)'};">${fmtMoney(summarFeeFor(L, sd.soFar))}</b> · ${sd.soFar > 30 ? `<b style="color:#FF9C8A;">costing ${fmtMoney(summarPerDay(L))} more every day</b>` : `start collecting ${fmtDateStr(addDays(deliv, COLLECT_FROM_DAY))} (day 30) — after that +${fmtMoney(summarPerDay(L))}/day`}.`;
+    : `Day <b>${sd.soFar}</b> since delivery · fee so far <b style="color:${sd.soFar > 30 ? '#FF9C8A' : 'var(--ink)'};">${fmtMoney(summarFeeFor(L, sd.soFar))}</b> · ${sd.soFar > 30 ? `<b style="color:#FF9C8A;">costing ${fmtMoney(summarPerDay(L))} more every day</b>` : `collect from the customer ${fmtDateStr(addDays(deliv, COLLECT_FROM_DAY))} (day ${COLLECT_FROM_DAY}) — after day 30 +${fmtMoney(summarPerDay(L))}/day`}.`;
   return `<div class="load-next-action" style="${deliv && !x.done && sd.soFar > 30 ? 'border-color:rgba(196,67,46,.6);background:rgba(196,67,46,.08);' : ''}"><div class="load-next-action-text"><div class="load-next-action-eyebrow">Customer → Summar</div><div style="font-size:13.5px;margin-top:2px;">${line}</div></div>${!x.done && deliv ? actBtn(x) : ''}</div>`;
 }
 function renderParty(){
