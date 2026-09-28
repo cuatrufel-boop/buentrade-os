@@ -688,6 +688,7 @@ auth.onAuthStateChanged(user => {
 
 <div class="toast-stack" id="toastStack"></div>
 
+<script src="js/email-modal.js"></script>
 <script>
 // ============ PAY & RECEIVE — Collections + Payments in one screen (approved 2026-09-28) ============
 // Every load's money comes from Orders (collections-search view:'pay_receive'); nothing is re-asked.
@@ -732,7 +733,13 @@ function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>"']
 function jsArg(s){ return escapeHtml(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
 // local calendar date (never toISOString — that shifts the day outside the US time zones)
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const day = d => d ? new Date(String(d).slice(0, 10) + 'T00:00:00') : null;
+// BuenTrade runs on Miami time (America/New_York) — the trader may be anywhere (e.g. Madrid). A
+// timestamp (delivered_at, paid_at…) becomes its Miami calendar day; a plain date stays as is.
+const BIZ_TZ = 'America/New_York';
+// date columns (payment_due_date, bank_entry_date…) arrive as midnight-UTC timestamps: keep their own day
+const dateOnly = v => v ? String(v).slice(0, 10) : null;
+const bizYmd = ts => new Date(ts).toLocaleDateString('en-CA', { timeZone: BIZ_TZ });
+const day = d => d ? new Date((String(d).length > 10 ? bizYmd(d) : String(d).slice(0, 10)) + 'T00:00:00') : null;
 const addDays = (d, n) => d ? new Date(d.getTime() + n * 86400000) : null;
 function showToast(title, detail, isError){
   const el = document.createElement('div'); el.className = 'toast' + (isError ? ' error' : '');
@@ -748,6 +755,8 @@ async function loadCollections(){
     document.getElementById('prView').innerHTML = `<div class="card"><div class="empty">Could not load: ${escapeHtml(e.message)}</div></div>`;
     return;
   }
+  prData.records.forEach(r => { r.bank_entry_date = dateOnly(r.bank_entry_date); });
+  prData.customer_payments.forEach(r => { r.bank_entry_date = dateOnly(r.bank_entry_date); });
   TODAY = day(prData.today); INTEREST_ANNUAL = Number(prData.interest_rate_annual || 0.15);
   LOADS = prData.loads.map(r => ({
     id: r.id, order_number: r.order_number, status: r.status,
@@ -760,11 +769,13 @@ async function loadCollections(){
     us_freight_amount: r.us_freight_amount, extra_costs_total: Number(r.extra_costs_total || 0),
     freight: r.freight_rate != null ? { carrier: r.carrier_name, rate: Number(r.freight_rate) } : null,
     customs: Number(r.tramite_aduanal_amount || 0), inspection: Number(r.inspection_amount || 0),
-    delivery_date: r.delivery_date ? String(r.delivery_date).slice(0, 10) : null, pickup_date: r.pickup_date,
+    delivery_date: dateOnly(r.delivery_date), pickup_date: dateOnly(r.pickup_date),
     plant_paid_at: r.plant_paid_at, summar_payment_sent_at: r.summar_payment_sent_at, picked_up_at: r.picked_up_at, delivered_at: r.delivered_at,
     offer_sent_at: r.offer_sent_at, po_sent_at: r.po_sent_at, so_sent_at: r.so_sent_at, order_created_at: r.order_created_at,
-    invoice_sent_at: r.invoice_sent_at, payment_due_date: r.payment_due_date, paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
+    invoice_sent_at: r.invoice_sent_at, payment_due_date: dateOnly(r.payment_due_date), paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
     interest_amount: r.interest_amount, won_by: r.won_by, customs_agency: r.customs_agency_name,
+    customer_phone: r.customer_phone, payments_contact_name: r.payments_contact_name, payments_contact_email: r.payments_contact_email,
+    payments_contact_whatsapp: r.payments_contact_whatsapp, payments_contact_phone: r.payments_contact_phone,
   }));
   // "viene de orders, queda en pay and receive cuando se paga a summar" — a load enters here once its
   // Orders advance is paid: the Summar wire for a Summar load (or Summar already paid the plant, when
@@ -983,7 +994,7 @@ function tabSummar(){
         <td class="order-num">${escapeHtml(L.order_number)}</td><td>${escapeHtml(L.client)}</td><td class="num">${L.sale ? fmtMoney(L.sale) : '<span class="payment-badge overdue">Missing data</span>'}</td>
         <td class="mono">${deliv ? fmtDateStr(deliv) : '—'}</td><td class="mono">${freeUntil ? fmtDateStr(freeUntil) : '—'}</td><td class="mono">${planned ? fmtDateStr(planned) : `<span class="muted">${L.payment_days || L.client_days || 30} days</span>`}</td>
         <td class="num">${deliv ? days : '—'}</td><td class="num" style="color:${deliv && days > 30 ? '#FF9C8A' : 'var(--ink)'};">${fee != null ? fmtMoney(fee) : '—'}${!deliv && fee != null ? ' <span class="muted" style="font-size:11px;">planned</span>' : ''}</td>
-        <td>${st}</td><td>${!x.done && deliv && L.sale ? actBtn(x) : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No Summar loads.</td></tr>'}</tbody></table></div></div>`;
+        <td>${st}</td><td style="white-space:nowrap;">${!x.done && deliv && L.sale ? reminderBtn(L) + ' ' + actBtn(x) : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No Summar loads.</td></tr>'}</tbody></table></div></div>`;
 }
 let loadFilter = 'open';
 function tabLoads(){
@@ -1040,7 +1051,7 @@ function renderDetail(){
   const nextIdx = track.findIndex(t => !t.done);
   const nodes = track.map((t, i) => (i ? `<div class="u-line${t.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${t.done ? 'done' : i === nextIdx ? 'now blink-now' : 'wait'}" style="width:74px;"><div class="u-mini-btn">${t.icon}</div><div class="u-mini-label">${escapeHtml(t.label)}</div><div class="u-mini-date">${t.date ? fmtDateStr(t.date) : ''}</div></div>`).join('');
   const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
-  const act = x => ((x.key === 'freight' || x.key === 'customs') && !x.done ? `<button class="btn small" onclick="surOpen('${L.order_number}','${x.key}')">+ Surcharge</button>` : '') + (x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true));
+  const act = x => (x.key === 'client' ? reminderBtn(L) : '') + ((x.key === 'freight' || x.key === 'customs') && !x.done ? `<button class="btn small" onclick="surOpen('${L.order_number}','${x.key}')">+ Surcharge</button>` : '') + (x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true));
   document.getElementById('orderDetailBox').innerHTML = `
     <div class="load-card">
       <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}${L.won_by ? ` · Trader: <b style="color:var(--ink);">${escapeHtml(L.won_by)}</b>` : ''}</div></div></div>
@@ -1103,9 +1114,9 @@ function renderParty(){
   document.getElementById('orderDetailTitle').textContent = name;
   document.getElementById('orderDetailBox').innerHTML = `<div class="load-card">
     ${isCustomer ? `<div class="muted" style="font-size:12.5px;margin-bottom:12px;">Credit limit: <b style="color:var(--ink);">${L0.credit_limit != null ? fmtMoney(L0.credit_limit) : 'No limit'}</b> · Terms: <b style="color:var(--ink);">${L0.client_days != null ? L0.client_days + ' days' : '—'}</b></div>` : ''}
-    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>What</th><th>Due</th><th>Status</th><th>Amount</th></tr></thead><tbody>
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>What</th><th>Due</th><th>Status</th><th>Amount</th><th></th></tr></thead><tbody>
     ${items.map(x => { const own = owedNow(x), s = status(x);
-      return `<tr style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')"><td class="order-num">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due) || '—'}</td><td><span class="payment-badge ${own ? s.cls : 'active'}">${own ? s.t : 'Coming · at delivery'}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">Nothing open.</td></tr>'}</tbody></table></div>
+      return `<tr style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')"><td class="order-num">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due) || '—'}</td><td><span class="payment-badge ${own ? s.cls : 'active'}">${own ? s.t : 'Coming · at delivery'}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td><td>${x.key === 'client' ? reminderBtn(x.L) : ''}</td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">Nothing open.</td></tr>'}</tbody></table></div>
     <div style="margin-top:16px;">${items.some(x => x.where === 'here' && owedNow(x) && x.amount) ? `<button class="wa-btn" onclick="payOpen('${dir}','${jsArg(name)}')">${dir === 'in' ? 'Apply Payment' : 'Record Paid'}</button>` : items.some(x => x.where === 'orders') ? '<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>' : ''}</div></div>`;
 }
 
@@ -1185,6 +1196,45 @@ async function rpSave(){
     if (confirmAfter) openConfirm();
   } catch (e) {
     err('Error: ' + e.message); document.getElementById('rpSaveBtn').disabled = false;
+  }
+}
+
+// ---------- Customer payment reminder (copy approved by the user 2026-09-28) ----------
+// Collect from day 29, never mentioning Summar — the customer already has the account on the
+// invoice. Same recipients as the Invoice: the customer's payments contact, CC the general contact;
+// WhatsApp to the payments contact. Never sent automatically: the shared review modal first.
+function reminderInfo(L){
+  const x = steps(L).find(s => s.key === 'client');
+  if (!x || x.done || !delivered(L) || !L.sale) return null;
+  const deliv = day(L.delivered_at);
+  const due = L.fin === 'summar' ? addDays(deliv, 30) : (day(L.payment_due_date) || addDays(deliv, L.client_days || 0));
+  const amount = L.fin === 'summar' ? L.sale : L.sale - L.amount_paid;
+  return { x, due, amount };
+}
+const reminderBtn = L => reminderInfo(L) ? `<button class="btn small" onclick="event.stopPropagation();sendReminder('${L.order_number}')">Send Reminder</button>` : '';
+async function sendReminder(orderNumber){
+  const L = LOADS.find(x => x.order_number === orderNumber), r = L && reminderInfo(L);
+  if (!r) return;
+  const contact = L.payments_contact_name || L.customer_contact_name || L.client;
+  const to = L.payments_contact_email || L.customer_email, cc = L.payments_contact_email && L.customer_email && L.customer_email !== L.payments_contact_email ? [L.customer_email] : [];
+  const phone = L.payments_contact_whatsapp || L.payments_contact_phone || L.customer_whatsapp || L.customer_phone;
+  const fecha = fmtDateStr(r.due), monto = fmtMoney(r.amount);
+  const subject = `${L.order_number} — Recordatorio de pago`;
+  const text = `Hola ${contact},
+
+Te recordamos que el pago de tu carga ${L.order_number} (${L.product}) por ${monto} vence el ${fecha}.
+
+Si ya lo realizaste, por favor compártenos el comprobante.
+
+Gracias,
+BuenTrade Team`;
+  const wa = `Hola ${contact}! Te recordamos que el pago de tu carga ${L.order_number} por ${monto} vence el ${fecha}. Si ya lo hiciste, compártenos el comprobante por favor. ¡Gracias!`;
+  try {
+    if (to) await bcSendEmailApi({ fromAlias: 'offers', to: [to], cc, subject, text, attachments: [], waInfo: phone ? { phone, message: wa } : null, fromDisplay: 'Offers BuenTrade <offers@buentradegroup.com>', title: 'Payment reminder' });
+    else if (phone) await bcOpenWaOnlyModal({ phone, message: wa, title: 'Payment reminder' });
+    else return showToast('No contact on file', `${L.client} has no email or WhatsApp in Clients.`, true);
+  } catch (e) {
+    if (!e.cancelled) showToast('Reminder not sent', e.message, true);
   }
 }
 

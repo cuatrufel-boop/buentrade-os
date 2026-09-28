@@ -154,6 +154,7 @@ async function payReceive(annualRate: number) {
   const loads = await sql`
     select sh.id, sh.order_number, sh.status, sh.customer_id, c.trade_name as customer_name, c.credit_limit, c.payment_days as customer_payment_days,
       c.email as customer_email, c.whatsapp as customer_whatsapp, c.contact_name as customer_contact_name,
+      c.phone as customer_phone, c.payments_contact_name, c.payments_contact_email, c.payments_contact_whatsapp, c.payments_contact_phone,
       po.plant_name, coalesce(so_.product_spec, so_.product_name) as product, po.financing_method, po.payment_days as summar_payment_days,
       sh.sale_amount, po.total_cost as plant_cost, so_.total_cost as offer_cost, so_.cost_per_lb, sales.real_weight,
       so_.us_freight_amount, coalesce(so_.tramite_aduanal_amount, 0) as tramite_aduanal_amount, coalesce(so_.inspection_amount, 0) as inspection_amount,
@@ -182,6 +183,6 @@ async function payReceive(annualRate: number) {
     select pa.*, c.trade_name as customer_name from payment_applications pa
     left join customers c on c.id = pa.customer_id order by pa.applied_at
   `;
-  return { loads, records, surcharges, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toISOString().slice(0, 10) };
+  return { loads, records, surcharges, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }) }; // Miami business day
 }
 
