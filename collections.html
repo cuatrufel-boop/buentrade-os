@@ -1136,7 +1136,7 @@ function exportAgingCsv(){
   a.download = `${lastAging.dir === 'in' ? 'to-collect' : 'to-pay'}-aging-${prData.today}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function tabCollect(){
-  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">Customers — who owes us <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">Customers Collect <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
     ${agingTable(groupBy(openItems('in'), payerKey), 'in')}
     <div style="margin-top:14px;font-size:12.5px;" class="muted">Summar loads: the customer pays Summar, not us — follow them in <a href="#" onclick="tab='summar';draw();return false;" style="color:var(--blue-bright);">Client → Summar</a>.</div></div>`;
 }
@@ -1145,7 +1145,7 @@ let cutoff = null, payFilter = '';
 function cutoffDate(){ if (!cutoff){ const t = TODAY; cutoff = ymd(new Date(t.getFullYear(), t.getMonth() + 1, 0)); } return day(cutoff); }
 function tabPay(){
   const groups = groupBy(openItems('out').filter(x => !payFilter || payeeKey(x).toLowerCase().includes(payFilter.toLowerCase())), payeeKey);
-  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">Statements — carriers & customs
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">Flete & Border Bills
       <span style="display:flex;gap:10px;align-items:center;">
         <span class="st-search-wrap" style="width:180px;"><svg class="st-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="payFilterInput" class="st-search-input" placeholder="Carrier / customs" value="${escapeHtml(payFilter)}" oninput="payFilter=this.value;draw();const i=document.getElementById('payFilterInput');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></span>
         <label class="muted" style="font-size:12px;font-weight:600;">Cutoff <input type="date" value="${ymd(cutoffDate())}" onchange="cutoff=this.value;draw()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label>
@@ -1173,7 +1173,7 @@ function tabSummar(){
   const rows = summarRows().sort((a, b) => (a.x.done - b.x.done) || ((b.sd.soFar ?? -1) - (a.sd.soFar ?? -1)));
   const open = rows.filter(r => !r.x.done);
   const perDay = summarAtRiskPerDay(), feeSoFar = open.filter(r => delivered(r.L)).reduce((n, r) => n + (summarFeeFor(r.L, r.sd.soFar) || 0), 0);
-  return `<div class="card"><h2>Client → Summar — every Summar load until the customer pays</h2>
+  return `<div class="card"><h2>Factoring Collect</h2>
     <div style="display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;margin:0 0 12px;"><span class="muted">Open Summar loads: <b style="color:var(--ink);">${open.length}</b></span><span class="muted">Summar fee so far on delivered loads: <b style="color:#FF9C8A;">${fmtMoney(feeSoFar)}</b></span><span class="muted">Costing us now, every day: <b style="color:#FF9C8A;">${fmtMoney(perDay)}</b></span></div>
     <div class="table-scroll"><table class="pr-table pr-aging"><thead><tr><th>Order</th><th>Customer</th><th>Sale</th><th>Delivered</th><th>Collect From</th><th>Planned</th><th>Days</th><th>Summar fee</th><th>Status</th><th></th></tr></thead><tbody>
     ${rows.map(({ L, x, sd }) => { const deliv = day(L.delivered_at), freeUntil = deliv ? addDays(deliv, COLLECT_FROM_DAY) : null, planned = deliv ? addDays(deliv, L.payment_days || L.client_days || 30) : null, days = sd.real ? sd.days : sd.soFar;
@@ -1187,14 +1187,15 @@ function tabSummar(){
         <td>${st}</td><td style="white-space:nowrap;">${!x.done && deliv && L.sale ? reminderBtn(L) + ' ' + actBtn(x) : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No Summar loads.</td></tr>'}</tbody></table></div></div>`;
 }
 let loadFilter = 'open';
-const PAGE_TABS = [['loads', 'Active Loads'], ['pay', 'Statements'], ['collect', 'Customers'], ['summar', 'Summar'], ['closed', 'Closed Loads'], ['ledger', 'Payments History']];
+// tab names chosen by the user 2026-09-28
+const PAGE_TABS = [['loads', 'Loads in Progress'], ['pay', 'Flete & Border Bills'], ['collect', 'Customers Collect'], ['summar', 'Factoring Collect'], ['closed', 'Finished Loads & Profit'], ['ledger', 'In & Out History']];
 // page views as the segmented selector Orders uses for its phases (user picked option C, 2026-09-28)
 function tabRow(){ const cur = tab === 'loads' && loadFilter === 'closed' ? 'closed' : tab; return `<div class="phase-tabs" style="margin:0 0 20px;">${PAGE_TABS.map(([k, l]) => `<div class="phase-tab${cur === k ? ' active' : ''}" onclick="${k === 'closed' ? "tab='loads';loadFilter='closed'" : `tab='${k}';loadFilter='open'`};draw()">${l}</div>`).join('')}</div>`; }
 function tabLoads(){
   const closedView = loadFilter === 'closed', rows = (closedView ? LOADS.filter(isClosed) : LOADS.filter(L => !isClosed(L)))
     .sort((a, b) => { const fa = flow(a), fb = flow(b); return (!!fb.current - !!fa.current) || String(a.order_number).localeCompare(String(b.order_number)); });
   const money = (paid, pend, paidWord, color) => `<div class="num" style="font-size:12.5px;">${fmtMoney(paid)} <span class="muted" style="font-size:11px;">${paidWord}</span></div><div class="num" style="font-size:12.5px;color:${pend ? color : 'var(--ink-soft)'};">${fmtMoney(pend)} <span class="muted" style="font-size:11px;">pending</span></div>`;
-  return `<div class="card"><h2 style="margin:0 0 10px;">${closedView ? 'Closed Loads' : 'Active Loads'}</h2>
+  return `<div class="card"><h2 style="margin:0 0 10px;">${closedView ? 'Finished Loads & Profit' : 'Loads in Progress'}</h2>
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Next Action</th><th>OUT</th><th>IN</th><th>Profit</th><th>${closedView ? 'Closed' : 'Stage'}</th></tr></thead>
     <tbody>${rows.map(L => { const p = profitOf(L), m = loadMoney(L);
       return `<tr style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}<div class="muted pr-product" style="font-family:Inter,sans-serif;font-weight:400;font-size:11.5px;margin-top:3px;" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</div></td><td style="white-space:nowrap;">${escapeHtml(L.client)}</td>
@@ -1219,7 +1220,7 @@ function ledgerRows(){
 }
 function tabLedger(){
   const rows = ledgerRows();
-  return `<div class="card"><h2>Payments Recorded — in & out</h2>
+  return `<div class="card"><h2>In & Out History</h2>
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Bank Date</th><th>In / Out</th><th>Who</th><th>Amount</th><th>Applied to</th><th>Account</th><th>Method / Ref</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td class="mono">${fmtDateStr(r.date)}</td><td>${r.dir === 'watch' ? '<span class="payment-badge due-soon">SUMMAR</span>' : `<span class="payment-badge ${r.dir === 'in' ? 'ok' : 'due-soon'}">${r.dir === 'in' ? 'IN' : 'OUT'}</span>`}</td><td>${escapeHtml(r.who)}${r.what ? `<div class="muted" style="font-size:11.5px;">${r.what}</div>` : ''}</td><td class="num">${fmtMoney(r.amount)}</td><td class="mono">${escapeHtml(r.applied.join(', '))}</td><td>${escapeHtml(r.account || '—')}</td><td class="muted">${escapeHtml([r.method, r.ref].filter(Boolean).join(' · ') || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No payments recorded yet.</td></tr>'}</tbody></table></div></div>`;
 }
