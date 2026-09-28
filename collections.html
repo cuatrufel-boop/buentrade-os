@@ -462,6 +462,9 @@
   .bt-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;height:38px;padding:0 12px;border-radius:7px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-weight:700;font-size:13.5px;font-family:'Inter',sans-serif;cursor:pointer;text-align:left;transition:background .18s,border-color .18s;}
   .bt-select-trigger:hover{background:rgba(90,170,255,.12);border-color:var(--blue-bright);}
   .bt-select-wrap.open .bt-select-trigger{border-color:var(--blue);}
+  /* the list's date filters look like the BuenTrade dropdowns next to them (white calendar icon) */
+  .pr-date{height:38px;width:118px;box-sizing:border-box;padding:0 6px;border-radius:7px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-weight:700;font-size:12px;font-family:'Inter',sans-serif;color-scheme:dark;}
+  .pr-date:focus{outline:none;border-color:var(--blue);}
   .bt-select-trigger:disabled{opacity:.5;cursor:default;}
   .bt-select-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
   .bt-select-chevron{width:14px;height:14px;flex-shrink:0;color:var(--ink-soft);transition:transform .15s ease;}
@@ -1161,20 +1164,52 @@ function routeHtml(L){
   const n = (ic, t) => `<div class="load-route-node">${ic}<span class="rname">${escapeHtml(t)}</span></div>`, ar = `<div class="load-route-arrow">${ARROW_ICON}</div>`;
   return `<div class="load-route">${[L.customs_agency && n(CUSTOMS_ICON, L.customs_agency), L.freight && L.freight.carrier && n(TRUCK_ICON, L.freight.carrier), n(CUSTOMER_ICON, L.client)].filter(Boolean).join(ar)}</div>`;
 }
-// every money movement of the load, as Orders' document tiles: paid with its date, or due
-function moneyTiles(L){
-  const st = steps(L).filter(x => x.dir !== 'info');
+// Money + Profit of the load (user 2026-09-29: option 2's movements table + option 3's profit bar,
+// then the itemized profit statement): every movement in flow order with its date, OUT / IN and
+// status; the profit so far with where the sale goes; each cost with its surcharges under it.
+const MONO = "font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;";
+function moneyItems(L){
+  const order = ['plant', 'gap', 'customs', 'freight', 'rem', 'client'];
   const lab = x => ({ plant: 'Plant', gap: 'Wire to Summar', customs: 'Customs', freight: 'Carrier', rem: 'Summar remanente', client: L.fin === 'summar' ? 'Customer → Summar' : 'Customer' })[x.key] || x.label;
-  const tile = x => { const paid = x.done, amt = paid && x.recs.length ? x.recorded : x.amount, d = paid ? paidOn(x) : x.due, late = !paid && x.due && x.due < TODAY, inv = (x.key === 'customs' || x.key === 'freight') ? invoiceFor(L, x.key) : null;
-    return `<div class="doc-row"><span class="payment-badge ${x.dir === 'out' ? 'due-soon' : 'ok'}" style="font-size:10px;">${x.dir === 'out' ? 'OUT' : 'IN'}</span><span class="doc-row-label">${escapeHtml(lab(x))}</span><span class="muted" style="font-size:11.5px;">${escapeHtml(x.who)}</span>${inv ? invBadge(inv) + invPdf(inv) : ''}<b class="mono" style="margin-left:auto;">${amt == null ? '—' : fmtMoney(amt)}</b><span class="doc-row-status${paid ? ' sent' : ''}" style="margin-left:8px;${late ? 'color:#FF9C8A;' : ''}">${paid ? (x.where === 'orders' ? 'Paid in Orders ' : 'Paid ') + (d ? fmtDateStr(d) : '') : d ? 'Due ' + fmtDateStr(d) : 'Pending'}</span></div>`; };
-  return `<div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div><div class="docs-panel-grid">${st.map(tile).join('')}</div>${L.fin === 'summar' ? '<div class="muted" style="font-size:11.5px;text-align:center;margin-top:8px;">Customer → Summar is paid to Summar, not to us — tracked to control the Summar fee.</div>' : ''}`;
+  return steps(L).filter(x => x.dir !== 'info').sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map(x => { const paid = x.done;
+    return { x, label: lab(x), who: x.who, amt: paid && x.recs.length ? x.recorded : x.amount, paid, d: paid ? paidOn(x) : x.due, late: !paid && x.due && x.due < TODAY, where: x.where, dir: x.dir }; });
+}
+function moneyTable(L){
+  const ms = moneyItems(L), sumDir = d => ms.filter(m => m.dir === d).reduce((n, m) => n + (m.amt || 0), 0);
+  const num = (v, c) => `<td class="num" style="${MONO}font-weight:700;color:${c};">${v == null ? '—' : fmtMoney(v)}</td>`;
+  const badge = m => { const inv = (m.x.key === 'customs' || m.x.key === 'freight') ? invoiceFor(L, m.x.key) : null;
+    return `<span class="payment-badge ${m.paid ? 'ok' : m.late ? 'overdue' : 'due-soon'}">${m.paid ? `${m.where === 'orders' ? 'Paid in Orders' : 'Paid'} ${m.d ? fmtDateStr(m.d) : ''}` : m.d ? `Due ${fmtDateStr(m.d)}` : 'Pending'}</span>${inv ? ' ' + invBadge(inv) + invPdf(inv) : ''}`; };
+  return `<div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
+    <div class="table-scroll" style="margin-top:10px;"><table class="pr-table"><thead><tr><th>Movement</th><th>Who</th><th>Date</th><th>OUT</th><th>IN</th><th>Status</th></tr></thead><tbody>
+    ${ms.map(m => `<tr><td style="font-weight:600;">${escapeHtml(m.label)}</td><td class="muted">${escapeHtml(m.who)}</td><td class="mono">${m.d ? fmtDateStr(m.d) : '—'}</td>${m.dir === 'out' ? num(m.amt, 'var(--amber)') + '<td></td>' : '<td></td>' + num(m.amt, m.dir === 'watch' ? 'var(--ink-soft)' : '#6FD3A8')}<td>${badge(m)}</td></tr>`).join('')}
+    <tr><td colspan="3" style="font-weight:700;">Total</td>${num(sumDir('out'), 'var(--amber)')}${num(sumDir('in'), '#6FD3A8')}<td></td></tr></tbody></table></div>
+    ${L.fin === 'summar' ? '<div class="muted" style="font-size:11.5px;margin-top:6px;">Customer → Summar is paid to Summar, not to us — tracked to control the Summar fee.</div>' : ''}`;
+}
+function profitSection(L){
+  const p = profitOf(L);
+  if (!p) return '<div class="docs-panel-heading">Profit</div><div class="empty">Missing cost / sale in Orders.</div>';
+  const G = '#6FD3A8', RED = '#FF9C8A', fin = L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr)`;
+  const parts = [['Purchase', p.purchase, 'rgba(255,255,255,.28)'], ['Freight', p.freight, '#5AAAFF'], ['Customs', p.customs + (p.extras || 0), '#E8B54C'], [L.fin === 'summar' ? 'Summar' : 'Interest', p.finance, RED], ['Profit', Math.max(0, p.profit), G]];
+  const total = parts.reduce((n, x) => n + x[1], 0) || 1;
+  const bar = `<div style="border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);padding:16px 20px;margin-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:700;">${isClosed(L) ? 'Real profit' : 'Profit so far'}</span><span style="${MONO}font-size:24px;font-weight:700;color:${p.profit >= 0 ? G : RED};">${fmtMoney(p.profit)} <span class="muted" style="font-size:12px;font-weight:500;">${(p.profit / L.sale * 100).toFixed(1)}% of ${fmtMoney(L.sale)}</span></span></div>
+    <div style="display:flex;height:14px;border-radius:99px;overflow:hidden;margin:14px 0 10px;">${parts.map(([, v, c]) => `<div style="width:${v / total * 100}%;background:${c};"></div>`).join('')}</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;">${parts.map(([l, v, c]) => `<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:3px;background:${c};"></span><span class="muted">${l}</span><b style="${MONO}">${fmtMoney(v)}</b></span>`).join('')}</div></div>`;
+  const sub = k => surchargesFor(L, k).map(r => ({ l: r.cost_type + (r.notes ? ' · ' + r.notes : ''), v: -Number(r.amount), sub: true }));
+  const rows = [{ l: 'Purchase cost', v: -p.purchase }, { l: 'Freight', v: -(p.freight - sumCharges(L, 'freight')) }, ...sub('freight'), { l: 'Customs / inspection', v: -(p.customs - sumCharges(L, 'customs')) }, ...sub('customs'), ...(p.extras ? [{ l: 'Extra costs', v: -p.extras }] : []), { l: fin, v: -p.finance, color: RED }];
+  const row = (l, v, o = {}) => `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:${o.sub ? '5px 0 5px 22px' : '9px 0'};${o.line ? 'border-top:1px solid var(--line);' : ''}"><span style="font-size:${o.sub ? 12 : 13.5}px;color:${o.sub ? 'var(--ink-soft)' : 'var(--ink)'};">${o.sub ? '↳ ' : ''}${escapeHtml(l)}</span><span style="${MONO}font-size:${o.sub ? 12.5 : 14}px;font-weight:${o.sub ? 500 : 700};color:${o.color || (o.sub ? 'var(--ink-soft)' : 'var(--ink)')};min-width:120px;text-align:right;">${fmtMoney(v)}</span></div>`;
+  const statement = `<div style="max-width:560px;margin:14px auto 0;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);padding:8px 20px 14px;">
+    ${row('Sale', L.sale, { color: G })}
+    <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px;">${rows.map(x => row(x.l, x.v, x)).join('')}</div>
+    ${row('Total costs', rows.reduce((n, x) => n + x.v, 0), { line: true, color: 'var(--amber)' })}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px 14px;border-radius:10px;background:rgba(111,211,168,.1);border:1px solid rgba(111,211,168,.35);"><span style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--ink);">${isClosed(L) ? 'Real profit' : 'Profit so far'} <span class="muted" style="font-weight:500;font-size:12px;">· ${(p.profit / L.sale * 100).toFixed(1)}% of sale</span></span><span style="${MONO}font-size:20px;font-weight:700;color:${p.profit >= 0 ? G : RED};">${fmtMoney(p.profit)}</span></div></div>`;
+  return `<div class="docs-panel-heading">Profit</div>${bar}${statement}`;
 }
 function renderDetail(){
   if (!detailOrder) return;
   const L = LOADS.find(x => x.order_number === detailOrder); if (!L) return closeDetail();
-  const fl = flow(L), p = profitOf(L);
+  const fl = flow(L);
   document.getElementById('orderDetailTitle').textContent = `${L.order_number} — ${L.client}`;
-  const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
   document.getElementById('orderDetailBox').innerHTML = `
     <div class="load-card">
       <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · delivered &amp; signed ${fmtDateStr(day(L.invoice_signed_at))} · ${finBadge(L)}${L.won_by ? ` · Trader: <b style="color:var(--ink);">${escapeHtml(L.won_by)}</b>` : ''}</div></div></div>
@@ -1182,15 +1217,13 @@ function renderDetail(){
       ${clockBand(L)}
       ${phaseLane(L, fl)}
       ${nextCard(L, fl)}
-      ${moneyTiles(L)}
-      <div class="docs-panel-heading">Profit</div>
-      <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -(p.freight - sumCharges(L, 'freight'))) + chargeLines(L, 'freight', line) + line('Inspection / customs', -(p.customs - sumCharges(L, 'customs'))) + chargeLines(L, 'customs', line) + (p.extras ? line('Extra costs', -p.extras) : '') + line(L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
+      ${moneyTable(L)}
+      ${profitSection(L)}
     </div>`;
 }
 function paidOn(x){ if (!x.done) return null; if (x.key === 'plant') return day(x.L.plant_paid_at); if (x.key === 'gap') return day(x.L.summar_payment_sent_at); return recDate(x); }
 // every extra charge of the load as its own profit line (user 2026-09-28: "no me esta discriminando los sobrecostos")
 const sumCharges = (L, kind) => surchargesFor(L, kind).reduce((n, r) => n + Number(r.amount), 0);
-const chargeLines = (L, kind, line) => surchargesFor(L, kind).map(r => line(`${escapeHtml(r.cost_type)}${r.notes ? ' · ' + escapeHtml(r.notes) : ''} <span class="muted" style="font-size:11px;">${kind === 'freight' ? 'carrier' : 'customs'}</span>`, -Number(r.amount))).join('');
 function termsPrompt(L, s){
   const who = (s.key === 'customs_bill' || s.key === 'customs_pay') ? { id: L.customs_agency_id, name: L.customs_agency, days: L.customs_agency_days } : (s.key === 'carrier_pay' || s.key === 'freight_bill') ? { id: L.carrier_id, name: L.freight && L.freight.carrier, days: L.carrier_days } : null;
   if (!who || !who.id || who.days != null) return '';
@@ -1578,7 +1611,7 @@ function closeConfirm(){ document.getElementById('confirmOverlay').style.display
 // podemos estar metiendo en todas partes... debo llevar un proceso para saber cuándo cierro la
 // carga"). Filters by customer / carrier or customs / delivery dates / status; the cards add up
 // only what is filtered (filter a carrier → what we owe it). Most urgent loads first.
-let F = { q: '', customer: '', provider: '', status: 'open', from: '', to: '' };
+let F = { q: '', customer: '', provider: '', status: 'all', from: '', to: '' };
 function filteredLoads(){
   const q = F.q.trim().toLowerCase(), rank = { red: 0, amber: 1, ok: 2 };
   return LOADS.filter(L => {
@@ -1598,15 +1631,15 @@ function filterSelect(id, key, allLabel, values, width){
 }
 function draw(){
   const rows = filteredLoads();
-  const dateIn = (key, lab) => `<label class="muted" style="font-size:12px;font-weight:600;">${lab} <input type="date" value="${F[key]}" onchange="F.${key}=this.value;draw()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label>`;
-  const statusSel = `<select id="fStatus" style="width:112px;" onchange="F.status=this.value;draw()">${[['open', 'Open'], ['late', 'Late'], ['closed', 'Closed'], ['all', 'Loads']].map(([v, l]) => `<option value="${v}"${F.status === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+  const dateIn = (key, lab) => `<label class="muted" style="font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;">${lab}<input class="pr-date" type="date" value="${F[key]}" onchange="F.${key}=this.value;draw()"></label>`;
+  const statusSel = `<select id="fStatus" style="width:126px;" onchange="F.status=this.value;draw()">${[['all', 'All Loads'], ['open', 'Open'], ['late', 'Late'], ['closed', 'Closed']].map(([v, l]) => `<option value="${v}"${F.status === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   document.getElementById('prView').innerHTML = cards(rows) + `<div class="card"><h2 style="margin:0 0 12px;">Loads</h2>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-      <span class="st-search-wrap" style="width:170px;"><svg class="st-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="fq" class="st-search-input" placeholder="Search" value="${escapeHtml(F.q)}" oninput="F.q=this.value;draw();const i=document.getElementById('fq');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <span class="st-search-wrap" style="width:auto;flex:1 1 120px;min-width:96px;max-width:200px;height:38px;"><svg class="st-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="fq" class="st-search-input" placeholder="Search" value="${escapeHtml(F.q)}" oninput="F.q=this.value;draw();const i=document.getElementById('fq');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></span>
       ${statusSel}
-      ${filterSelect('fCust', 'customer', 'Clients', LOADS.map(L => L.client), 130)}
-      ${filterSelect('fProv', 'provider', 'Fletes & Borders', LOADS.flatMap(L => [L.freight && L.freight.carrier, L.customs_agency]), 160)}
-      ${dateIn('from', 'Delivered from')}${dateIn('to', 'to')}
+      ${filterSelect('fCust', 'customer', 'All Clients', LOADS.map(L => L.client), 136)}
+      ${filterSelect('fProv', 'provider', 'All Fletes & Borders', LOADS.flatMap(L => [L.freight && L.freight.carrier, L.customs_agency]), 184)}
+      <span style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap;">${dateIn('from', 'Delivered from')}${dateIn('to', 'to')}</span>
     </div>
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Clock</th><th>Next Action</th><th>Costing</th><th>OUT pending</th><th>IN pending</th><th>Stage</th></tr></thead><tbody>
     ${rows.map(L => { const c = clock(L), m = loadMoney(L), closed = isClosed(L);
