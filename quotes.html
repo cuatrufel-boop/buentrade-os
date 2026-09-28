@@ -201,6 +201,8 @@
      the page while the new full-width tab bar (and Messaging / Product Coverage) use the full width —
      the cards and lists no longer lined up under the bar. Same edges for everything now. */
   .rq-panel-stats-wrap,.rq-hero-banner,.rq-results-col{padding-left:0 !important;padding-right:0 !important;}
+  /* the search sits right under the tab bar, same spacing as Logistics */
+  .rq-hero-banner-compact{padding-top:0 !important;}
   .tab-count{background:#C4432E;color:#fff;font-size:10.5px;font-weight:700;border-radius:10px;padding:1px 7px;line-height:1.5;}
   .cov-card{padding:16px 0;border-bottom:1px solid var(--line);}
   .cov-card:last-child{border-bottom:none;}
@@ -1084,6 +1086,10 @@ auth.onAuthStateChanged(user => {
 <div class="wrap">
   <h1 id="rq_page_title">Quotes</h1>
 
+  <!-- Real ask 2026-09-28 ("igual que esta logistics y todas"): each tab's stat cards sit ABOVE the tab
+       bar, like Logistics / Pay & Receive — qPlaceTabCards() moves them here, setQuoteTab() shows the
+       active tab's cards. -->
+  <div id="qCardsSlot"></div>
   <div class="tab-row">
     <button type="button" class="tab-btn active" id="qTabBtn_request" onclick="setQuoteTab('request')">Quotes<span id="qPendingCount" class="tab-count" style="display:none;"></span></button>
     <!-- Messaging (2026-09-27): lives inside Quotes, not as another top-nav module ("no queremos poner tantos módulos") —
@@ -1613,6 +1619,16 @@ function rqReturnCustomersWrapHome(){
 // in-progress quote — only ever came from tearing down and rebuilding rq_plant_rows/Pending's own
 // slots on every tab change; with nothing left to switch away FROM inside this one screen, none of
 // that teardown is needed here any more.
+// Moves each tab's stat cards above the tab bar once (ids unchanged, so every renderer keeps working).
+function qPlaceTabCards(){
+  const slot = document.getElementById('qCardsSlot'); if (!slot || slot.dataset.placed) return;
+  const rq = document.querySelector('#qPanel_request .rq-panel-stats-wrap'), qm = document.querySelector('#qPanel_messaging #qm_stats_row');
+  if (rq){ slot.appendChild(rq); rq.style.padding = '0'; rq.style.marginBottom = '18px'; }
+  if (qm){ slot.appendChild(qm); qm.style.marginBottom = '18px'; qm.style.display = 'none'; }
+  if (rq && qm) slot.dataset.placed = '1';
+}
+document.addEventListener('DOMContentLoaded', qPlaceTabCards);
+if (document.readyState !== 'loading') qPlaceTabCards();
 function setQuoteTab(tab){
   document.getElementById('qTabBtn_request').classList.toggle('active', tab === 'request');
   document.getElementById('qTabBtn_messaging').classList.toggle('active', tab === 'messaging');
@@ -1622,6 +1638,10 @@ function setQuoteTab(tab){
   document.getElementById('qPanel_messaging').style.display = tab === 'messaging' ? 'block' : 'none';
   document.getElementById('qPanel_coverage').style.display = tab === 'coverage' ? 'block' : 'none';
   document.getElementById('qPanel_quotingtool').style.display = tab === 'quotingtool' ? 'block' : 'none';
+  qPlaceTabCards();
+  const rqCards = document.querySelector('#qCardsSlot .rq-panel-stats-wrap'), qmCards = document.querySelector('#qCardsSlot #qm_stats_row');
+  if (rqCards) rqCards.style.display = tab === 'request' ? '' : 'none';
+  if (qmCards) qmCards.style.display = tab === 'messaging' ? '' : 'none';
   if (tab === 'request') renderRqPlants();
   // Coverage exists specifically to answer "did this actually get recorded?" — a cache that
   // survives leaving the tab (e.g. to load prices in plants.html) and coming back would keep
