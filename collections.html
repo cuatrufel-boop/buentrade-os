@@ -455,12 +455,13 @@
   /* Pay & Receive layout (2026-09-28, "no esta bien alineado"): 5 tab-cards must never clip their
      number — every card the same value size (hero here is only a color, not a bigger number),
      whole dollars on the cards (cents stay in the tables), and the text column may shrink. */
-  .stats-row.pr-cards{grid-template-columns:repeat(5,minmax(0,1fr));}
+  .stats-row.pr-cards{grid-template-columns:repeat(6,minmax(0,1fr));}
   .pr-cards .stat-card{padding:14px 14px;gap:10px;}
   .pr-cards .stat-card > div:last-child{min-width:0;}
   .pr-cards .stat-value,.pr-cards .stat-card.hero .stat-value{font-size:20px;white-space:nowrap;}
   .pr-cards .stat-label{line-height:1.25;}
-  @media (max-width:980px){ .stats-row.pr-cards{grid-template-columns:repeat(3,minmax(0,1fr));} }
+  @media (max-width:1250px){ .pr-cards .stat-icon{display:none;} }
+  @media (max-width:980px){ .stats-row.pr-cards{grid-template-columns:repeat(3,minmax(0,1fr));} .pr-cards .stat-icon{display:flex;} }
   @media (max-width:700px){ .stats-row.pr-cards{grid-template-columns:repeat(2,minmax(0,1fr));} }
   /* row actions: same green action button as Orders, sized to the table row so every row is the same height */
   .pr-aging th,.pr-aging td{white-space:nowrap;padding-left:7px;padding-right:7px;}
@@ -740,6 +741,7 @@ async function loadCollections(){
     customs: Number(r.tramite_aduanal_amount || 0), inspection: Number(r.inspection_amount || 0),
     delivery_date: r.delivery_date ? String(r.delivery_date).slice(0, 10) : null, pickup_date: r.pickup_date,
     plant_paid_at: r.plant_paid_at, summar_payment_sent_at: r.summar_payment_sent_at, picked_up_at: r.picked_up_at, delivered_at: r.delivered_at,
+    offer_sent_at: r.offer_sent_at, po_sent_at: r.po_sent_at, so_sent_at: r.so_sent_at, order_created_at: r.order_created_at,
     invoice_sent_at: r.invoice_sent_at, payment_due_date: r.payment_due_date, paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
     interest_amount: r.interest_amount,
   }));
@@ -755,7 +757,19 @@ function stageLabel(L){
   return { t: 'Confirm PU', cls: 'active' };
 }
 function recordsFor(L, kind){ return prData.records.filter(r => r.shipment_id === L.id && r.kind === kind); }
-function summarFee(L){ if (!L.sale) return null; const days = L.payment_days || L.client_days || 30; return L.sale * (SUMMAR_RATES.transitFeePct + SUMMAR_RATES.factoringBaseFeePct + Math.max(0, days - 30) * SUMMAR_RATES.extraDayFeePct) / 100; }
+// Summar fee on a load — days counted from delivery: the real days once the customer paid Summar,
+// the days so far while it is still open (never less than the QT's planned days), the planned
+// days before delivery. Past day 30 every day costs sale × 0.0417%.
+function summarDays(L){
+  const deliv = day(L.delivered_at), planned = L.payment_days || L.client_days || 30;
+  const paid = recordsFor(L, 'client_paid_summar')[0];
+  if (deliv && paid) return { days: Math.max(0, Math.round((day(paid.bank_entry_date) - deliv) / 86400000)), real: true, paidOn: day(paid.bank_entry_date) };
+  if (deliv) return { days: Math.max(planned, Math.round((TODAY - deliv) / 86400000)), soFar: Math.max(0, Math.round((TODAY - deliv) / 86400000)), planned };
+  return { days: planned, planned };
+}
+function summarFeeFor(L, days){ return L.sale ? L.sale * (SUMMAR_RATES.transitFeePct + SUMMAR_RATES.factoringBaseFeePct + Math.max(0, days - 30) * SUMMAR_RATES.extraDayFeePct) / 100 : null; }
+function summarFee(L){ return summarFeeFor(L, summarDays(L).days); }
+const summarPerDay = L => L.sale ? L.sale * SUMMAR_RATES.extraDayFeePct / 100 : 0;
 function steps(L){
   const out = [];
   const delivery = day(L.delivered_at) || day(L.delivery_date);
@@ -777,9 +791,10 @@ function steps(L){
   const customs = L.customs + L.inspection;
   if (customs > 0){ const r = recordsFor(L, 'customs'); add('customs', 'out', 'here', 'Customs', 'Customs broker', CUSTOMS_ICON, customs, delivery, r.some(x => x.settles), 'Paid at delivery', r); }
   if (L.fin === 'summar'){
-    const fee = summarFee(L), r = recordsFor(L, 'summar_remanente');
+    const fee = summarFeeFor(L, L.payment_days || L.client_days || 30), r = recordsFor(L, 'summar_remanente');
     add('rem', 'in', 'here', 'Summar remanente', 'Summar', RECEIPT_ICON, L.sale ? Math.round((0.2 * L.sale - fee) * 100) / 100 : null, delivery, r.some(x => x.settles), '20% of sale − fee est. ' + fmtMoney(fee), r);
-    add('client', 'info', 'watch', 'Client pays Summar', L.client, RECEIPT_ICON, L.sale, clientDue, false, 'Summar collects — watch only');
+    const cps = recordsFor(L, 'client_paid_summar'), sDue = delivery ? addDays(delivery, L.payment_days || L.client_days || 30) : null;
+    add('client', 'watch', 'here', 'Client pays Summar', L.client, RECEIPT_ICON, L.sale, sDue, cps.length > 0, 'Summar collects · after day 30 each day costs us ' + fmtMoney(summarPerDay(L)), cps);
   } else {
     const owed = L.sale != null ? L.sale - L.amount_paid : null;
     out.push({ id: L.order_number + '|client', key: 'client', L, dir: 'in', where: 'here', label: 'Client payment', who: L.client, icon: RECEIPT_ICON,
@@ -800,8 +815,8 @@ const allSteps = () => LOADS.flatMap(steps);
 const sum = a => a.reduce((n, x) => n + (x.amount || 0), 0);
 const pend = (L, dir) => steps(L).filter(x => x.dir === dir && !x.done && x.amount !== 0);
 const amtCell = (items, color) => !items.length ? '<span class="muted">—</span>' : items.some(x => x.amount == null) && !sum(items) ? '<span class="payment-badge overdue">Missing data</span>' : `<span style="color:${color};">${fmtMoney(sum(items))}</span>`;
-const isClosed = L => !pend(L, 'in').length && !pend(L, 'out').length;
-const nextStep = L => [...pend(L, 'in'), ...pend(L, 'out')].sort((a, b) => (a.due || 9e15) - (b.due || 9e15))[0];
+const isClosed = L => !pend(L, 'in').length && !pend(L, 'out').length && !pend(L, 'watch').length;
+const nextStep = L => [...pend(L, 'in'), ...pend(L, 'out'), ...pend(L, 'watch')].sort((a, b) => (a.due || 9e15) - (b.due || 9e15))[0];
 const delivered = L => !!(L.delivered_at || L.status === 'delivered');
 // Owed now vs coming: customer / Summar money and freight / customs are owed once the load is
 // delivered; plant payment and the Summar wire are advance steps (Orders), owed before pickup.
@@ -830,7 +845,7 @@ const IC = { in: '<path d="M12 5v14M19 12l-7 7-7-7"/>', out: '<path d="M12 19V5M
 function bucketOf(x){ if (!owedNow(x)) return 'coming'; const d = status(x).days || 0; return !d ? 'current' : d <= 30 ? '1-30' : d <= 60 ? '31-60' : d <= 90 ? '61-90' : '90+'; }
 const BUCKETS = [['current', 'Current', '#6FD3A8'], ['1-30', '1-30 days', 'var(--amber)'], ['31-60', '31-60 days', '#F0904D'], ['61-90', '61-90 days', '#FF9C8A'], ['90+', '90+ days', '#FF6B57']];
 const openItems = dir => allSteps().filter(x => x.dir === dir && !x.done && x.amount !== 0);
-const summarWatch = () => allSteps().filter(x => x.key === 'client' && x.dir === 'info' && delivered(x.L));
+
 function groupBy(items, keyFn){ const m = new Map(); for (const x of items){ const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; }
 const payerKey = x => x.key === 'rem' ? 'Summar' : x.who;
 const payeeKey = x => x.who;
@@ -839,10 +854,11 @@ const payeeKey = x => x.who;
 let tab = 'collect';
 function cards(){
   const ci = openItems('in').filter(owedNow), co = openItems('out').filter(owedNow);
-  const over = [...ci, ...co].filter(x => x.due && x.due < TODAY);
+  const over = [...ci, ...co, ...openItems('watch').filter(owedNow)].filter(x => x.due && x.due < TODAY);
   const C = [
     { k: 'collect', cls: 'ok', v: fmtWhole(sum(ci)), l: 'To Collect', icon: IC.in },
     { k: 'pay', cls: 'warn', v: fmtWhole(sum(co)), l: 'To Pay', icon: IC.out },
+    { k: 'summar', cls: '', v: String(summarRows().filter(r => !r.x.done).length), l: 'Client → Summar', icon: IC.warn },
     { k: 'overdue', cls: 'danger', v: String(over.length), l: 'Overdue', icon: IC.warn },
     { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Open Loads', icon: IC.truck },
     { k: 'ledger', cls: '', v: String(ledgerRows().length), l: 'Payments Recorded', icon: IC.check },
@@ -885,24 +901,51 @@ function exportAgingCsv(){
   a.download = `${lastAging.dir === 'in' ? 'to-collect' : 'to-pay'}-aging-${prData.today}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function tabCollect(){
-  const w = summarWatch();
   return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Collect — by customer <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
     ${howTo('every load in Orders — a customer owes us from delivery (direct loads); Summar owes us the remanente at delivery (Summar loads). <b>Coming</b> = loads not delivered yet.', 'when money arrives, click <b>Apply Payment</b> on that row. Click a name to see its loads.', 'the invoice (or remanente) is marked paid → that customer\u2019s balance and aging go down and their credit left goes up → To Collect drops → the payment goes to Payments Recorded → in Orders the load shows <b>Paid</b> → when nothing is left to pay or collect, the load moves to Closed with its real profit.')}
     ${agingTable(groupBy(openItems('in'), payerKey), 'in')}
-    <div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;"><b>Customers paying Summar</b> <span class="muted">— Summar collects; shown so you see the risk.</span> ${w.length ? w.map(x => `<span class="payment-badge ${status(x).cls}" style="margin:4px 4px 0 0;">${escapeHtml(x.who)} · ${fmtMoney(x.amount)} · ${status(x).t}</span>`).join('') : '<span class="muted">None right now (no Summar load delivered yet).</span>'}</div></div>`;
+    <div style="margin-top:14px;font-size:12.5px;" class="muted">Summar loads: the customer pays Summar, not us — follow them in <a href="#" onclick="tab='summar';draw();return false;" style="color:var(--blue-bright);">Client → Summar</a>.</div></div>`;
 }
 function tabPay(){
   return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Pay — by carrier, customs, plant <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
     ${howTo('every load in Orders — freight and customs are owed at delivery; plant payment and Summar wire are paid from Orders before pickup. <b>Coming</b> = loads not delivered yet.', 'when you pay freight or customs, click <b>Record Paid</b> on that row. Plant / Summar: pay in Orders, it shows here by itself.', 'that bill is marked paid → To Pay drops → the amount you really paid replaces the estimate in the load\u2019s profit → it goes to Payments Recorded → when nothing is left, the load closes with its real profit.')}
     ${agingTable(groupBy(openItems('out'), payeeKey), 'out')}</div>`;
 }
+const dirBadge = x => x.dir === 'watch' ? '<span class="payment-badge due-soon">SUMMAR</span>' : `<span class="payment-badge ${x.dir === 'in' ? 'ok' : 'due-soon'}">${x.dir === 'in' ? 'IN' : 'OUT'}</span>`;
+function actBtn(x, single){
+  if (x.where === 'orders') return '<a class="btn small" href="orders.html">Pay in Orders →</a>';
+  const label = x.dir === 'watch' ? 'Client Paid Summar' : x.dir === 'in' ? (single ? 'Record Received' : 'Apply Payment') : 'Record Paid';
+  return `<button class="wa-btn" onclick="event.stopPropagation();payOpen('${x.dir}','${jsArg(x.dir === 'in' ? payerKey(x) : payeeKey(x))}'${single || x.dir === 'watch' ? `,'${x.id}'` : ''})">${label}</button>`;
+}
 function tabOverdue(){
-  const items = [...openItems('in'), ...openItems('out')].filter(x => owedNow(x) && x.due && x.due < TODAY).sort((a, b) => a.due - b.due);
+  const items = [...openItems('in'), ...openItems('out'), ...openItems('watch')].filter(x => owedNow(x) && x.due && x.due < TODAY).sort((a, b) => a.due - b.due);
   return `<div class="card"><h2>Overdue — act today</h2>
-    ${howTo('the same loads, only what is past due (money in and money out).', 'work down the list, oldest first — each row has its action.', 'the row leaves this list as soon as it is recorded (same effect as in To Collect / To Pay).')}
+    ${howTo('the same loads, only what is past due: money in, money out, and customers late paying Summar.', 'work down the list, oldest first — each row has its action.', 'the row leaves this list as soon as it is recorded (same effect as in To Collect / To Pay).')}
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>In / Out</th><th>Who</th><th>What</th><th>Was Due</th><th>Late</th><th>Amount</th><th></th></tr></thead><tbody>
-    ${items.map(x => { const s = status(x), act = x.where === 'orders' ? '<a class="btn small" href="orders.html">Pay in Orders →</a>' : `<button class="wa-btn" onclick="payOpen('${x.dir}','${jsArg(x.dir === 'in' ? payerKey(x) : payeeKey(x))}')">${x.dir === 'in' ? 'Apply Payment' : 'Record Paid'}</button>`;
-      return `<tr${x.dir === 'in' && s.days > 30 ? ' class="ct-row-overdue30"' : ''}><td class="order-num" style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td><span class="payment-badge ${x.dir === 'in' ? 'ok' : 'due-soon'}">${x.dir === 'in' ? 'IN' : 'OUT'}</span></td><td>${escapeHtml(x.who)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due)}</td><td><span class="payment-badge overdue">${s.t}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td><td>${act}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing overdue.</td></tr>'}</tbody></table></div></div>`;
+    ${items.map(x => { const s = status(x), act = actBtn(x);
+      return `<tr${x.dir === 'in' && s.days > 30 ? ' class="ct-row-overdue30"' : ''}><td class="order-num" style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td>${dirBadge(x)}</td><td>${escapeHtml(x.who)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due)}</td><td><span class="payment-badge overdue">${s.t}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td><td>${act}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing overdue.</td></tr>'}</tbody></table></div></div>`;
+}
+// ---------- Client → Summar: every Summar load until its customer pays Summar ----------
+// "que no nos maten los intereses": the Summar fee grows every day after day 30 from delivery.
+function summarRows(){ return LOADS.filter(L => L.fin === 'summar').map(L => ({ L, x: steps(L).find(s => s.key === 'client'), sd: summarDays(L) })).filter(r => r.x); }
+function summarAtRiskPerDay(){ return summarRows().filter(r => !r.x.done && delivered(r.L) && r.sd.soFar > 30).reduce((n, r) => n + summarPerDay(r.L), 0); }
+function tabSummar(){
+  const rows = summarRows().sort((a, b) => (a.x.done - b.x.done) || ((b.sd.soFar ?? -1) - (a.sd.soFar ?? -1)));
+  const open = rows.filter(r => !r.x.done);
+  const perDay = summarAtRiskPerDay(), feeSoFar = open.filter(r => delivered(r.L)).reduce((n, r) => n + (summarFeeFor(r.L, r.sd.soFar) || 0), 0);
+  return `<div class="card"><h2>Client → Summar — every Summar load until the customer pays</h2>
+    ${howTo('Orders — every Summar load from the moment it exists (wire to Summar, pickup, delivery). The customer pays Summar, not us.', 'follow up with the customer before day 30. When Summar confirms the customer paid, click <b>Client Paid Summar</b> and enter the date.', 'the Summar fee stops growing and is fixed with the real days → the load\u2019s profit uses that real fee → the load closes (if nothing else is open) → it goes to Payments Recorded.')}
+    <div style="display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;margin:0 0 12px;"><span class="muted">Open Summar loads: <b style="color:var(--ink);">${open.length}</b></span><span class="muted">Summar fee so far on delivered loads: <b style="color:#FF9C8A;">${fmtMoney(feeSoFar)}</b></span><span class="muted">Costing us now, every day: <b style="color:#FF9C8A;">${fmtMoney(perDay)}</b></span></div>
+    <div class="table-scroll"><table class="pr-table pr-aging"><thead><tr><th>Order</th><th>Customer</th><th>Sale</th><th>Delivered</th><th>Fee-free until</th><th>Customer due</th><th>Days</th><th>Summar fee</th><th>Status</th><th></th></tr></thead><tbody>
+    ${rows.map(({ L, x, sd }) => { const deliv = day(L.delivered_at), freeUntil = deliv ? addDays(deliv, 30) : null, days = sd.real ? sd.days : sd.soFar;
+      const fee = deliv ? summarFeeFor(L, sd.real ? sd.days : sd.soFar) : summarFeeFor(L, sd.planned);
+      const st = x.done ? `<span class="payment-badge ok">Paid ${fmtDateStr(sd.paidOn)}</span>` : !deliv ? `<span class="payment-badge active">${L.delivery_date ? 'Delivery ' + fmtDateStr(L.delivery_date).slice(0, 5) : 'Not delivered'}</span>`
+        : days > 30 ? `<span class="payment-badge overdue">+${fmtMoney(summarPerDay(L))}/day</span>` : `<span class="payment-badge ${30 - days <= 7 ? 'due-soon' : 'active'}">${30 - days}d fee-free left</span>`;
+      return `<tr${!x.done && days > 30 ? ' class="ct-row-overdue30"' : ''} style="cursor:pointer;" onclick="openDetail('${L.order_number}')">
+        <td class="order-num">${escapeHtml(L.order_number)}</td><td>${escapeHtml(L.client)}</td><td class="num">${L.sale ? fmtMoney(L.sale) : '<span class="payment-badge overdue">Missing data</span>'}</td>
+        <td class="mono">${deliv ? fmtDateStr(deliv) : '—'}</td><td class="mono">${freeUntil ? fmtDateStr(freeUntil) : '—'}</td><td class="mono">${x.due ? fmtDateStr(x.due) : '—'}</td>
+        <td class="num">${deliv ? days : '—'}</td><td class="num" style="color:${deliv && days > 30 ? '#FF9C8A' : 'var(--ink)'};">${fee != null ? fmtMoney(fee) : '—'}${!deliv && fee != null ? ' <span class="muted" style="font-size:11px;">planned</span>' : ''}</td>
+        <td>${st}</td><td>${!x.done && deliv && L.sale ? actBtn(x) : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No Summar loads.</td></tr>'}</tbody></table></div></div>`;
 }
 let loadFilter = 'open';
 function tabLoads(){
@@ -926,7 +969,7 @@ function ledgerRows(){
     if (!m.has(k)) m.set(k, { date: p.bank_entry_date, at: p.applied_at, dir: 'in', who: (p.customer_name || '').trim(), amount: 0, applied: [], account: p.collection_account, method: p.payment_method, ref: p.payment_reference });
     const r = m.get(k); r.amount += Number(p.amount_applied); r.applied.push(p.order_number); }
   for (const p of prData.records){ const k = 'r' + p.payment_batch_id;
-    if (!m.has(k)) m.set(k, { date: p.bank_entry_date, at: p.created_at, dir: p.direction, who: p.party_name || '', what: { freight: 'Freight', customs: 'Customs', summar_remanente: 'Summar remanente' }[p.kind], amount: 0, applied: [], account: p.account, method: p.payment_method, ref: p.payment_reference });
+    if (!m.has(k)) m.set(k, { date: p.bank_entry_date, at: p.created_at, dir: p.direction, who: p.party_name || '', what: { freight: 'Freight', customs: 'Customs', summar_remanente: 'Summar remanente', client_paid_summar: 'Customer paid Summar' }[p.kind], amount: 0, applied: [], account: p.account, method: p.payment_method, ref: p.payment_reference });
     const r = m.get(k); r.amount += Number(p.amount); r.applied.push(p.order_number); }
   return [...m.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
@@ -935,7 +978,7 @@ function tabLedger(){
   return `<div class="card"><h2>Payments Recorded — in & out</h2>
     ${howTo('what you record with Apply Payment / Record Paid (customer payments, freight, customs, Summar remanentes).', 'nothing — it is the history, to check a payment.', '')}
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Bank Date</th><th>In / Out</th><th>Who</th><th>Amount</th><th>Applied to</th><th>Account</th><th>Method / Ref</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td class="mono">${fmtDateStr(r.date)}</td><td><span class="payment-badge ${r.dir === 'in' ? 'ok' : 'due-soon'}">${r.dir === 'in' ? 'IN' : 'OUT'}</span></td><td>${escapeHtml(r.who)}${r.what ? `<div class="muted" style="font-size:11.5px;">${r.what}</div>` : ''}</td><td class="num">${fmtMoney(r.amount)}</td><td class="mono">${escapeHtml(r.applied.join(', '))}</td><td>${escapeHtml(r.account || '—')}</td><td class="muted">${escapeHtml([r.method, r.ref].filter(Boolean).join(' · ') || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No payments recorded yet.</td></tr>'}</tbody></table></div></div>`;
+    ${rows.map(r => `<tr><td class="mono">${fmtDateStr(r.date)}</td><td>${r.dir === 'watch' ? '<span class="payment-badge due-soon">SUMMAR</span>' : `<span class="payment-badge ${r.dir === 'in' ? 'ok' : 'due-soon'}">${r.dir === 'in' ? 'IN' : 'OUT'}</span>`}</td><td>${escapeHtml(r.who)}${r.what ? `<div class="muted" style="font-size:11.5px;">${r.what}</div>` : ''}</td><td class="num">${fmtMoney(r.amount)}</td><td class="mono">${escapeHtml(r.applied.join(', '))}</td><td>${escapeHtml(r.account || '—')}</td><td class="muted">${escapeHtml([r.method, r.ref].filter(Boolean).join(' · ') || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No payments recorded yet.</td></tr>'}</tbody></table></div></div>`;
 }
 
 // ---------- customer / payee page and load page (full page, same as Orders' order detail) ----------
@@ -949,20 +992,39 @@ function renderDetail(){
   const L = LOADS.find(x => x.order_number === detailOrder); if (!L) return closeDetail();
   const st = steps(L), nx = nextStep(L), p = profitOf(L);
   document.getElementById('orderDetailTitle').textContent = `${L.order_number} — ${L.client}`;
-  const nodes = st.map((x, i) => { const isNext = nx && nx.id === x.id, cls = x.done ? 'done' : isNext ? 'now blink-now' : x.dir === 'info' ? '' : 'wait';
-    return (i ? `<div class="u-line${x.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${cls}" style="width:84px;"><div class="u-mini-btn">${x.icon}</div><div class="u-mini-label">${escapeHtml(x.label)}</div><div class="u-mini-date">${x.due ? fmtDateStr(x.due) : ''}</div></div>`; }).join('');
+  // Track: the whole life of the load in one line — Orders milestones and every money step, in order,
+  // from the offer to the customer's final payment (to us, or to Summar). Green = done, amber = next.
+  const byKey = k => st.find(x => x.key === k);
+  const mile = (label, icon, at) => ({ label, icon, done: !!at, date: at ? day(at) : null });
+  const money = x => x && ({ label: x.label, icon: x.icon, done: x.done, date: x.done ? (x.recs[0] ? day(x.recs[0].bank_entry_date) : x.key === 'plant' ? day(L.plant_paid_at) : x.key === 'gap' ? day(L.summar_payment_sent_at) : x.key === 'client' && L.paid_at ? day(L.paid_at) : null) : x.due, x });
+  const track = [mile('Offer sent', DOC_ICON, L.offer_sent_at), mile('PO sent', DOC_ICON, L.po_sent_at),
+    money(byKey(L.fin === 'summar' ? 'gap' : 'plant')), mile('Picked up', TRUCK_ICON, L.picked_up_at), mile('Delivered', PIN_ICON, L.delivered_at),
+    money(byKey('freight')), money(byKey('customs')), L.fin === 'summar' ? money(byKey('rem')) : null,
+    mile('Invoice sent', SIGN_ICON, L.invoice_sent_at), money(byKey('client'))].filter(Boolean);
+  const nextIdx = track.findIndex(t => !t.done);
+  const nodes = track.map((t, i) => (i ? `<div class="u-line${t.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${t.done ? 'done' : i === nextIdx ? 'now blink-now' : 'wait'}" style="width:74px;"><div class="u-mini-btn">${t.icon}</div><div class="u-mini-label">${escapeHtml(t.label)}</div><div class="u-mini-date">${t.date ? fmtDateStr(t.date) : ''}</div></div>`).join('');
   const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
-  const act = x => x.done || !x.amount ? '' : x.where === 'orders' ? '<a class="btn small" href="orders.html">Pay in Orders →</a>' : x.where === 'watch' ? '' : !owedNow(x) ? '<span class="muted" style="font-size:11.5px;">At delivery</span>' : `<button class="btn small" onclick="payOpen('${x.dir}','${jsArg(x.dir === 'in' ? payerKey(x) : payeeKey(x))}','${x.id}')">${x.dir === 'in' ? 'Record Received' : 'Record Paid'}</button>`;
+  const act = x => x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true);
   document.getElementById('orderDetailBox').innerHTML = `
     <div class="load-card">
       <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}</div></div></div>
-      ${nx ? `<div class="load-next-action"><div class="load-next-action-icon">${nx.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">Next Money</div><div class="load-next-action-label">${escapeHtml(nx.label)} — ${nx.amount == null ? 'missing cost/sale in Orders' : fmtMoney(nx.amount)} · ${owedNow(nx) ? status(nx).t : 'at delivery'}</div></div>${nx.where === 'here' && nx.amount && owedNow(nx) ? `<button class="wa-btn" onclick="payOpen('${nx.dir}','${jsArg(nx.dir === 'in' ? payerKey(nx) : payeeKey(nx))}','${nx.id}')">${nx.dir === 'in' ? 'Record Received' : 'Record Paid'} →</button>` : nx.where === 'orders' ? `<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>` : '<span class="muted" style="font-size:12px;">At delivery</span>'}</div>` : ''}
+      ${nx ? `<div class="load-next-action"><div class="load-next-action-icon">${nx.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">Next Money</div><div class="load-next-action-label">${escapeHtml(nx.label)} — ${nx.amount == null ? 'missing cost/sale in Orders' : fmtMoney(nx.amount)} · ${owedNow(nx) ? status(nx).t : 'at delivery'}</div></div>${nx.where === 'here' && nx.amount && owedNow(nx) ? actBtn(nx, true) : nx.where === 'orders' ? `<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>` : '<span class="muted" style="font-size:12px;">At delivery</span>'}</div>` : ''}
+      <div class="docs-panel-heading">Track — offer to final payment</div>
       <div class="utimeline" style="justify-content:center;">${nodes}</div>
+      ${L.fin === 'summar' ? summarBox(L) : ''}
       <div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
-      <div class="docs-panel-grid">${st.map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${x.done || owedNow(x) ? s.cls : 'active'}">${x.done || owedNow(x) ? s.t : 'At delivery'}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
+      <div class="docs-panel-grid">${st.map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' || x.dir === 'watch' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : x.dir === 'watch' ? 'SUMMAR' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${x.done || owedNow(x) ? s.cls : 'active'}">${x.done || owedNow(x) ? s.t : 'At delivery'}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
       <div class="docs-panel-heading">Profit</div>
       <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (L.extra_costs_total ? line('Extra costs', -L.extra_costs_total) : '') + line(L.fin === 'summar' ? 'Summar fee (est.)' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
     </div>`;
+}
+function summarBox(L){
+  const deliv = day(L.delivered_at), sd = summarDays(L), x = steps(L).find(s => s.key === 'client');
+  if (!L.sale) return '';
+  const line = !deliv ? `Not delivered yet — planned ${sd.planned} days → Summar fee ${fmtMoney(summarFeeFor(L, sd.planned))}.`
+    : x.done ? `Customer paid Summar ${fmtDateStr(sd.paidOn)} — ${sd.days} days from delivery → real Summar fee <b>${fmtMoney(summarFee(L))}</b>.`
+    : `Day <b>${sd.soFar}</b> since delivery · fee so far <b style="color:${sd.soFar > 30 ? '#FF9C8A' : 'var(--ink)'};">${fmtMoney(summarFeeFor(L, sd.soFar))}</b> · ${sd.soFar > 30 ? `<b style="color:#FF9C8A;">costing ${fmtMoney(summarPerDay(L))} more every day</b>` : `${30 - sd.soFar} fee-free days left, then +${fmtMoney(summarPerDay(L))}/day`}.`;
+  return `<div class="load-next-action" style="${deliv && !x.done && sd.soFar > 30 ? 'border-color:rgba(196,67,46,.6);background:rgba(196,67,46,.08);' : ''}"><div class="load-next-action-text"><div class="load-next-action-eyebrow">Customer → Summar</div><div style="font-size:13.5px;margin-top:2px;">${line}</div></div>${!x.done && deliv ? actBtn(x) : ''}</div>`;
 }
 function renderParty(){
   const { dir, name } = detailParty;
@@ -987,8 +1049,8 @@ function payItems(dir, name){ return openItems(dir).filter(x => owedNow(x) && x.
 function payOpen(dir, name, onlyId){
   payDir = dir; payOnly = onlyId || null; payKey = `pr-${dir}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const names = [...new Set(openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here').map(dir === 'in' ? payerKey : payeeKey))];
-  document.getElementById('rpTitle').textContent = dir === 'in' ? 'Apply Payment' : 'Record Payment Sent';
-  document.getElementById('rpHelp').textContent = payOnly ? 'This payment goes to this one item and closes it with the amount you enter.'
+  document.getElementById('rpTitle').textContent = dir === 'watch' ? 'Client Paid Summar' : dir === 'in' ? 'Apply Payment' : 'Record Payment Sent';
+  document.getElementById('rpHelp').textContent = dir === 'watch' ? 'The customer paid Summar (not us). Enter the date Summar received it — that fixes the real Summar fee and closes the load.' : payOnly ? 'This payment goes to this one item and closes it with the amount you enter.'
     : dir === 'in' ? 'An exact match first, otherwise the oldest open item first. You see the split before saving.' : 'The amount you paid goes to this party\u2019s oldest open items first. You see the split before saving.';
   document.getElementById('rpFromLabel').textContent = dir === 'in' ? 'From' : 'To';
   document.getElementById('rpAmtLabel').textContent = dir === 'in' ? 'Amount received (USD)' : 'Amount paid (USD)';
@@ -998,9 +1060,9 @@ function payOpen(dir, name, onlyId){
   const only = payOnly && allSteps().find(x => x.id === payOnly);
   document.getElementById('rpAmt').value = only ? only.amount : '';
   document.getElementById('rpDate').value = prData.today;
-  document.getElementById('rpAccount').value = dir === 'out' ? 'Buentrade' : '';
+  document.getElementById('rpAccount').value = dir === 'out' ? 'Buentrade' : dir === 'watch' ? 'Summar' : '';
   document.getElementById('rpMethod').value = ''; document.getElementById('rpRef').value = ''; document.getElementById('rpMsg').textContent = '';
-  document.getElementById('rpSaveBtn').textContent = dir === 'in' ? 'Apply Payment' : 'Record Paid';
+  document.getElementById('rpSaveBtn').textContent = dir === 'watch' ? 'Client Paid Summar' : dir === 'in' ? 'Apply Payment' : 'Record Paid';
   document.getElementById('rpSaveBtn').disabled = false;
   rpRender(); document.getElementById('rpOverlay').style.display = 'flex';
 }
@@ -1019,14 +1081,14 @@ async function rpSave(){
   const method = document.getElementById('rpMethod').value.trim() || null, reference = document.getElementById('rpRef').value.trim() || null;
   const err = t => { msg.textContent = t; msg.style.color = '#FF9C8A'; };
   if (!(amount > 0)) return err('Enter a valid amount.');
-  if (!bankDate) return err('Enter the bank date.');
+  if (!bankDate) return err('Enter the date.');
   if (!account) return err('Select the account.');
   const plan = payPlan.filter(p => p.a > 0);
   if (!plan.length) return err('Nothing to apply.');
   msg.textContent = 'Saving…'; msg.style.color = 'var(--ink-soft)'; document.getElementById('rpSaveBtn').disabled = true;
   const before = { owed: sum(payItems(payDir, who)) };
   try {
-    const customerPlan = plan.filter(p => p.x.key === 'client');
+    const customerPlan = plan.filter(p => p.x.key === 'client' && p.x.dir === 'in');
     if (customerPlan.length){
       const L = customerPlan[0].x.L;
       const res = await callApi('shipments-apply-payment', { idempotency_key: payKey + '-customer', actor: currentActor(), customer_id: L.customer_id, amount: customerPlan.reduce((n, p) => n + p.a, 0),
@@ -1034,7 +1096,7 @@ async function rpSave(){
         allocations: customerPlan.map(p => ({ shipment_id: p.x.L.id, amount: Math.round(p.a * 100) / 100 })) });
       confirmAfter = { L, amount: customerPlan.reduce((n, p) => n + p.a, 0), applied: res.applications.map(a => ({ order_number: a.order_number, amount_applied: Number(a.amount_applied) })) };
     }
-    const byKind = groupBy(plan.filter(p => p.x.key !== 'client'), p => ({ freight: 'freight', customs: 'customs', rem: 'summar_remanente' })[p.x.key]);
+    const byKind = groupBy(plan.filter(p => !(p.x.key === 'client' && p.x.dir === 'in')), p => p.x.dir === 'watch' ? 'client_paid_summar' : ({ freight: 'freight', customs: 'customs', rem: 'summar_remanente' })[p.x.key]);
     for (const [kind, ps] of byKind){
       await callApi('shipments-apply-payment', { kind, idempotency_key: payKey + '-' + kind, actor: currentActor(), party_name: who,
         bank_entry_date: bankDate, collection_account: account, payment_method: method, payment_reference: reference,
@@ -1045,7 +1107,9 @@ async function rpSave(){
     await loadCollections();
     const left = sum(payItems(payDir, who));
     const closedNow = touched.map(n => LOADS.find(L => L.order_number === n)).filter(L => L && isClosed(L));
-    showToast(payDir === 'in' ? 'Payment applied' : 'Payment recorded',
+    if (payDir === 'watch'){ const L = LOADS.find(x => x.order_number === touched[0]), sd = summarDays(L);
+      showToast('Client paid Summar', `${L.order_number}: ${sd.days} days from delivery · real Summar fee ${fmtMoney(summarFee(L))}` + (isClosed(L) ? ` · load closed, profit ${fmtMoney(profitOf(L).profit)}` : ''));
+    } else showToast(payDir === 'in' ? 'Payment applied' : 'Payment recorded',
       (payDir === 'in' ? `${who} still owes us ${fmtMoney(left)} (was ${fmtMoney(before.owed)})` : `We still owe ${who} ${fmtMoney(left)} (was ${fmtMoney(before.owed)})`)
       + (closedNow.length ? ' · ' + closedNow.map(L => `${L.order_number} closed, profit ${fmtMoney(profitOf(L).profit)}`).join(' · ') : ''));
     if (confirmAfter) openConfirm();
@@ -1093,7 +1157,7 @@ function sendConfirmWhatsapp(){ const { contact, copy } = confirmState; window.o
 function closeConfirm(){ document.getElementById('confirmOverlay').style.display = 'none'; confirmState = null; }
 
 function draw(){
-  document.getElementById('prView').innerHTML = cards() + ({ collect: tabCollect, pay: tabPay, overdue: tabOverdue, loads: tabLoads, ledger: tabLedger }[tab])();
+  document.getElementById('prView').innerHTML = cards() + ({ collect: tabCollect, pay: tabPay, summar: tabSummar, overdue: tabOverdue, loads: tabLoads, ledger: tabLedger }[tab])();
 }
 
 // Links from other pages (payments.html redirect, Collections links): ?customer=<id> opens Apply Payment for them.

@@ -161,6 +161,7 @@ async function payReceive(annualRate: number) {
       (select min(d::date) from purchase_orders p2, jsonb_array_elements_text(p2.delivery_dates) d where p2.order_number = sh.order_number) as delivery_date,
       sh.pickup_date, sh.plant_paid_at, sh.summar_payment_sent_at, sh.picked_up_at, sh.delivered_at, sh.invoice_sent_at, sh.payment_due_date,
       sh.paid_at, sh.amount_paid, sh.net_profit, sh.interest_amount,
+      so_.sent_at as offer_sent_at, sh.po_sent_at, sh.so_sent_at, sh.created_at as order_created_at,
       fo.carrier_name, fo.freight_rate
     from shipments sh
     left join customers c on c.id = sh.customer_id

@@ -138,7 +138,9 @@ Deno.serve(async (req) => {
 // several loads (allocations), exactly like a customer payment; each slice is one
 // shipment_money_records row, all sharing one payment_batch_id. The page computes the split and
 // shows it before saving; this only validates and stores it.
-const KINDS: Record<string, "in" | "out"> = { freight: "out", customs: "out", summar_remanente: "in" };
+// client_paid_summar (2026-09-28): the customer paid SUMMAR for a Summar load — never our bank,
+// recorded so the load closes and the real Summar fee (days from delivery) is known.
+const KINDS: Record<string, "in" | "out" | "watch"> = { freight: "out", customs: "out", summar_remanente: "in", client_paid_summar: "watch" };
 async function recordMoney(body: Record<string, any>) {
   const { actor, kind, party_name = null, bank_entry_date, collection_account, payment_method = null, payment_reference = null, idempotency_key, allocations } = body;
   const missing = ["actor", "kind", "bank_entry_date", "collection_account", "idempotency_key", "allocations"].filter((k) => body[k] == null);
@@ -161,7 +163,7 @@ async function recordMoney(body: Record<string, any>) {
   for (const a of allocations) {
     const sh = byId.get(a.shipment_id);
     if (!sh) return jsonResponse({ error: `unknown shipment ${a.shipment_id}` }, 400);
-    if (kind === "summar_remanente" && sh.financing_method !== "summar") return jsonResponse({ error: `${sh.order_number} is not a Summar load — it has no Summar remanente` }, 400);
+    if ((kind === "summar_remanente" || kind === "client_paid_summar") && sh.financing_method !== "summar") return jsonResponse({ error: `${sh.order_number} is not a Summar load` }, 400);
   }
 
   const batchId = crypto.randomUUID();
