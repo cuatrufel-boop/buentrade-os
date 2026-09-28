@@ -673,6 +673,19 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<div id="surOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:460px;">
+    <h3>Add Surcharge</h3>
+    <div class="email-modal-from" id="surSub"></div>
+    <div class="email-modal-field"><label>Bill</label><select id="surKind" style="width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;"><option value="freight">Freight (carrier)</option><option value="customs">Customs</option></select></div>
+    <div class="email-modal-field"><label>Surcharge</label><select id="surType" style="width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:13.5px;font-family:inherit;"></select></div>
+    <div class="email-modal-field"><label>Amount (USD)</label><input id="surAmt" class="mono" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="email-modal-field"><label>Note (required for Other)</label><input id="surNotes" placeholder="What the carrier / customs charged it for"></div>
+    <div id="surMsg" style="font-size:12.5px;margin-top:6px;"></div>
+    <div class="email-modal-actions"><button class="btn secondary" onclick="surClose()">Cancel</button><button class="wa-btn" id="surSaveBtn" onclick="surSave()">Add Surcharge</button></div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toastStack"></div>
 
 <script>
@@ -717,6 +730,8 @@ function fmtWhole(n){ const v = Math.round(Number(n || 0)); return (v < 0 ? '-$'
 function fmtDateStr(d){ if (!d) return ''; const dt = d instanceof Date ? d : new Date(String(d).slice(0, 10) + 'T00:00:00'); return dt.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }); }
 function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function jsArg(s){ return escapeHtml(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
+// local calendar date (never toISOString — that shifts the day outside the US time zones)
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const day = d => d ? new Date(String(d).slice(0, 10) + 'T00:00:00') : null;
 const addDays = (d, n) => d ? new Date(d.getTime() + n * 86400000) : null;
 function showToast(title, detail, isError){
@@ -749,7 +764,7 @@ async function loadCollections(){
     plant_paid_at: r.plant_paid_at, summar_payment_sent_at: r.summar_payment_sent_at, picked_up_at: r.picked_up_at, delivered_at: r.delivered_at,
     offer_sent_at: r.offer_sent_at, po_sent_at: r.po_sent_at, so_sent_at: r.so_sent_at, order_created_at: r.order_created_at,
     invoice_sent_at: r.invoice_sent_at, payment_due_date: r.payment_due_date, paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
-    interest_amount: r.interest_amount, won_by: r.won_by,
+    interest_amount: r.interest_amount, won_by: r.won_by, customs_agency: r.customs_agency_name,
   }));
   // "viene de orders, queda en pay and receive cuando se paga a summar" — a load enters here once its
   // Orders advance is paid: the Summar wire for a Summar load (or Summar already paid the plant, when
@@ -766,6 +781,7 @@ function stageLabel(L){
   if (L.picked_up_at) return { t: 'Picked Up', cls: 'active' };
   return { t: 'Confirm PU', cls: 'active' };
 }
+function surchargesFor(L, kind){ return (prData.surcharges || []).filter(r => r.order_number === L.order_number && r.payable_kind === kind); }
 function recordsFor(L, kind){ return prData.records.filter(r => r.shipment_id === L.id && r.kind === kind); }
 // Summar fee on a load — days counted from delivery: the real days once the customer paid Summar,
 // the days so far while it is still open (never less than the QT's planned days), the planned
@@ -797,9 +813,15 @@ function steps(L){
   } else {
     add('plant', 'out', 'orders', 'Plant payment', L.plant || 'Plant', PLANT_ICON, L.cost, beforePickup, L.plant_paid_at, 'Done in Orders');
   }
-  if (L.freight && L.freight.rate){ const r = recordsFor(L, 'freight'); add('freight', 'out', 'here', 'Freight', L.freight.carrier || 'Carrier not assigned', TRUCK_ICON, L.freight.rate, delivery ? addDays(delivery, FREIGHT_DAYS) : null, r.some(x => x.settles), `Paid ${FREIGHT_DAYS} days after delivery`, r); }
+  // Freight and customs bills = base (from Orders) + every surcharge added to that bill on this load.
+  const fs = surchargesFor(L, 'freight'), cs = surchargesFor(L, 'customs'), sum$ = a => a.reduce((n, x) => n + Number(x.amount), 0);
+  if ((L.freight && L.freight.rate) || fs.length){ const r = recordsFor(L, 'freight'), base = L.freight ? L.freight.rate : 0;
+    add('freight', 'out', 'here', 'Freight', (L.freight && L.freight.carrier) || 'Carrier not assigned', TRUCK_ICON, base + sum$(fs), delivery ? addDays(delivery, FREIGHT_DAYS) : null, r.some(x => x.settles), `Paid ${FREIGHT_DAYS} days after delivery` + (fs.length ? ` · base ${fmtMoney(base)} + surcharges ${fmtMoney(sum$(fs))}` : ''), r);
+    Object.assign(out[out.length - 1], { base, surcharges: fs }); }
   const customs = L.customs + L.inspection;
-  if (customs > 0){ const r = recordsFor(L, 'customs'); add('customs', 'out', 'here', 'Customs', 'Customs broker', CUSTOMS_ICON, customs, delivery, r.some(x => x.settles), 'Paid at delivery', r); }
+  if (customs > 0 || cs.length){ const r = recordsFor(L, 'customs');
+    add('customs', 'out', 'here', 'Customs', L.customs_agency || 'Customs broker', CUSTOMS_ICON, customs + sum$(cs), delivery, r.some(x => x.settles), 'Paid at delivery' + (cs.length ? ` · base ${fmtMoney(customs)} + surcharges ${fmtMoney(sum$(cs))}` : ''), r);
+    Object.assign(out[out.length - 1], { base: customs, surcharges: cs }); }
   if (L.fin === 'summar'){
     const fee = summarFeeFor(L, L.payment_days || L.client_days || 30), r = recordsFor(L, 'summar_remanente');
     add('rem', 'in', 'here', 'Summar remanente', 'Summar', RECEIPT_ICON, L.sale ? Math.round((0.2 * L.sale - fee) * 100) / 100 : null, delivery, r.some(x => x.settles), `20% of sale − Summar fee ${fmtMoney(fee)} (${L.payment_days || L.client_days || 30} days)`, r);
@@ -840,13 +862,17 @@ function profitOf(L){
   const purchase = (L.real_weight != null && L.cost_per_lb != null) ? Number(L.real_weight) * Number(L.cost_per_lb) : (L.offer_cost != null ? Number(L.offer_cost) : L.cost);
   if (purchase == null) return null;
   const st = steps(L), paidOf = k => { const x = st.find(s => s.key === k); return x && x.done && x.recs.length ? x.recorded : null; };
-  const freight = paidOf('freight') ?? Number(L.us_freight_amount ?? (L.freight ? L.freight.rate : 0));
-  const customs = paidOf('customs') ?? L.inspection;
+  const fsur = surchargesFor(L, 'freight').reduce((n, x) => n + Number(x.amount), 0), csur = surchargesFor(L, 'customs').reduce((n, x) => n + Number(x.amount), 0);
+  const freight = paidOf('freight') ?? (Number(L.us_freight_amount ?? (L.freight ? L.freight.rate : 0)) + fsur);
+  const customsPaid = paidOf('customs'), customs = customsPaid ?? (L.inspection + csur);
+  // surcharges live in order_extra_costs too; a recorded customs payment already includes the
+  // customs processing (tramite) row that is also in order_extra_costs
+  const extras = L.extra_costs_total - fsur - csur - (customsPaid != null ? L.customs : 0);
   let finance;
   if (L.fin === 'summar') finance = summarFee(L) || 0;
   else if (L.paid_at && L.interest_amount != null) finance = Number(L.interest_amount);
   else { const inv = day(L.invoice_sent_at); finance = inv ? L.sale * (INTEREST_ANNUAL / 365) * Math.max(0, Math.round((TODAY - inv) / 86400000)) : 0; }
-  return { profit: L.sale - purchase - freight - customs - L.extra_costs_total - finance, purchase, freight, customs, finance };
+  return { profit: L.sale - purchase - freight - customs - extras - finance, purchase, freight, customs, finance, extras };
 }
 function stageBadge(L){ const s = stageLabel(L); return `<span class="payment-badge ${s.cls}" style="display:inline-flex;align-items:center;gap:5px;"><svg viewBox="0 0 24 24" style="width:12px;height:12px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${PIN_ICON.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg> ${s.t}</span>`; }
 const finBadge = L => `<span class="payment-badge ${L.fin === 'summar' ? 'due-soon' : 'active'}" style="margin-left:6px;">${L.fin === 'summar' ? 'Summar' : 'Direct'}</span>`;
@@ -886,7 +912,7 @@ function agingTable(groups, dir){
   lastAging = { dir, rows };
   const tot = { coming: rows.reduce((n, r) => n + r.b.coming, 0) }; for (const [k] of BUCKETS) tot[k] = rows.reduce((n, r) => n + r.b[k], 0);
   const cell = (v, c) => `<td class="num" style="color:${v ? c : 'var(--ink-soft)'};${v ? 'font-weight:700;' : ''}">${v ? fmtMoney(v) : '—'}</td>`;
-  return `<div class="table-scroll"><table class="pr-aging"><thead><tr><th>${dir === 'in' ? 'Who owes us' : 'Who we owe'}</th>${BUCKETS.map(([, l]) => `<th>${l}</th>`).join('')}<th>Total Owed</th>${dir === 'in' ? '<th>Credit Left</th>' : ''}<th title="Loads not delivered yet — not owed until delivery">Coming</th><th></th></tr></thead><tbody>
+  return `<div class="table-scroll"><table class="pr-aging"><thead><tr><th>${dir === 'in' ? 'Who owes us' : 'Who we owe'}</th>${BUCKETS.map(([, l]) => `<th>${l}</th>`).join('')}<th>Total Owed</th>${dir === 'in' ? '<th>Credit Left</th>' : '<th>Due by Cutoff</th>'}<th title="Loads not delivered yet — not owed until delivery">Coming</th><th></th></tr></thead><tbody>
     ${rows.map(r => { const isCustomer = dir === 'in' && r.name !== 'Summar', lim = isCustomer ? r.L.credit_limit : null, left = lim != null ? Number(lim) - r.owed : null, blink = dir === 'in' && r.worst >= 2;
       const canRecord = r.items.some(x => x.where === 'here' && owedNow(x) && x.amount);
       const action = canRecord ? `<button class="wa-btn" onclick="event.stopPropagation();payOpen('${dir}','${jsArg(r.name)}')">${dir === 'in' ? 'Apply Payment' : 'Record Paid'}</button>`
@@ -895,9 +921,9 @@ function agingTable(groups, dir){
         <td><span style="color:var(--blue-bright);font-weight:600;">${escapeHtml(r.name)}</span>${r.name === 'Summar' ? ` <span class="muted" style="font-size:11px;">${dir === 'in' ? 'remanentes' : 'wire (cost − 80% of sale)'}</span>` : ''}</td>
         ${BUCKETS.map(([k, , c]) => cell(r.b[k], c)).join('')}
         <td class="num" style="font-weight:700;">${r.owed ? fmtMoney(r.owed) : r.hasMissing ? '<span class="payment-badge overdue" title="Cost or sale missing in Orders">Missing data</span>' : '—'}</td>
-        ${dir === 'in' ? `<td class="num" style="color:${left == null ? 'var(--ink-soft)' : left < 0 ? '#FF9C8A' : '#6FD3A8'};">${!isCustomer ? '—' : left == null ? 'No limit' : fmtMoney(left)}</td>` : ''}
+        ${dir === 'in' ? `<td class="num" style="color:${left == null ? 'var(--ink-soft)' : left < 0 ? '#FF9C8A' : '#6FD3A8'};">${!isCustomer ? '—' : left == null ? 'No limit' : fmtMoney(left)}</td>` : `<td class="num" style="font-weight:700;color:var(--amber);">${(() => { const v = r.items.filter(x => owedNow(x) && x.due && x.due <= cutoffDate()).reduce((n, x) => n + (x.amount || 0), 0); return v ? fmtMoney(v) : '—'; })()}</td>`}
         <td class="num muted">${r.b.coming ? fmtMoney(r.b.coming) : '—'}</td><td>${action}</td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">Nothing ${dir === 'in' ? 'to collect' : 'to pay'}.</td></tr>`}
-    <tr><td style="font-weight:700;">Total</td>${BUCKETS.map(([k, , c]) => cell(tot[k], c)).join('')}<td class="num" style="font-weight:700;">${fmtMoney(BUCKETS.reduce((n, [k]) => n + tot[k], 0))}</td>${dir === 'in' ? '<td></td>' : ''}<td class="num muted">${fmtMoney(tot.coming)}</td><td></td></tr>
+    <tr><td style="font-weight:700;">Total</td>${BUCKETS.map(([k, , c]) => cell(tot[k], c)).join('')}<td class="num" style="font-weight:700;">${fmtMoney(BUCKETS.reduce((n, [k]) => n + tot[k], 0))}</td>${dir === 'in' ? '<td></td>' : `<td class="num" style="font-weight:700;color:var(--amber);">${fmtMoney(rows.reduce((n, r) => n + r.items.filter(x => owedNow(x) && x.due && x.due <= cutoffDate()).reduce((m, x) => m + (x.amount || 0), 0), 0))}</td>`}<td class="num muted">${fmtMoney(tot.coming)}</td><td></td></tr>
     </tbody></table></div>`;
 }
 function exportAgingCsv(){
@@ -913,9 +939,17 @@ function tabCollect(){
     ${agingTable(groupBy(openItems('in'), payerKey), 'in')}
     <div style="margin-top:14px;font-size:12.5px;" class="muted">Summar loads: the customer pays Summar, not us — follow them in <a href="#" onclick="tab='summar';draw();return false;" style="color:var(--blue-bright);">Client → Summar</a>.</div></div>`;
 }
+// Month cutoff ("a corte del mes"): what each carrier / customs agency must be paid by that date.
+let cutoff = null, payFilter = '';
+function cutoffDate(){ if (!cutoff){ const t = TODAY; cutoff = ymd(new Date(t.getFullYear(), t.getMonth() + 1, 0)); } return day(cutoff); }
 function tabPay(){
-  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Pay — by carrier, customs, plant <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
-    ${agingTable(groupBy(openItems('out'), payeeKey), 'out')}</div>`;
+  const groups = groupBy(openItems('out').filter(x => !payFilter || payeeKey(x).toLowerCase().includes(payFilter.toLowerCase())), payeeKey);
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">To Pay — by carrier, customs, plant
+      <span style="display:flex;gap:10px;align-items:center;">
+        <span class="st-search-wrap" style="width:180px;"><svg class="st-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="payFilterInput" class="st-search-input" placeholder="Carrier / customs" value="${escapeHtml(payFilter)}" oninput="payFilter=this.value;draw();const i=document.getElementById('payFilterInput');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></span>
+        <label class="muted" style="font-size:12px;font-weight:600;">Cutoff <input type="date" value="${ymd(cutoffDate())}" onchange="cutoff=this.value;draw()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label>
+        <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></span></h2>
+    ${agingTable(groups, 'out')}</div>`;
 }
 const dirBadge = x => x.dir === 'watch' ? '<span class="payment-badge due-soon">SUMMAR</span>' : `<span class="payment-badge ${x.dir === 'in' ? 'ok' : 'due-soon'}">${x.dir === 'in' ? 'IN' : 'OUT'}</span>`;
 function actBtn(x, single){
@@ -1006,7 +1040,7 @@ function renderDetail(){
   const nextIdx = track.findIndex(t => !t.done);
   const nodes = track.map((t, i) => (i ? `<div class="u-line${t.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${t.done ? 'done' : i === nextIdx ? 'now blink-now' : 'wait'}" style="width:74px;"><div class="u-mini-btn">${t.icon}</div><div class="u-mini-label">${escapeHtml(t.label)}</div><div class="u-mini-date">${t.date ? fmtDateStr(t.date) : ''}</div></div>`).join('');
   const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
-  const act = x => x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true);
+  const act = x => ((x.key === 'freight' || x.key === 'customs') && !x.done ? `<button class="btn small" onclick="surOpen('${L.order_number}','${x.key}')">+ Surcharge</button>` : '') + (x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true));
   document.getElementById('orderDetailBox').innerHTML = `
     <div class="load-card">
       <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}${L.won_by ? ` · Trader: <b style="color:var(--ink);">${escapeHtml(L.won_by)}</b>` : ''}</div></div></div>
@@ -1017,7 +1051,7 @@ function renderDetail(){
       <div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
       <div class="docs-panel-grid">${st.map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' || x.dir === 'watch' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : x.dir === 'watch' ? 'SUMMAR' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${x.done || owedNow(x) ? s.cls : 'active'}">${x.done || owedNow(x) ? s.t : 'At delivery'}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
       <div class="docs-panel-heading">Profit</div>
-      <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (L.extra_costs_total ? line('Extra costs', -L.extra_costs_total) : '') + line(L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
+      <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (p.extras ? line('Extra costs', -p.extras) : '') + line(L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
     </div>`;
 }
 function summarBox(L){
@@ -1028,8 +1062,42 @@ function summarBox(L){
     : `Day <b>${sd.soFar}</b> since delivery · fee so far <b style="color:${sd.soFar > 30 ? '#FF9C8A' : 'var(--ink)'};">${fmtMoney(summarFeeFor(L, sd.soFar))}</b> · ${sd.soFar > 30 ? `<b style="color:#FF9C8A;">costing ${fmtMoney(summarPerDay(L))} more every day</b>` : `collect from the customer ${fmtDateStr(addDays(deliv, COLLECT_FROM_DAY))} (day ${COLLECT_FROM_DAY}) — after day 30 +${fmtMoney(summarPerDay(L))}/day`}.`;
   return `<div class="load-next-action" style="${deliv && !x.done && sd.soFar > 30 ? 'border-color:rgba(196,67,46,.6);background:rgba(196,67,46,.08);' : ''}"><div class="load-next-action-text"><div class="load-next-action-eyebrow">Customer → Summar</div><div style="font-size:13.5px;margin-top:2px;">${line}</div></div>${!x.done && deliv ? actBtn(x) : ''}</div>`;
 }
+// Carrier / customs statement: every open bill of that payee, base + surcharges, what is due by the
+// cutoff — to compare with what they send and pay it in one go.
+function renderStatement(name){
+  const cut = cutoffDate();
+  const items = openItems('out').filter(x => x.where === 'here' && payeeKey(x) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
+  const dueBy = items.filter(x => owedNow(x) && x.due && x.due <= cut), sumOf = a => a.reduce((n, x) => n + (x.amount || 0), 0);
+  document.getElementById('orderDetailTitle').textContent = `${name} — statement`;
+  document.getElementById('orderDetailBox').innerHTML = `<div class="load-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+      <label class="muted" style="font-size:12.5px;font-weight:600;">Cutoff <input type="date" value="${ymd(cut)}" onchange="cutoff=this.value;draw();renderDetail()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label>
+      <span style="display:flex;gap:10px;"><button class="btn small" onclick="exportStatementCsv('${jsArg(name)}')">⬇ Export CSV</button>${dueBy.length ? `<button class="wa-btn" onclick="payOpen('out','${jsArg(name)}',null,${sumOf(dueBy).toFixed(2)})">Pay ${fmtMoney(sumOf(dueBy))}</button>` : ''}</span>
+    </div>
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>What</th><th>Delivered</th><th>Due</th><th>Base</th><th>Surcharges</th><th>Total</th><th></th></tr></thead><tbody>
+    ${items.map(x => { const own = owedNow(x), inCut = own && x.due && x.due <= cut, sur = x.surcharges || [];
+      return `<tr><td class="order-num" style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')">${escapeHtml(x.L.order_number)}</td><td class="muted">${escapeHtml(x.label)}</td>
+        <td class="mono">${x.L.delivered_at ? fmtDateStr(x.L.delivered_at) : '<span class="muted">Not yet</span>'}</td>
+        <td><span class="payment-badge ${!own ? 'active' : inCut ? (x.due < TODAY ? 'overdue' : 'due-soon') : 'active'}">${x.due ? fmtDateStr(x.due) : '—'}</span></td>
+        <td class="num">${fmtMoney(x.base ?? x.amount)}</td>
+        <td style="white-space:normal;text-align:left;">${sur.map(r => `<div style="font-size:11.5px;white-space:nowrap;">${escapeHtml(r.cost_type)}${r.notes ? ' · ' + escapeHtml(r.notes) : ''} <b class="mono">${fmtMoney(r.amount)}</b></div>`).join('') || '<span class="muted">—</span>'}</td>
+        <td class="num" style="font-weight:700;${inCut ? 'color:var(--amber);' : ''}">${fmtMoney(x.amount)}</td>
+        <td><button class="btn small" onclick="surOpen('${x.L.order_number}','${x.key}')">+ Surcharge</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing open with this payee.</td></tr>'}
+    <tr><td colspan="6" style="font-weight:700;">Due by ${fmtDateStr(cut)}</td><td class="num" style="font-weight:700;color:var(--amber);">${fmtMoney(sumOf(dueBy))}</td><td></td></tr>
+    <tr><td colspan="6" class="muted">All open (incl. not due / not delivered)</td><td class="num muted">${fmtMoney(sumOf(items))}</td><td></td></tr>
+    </tbody></table></div></div>`;
+}
+function exportStatementCsv(name){
+  const cut = cutoffDate(), items = openItems('out').filter(x => x.where === 'here' && payeeKey(x) === name);
+  const rows = items.map(x => [x.L.order_number, x.label, x.L.delivered_at ? fmtDateStr(x.L.delivered_at) : '', x.due ? fmtDateStr(x.due) : '', (x.base ?? x.amount ?? 0).toFixed(2),
+    (x.surcharges || []).map(r => `${r.cost_type}${r.notes ? ' (' + r.notes + ')' : ''}: ${Number(r.amount).toFixed(2)}`).join('; '), (x.amount || 0).toFixed(2), owedNow(x) && x.due && x.due <= cut ? 'yes' : 'no']);
+  const csv = [['Order', 'What', 'Delivered', 'Due', 'Base', 'Surcharges', 'Total', `Due by ${fmtDateStr(cut)}`], ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `${name.replace(/[^A-Za-z0-9]+/g, '-')}-statement-${ymd(cut)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
 function renderParty(){
   const { dir, name } = detailParty;
+  if (dir === 'out') return renderStatement(name);
   const items = openItems(dir).filter(x => (dir === 'in' ? payerKey(x) : payeeKey(x)) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
   const L0 = items[0] && items[0].L, isCustomer = dir === 'in' && name !== 'Summar' && L0;
   document.getElementById('orderDetailTitle').textContent = name;
@@ -1048,7 +1116,7 @@ function renderParty(){
 // the real amount paid (replaces the estimate).
 let payDir = 'in', payPlan = [], payOnly = null, payKey = null;
 function payItems(dir, name){ return openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here' && (dir === 'in' ? payerKey(x) : payeeKey(x)) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15)); }
-function payOpen(dir, name, onlyId){
+function payOpen(dir, name, onlyId, prefill){
   payDir = dir; payOnly = onlyId || null; payKey = `pr-${dir}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const names = [...new Set(openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here').map(dir === 'in' ? payerKey : payeeKey))];
   document.getElementById('rpTitle').textContent = dir === 'watch' ? 'Client Paid Summar' : dir === 'in' ? 'Apply Payment' : 'Record Payment Sent';
@@ -1060,7 +1128,7 @@ function payOpen(dir, name, onlyId){
   sel.innerHTML = names.map(k => `<option value="${escapeHtml(k)}"${k === name ? ' selected' : ''}>${escapeHtml(k)}</option>`).join('');
   sel.disabled = !!payOnly;
   const only = payOnly && allSteps().find(x => x.id === payOnly);
-  document.getElementById('rpAmt').value = only ? only.amount : '';
+  document.getElementById('rpAmt').value = only ? only.amount : (prefill || '');
   document.getElementById('rpDate').value = prData.today;
   document.getElementById('rpAccount').value = dir === 'out' ? 'Buentrade' : dir === 'watch' ? 'Summar' : '';
   document.getElementById('rpMethod').value = ''; document.getElementById('rpRef').value = ''; document.getElementById('rpMsg').textContent = '';
@@ -1118,6 +1186,36 @@ async function rpSave(){
   } catch (e) {
     err('Error: ' + e.message); document.getElementById('rpSaveBtn').disabled = false;
   }
+}
+
+// ---------- Add surcharge (freight or customs bill) ----------
+const SURCHARGE_TYPES = ['Customs Processing', 'US Warehouse Handling', 'Lumper fee', 'INBOND Release', 'Labels', 'Plastic wrap', 'IN-LIEU',
+  'Storage — Overnight', 'Storage — Weekend', 'Storage — Short term', 'Storage — Mid term', 'Storage — Long term', 'Storage — Extra long',
+  'Fresh to Frozen conversion', 'Other'];
+let surCtx = null;
+function surOpen(orderNumber, kind){
+  surCtx = { orderNumber, key: `sur-${orderNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  document.getElementById('surSub').textContent = orderNumber;
+  document.getElementById('surKind').value = kind === 'customs' ? 'customs' : 'freight';
+  document.getElementById('surType').innerHTML = '<option value="">Select...</option>' + SURCHARGE_TYPES.map(t => `<option>${escapeHtml(t)}</option>`).join('');
+  document.getElementById('surAmt').value = ''; document.getElementById('surNotes').value = ''; document.getElementById('surMsg').textContent = '';
+  document.getElementById('surSaveBtn').disabled = false;
+  document.getElementById('surOverlay').style.display = 'flex';
+}
+function surClose(){ document.getElementById('surOverlay').style.display = 'none'; }
+async function surSave(){
+  const msg = document.getElementById('surMsg'), err = t => { msg.textContent = t; msg.style.color = '#FF9C8A'; };
+  const kind = document.getElementById('surKind').value, type = document.getElementById('surType').value, amount = parseFloat(document.getElementById('surAmt').value), notes = document.getElementById('surNotes').value.trim() || null;
+  if (!type) return err('Select the surcharge.');
+  if (type === 'Other' && !notes) return err('Write what it is.');
+  if (!(amount > 0)) return err('Enter a valid amount.');
+  document.getElementById('surSaveBtn').disabled = true; msg.textContent = 'Saving…'; msg.style.color = 'var(--ink-soft)';
+  try {
+    await callApi('shipments-apply-payment', { kind: 'surcharge', idempotency_key: surCtx.key, actor: currentActor(), order_number: surCtx.orderNumber, payable_kind: kind, cost_type: type, amount, notes });
+    surClose(); await loadCollections();
+    const L = LOADS.find(x => x.order_number === surCtx.orderNumber), x = L && steps(L).find(s => s.key === kind);
+    showToast('Surcharge added', `${surCtx.orderNumber} — ${kind} bill now ${x ? fmtMoney(x.amount) : ''}${L && profitOf(L) ? ' · profit ' + fmtMoney(profitOf(L).profit) : ''}`);
+  } catch (e) { err('Error: ' + e.message); document.getElementById('surSaveBtn').disabled = false; }
 }
 
 // ---------- customer confirmation (approved copy 2026-09-13, same text payments.html sent) ----------

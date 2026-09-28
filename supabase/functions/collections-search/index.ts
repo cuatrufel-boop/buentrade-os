@@ -161,7 +161,8 @@ async function payReceive(annualRate: number) {
       (select min(d::date) from purchase_orders p2, jsonb_array_elements_text(p2.delivery_dates) d where p2.order_number = sh.order_number) as delivery_date,
       sh.pickup_date, sh.plant_paid_at, sh.summar_payment_sent_at, sh.picked_up_at, sh.delivered_at, sh.invoice_sent_at, sh.payment_due_date,
       sh.paid_at, sh.amount_paid, sh.net_profit, sh.interest_amount,
-      so_.sent_at as offer_sent_at, so_.won_by, sh.po_sent_at, sh.so_sent_at, sh.created_at as order_created_at,
+      so_.sent_at as offer_sent_at, so_.won_by,
+      (select name from providers where id = coalesce(so_.customs_agency_provider_id, c.customs_agency_provider_id)) as customs_agency_name, sh.po_sent_at, sh.so_sent_at, sh.created_at as order_created_at,
       fo.carrier_name, fo.freight_rate
     from shipments sh
     left join customers c on c.id = sh.customer_id
@@ -176,10 +177,11 @@ async function payReceive(annualRate: number) {
     order by sh.order_number
   `;
   const records = await sql`select * from shipment_money_records order by created_at`;
+  const surcharges = await sql`select id, order_number, cost_type, amount, notes, payable_kind, created_at from order_extra_costs where payable_kind is not null order by created_at`;
   const customerPayments = await sql`
     select pa.*, c.trade_name as customer_name from payment_applications pa
     left join customers c on c.id = pa.customer_id order by pa.applied_at
   `;
-  return { loads, records, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toISOString().slice(0, 10) };
+  return { loads, records, surcharges, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toISOString().slice(0, 10) };
 }
 

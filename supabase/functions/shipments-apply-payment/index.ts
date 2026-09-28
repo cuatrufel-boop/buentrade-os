@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
+    if (body.kind === "surcharge") return await addSurcharge(body);
     if (body.kind && body.kind !== "customer") return await recordMoney(body);
     const missing = ["actor", "customer_id", "amount", "bank_entry_date", "collection_account"].filter((k) => body[k] == null);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
@@ -184,5 +185,37 @@ async function recordMoney(body: Record<string, any>) {
     return out;
   });
   return jsonResponse({ recorded: true, records, payment_batch_id: batchId });
+}
+
+// Pay & Receive surcharges (2026-09-28, "si los fletes de cada carga tuvieron sobrecostos debo
+// poder adherirlos y saber al final del corte cuanto se le paga... igual que aduanas"): one
+// order_extra_costs row on the load (so profit already counts it, like every extra cost) marked
+// with the bill it belongs to — the carrier's freight bill or the customs bill.
+// cost_type is a closed list: the Trading Tool's own extra-cost names, or "Other" with a note.
+const SURCHARGE_TYPES = ["Customs Processing", "US Warehouse Handling", "Lumper fee", "INBOND Release", "Labels", "Plastic wrap", "IN-LIEU",
+  "Storage — Overnight", "Storage — Weekend", "Storage — Short term", "Storage — Mid term", "Storage — Long term", "Storage — Extra long",
+  "Fresh to Frozen conversion", "Other"];
+async function addSurcharge(body: Record<string, any>) {
+  const { actor, order_number, payable_kind, cost_type, amount, notes = null, idempotency_key } = body;
+  const missing = ["actor", "order_number", "payable_kind", "cost_type", "amount", "idempotency_key"].filter((k) => body[k] == null);
+  if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
+  if (!["freight", "customs"].includes(payable_kind)) return jsonResponse({ error: "payable_kind must be freight or customs" }, 400);
+  if (!SURCHARGE_TYPES.includes(cost_type)) return jsonResponse({ error: "cost_type must be one of: " + SURCHARGE_TYPES.join(", ") }, 400);
+  if (cost_type === "Other" && !(notes && String(notes).trim())) return jsonResponse({ error: "write what the Other surcharge is in notes" }, 400);
+  if (!(Number(amount) > 0)) return jsonResponse({ error: "amount must be greater than 0" }, 400);
+  const [done] = await sql`select * from order_extra_costs where idempotency_key = ${idempotency_key}`;
+  if (done) return jsonResponse({ added: true, idempotent_replay: true, surcharge: done });
+  const [sh] = await sql`select sh.order_number, sh.sent_offer_id from shipments sh where sh.order_number = ${order_number}`;
+  if (!sh) return jsonResponse({ error: "unknown order_number" }, 404);
+  const row = await sql.begin(async (tx) => {
+    const [r] = await tx`
+      insert into order_extra_costs (order_number, sent_offer_id, cost_type, amount, notes, payable_kind, actor, idempotency_key)
+      values (${sh.order_number}, ${sh.sent_offer_id}, ${cost_type}, ${Number(amount)}, ${notes}, ${payable_kind}, ${actor}, ${idempotency_key})
+      returning *
+    `;
+    await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "order_extra_costs", record_id: r.id, before: null, after: r });
+    return r;
+  });
+  return jsonResponse({ added: true, surcharge: row });
 }
 
