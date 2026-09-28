@@ -721,7 +721,7 @@ auth.onAuthStateChanged(user => {
   <div class="email-modal-box" style="max-width:420px;">
     <h3>Payment Terms</h3>
     <div class="email-modal-from" id="tmSub"></div>
-    <div class="email-modal-field"><label>Days after delivery (0 = cash)</label><input id="tmDays" class="mono" type="number" min="0" max="180" step="1" placeholder="30"></div>
+    <div class="email-modal-field"><label>We pay them</label><select id="tmDays"><option value="">Select…</option><option value="0">At delivery</option><option value="30">30 days after delivery</option></select></div>
     <div id="tmMsg" style="font-size:12.5px;margin-top:6px;color:#FF9C8A;"></div>
     <div class="email-modal-actions"><button class="btn secondary" onclick="tmClose()">Cancel</button><button class="wa-btn" onclick="tmSave()">Save</button></div>
   </div>
@@ -875,14 +875,16 @@ function flow(L){
     if (s.key === 'rem'){ s.locked = !billsOk; s.why = 'Confirm the bills first.'; }
     if (s.key === 'customs_pay' || s.key === 'carrier_pay'){
       const bill = s.key === 'customs_pay' ? 'customs_bill' : 'freight_bill', terms = s.key === 'customs_pay' ? termsText(L.customs_agency_days, 0) : termsText(L.carrier_days, FREIGHT_DAYS);
-      s.locked = !ok(bill) || (s.from && TODAY < s.from);
-      s.why = !ok(bill) ? `Confirm the ${byKey(bill).label} first.` : `Scheduled ${fmtDateStr(s.from)} (${terms.toLowerCase()}).`;
+      s.locked = !ok(bill);
+      s.why = `Confirm the ${byKey(bill).label} first.`;
+      // not due yet (30-day terms): payable early from Pay Now, but it doesn't take the Next Action
+      s.early = ok(bill) && !!s.from && TODAY < s.from; s.dueText = `Due ${fmtDateStr(s.from)} (${terms.toLowerCase()})`;
     }
     if (s.key === 'reminder'){ s.locked = !billsOk || !ok('rem') || (s.from && TODAY < s.from); s.why = !billsOk || !ok('rem') ? 'Do the steps before first.' : `Collect from ${fmtDateStr(s.from)} (day ${COLLECT_FROM_DAY}).`; }
     if (s.key === 'client'){ s.locked = !billsOk || !ok('rem'); s.why = 'Do the steps before first.'; }
   }
-  const current = f.find(s => !s.done && !s.locked) || null;
-  const waiting = current ? null : f.find(s => !s.done) || null;
+  const current = f.find(s => !s.done && !s.locked && !s.early) || null;
+  const waiting = current ? null : f.find(s => !s.done && !s.early) || f.find(s => !s.done) || null;
   return { f, current, waiting, allDone: f.every(s => s.done) };
 }
 function recDate(x){ if (x.recs && x.recs[0]) return day(x.recs[0].bank_entry_date); if (x.key === 'client' && x.L.paid_at) return day(x.L.paid_at); return null; }
@@ -931,7 +933,7 @@ function stageLabel(L){
 // flow). Not set yet → carrier 30 days, customs cash, and the flow asks to set it.
 const carrierDays = L => L.carrier_days ?? FREIGHT_DAYS;
 const customsDays = L => L.customs_agency_days ?? 0;
-const termsText = (days, fallback) => days == null ? `Terms not set — using ${fallback ? fallback + ' days' : 'cash'}` : days === 0 ? 'Cash (at delivery)' : `${days} days after delivery`;
+const termsText = (days, fallback) => days == null ? `Terms not set — using ${fallback ? fallback + ' days' : 'at delivery'}` : days === 0 ? 'At delivery' : `${days} days after delivery`;
 function surchargesFor(L, kind){ return (prData.surcharges || []).filter(r => r.order_number === L.order_number && r.payable_kind === kind); }
 function recordsFor(L, kind){ return prData.records.filter(r => r.shipment_id === L.id && r.kind === kind); }
 // Summar fee on a load — days counted from delivery: the real days once the customer paid Summar,
@@ -1193,12 +1195,43 @@ function renderDetail(){
       <div class="utimeline" style="justify-content:center;">${nodes}</div>
       ${L.fin === 'summar' ? summarBox(L) : ''}
       <div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
-      <div class="docs-panel-grid">${st.filter(x => !['plant', 'gap'].includes(x.key)).map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' || x.dir === 'watch' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : x.dir === 'watch' ? 'SUMMAR' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${s.cls}">${s.t}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
+      ${moneySummary(L, st)}
       <div class="docs-panel-heading">Profit</div>
       <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -(p.freight - sumCharges(L, 'freight'))) + chargeLines(L, 'freight', line) + line('Inspection / customs', -(p.customs - sumCharges(L, 'customs'))) + chargeLines(L, 'customs', line) + (p.extras ? line('Extra costs', -p.extras) : '') + line(L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
     </div>`;
 }
 // payment terms missing for the provider of this step → set them right here, in the flow
+// OUT / IN of the load, every movement with its real date (user 2026-09-28: "el sistema debe saber
+// cuando pague cuando no para saber que sale que entra visible"). Advance payments done in Orders
+// (plant / Summar wire) show here as paid in Orders; customs / freight / remanente / customer
+// payment are paid or recorded from here. Summar paying the plant is Summar's money — not listed.
+function paidOn(x){ if (!x.done) return null; if (x.key === 'plant') return day(x.L.plant_paid_at); if (x.key === 'gap') return day(x.L.summar_payment_sent_at); return recDate(x); }
+function moneySummary(L, st){
+  const fl = flow(L), payStep = k => fl.f.find(s => s.key === k);
+  const row = (x, label, where) => {
+    const paid = x.done, amt = paid && x.recs.length ? x.recorded : x.amount, d = paid ? paidOn(x) : x.due, late = !paid && x.due && x.due < TODAY;
+    let act = '';
+    if (!paid && where === 'here'){
+      const ps = payStep(x.key === 'customs' ? 'customs_pay' : x.key === 'freight' ? 'carrier_pay' : null);
+      if (ps) act = ps.locked ? `<span class="muted" style="font-size:11.5px;">${escapeHtml(ps.why)}</span>` : `<button class="wa-btn" onclick="payOpen('out','${jsArg(x.who)}')">Pay Now</button>`;
+      else if (x.key === 'rem') { const s5 = payStep('rem'); act = s5 && !s5.locked ? actBtn(x, true) : ''; }
+    }
+    return `<tr><td style="white-space:nowrap;"><b style="font-weight:600;">${escapeHtml(label)}</b> <span class="muted" style="font-size:11.5px;">· ${escapeHtml(x.who)}</span></td><td class="num">${amt == null ? '—' : fmtMoney(amt)}</td>
+      <td>${paid ? `<span class="payment-badge ok">${where === 'orders' ? 'Paid in Orders' : 'Paid'}${d ? ' ' + fmtDateStr(d) : ''}</span>` : `<span class="payment-badge ${late ? 'overdue' : 'due-soon'}">${d ? 'Due ' + fmtDateStr(d) : 'Pending'}</span>`}</td><td>${act}</td></tr>`;
+  };
+  const out = st.filter(x => x.dir === 'out'), inn = st.filter(x => x.dir === 'in' || x.dir === 'watch');
+  const tot = (a, paid) => a.filter(x => !!x.done === paid).reduce((n, x) => n + ((paid && x.recs.length ? x.recorded : x.amount) || 0), 0);
+  const label = x => ({ plant: 'Plant', gap: 'Wire to Summar', customs: 'Customs', freight: 'Carrier', rem: 'Summar remanente', client: L.fin === 'summar' ? 'Customer → Summar' : 'Customer' })[x.key] || x.label;
+  const block = (title, color, rows, a, paidWord, pendWord) => `<div class="load-card" style="padding:14px 16px;margin:0;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;"><b style="color:${color};font-family:'Space Grotesk',sans-serif;">${title}</b>
+        <span style="font-size:12px;" class="muted">${paidWord} <b class="mono" style="color:var(--ink);">${fmtMoney(tot(a, true))}</b> · ${pendWord} <b class="mono" style="color:${color};">${fmtMoney(tot(a, false))}</b></span></div>
+      <table class="pr-table"><tbody>${rows || '<tr><td class="empty">—</td></tr>'}</tbody></table></div>`;
+  return `<div style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px;">
+    ${block('OUT — we pay', 'var(--amber)', out.map(x => row(x, label(x), x.where)).join(''), out, 'Paid', 'Pending')}
+    ${block('IN — we receive', '#6FD3A8', inn.map(x => row(x, label(x), x.where)).join(''), inn.filter(x => x.dir === 'in'), 'Received', 'Pending')}
+  </div>${L.fin === 'summar' ? '<div class="muted" style="font-size:11.5px;margin-top:6px;">Customer → Summar is paid to Summar, not to us — tracked to control the Summar fee.</div>' : ''}`;
+}
+
 // every extra charge of the load as its own profit line (user 2026-09-28: "no me esta discriminando los sobrecostos")
 const sumCharges = (L, kind) => surchargesFor(L, kind).reduce((n, r) => n + Number(r.amount), 0);
 const chargeLines = (L, kind, line) => surchargesFor(L, kind).map(r => line(`${escapeHtml(r.cost_type)}${r.notes ? ' · ' + escapeHtml(r.notes) : ''} <span class="muted" style="font-size:11px;">${kind === 'freight' ? 'carrier' : 'customs'}</span>`, -Number(r.amount))).join('');
@@ -1471,14 +1504,14 @@ function setMoney(id, v){ const el = document.getElementById(id); if (el){ el.va
 
 // ---------- Payment terms of a carrier / customs agency, set from the flow ----------
 let tmProvider = null;
-function termsOpen(id, name){ tmProvider = { id, name, key: `terms-${id}-${Date.now()}` }; document.getElementById('tmSub').textContent = name; document.getElementById('tmDays').value = ''; document.getElementById('tmMsg').textContent = ''; document.getElementById('tmOverlay').style.display = 'flex'; }
+function termsOpen(id, name){ tmProvider = { id, name, key: `terms-${id}-${Date.now()}` }; document.getElementById('tmSub').textContent = name; const d = document.getElementById('tmDays'); d.value = ''; if (d.btSync) d.btSync(); document.getElementById('tmMsg').textContent = ''; document.getElementById('tmOverlay').style.display = 'flex'; }
 function tmClose(){ document.getElementById('tmOverlay').style.display = 'none'; }
 async function tmSave(){
   const v = document.getElementById('tmDays').value, days = Number(v);
-  if (v === '' || !Number.isInteger(days) || days < 0 || days > 180){ document.getElementById('tmMsg').textContent = 'Whole days between 0 (cash) and 180.'; return; }
+  if (v === ''){ document.getElementById('tmMsg').textContent = 'Pick at delivery or 30 days.'; return; }
   try {
     await callApi('providers-update', { actor: currentActor(), id: tmProvider.id, payment_days: days, idempotency_key: tmProvider.key });
-    tmClose(); await loadCollections(); showToast('Payment terms saved', `${tmProvider.name}: ${days === 0 ? 'cash' : days + ' days after delivery'} (also in Logistics)`);
+    tmClose(); await loadCollections(); showToast('Payment terms saved', `${tmProvider.name}: ${days === 0 ? 'at delivery' : days + ' days after delivery'} (also in Logistics)`);
   } catch (e) { document.getElementById('tmMsg').textContent = 'Error: ' + e.message; }
 }
 

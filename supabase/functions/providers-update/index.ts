@@ -30,8 +30,10 @@ Deno.serve(async (req) => {
     const [existing] = await sql`select * from providers where id = ${id}`;
     if (!existing) return jsonResponse({ error: "unknown provider id" }, 404);
 
-    if ("payment_days" in body && body.payment_days != null && !(Number.isInteger(body.payment_days) && body.payment_days >= 0 && body.payment_days <= 180)) {
-      return jsonResponse({ error: "payment_days must be a whole number of days between 0 (cash) and 180" }, 400);
+    // two options only (user 2026-09-28: "carriers ... a 30 dias o cuando entregan; aduanas a 30
+    // dias o cuando se entrega la carga"): 0 = at delivery, 30 = 30 days after delivery
+    if ("payment_days" in body && body.payment_days != null && ![0, 30].includes(body.payment_days)) {
+      return jsonResponse({ error: "payment_days must be 0 (at delivery) or 30 (30 days after delivery)" }, 400);
     }
     const merged: any = { ...existing };
     for (const f of UPDATABLE_FIELDS) if (f in body) merged[f] = body[f];

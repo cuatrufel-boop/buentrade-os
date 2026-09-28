@@ -591,7 +591,7 @@ auth.onAuthStateChanged(user => {
         </div>
         <div class="profile-panel">
           <div class="profile-heading">Payment Terms</div>
-          <div class="field"><label>Days after delivery (0 = cash)</label><input id="p_payment_days" type="number" min="0" max="180" step="1" placeholder="30"></div>
+          <div class="field"><label>We pay them</label><select id="p_payment_days"><option value="">Not set</option><option value="0">At delivery</option><option value="30">30 days after delivery</option></select></div>
         </div>
         <div class="profile-panel">
           <div class="profile-heading">Notes</div>
@@ -1185,7 +1185,7 @@ function renderProviderProfileView(p){
   document.getElementById('pv_email').innerHTML = p.email ? `<a href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(p.email))}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.email)}</a>` : '—';
   document.getElementById('pv_email_cc').textContent = p.email_cc || '—';
   document.getElementById('pv_notes').textContent = p.notes || '—';
-  document.getElementById('pv_payment_days').textContent = p.payment_days == null ? 'Not set' : p.payment_days === 0 ? 'Cash (at delivery)' : `${p.payment_days} days after delivery`;
+  document.getElementById('pv_payment_days').textContent = p.payment_days == null ? 'Not set' : p.payment_days === 0 ? 'At delivery' : `${p.payment_days} days after delivery`;
 }
 
 function openProviderWhatsApp(){
@@ -1293,7 +1293,8 @@ function editProviderProfile(){
   document.getElementById('p_email').value = p.email || '';
   document.getElementById('p_email_cc').value = p.email_cc || '';
   document.getElementById('p_notes').value = p.notes || '';
-  document.getElementById('p_payment_days').value = p.payment_days == null ? '' : p.payment_days;
+  document.getElementById('p_payment_days').value = p.payment_days == null ? '' : String(p.payment_days);
+  if (document.getElementById('p_payment_days').btSync) document.getElementById('p_payment_days').btSync();
   const pPhone = splitPhone(p.phone);
   document.getElementById('p_phone_code').value = pPhone.code;
   document.getElementById('p_phone_number').value = pPhone.number;
