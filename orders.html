@@ -130,7 +130,7 @@
   .toast-text b{display:block;font-size:13px;margin-bottom:1px;}
   @keyframes toastIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
   .order-num{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--ink);}
-  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;margin-bottom:20px;}
   .stat-card{
     background:linear-gradient(135deg, rgba(232,181,76,.32), rgba(232,181,76,.08));
     border:1px solid rgba(232,181,76,.55); border-radius:12px;
@@ -911,17 +911,11 @@ async function loadStatusOrders(){
   try { orders = (await callApi('shipments-search', { limit: 500 })).results || []; }
   catch (e) { wrap.innerHTML = ''; document.getElementById('statusEmpty').style.display = 'block'; document.getElementById('statusEmpty').textContent = 'Error loading: ' + e.message; return; }
 
-  // A load stops needing attention once it's delivered AND either 3+ days past its payment due
-  // date (paid or written off by then in practice) — this is a time-based cutoff to keep old
-  // closed loads from accumulating here forever, not a real "paid" flag.
-  const today = new Date();
-  const active = orders.filter(o => {
-    if (o.status !== 'delivered') return true;
-    if (!o.delivered_at) return true;
-    const daysSinceDelivery = (today - new Date(o.delivered_at)) / 86400000;
-    const payDays = 30; // shown badge already accounts for the real payment_due_date; this is just the list cutoff
-    return daysSinceDelivery < payDays + 3;
-  });
+  // Real ask 2026-09-28 ("cuando termina el ultimo paso de orders debe pasar a pay and rec... no
+  // quiero el mismo flujo en orden y en pay and rec"): Orders' flow ends with the customer's
+  // signature on the Invoice. The moment a load is delivered AND signed it moves to Pay & Receive
+  // (collections.html) and leaves this list — no payment tracking here (was a 33-day time cutoff).
+  const active = orders.filter(o => !(o.status === 'delivered' && o.invoice_signed_at));
 
   // shipments-search already joins everything (carrier, customer contact, catalog product,
   // freight origin) — just reshape field names to what renderStatusOrders/advanceLoadStatus
@@ -1705,15 +1699,12 @@ function renderStatusStats(){
   const inTransit = statusOrders.filter(o => o.load_status !== 'delivered').length;
   const uniqueCustomers = new Set(statusOrders.map(o => o.customer_name)).size;
   const today = new Date();
-  const overdue = statusOrders.filter(o => o.payment_due_date && new Date(o.payment_due_date + 'T00:00:00') < today).length;
   const deliveredRecent = statusOrders.filter(o => o.load_status === 'delivered').length;
   const stats = [
     { accent: '#5AAAFF', accentSoft: 'rgba(90,170,255,.4)', value: String(inTransit), label: 'Loads in transit', hero: true,
       icon: '<rect x="1" y="7" width="15" height="10" rx="1"/><path d="M16 10h3.5L22 14v3h-6z"/><circle cx="6" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/>' },
     { accent: '#5AAAFF', accentSoft: 'rgba(90,170,255,.4)', value: String(uniqueCustomers), label: 'Customers active',
       icon: '<path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="3.5"/><path d="M21 20v-1a4 4 0 0 0-3-3.87"/><path d="M15.5 3.6a3.5 3.5 0 0 1 0 6.8"/>' },
-    { accent: '#FF9C8A', accentSoft: 'rgba(196,67,46,.4)', value: String(overdue), label: 'Payments overdue',
-      icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>' },
     { accent: '#5FE097', accentSoft: 'rgba(95,224,151,.4)', value: String(deliveredRecent), label: 'Delivered',
       icon: '<path d="M20 6 9 17l-5-5"/>' },
   ];

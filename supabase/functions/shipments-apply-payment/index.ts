@@ -26,6 +26,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     if (body.kind === "surcharge") return await addSurcharge(body);
+    if (body.kind === "flow_step") return await flowStep(body);
     if (body.kind && body.kind !== "customer") return await recordMoney(body);
     const missing = ["actor", "customer_id", "amount", "bank_entry_date", "collection_account"].filter((k) => body[k] == null);
     if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
@@ -217,5 +218,27 @@ async function addSurcharge(body: Record<string, any>) {
     return r;
   });
   return jsonResponse({ added: true, surcharge: row });
+}
+
+// Pay & Receive flow steps that are not money (2026-09-28): the trader confirmed the load's real
+// freight cost, or sent the customer the day-29 payment reminder. Once per load per step.
+async function flowStep(body: Record<string, any>) {
+  const { actor, order_number, step, detail = null, idempotency_key } = body;
+  const missing = ["actor", "order_number", "step", "idempotency_key"].filter((k) => body[k] == null);
+  if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
+  if (!["freight_confirmed", "customer_reminder_sent"].includes(step)) return jsonResponse({ error: "step must be freight_confirmed or customer_reminder_sent" }, 400);
+  const [sh] = await sql`select id from shipments where order_number = ${order_number}`;
+  if (!sh) return jsonResponse({ error: "unknown order_number" }, 404);
+  const [done] = await sql`select * from shipment_flow_steps where shipment_id = ${sh.id} and step = ${step}`;
+  if (done) return jsonResponse({ recorded: true, idempotent_replay: true, step: done });
+  const row = await sql.begin(async (tx) => {
+    const [r] = await tx`
+      insert into shipment_flow_steps (shipment_id, step, actor, detail, idempotency_key)
+      values (${sh.id}, ${step}, ${actor}, ${detail}, ${idempotency_key}) returning *
+    `;
+    await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "shipment_flow_steps", record_id: `${sh.id}:${step}`, before: null, after: r });
+    return r;
+  });
+  return jsonResponse({ recorded: true, step: row });
 }
 

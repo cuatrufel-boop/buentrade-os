@@ -10,7 +10,7 @@ const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
 
 const UPDATABLE_FIELDS = [
   "name", "country", "city", "country_id", "city_id", "phone", "whatsapp", "address", "contact_name", "email", "email_cc", "whatsapp_cc", "notes",
-  "mc_number", "dot_number",
+  "mc_number", "dot_number", "payment_days",
 ];
 
 Deno.serve(async (req) => {
@@ -30,6 +30,9 @@ Deno.serve(async (req) => {
     const [existing] = await sql`select * from providers where id = ${id}`;
     if (!existing) return jsonResponse({ error: "unknown provider id" }, 404);
 
+    if ("payment_days" in body && body.payment_days != null && !(Number.isInteger(body.payment_days) && body.payment_days >= 0 && body.payment_days <= 180)) {
+      return jsonResponse({ error: "payment_days must be a whole number of days between 0 (cash) and 180" }, 400);
+    }
     const merged: any = { ...existing };
     for (const f of UPDATABLE_FIELDS) if (f in body) merged[f] = body[f];
 
@@ -37,7 +40,9 @@ Deno.serve(async (req) => {
     const exactDuplicate = others.find((p: any) => normalize(p.name) === normalize(merged.name));
     const nearDuplicates = others.filter((p: any) => isNearDuplicate(normalize(p.name), normalize(merged.name)));
 
-    if ((exactDuplicate || nearDuplicates.length) && !override_duplicate_check) {
+    // the name didn't change (e.g. only payment_days from Pay & Receive) — nothing new to compare
+    const nameUnchanged = normalize(merged.name) === normalize(existing.name);
+    if ((exactDuplicate || nearDuplicates.length) && !override_duplicate_check && !nameUnchanged) {
       return duplicateResponse({
         message: exactDuplicate
           ? "This edit would make it identical to another existing provider — confirm to see it or override to save anyway."
@@ -56,6 +61,7 @@ Deno.serve(async (req) => {
           contact_name = ${merged.contact_name}, email = ${merged.email}, email_cc = ${merged.email_cc},
           whatsapp_cc = ${merged.whatsapp_cc}, notes = ${merged.notes},
           mc_number = ${merged.mc_number}, dot_number = ${merged.dot_number},
+          payment_days = ${merged.payment_days},
           updated_at = now()
         where id = ${id} returning *
       `;

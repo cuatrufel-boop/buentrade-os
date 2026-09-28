@@ -541,6 +541,10 @@ auth.onAuthStateChanged(user => {
           </div>
         </div>
         <div class="profile-panel">
+          <div class="profile-heading">Payment Terms</div>
+          <div class="profile-row"><span class="view-label">We pay</span><span class="profile-row-value" id="pv_payment_days">—</span></div>
+        </div>
+        <div class="profile-panel">
           <div class="profile-heading">Notes</div>
           <div class="profile-row"><span class="profile-row-value" id="pv_notes">—</span></div>
         </div>
@@ -584,6 +588,10 @@ auth.onAuthStateChanged(user => {
             </div>
           </div>
           <div class="field"><label>CC Emails (comma-separated)</label><input id="p_email_cc" placeholder="dispatch@carrier.com, billing@carrier.com"></div>
+        </div>
+        <div class="profile-panel">
+          <div class="profile-heading">Payment Terms</div>
+          <div class="field"><label>Days after delivery (0 = cash)</label><input id="p_payment_days" type="number" min="0" max="180" step="1" placeholder="30"></div>
         </div>
         <div class="profile-panel">
           <div class="profile-heading">Notes</div>
@@ -1177,6 +1185,7 @@ function renderProviderProfileView(p){
   document.getElementById('pv_email').innerHTML = p.email ? `<a href="${escapeHtml('https://mail.google.com/mail/?view=cm&to=' + encodeURIComponent(p.email))}" target="bt_gmail" rel="noopener" style="color:var(--blue);text-decoration:none;">${escapeHtml(p.email)}</a>` : '—';
   document.getElementById('pv_email_cc').textContent = p.email_cc || '—';
   document.getElementById('pv_notes').textContent = p.notes || '—';
+  document.getElementById('pv_payment_days').textContent = p.payment_days == null ? 'Not set' : p.payment_days === 0 ? 'Cash (at delivery)' : `${p.payment_days} days after delivery`;
 }
 
 function openProviderWhatsApp(){
@@ -1284,6 +1293,7 @@ function editProviderProfile(){
   document.getElementById('p_email').value = p.email || '';
   document.getElementById('p_email_cc').value = p.email_cc || '';
   document.getElementById('p_notes').value = p.notes || '';
+  document.getElementById('p_payment_days').value = p.payment_days == null ? '' : p.payment_days;
   const pPhone = splitPhone(p.phone);
   document.getElementById('p_phone_code').value = pPhone.code;
   document.getElementById('p_phone_number').value = pPhone.number;
@@ -1320,6 +1330,7 @@ async function saveProviderProfile(forceOverride){
     email: document.getElementById('p_email').value || null,
     email_cc: document.getElementById('p_email_cc').value || null,
     notes: document.getElementById('p_notes').value || null,
+    payment_days: document.getElementById('p_payment_days').value === '' ? null : Number(document.getElementById('p_payment_days').value),
   };
   if (!payload.name){
     document.getElementById('formMsg').textContent = 'Name is required.';

@@ -673,6 +673,25 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<div id="cfOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:480px;">
+    <h3>Confirm Freight</h3>
+    <div class="email-modal-from" id="cfSub"></div>
+    <div id="cfBody"></div>
+    <div class="muted" style="font-size:12px;margin-top:10px;">Any surcharge the carrier charged? Add it before confirming — the total goes on the carrier's bill.</div>
+    <div id="cfMsg" style="font-size:12.5px;margin-top:6px;color:#FF9C8A;"></div>
+    <div class="email-modal-actions"><button class="btn secondary" onclick="cfClose()">Cancel</button><button class="btn" onclick="cfAddSurcharge()">+ Surcharge</button><button class="wa-btn" id="cfSaveBtn" onclick="cfSave()">Confirm Freight</button></div>
+  </div>
+</div>
+<div id="tmOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:420px;">
+    <h3>Payment Terms</h3>
+    <div class="email-modal-from" id="tmSub"></div>
+    <div class="email-modal-field"><label>Days after delivery (0 = cash)</label><input id="tmDays" class="mono" type="number" min="0" max="180" step="1" placeholder="30"></div>
+    <div id="tmMsg" style="font-size:12.5px;margin-top:6px;color:#FF9C8A;"></div>
+    <div class="email-modal-actions"><button class="btn secondary" onclick="tmClose()">Cancel</button><button class="wa-btn" onclick="tmSave()">Save</button></div>
+  </div>
+</div>
 <div id="surOverlay" class="email-modal-overlay" style="display:none;">
   <div class="email-modal-box" style="max-width:460px;">
     <h3>Add Surcharge</h3>
@@ -773,18 +792,91 @@ async function loadCollections(){
     plant_paid_at: r.plant_paid_at, summar_payment_sent_at: r.summar_payment_sent_at, picked_up_at: r.picked_up_at, delivered_at: r.delivered_at,
     offer_sent_at: r.offer_sent_at, po_sent_at: r.po_sent_at, so_sent_at: r.so_sent_at, order_created_at: r.order_created_at,
     invoice_sent_at: r.invoice_sent_at, payment_due_date: dateOnly(r.payment_due_date), paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
-    interest_amount: r.interest_amount, won_by: r.won_by, customs_agency: r.customs_agency_name,
+    interest_amount: r.interest_amount, won_by: r.won_by, customs_agency: r.customs_agency_name, invoice_signed_at: r.invoice_signed_at,
+    carrier_id: r.carrier_id, carrier_days: r.carrier_days, customs_agency_id: r.customs_agency_id, customs_agency_days: r.customs_agency_days,
     customer_phone: r.customer_phone, payments_contact_name: r.payments_contact_name, payments_contact_email: r.payments_contact_email,
     payments_contact_whatsapp: r.payments_contact_whatsapp, payments_contact_phone: r.payments_contact_phone,
   }));
-  // "viene de orders, queda en pay and receive cuando se paga a summar" — a load enters here once its
-  // Orders advance is paid: the Summar wire for a Summar load (or Summar already paid the plant, when
-  // no wire was needed), the plant payment for a direct load. Before that it lives only in Orders.
-  LOADS = LOADS.filter(L => L.fin === 'summar' ? !!(L.summar_payment_sent_at || L.plant_paid_at) : !!L.plant_paid_at);
+  // "cuando termina el ultimo paso de orders debe pasar a pay and rec" (2026-09-28): Orders ends with
+  // the customer's signature on the Invoice (= proof of delivery). A load enters here only once it is
+  // delivered AND its invoice is signed — never before, so no unfinished load and no step of the
+  // Orders flow is repeated here. From here on it has its own flow (see flow()).
+  LOADS = LOADS.filter(L => (L.delivered_at || L.status === 'delivered') && L.invoice_signed_at);
   draw(); renderDetail();
 }
 
 // ---------- the money steps of one load ----------
+// ============ THE PAY & RECEIVE FLOW — same visual flow as Orders, the second half of the load ============
+// Approved 2026-09-28 ("esos pasos estan bien"), in this order, one at a time, each unlocked by the
+// one before (or by its date), exactly like Orders' timeline — the flow is obligatory, not optional:
+//   1 Pay customs            (skipped when the load has no customs)          — agency's terms
+//   2 Confirm freight        base + surcharges, or no surcharges → goes on the carrier's bill
+//   3 Summar remanente       Summar loads only
+//   4 Collect from customer  Send Reminder, from day 29 (skipped if the customer already paid)
+//   5 Customer paid          to us (direct) or to Summar
+//   6 Pay carrier            when due by the carrier's terms, from its statement with its other loads
+function flowDone(L, step){ return (prData.flow_steps || []).find(f => f.shipment_id === L.id && f.step === step); }
+function flow(L){
+  const st = steps(L), get = k => st.find(x => x.key === k), deliv = day(L.delivered_at);
+  const customs = get('customs'), freight = get('freight'), rem = get('rem'), client = get('client');
+  const fc = flowDone(L, 'freight_confirmed'), rs = flowDone(L, 'customer_reminder_sent');
+  const collectOn = deliv ? addDays(deliv, COLLECT_FROM_DAY) : null;
+  const f = [];
+  if (customs) f.push({ key: 'customs', label: 'Pay Customs', icon: CUSTOMS_ICON, x: customs, done: customs.done, date: customs.done ? recDate(customs) : customs.due, after: null });
+  if (freight) f.push({ key: 'freight_confirm', label: 'Confirm Freight', icon: TRUCK_ICON, x: freight, done: !!fc || freight.done, date: fc ? day(fc.done_at) : null });
+  if (rem) f.push({ key: 'rem', label: 'Summar Remanente', icon: RECEIPT_ICON, x: rem, done: rem.done, date: rem.done ? recDate(rem) : rem.due });
+  f.push({ key: 'reminder', label: 'Collect', icon: EMAIL_ICON_PR, x: client, done: !!rs || client.done, date: rs ? day(rs.done_at) : collectOn, from: collectOn });
+  f.push({ key: 'client', label: L.fin === 'summar' ? 'Client Paid Summar' : 'Customer Paid', icon: MONEY_ICON, x: client, done: client.done, date: client.done ? recDate(client) : client.due });
+  if (freight) f.push({ key: 'carrier', label: 'Pay Carrier', icon: TRUCK_ICON, x: freight, done: freight.done, date: freight.done ? recDate(freight) : freight.due, from: freight.due });
+  // unlock: steps 1-3 strictly in order; Collect from day 29 once 1-3 are done; Customer Paid once
+  // 1-3 are done (money can arrive before the reminder); Pay Carrier once the freight is confirmed
+  // and its terms are due.
+  const pre = f.filter(s => ['customs', 'freight_confirm', 'rem'].includes(s.key));
+  pre.forEach((s, i) => { s.locked = pre.slice(0, i).some(p => !p.done); s.why = 'Do the step before first.'; });
+  const preDone = pre.every(s => s.done);
+  for (const s of f){
+    if (s.key === 'reminder'){ s.locked = !preDone || (s.from && TODAY < s.from); s.why = !preDone ? 'Do the steps before first.' : `Collect from ${fmtDateStr(s.from)} (day ${COLLECT_FROM_DAY}).`; }
+    if (s.key === 'client'){ s.locked = !preDone; s.why = 'Do the steps before first.'; }
+    if (s.key === 'carrier'){ const conf = f.find(x => x.key === 'freight_confirm'); s.locked = !(conf && conf.done) || (s.from && TODAY < s.from); s.why = !(conf && conf.done) ? 'Confirm the freight first.' : `Due ${fmtDateStr(s.from)} (${termsText(L.carrier_days, FREIGHT_DAYS).toLowerCase()}).`; }
+  }
+  const current = f.find(s => !s.done && !s.locked) || null;
+  const waiting = current ? null : f.find(s => !s.done) || null;
+  return { f, current, waiting, allDone: f.every(s => s.done) };
+}
+function recDate(x){ if (x.recs && x.recs[0]) return day(x.recs[0].bank_entry_date); if (x.key === 'client' && x.L.paid_at) return day(x.L.paid_at); return null; }
+const EMAIL_ICON_PR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>';
+// the one action of a flow step — the same button everywhere it shows (Next Action card, timeline)
+function stepAction(L, s){
+  if (s.done) return '';
+  if (s.locked) return `<span class="muted" style="font-size:12px;">${escapeHtml(s.why)}</span>`;
+  if (s.key === 'customs' || s.key === 'rem') return actBtn(s.x, true);
+  if (s.key === 'freight_confirm') return `<button class="wa-btn" onclick="event.stopPropagation();confirmFreightOpen('${L.order_number}')">Confirm Freight</button>`;
+  if (s.key === 'reminder') return `<button class="wa-btn" onclick="event.stopPropagation();sendReminder('${L.order_number}')">Send Reminder</button>`;
+  if (s.key === 'client') return actBtn(s.x, true);
+  if (s.key === 'carrier') return `<button class="wa-btn" onclick="event.stopPropagation();openParty('out','${jsArg(s.x.who)}')">Pay from ${escapeHtml(s.x.who)} statement →</button>`;
+  return '';
+}
+function stepClick(orderNumber, key){
+  const L = LOADS.find(x => x.order_number === orderNumber), s = L && flow(L).f.find(x => x.key === key);
+  if (!s) return;
+  if (s.done) return showToast(s.label, s.date ? `Done ${fmtDateStr(s.date)}` : 'Done');
+  if (s.locked) return showToast(s.label, s.why, true);
+  const tmp = document.createElement('div'); tmp.innerHTML = stepAction(L, s); const b = tmp.querySelector('button'); if (b) b.click();
+}
+function flowStageBadge(L){
+  const fl = flow(L);
+  if (fl.allDone) return '<span class="payment-badge ok">Closed</span>';
+  const s = fl.current || fl.waiting, late = s.x && !s.x.done && s.x.due && s.x.due < TODAY && s.key !== 'freight_confirm';
+  return `<span class="payment-badge ${fl.current ? (late ? 'overdue' : 'due-soon') : 'active'}" style="display:inline-flex;align-items:center;gap:5px;"><svg viewBox="0 0 24 24" style="width:12px;height:12px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${PIN_ICON.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</svg> ${escapeHtml(s.label)}${fl.current ? '' : ' · ' + fmtDateStr(s.from || s.date)}</span>`;
+}
+// Orders' "Next Action" column: the step just done, the pending one (pulsing), the one after
+function flowPreview(L){
+  const { f, current, waiting } = flow(L), idx = f.indexOf(current || waiting);
+  if (idx < 0) return '<span class="payment-badge ok">All caught up</span>';
+  const slice = []; if (idx > 0) slice.push({ s: f[idx - 1], state: 'done' }); slice.push({ s: f[idx], state: current ? 'current' : 'wait' }); if (idx < f.length - 1) slice.push({ s: f[idx + 1], state: 'wait' });
+  return `<div class="c-timeline">${slice.map((t, i) => `<div class="c-node${t.state === 'done' && t.s.done ? ' done' : t.state === 'current' ? ' current' : ''}"${t.state === 'current' ? ' style="border-color:var(--amber);color:var(--amber);"' : ''} title="${escapeHtml(t.s.label)}">${t.s.icon}</div>${i < slice.length - 1 ? `<div class="c-line${t.s.done ? ' done' : ''}"></div>` : ''}`).join('')}</div>`;
+}
+
 function stageLabel(L){
   if (L.paid_at) return { t: 'Paid', cls: 'ok' };
   if (L.invoice_sent_at) return { t: 'Invoiced', cls: 'active' };
@@ -792,6 +884,11 @@ function stageLabel(L){
   if (L.picked_up_at) return { t: 'Picked Up', cls: 'active' };
   return { t: 'Confirm PU', cls: 'active' };
 }
+// Each carrier / customs agency has its own payment term (Logistics profile, or set right in the
+// flow). Not set yet → carrier 30 days, customs cash, and the flow asks to set it.
+const carrierDays = L => L.carrier_days ?? FREIGHT_DAYS;
+const customsDays = L => L.customs_agency_days ?? 0;
+const termsText = (days, fallback) => days == null ? `Terms not set — using ${fallback ? fallback + ' days' : 'cash'}` : days === 0 ? 'Cash (at delivery)' : `${days} days after delivery`;
 function surchargesFor(L, kind){ return (prData.surcharges || []).filter(r => r.order_number === L.order_number && r.payable_kind === kind); }
 function recordsFor(L, kind){ return prData.records.filter(r => r.shipment_id === L.id && r.kind === kind); }
 // Summar fee on a load — days counted from delivery: the real days once the customer paid Summar,
@@ -827,11 +924,11 @@ function steps(L){
   // Freight and customs bills = base (from Orders) + every surcharge added to that bill on this load.
   const fs = surchargesFor(L, 'freight'), cs = surchargesFor(L, 'customs'), sum$ = a => a.reduce((n, x) => n + Number(x.amount), 0);
   if ((L.freight && L.freight.rate) || fs.length){ const r = recordsFor(L, 'freight'), base = L.freight ? L.freight.rate : 0;
-    add('freight', 'out', 'here', 'Freight', (L.freight && L.freight.carrier) || 'Carrier not assigned', TRUCK_ICON, base + sum$(fs), delivery ? addDays(delivery, FREIGHT_DAYS) : null, r.some(x => x.settles), `Paid ${FREIGHT_DAYS} days after delivery` + (fs.length ? ` · base ${fmtMoney(base)} + surcharges ${fmtMoney(sum$(fs))}` : ''), r);
+    add('freight', 'out', 'here', 'Freight', (L.freight && L.freight.carrier) || 'Carrier not assigned', TRUCK_ICON, base + sum$(fs), delivery ? addDays(delivery, carrierDays(L)) : null, r.some(x => x.settles), termsText(L.carrier_days, FREIGHT_DAYS) + (fs.length ? ` · base ${fmtMoney(base)} + surcharges ${fmtMoney(sum$(fs))}` : ''), r);
     Object.assign(out[out.length - 1], { base, surcharges: fs }); }
   const customs = L.customs + L.inspection;
   if (customs > 0 || cs.length){ const r = recordsFor(L, 'customs');
-    add('customs', 'out', 'here', 'Customs', L.customs_agency || 'Customs broker', CUSTOMS_ICON, customs + sum$(cs), delivery, r.some(x => x.settles), 'Paid at delivery' + (cs.length ? ` · base ${fmtMoney(customs)} + surcharges ${fmtMoney(sum$(cs))}` : ''), r);
+    add('customs', 'out', 'here', 'Customs', L.customs_agency || 'Customs broker', CUSTOMS_ICON, customs + sum$(cs), delivery ? addDays(delivery, customsDays(L)) : null, r.some(x => x.settles), termsText(L.customs_agency_days, 0) + (cs.length ? ` · base ${fmtMoney(customs)} + surcharges ${fmtMoney(sum$(cs))}` : ''), r);
     Object.assign(out[out.length - 1], { base: customs, surcharges: cs }); }
   if (L.fin === 'summar'){
     const fee = summarFeeFor(L, L.payment_days || L.client_days || 30), r = recordsFor(L, 'summar_remanente');
@@ -858,7 +955,7 @@ const allSteps = () => LOADS.flatMap(steps);
 const sum = a => a.reduce((n, x) => n + (x.amount || 0), 0);
 const pend = (L, dir) => steps(L).filter(x => x.dir === dir && !x.done && x.amount !== 0);
 const amtCell = (items, color) => !items.length ? '<span class="muted">—</span>' : items.some(x => x.amount == null) && !sum(items) ? '<span class="payment-badge overdue">Missing data</span>' : `<span style="color:${color};">${fmtMoney(sum(items))}</span>`;
-const isClosed = L => !pend(L, 'in').length && !pend(L, 'out').length && !pend(L, 'watch').length;
+const isClosed = L => !pend(L, 'in').length && !pend(L, 'out').length && !pend(L, 'watch').length && flow(L).allDone;
 const nextStep = L => [...pend(L, 'in'), ...pend(L, 'out'), ...pend(L, 'watch')].sort((a, b) => (a.due || 9e15) - (b.due || 9e15))[0];
 const delivered = L => !!(L.delivered_at || L.status === 'delivered');
 // Owed now vs coming: customer / Summar money and freight / customs are owed once the load is
@@ -903,7 +1000,7 @@ function cards(){
   const ci = openItems('in').filter(owedNow), co = openItems('out').filter(owedNow);
   const over = [...ci, ...co, ...openItems('watch').filter(owedNow)].filter(x => x.due && x.due < TODAY);
   const C = [
-    { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Open Loads', icon: IC.truck },
+    { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Active Loads', icon: IC.truck },
     { k: 'collect', cls: 'ok', v: fmtWhole(sum(ci)), l: 'To Collect', icon: IC.in },
     { k: 'pay', cls: 'warn', v: fmtWhole(sum(co)), l: 'To Pay', icon: IC.out },
     { k: 'summar', cls: '', v: String(summarRows().filter(r => !r.x.done).length), l: 'Client → Summar', icon: IC.warn },
@@ -998,15 +1095,15 @@ function tabSummar(){
 }
 let loadFilter = 'open';
 function tabLoads(){
-  const closed = LOADS.filter(isClosed), rows = loadFilter === 'closed' ? closed : LOADS.filter(L => !isClosed(L));
-  return `<div class="card"><h2>Loads — money per load</h2>
+  const closed = LOADS.filter(isClosed), rows = (loadFilter === 'closed' ? closed : LOADS.filter(L => !isClosed(L)))
+    .sort((a, b) => { const fa = flow(a), fb = flow(b); return (!!fb.current - !!fa.current) || String(a.order_number).localeCompare(String(b.order_number)); });
+  return `<div class="card"><h2 style="margin:0 0 8px;">Active Loads</h2>
     <div class="phase-tabs" style="margin:0 0 12px;max-width:340px;">${[['open', 'Open', LOADS.length - closed.length], ['closed', 'Closed · profit', closed.length]].map(t => `<div class="phase-tab${loadFilter === t[0] ? ' active' : ''}" onclick="loadFilter='${t[0]}';draw()">${t[1]}<span class="phase-tab-count">${t[2]}</span></div>`).join('')}</div>
-    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>To Collect</th><th>To Pay</th><th>Next Money</th><th>${loadFilter === 'closed' ? 'Real Profit' : 'Stage'}</th></tr></thead>
-    <tbody>${rows.map(L => { const nx = nextStep(L), pi = pend(L, 'in'), po = pend(L, 'out'), p = profitOf(L);
-      return `<tr style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}</td><td style="white-space:nowrap;">${escapeHtml(L.client)}</td><td class="muted pr-product" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</td>
-        <td class="num">${amtCell(pi, '#6FD3A8')}</td><td class="num">${amtCell(po, 'var(--amber)')}</td>
-        <td>${nx ? `<div style="font-size:12px;white-space:nowrap;margin-bottom:3px;">${escapeHtml(nx.label)}</div><span class="payment-badge ${owedNow(nx) ? status(nx).cls : 'active'}">${owedNow(nx) ? status(nx).t : 'At delivery'}</span>` : '<span class="payment-badge ok">Settled</span>'}</td>
-        <td>${loadFilter === 'closed' ? `<span class="num" style="color:${p && p.profit >= 0 ? '#6FD3A8' : '#FF9C8A'};">${p ? fmtMoney(p.profit) : '—'}</span>` : stageBadge(L)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No closed loads yet — record the money of a load and it closes here with its real profit.</td></tr>'}</tbody></table></div></div>`;
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Plant</th><th>Next Action</th><th>${loadFilter === 'closed' ? 'Real Profit' : 'Stage'}</th></tr></thead>
+    <tbody>${rows.map(L => { const p = profitOf(L);
+      return `<tr style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}</td><td style="white-space:nowrap;">${escapeHtml(L.client)}</td><td class="muted pr-product" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</td><td class="muted">${escapeHtml(L.plant || '—')}</td>
+        <td>${flowPreview(L)}</td>
+        <td>${loadFilter === 'closed' ? `<span class="num" style="color:${p && p.profit >= 0 ? '#6FD3A8' : '#FF9C8A'};">${p ? fmtMoney(p.profit) : '—'}</span>` : flowStageBadge(L)}</td></tr>`; }).join('') || `<tr><td colspan="6" class="empty">${loadFilter === 'closed' ? 'No closed loads yet.' : 'No loads here yet — a load arrives from Orders once it is delivered and its invoice is signed.'}</td></tr>`}</tbody></table></div></div>`;
 }
 // One row per bank movement: customer payments (payment_applications) + freight / customs /
 // remanente records (shipment_money_records), both grouped by payment_batch_id.
@@ -1037,33 +1134,32 @@ function renderDetail(){
   if (detailParty) return renderParty();
   if (!detailOrder) return;
   const L = LOADS.find(x => x.order_number === detailOrder); if (!L) return closeDetail();
-  const st = steps(L), nx = nextStep(L), p = profitOf(L);
+  const st = steps(L), p = profitOf(L), fl = flow(L);
   document.getElementById('orderDetailTitle').textContent = `${L.order_number} — ${L.client}`;
-  // Track: the whole life of the load in one line — Orders milestones and every money step, in order,
-  // from the offer to the customer's final payment (to us, or to Summar). Green = done, amber = next.
-  const byKey = k => st.find(x => x.key === k);
-  const mile = (label, icon, at) => ({ label, icon, done: !!at, date: at ? day(at) : null });
-  const money = x => x && ({ label: x.label, icon: x.icon, done: x.done, date: x.done ? (x.recs[0] ? day(x.recs[0].bank_entry_date) : x.key === 'plant' ? day(L.plant_paid_at) : x.key === 'gap' ? day(L.summar_payment_sent_at) : x.key === 'client' && L.paid_at ? day(L.paid_at) : null) : x.due, x });
-  const track = [mile('Offer sent', DOC_ICON, L.offer_sent_at), mile('PO sent', DOC_ICON, L.po_sent_at),
-    money(byKey(L.fin === 'summar' ? 'gap' : 'plant')), mile('Picked up', TRUCK_ICON, L.picked_up_at), mile('Delivered', PIN_ICON, L.delivered_at),
-    money(byKey('customs')), L.fin === 'summar' ? money(byKey('rem')) : null,
-    mile('Invoice sent', SIGN_ICON, L.invoice_sent_at), money(byKey('freight')), money(byKey('client'))].filter(Boolean);
-  const nextIdx = track.findIndex(t => !t.done);
-  const nodes = track.map((t, i) => (i ? `<div class="u-line${t.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${t.done ? 'done' : i === nextIdx ? 'now blink-now' : 'wait'}" style="width:74px;"><div class="u-mini-btn">${t.icon}</div><div class="u-mini-label">${escapeHtml(t.label)}</div><div class="u-mini-date">${t.date ? fmtDateStr(t.date) : ''}</div></div>`).join('');
+  // the Pay & Receive flow, drawn exactly like Orders' timeline: done green, the next one pulsing,
+  // the rest waiting; clicking a node does its action or says why it is waiting
+  const nodes = fl.f.map((s, i) => (i ? `<div class="u-line${s.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${s.done ? 'done' : s === fl.current ? 'now blink-now' : 'wait'}" style="width:86px;cursor:pointer;" onclick="stepClick('${L.order_number}','${s.key}')"><div class="u-mini-btn">${s.icon}</div><div class="u-mini-label">${escapeHtml(s.label)}</div><div class="u-mini-date">${s.date ? fmtDateStr(s.date) : ''}</div></div>`).join('');
+  const nxt = fl.current || fl.waiting;
+  const card = !nxt ? '' : `<div class="load-next-action"><div class="load-next-action-icon">${nxt.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">${fl.current ? 'Next Action' : 'Waiting'}</div><div class="load-next-action-label">${escapeHtml(nxt.label)}${nxt.x && nxt.x.amount && nxt.key !== 'reminder' ? ' — ' + fmtMoney(nxt.x.amount) : ''}${fl.current ? '' : ' · ' + escapeHtml(nxt.why)}</div>${termsPrompt(L, nxt)}</div>${fl.current ? stepAction(L, fl.current) : ''}</div>`;
   const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
-  const act = x => (x.key === 'client' ? reminderBtn(L) : '') + ((x.key === 'freight' || x.key === 'customs') && !x.done ? `<button class="btn small" onclick="surOpen('${L.order_number}','${x.key}')">+ Surcharge</button>` : '') + (x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true));
+  const act = x => (x.key === 'freight' || x.key === 'customs') && !x.done && !(x.key === 'freight' && flowDone(L, 'freight_confirmed')) ? `<button class="btn small" onclick="surOpen('${L.order_number}','${x.key}')">+ Surcharge</button>` : '';
   document.getElementById('orderDetailBox').innerHTML = `
     <div class="load-card">
-      <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}${L.won_by ? ` · Trader: <b style="color:var(--ink);">${escapeHtml(L.won_by)}</b>` : ''}</div></div></div>
-      ${nx ? `<div class="load-next-action"><div class="load-next-action-icon">${nx.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">Next Money</div><div class="load-next-action-label">${escapeHtml(nx.label)} — ${nx.amount == null ? 'missing cost/sale in Orders' : fmtMoney(nx.amount)} · ${owedNow(nx) ? status(nx).t : 'at delivery'}</div></div>${nx.where === 'here' && nx.amount && owedNow(nx) ? actBtn(nx, true) : nx.where === 'orders' ? `<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>` : '<span class="muted" style="font-size:12px;">At delivery</span>'}</div>` : ''}
-      <div class="docs-panel-heading">Track — offer to final payment</div>
+      <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · delivered &amp; signed ${fmtDateStr(day(L.invoice_signed_at))} · ${finBadge(L)}${L.won_by ? ` · Trader: <b style="color:var(--ink);">${escapeHtml(L.won_by)}</b>` : ''}</div></div></div>
+      ${card || '<div class="load-next-action done"><span class="payment-badge ok">Flow complete — load closed</span></div>'}
       <div class="utimeline" style="justify-content:center;">${nodes}</div>
       ${L.fin === 'summar' ? summarBox(L) : ''}
       <div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
-      <div class="docs-panel-grid">${st.map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' || x.dir === 'watch' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : x.dir === 'watch' ? 'SUMMAR' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${x.done || owedNow(x) ? s.cls : 'active'}">${x.done || owedNow(x) ? s.t : 'At delivery'}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
+      <div class="docs-panel-grid">${st.filter(x => !['plant', 'gap'].includes(x.key)).map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' || x.dir === 'watch' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : x.dir === 'watch' ? 'SUMMAR' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${s.cls}">${s.t}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
       <div class="docs-panel-heading">Profit</div>
       <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (p.extras ? line('Extra costs', -p.extras) : '') + line(L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
     </div>`;
+}
+// payment terms missing for the provider of this step → set them right here, in the flow
+function termsPrompt(L, s){
+  const who = s.key === 'customs' ? { id: L.customs_agency_id, name: L.customs_agency, days: L.customs_agency_days } : (s.key === 'carrier' || s.key === 'freight_confirm') ? { id: L.carrier_id, name: L.freight && L.freight.carrier, days: L.carrier_days } : null;
+  if (!who || !who.id || who.days != null) return '';
+  return `<div style="font-size:12px;margin-top:4px;" class="muted">${escapeHtml(who.name)} has no payment terms yet — <a href="#" onclick="event.preventDefault();termsOpen('${who.id}','${jsArg(who.name)}')" style="color:var(--blue-bright);">Set payment terms</a></div>`;
 }
 function summarBox(L){
   const deliv = day(L.delivered_at), sd = summarDays(L), x = steps(L).find(s => s.key === 'client');
@@ -1078,7 +1174,8 @@ function summarBox(L){
 function renderStatement(name){
   const cut = cutoffDate();
   const items = openItems('out').filter(x => x.where === 'here' && payeeKey(x) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
-  const dueBy = items.filter(x => owedNow(x) && x.due && x.due <= cut), sumOf = a => a.reduce((n, x) => n + (x.amount || 0), 0);
+  const confirmed = x => x.key !== 'freight' || !!flowDone(x.L, 'freight_confirmed');
+  const dueBy = items.filter(x => owedNow(x) && confirmed(x) && x.due && x.due <= cut), sumOf = a => a.reduce((n, x) => n + (x.amount || 0), 0);
   document.getElementById('orderDetailTitle').textContent = `${name} — statement`;
   document.getElementById('orderDetailBox').innerHTML = `<div class="load-card">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
@@ -1093,7 +1190,7 @@ function renderStatement(name){
         <td class="num">${fmtMoney(x.base ?? x.amount)}</td>
         <td style="white-space:normal;text-align:left;">${sur.map(r => `<div style="font-size:11.5px;white-space:nowrap;">${escapeHtml(r.cost_type)}${r.notes ? ' · ' + escapeHtml(r.notes) : ''} <b class="mono">${fmtMoney(r.amount)}</b></div>`).join('') || '<span class="muted">—</span>'}</td>
         <td class="num" style="font-weight:700;${inCut ? 'color:var(--amber);' : ''}">${fmtMoney(x.amount)}</td>
-        <td><button class="btn small" onclick="surOpen('${x.L.order_number}','${x.key}')">+ Surcharge</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing open with this payee.</td></tr>'}
+        <td>${confirmed(x) ? '<span class="payment-badge ok">Confirmed</span>' : `<button class="btn small" onclick="confirmFreightOpen('${x.L.order_number}')">Confirm</button>`}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing open with this payee.</td></tr>'}
     <tr><td colspan="6" style="font-weight:700;">Due by ${fmtDateStr(cut)}</td><td class="num" style="font-weight:700;color:var(--amber);">${fmtMoney(sumOf(dueBy))}</td><td></td></tr>
     <tr><td colspan="6" class="muted">All open (incl. not due / not delivered)</td><td class="num muted">${fmtMoney(sumOf(items))}</td><td></td></tr>
     </tbody></table></div></div>`;
@@ -1230,12 +1327,50 @@ Gracias,
 BuenTrade Team`;
   const wa = `Hola ${contact}! Te recordamos que el pago de tu carga ${L.order_number} por ${monto} vence el ${fecha}. Si ya lo hiciste, compártenos el comprobante por favor. ¡Gracias!`;
   try {
-    if (to) await bcSendEmailApi({ fromAlias: 'offers', to: [to], cc, subject, text, attachments: [], waInfo: phone ? { phone, message: wa } : null, fromDisplay: 'Offers BuenTrade <offers@buentradegroup.com>', title: 'Payment reminder' });
-    else if (phone) await bcOpenWaOnlyModal({ phone, message: wa, title: 'Payment reminder' });
+    let channel;
+    if (to){ await bcSendEmailApi({ fromAlias: 'offers', to: [to], cc, subject, text, attachments: [], waInfo: phone ? { phone, message: wa } : null, fromDisplay: 'Offers BuenTrade <offers@buentradegroup.com>', title: 'Payment reminder' }); channel = 'email'; }
+    else if (phone){ const r2 = await bcOpenWaOnlyModal({ phone, message: wa, title: 'Payment reminder' }); if (!r2 || !r2.sent) return; channel = 'whatsapp'; }
     else return showToast('No contact on file', `${L.client} has no email or WhatsApp in Clients.`, true);
+    // step 4 of the flow is done once the reminder actually went out
+    await callApi('shipments-apply-payment', { kind: 'flow_step', step: 'customer_reminder_sent', idempotency_key: `rem-${L.order_number}-${Date.now()}`, actor: currentActor(), order_number: L.order_number, detail: { channel, amount: r.amount, due: ymd(r.due) } });
+    await loadCollections(); showToast('Reminder sent', `${L.order_number} — ${L.client}`);
   } catch (e) {
     if (!e.cancelled) showToast('Reminder not sent', e.message, true);
   }
+}
+
+// ---------- Step 2: Confirm Freight (base + surcharges → the carrier's bill) ----------
+let cfOrder = null, cfKey = null;
+function confirmFreightOpen(orderNumber){
+  cfOrder = orderNumber; cfKey = `cf-${orderNumber}-${Date.now()}`;
+  const L = LOADS.find(x => x.order_number === orderNumber), x = steps(L).find(s => s.key === 'freight');
+  document.getElementById('cfSub').textContent = `${orderNumber} — ${x.who} · ${termsText(L.carrier_days, FREIGHT_DAYS)}`;
+  document.getElementById('cfBody').innerHTML = `<table><tbody><tr><td>Freight (from Orders)</td><td class="num">${fmtMoney(x.base)}</td></tr>${(x.surcharges || []).map(r => `<tr><td>${escapeHtml(r.cost_type)}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}</td><td class="num">${fmtMoney(r.amount)}</td></tr>`).join('')}<tr><td style="font-weight:700;">Carrier bill</td><td class="num" style="font-weight:700;color:var(--amber);">${fmtMoney(x.amount)}</td></tr></tbody></table>`;
+  document.getElementById('cfMsg').textContent = ''; document.getElementById('cfSaveBtn').disabled = false;
+  document.getElementById('cfOverlay').style.display = 'flex';
+}
+function cfClose(){ document.getElementById('cfOverlay').style.display = 'none'; }
+function cfAddSurcharge(){ cfClose(); surOpen(cfOrder, 'freight', () => confirmFreightOpen(cfOrder)); }
+async function cfSave(){
+  const L = LOADS.find(x => x.order_number === cfOrder), x = steps(L).find(s => s.key === 'freight');
+  document.getElementById('cfSaveBtn').disabled = true;
+  try {
+    await callApi('shipments-apply-payment', { kind: 'flow_step', step: 'freight_confirmed', idempotency_key: cfKey, actor: currentActor(), order_number: cfOrder, detail: { carrier: x.who, total: x.amount, surcharges: (x.surcharges || []).length } });
+    cfClose(); await loadCollections();
+    showToast('Freight confirmed', `${cfOrder} — ${fmtMoney(x.amount)} on ${x.who}'s bill, due ${fmtDateStr(x.due)}`);
+  } catch (e) { document.getElementById('cfMsg').textContent = 'Error: ' + e.message; document.getElementById('cfSaveBtn').disabled = false; }
+}
+// ---------- Payment terms of a carrier / customs agency, set from the flow ----------
+let tmProvider = null;
+function termsOpen(id, name){ tmProvider = { id, name, key: `terms-${id}-${Date.now()}` }; document.getElementById('tmSub').textContent = name; document.getElementById('tmDays').value = ''; document.getElementById('tmMsg').textContent = ''; document.getElementById('tmOverlay').style.display = 'flex'; }
+function tmClose(){ document.getElementById('tmOverlay').style.display = 'none'; }
+async function tmSave(){
+  const v = document.getElementById('tmDays').value, days = Number(v);
+  if (v === '' || !Number.isInteger(days) || days < 0 || days > 180){ document.getElementById('tmMsg').textContent = 'Whole days between 0 (cash) and 180.'; return; }
+  try {
+    await callApi('providers-update', { actor: currentActor(), id: tmProvider.id, payment_days: days, idempotency_key: tmProvider.key });
+    tmClose(); await loadCollections(); showToast('Payment terms saved', `${tmProvider.name}: ${days === 0 ? 'cash' : days + ' days after delivery'} (also in Logistics)`);
+  } catch (e) { document.getElementById('tmMsg').textContent = 'Error: ' + e.message; }
 }
 
 // ---------- Add surcharge (freight or customs bill) ----------
@@ -1243,8 +1378,8 @@ const SURCHARGE_TYPES = ['Customs Processing', 'US Warehouse Handling', 'Lumper 
   'Storage — Overnight', 'Storage — Weekend', 'Storage — Short term', 'Storage — Mid term', 'Storage — Long term', 'Storage — Extra long',
   'Fresh to Frozen conversion', 'Other'];
 let surCtx = null;
-function surOpen(orderNumber, kind){
-  surCtx = { orderNumber, key: `sur-${orderNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+function surOpen(orderNumber, kind, after){
+  surCtx = { after, orderNumber, key: `sur-${orderNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
   document.getElementById('surSub').textContent = orderNumber;
   document.getElementById('surKind').value = kind === 'customs' ? 'customs' : 'freight';
   document.getElementById('surType').innerHTML = '<option value="">Select...</option>' + SURCHARGE_TYPES.map(t => `<option>${escapeHtml(t)}</option>`).join('');
@@ -1264,6 +1399,7 @@ async function surSave(){
     await callApi('shipments-apply-payment', { kind: 'surcharge', idempotency_key: surCtx.key, actor: currentActor(), order_number: surCtx.orderNumber, payable_kind: kind, cost_type: type, amount, notes });
     surClose(); await loadCollections();
     const L = LOADS.find(x => x.order_number === surCtx.orderNumber), x = L && steps(L).find(s => s.key === kind);
+    if (surCtx.after) surCtx.after();
     showToast('Surcharge added', `${surCtx.orderNumber} — ${kind} bill now ${x ? fmtMoney(x.amount) : ''}${L && profitOf(L) ? ' · profit ' + fmtMoney(profitOf(L).profit) : ''}`);
   } catch (e) { err('Error: ' + e.message); document.getElementById('surSaveBtn').disabled = false; }
 }

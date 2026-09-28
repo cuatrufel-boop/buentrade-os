@@ -162,27 +162,29 @@ async function payReceive(annualRate: number) {
       (select min(d::date) from purchase_orders p2, jsonb_array_elements_text(p2.delivery_dates) d where p2.order_number = sh.order_number) as delivery_date,
       sh.pickup_date, sh.plant_paid_at, sh.summar_payment_sent_at, sh.picked_up_at, sh.delivered_at, sh.invoice_sent_at, sh.payment_due_date,
       sh.paid_at, sh.amount_paid, sh.net_profit, sh.interest_amount,
-      so_.sent_at as offer_sent_at, so_.won_by,
-      (select name from providers where id = coalesce(so_.customs_agency_provider_id, c.customs_agency_provider_id)) as customs_agency_name, sh.po_sent_at, sh.so_sent_at, sh.created_at as order_created_at,
-      fo.carrier_name, fo.freight_rate
+      so_.sent_at as offer_sent_at, so_.won_by, sh.invoice_signed_at,
+      ag.id as customs_agency_id, ag.name as customs_agency_name, ag.payment_days as customs_agency_days, sh.po_sent_at, sh.so_sent_at, sh.created_at as order_created_at,
+      fo.carrier_id, fo.carrier_name, fo.carrier_days, fo.freight_rate
     from shipments sh
     left join customers c on c.id = sh.customer_id
     left join purchase_orders po on po.order_number = sh.order_number
     left join sent_offers so_ on so_.id = sh.sent_offer_id
     left join sales_orders sales on sales.order_number = sh.order_number
     left join lateral (
-      select pr.name as carrier_name, coalesce(f.actual_rate, f.quoted_rate) as freight_rate
+      select pr.id as carrier_id, pr.name as carrier_name, pr.payment_days as carrier_days, coalesce(f.actual_rate, f.quoted_rate) as freight_rate
       from freight_orders f left join providers pr on pr.id = f.carrier_provider_id
       where f.order_number = sh.order_number order by f.created_at desc limit 1
     ) fo on true
+    left join providers ag on ag.id = coalesce(so_.customs_agency_provider_id, c.customs_agency_provider_id)
     order by sh.order_number
   `;
   const records = await sql`select * from shipment_money_records order by created_at`;
+  const flowSteps = await sql`select shipment_id, step, done_at, actor from shipment_flow_steps`;
   const surcharges = await sql`select id, order_number, cost_type, amount, notes, payable_kind, created_at from order_extra_costs where payable_kind is not null order by created_at`;
   const customerPayments = await sql`
     select pa.*, c.trade_name as customer_name from payment_applications pa
     left join customers c on c.id = pa.customer_id order by pa.applied_at
   `;
-  return { loads, records, surcharges, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }) }; // Miami business day
+  return { loads, records, surcharges, flow_steps: flowSteps, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }) }; // Miami business day
 }
 
