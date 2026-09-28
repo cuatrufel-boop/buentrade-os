@@ -68,11 +68,11 @@ function computeBorderArrivalDate(fromDateStr: string): string | null {
 // action, always: open the order's forced screen in BuenTrade OS (appLink). The real send action
 // (WhatsApp/Email/Confirmar pago/Enviar a Aduana) lives INSIDE that screen, same as every other
 // document send in this codebase — "nada se manda sin que el trader vea."
-async function sendPush(actor: string, title: string, body: string, orderNumber: string) {
+async function sendPush(actor: string, title: string, body: string, orderNumber: string, page = "orders.html") {
   await fetch(API_ROOT + "push-send", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + API_KEY, apikey: API_KEY },
-    body: JSON.stringify({ actor, title, body, url: `/orders.html?focus=${orderNumber}`, actions: [{ action: "open_app", title: "Abrir en BuenTrade OS", url: `/orders.html?focus=${orderNumber}` }] }),
+    body: JSON.stringify({ actor, title, body, url: `/${page}?focus=${orderNumber}`, actions: [{ action: "open_app", title: "Abrir en BuenTrade OS", url: `/${page}?focus=${orderNumber}` }] }),
   }).catch(() => {}); // best-effort — a push failure must never break the poll loop for other shipments
 }
 
@@ -131,10 +131,10 @@ async function sendEmail(accessToken: string, to: string, subject: string, body:
 // (appLink) — the email's link was missing entirely before this correction; only the bypass
 // compose-links were ever included in the email body, so reading an alert by email left the
 // trader with no way into the app at all, only a raw external link.
-async function notify(gmailToken: string, actor: string, title: string, body: string, orderNumber: string) {
-  const link = appLink(orderNumber);
+async function notify(gmailToken: string, actor: string, title: string, body: string, orderNumber: string, page = "orders.html") {
+  const link = page === "orders.html" ? appLink(orderNumber) : `${APP_ORIGIN}/${page}?focus=${orderNumber}`;
   await Promise.all([
-    sendPush(actor, title, body, orderNumber),
+    sendPush(actor, title, body, orderNumber, page),
     sendEmail(gmailToken, actor, title, `${body}\n\nAbrir en BuenTrade OS: ${link}`),
   ]);
 }
@@ -311,8 +311,101 @@ Deno.serve(async (req) => {
       }
     }
 
+    alertsSent += await moneyAlerts(gmailToken);
     return jsonResponse({ checked: shipments.length, alerts_sent: alertsSent });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
   }
 });
+
+// ============ Pay & Receive money alerts (2026-09-28) ============
+// "viene de orders, queda en pay and receive cuando se paga a summar y de ahi debemos empezar a
+// notificar in and outs de dinero de esa carga hasta que el cliente pague... que el trader sea
+// responsable de hacerlo." A load enters Pay & Receive once Orders ends — delivered and the
+// invoice signed (corrected by the user 2026-09-28). From then on the trader who won it
+// gets one push + email per money milestone, each sent once (money_alerts_sent), each opening
+// that load in Pay & Receive (collections.html?focus=…):
+//   entered     — delivered + invoice signed: the load's money plan (customs, freight, remanente, collect date)
+//   freight_due — carrier payment due by that carrier's payment terms (30 days if not set)
+//   summar_day30 — day 29: collect from the customer (term is 30 days; the QT plans 40; the customer
+//                  is never told about Summar), after day 30 every day costs sale × 0.0417%
+//                  and from here every day costs sale × 0.0417%
+//   summar_due  — the planned day (40) passed and the customer still hasn't paid Summar
+//   customer_due — a direct customer's invoice is due
+// Summar rates: same three numbers as trading-tool.html SUMMAR_RATES (contract 2026-09-19).
+const SUMMAR = { transit: 0.234, base: 1.20, extraDay: 0.0417 };
+const COLLECT_FROM_DAY = 29, FREIGHT_DAYS = 30; // confirmed by the user 2026-09-28
+const usd = (n: number) => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const mdy = (d: Date) => d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric", timeZone: "UTC" });
+
+async function moneyAlerts(gmailToken: string): Promise<number> {
+  const loads = await sql`
+    select sh.id, sh.order_number, sh.sale_amount, sh.delivered_at, sh.paid_at, sh.payment_due_date, sh.amount_paid,
+      sh.plant_paid_at, sh.summar_payment_sent_at, o.won_by, c.trade_name as customer_name, c.payment_days as customer_days,
+      po.financing_method, po.payment_days as summar_days,
+      coalesce(o.tramite_aduanal_amount, 0) + coalesce(o.inspection_amount, 0) as customs,
+      (select coalesce(f.actual_rate, f.quoted_rate) from freight_orders f where f.order_number = sh.order_number order by f.created_at desc limit 1) as freight,
+      (select pr.name from freight_orders f left join providers pr on pr.id = f.carrier_provider_id where f.order_number = sh.order_number order by f.created_at desc limit 1) as carrier,
+      (select pr.payment_days from freight_orders f left join providers pr on pr.id = f.carrier_provider_id where f.order_number = sh.order_number order by f.created_at desc limit 1) as carrier_days,
+      (select ag.payment_days from providers ag where ag.id = coalesce(o.customs_agency_provider_id, c.customs_agency_provider_id)) as customs_days,
+      sh.invoice_signed_at,
+      coalesce((select array_agg(kind) from shipment_money_records r where r.shipment_id = sh.id and r.settles), '{}') as recorded,
+      coalesce((select array_agg(alert_key) from money_alerts_sent a where a.shipment_id = sh.id), '{}') as sent
+    from shipments sh
+    join sent_offers o on o.id = sh.sent_offer_id
+    left join customers c on c.id = sh.customer_id
+    left join purchase_orders po on po.order_number = sh.order_number
+    where o.won_by is not null and sh.paid_at is null
+  `;
+  // Miami business days (America/New_York), whatever time zone the server runs in
+  const bizDay = (ts: string | Date) => new Date(new Date(ts).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) + "T00:00:00Z");
+  const today = bizDay(new Date());
+  let sent = 0;
+  for (const L of loads) {
+    const summar = L.financing_method === "summar";
+    // a load is in Pay & Receive once Orders ended: delivered and the invoice signed (2026-09-28)
+    if (!(L.delivered_at && L.invoice_signed_at)) continue;
+    const recorded: string[] = L.recorded, already: string[] = L.sent;
+    if (summar && recorded.includes("client_paid_summar")) continue; // customer paid Summar — load done
+    const sale = Number(L.sale_amount || 0), freight = Number(L.freight || 0), customs = Number(L.customs || 0);
+    const sDays = Number(L.summar_days || L.customer_days || 30), perDay = sale * SUMMAR.extraDay / 100;
+    const remanente = sale * 0.2 - sale * (SUMMAR.transit + SUMMAR.base + Math.max(0, sDays - 30) * SUMMAR.extraDay) / 100;
+    const who = L.customer_name ? String(L.customer_name).trim() : "the customer";
+    const tag = `BT-${btNum(L.order_number)} — ${who}`;
+    const fire = async (key: string, title: string, body: string) => {
+      if (already.includes(key)) return;
+      await notify(gmailToken, L.won_by, title, body, L.order_number, "collections.html");
+      await sql`insert into money_alerts_sent (shipment_id, alert_key) values (${L.id}, ${key}) on conflict do nothing`;
+      sent++;
+    };
+    const deliv = bizDay(L.delivered_at);
+    const days = Math.round((today.getTime() - deliv.getTime()) / 86400000);
+    const carrierDays = L.carrier_days == null ? FREIGHT_DAYS : Number(L.carrier_days), customsDays = L.customs_days == null ? 0 : Number(L.customs_days);
+    const on = (n: number) => mdy(new Date(deliv.getTime() + n * 86400000));
+    const plan = [
+      customs ? `customs ${usd(customs)} ${customsDays ? `by ${on(customsDays)}` : "now"}` : null,
+      freight ? `confirm the freight (${usd(freight)}${L.carrier ? `, ${L.carrier}` : ""} + any surcharge), pay it by ${on(carrierDays)}` : null,
+      summar ? `receive the Summar remanente ${usd(remanente)}` : null,
+      `collect from the customer on ${on(COLLECT_FROM_DAY)} (${usd(sale)}${summar ? ", paid to Summar" : ""})`,
+    ].filter(Boolean);
+    await fire("entered", `Pay & Receive — ${tag}`, `Delivered and signed — this load is now in Pay & Receive. Next: ${plan.join("; ")}.`);
+    if (freight && !recorded.includes("freight") && days >= carrierDays) await fire("freight_due", `Freight due — ${tag}`,
+      `Pay freight ${usd(freight)}${L.carrier ? ` to ${L.carrier}` : ""} (due ${on(carrierDays)}). Pay it from the carrier's statement in Pay & Receive.`);
+
+    // Day 29 — the flow's Collect step unlocks for every load (Summar or direct)
+    if (days >= COLLECT_FROM_DAY) await fire("summar_day30", `Day ${COLLECT_FROM_DAY} — collect from the customer — ${tag}`, summar
+      ? `${who} owes ${usd(sale)} on this load. Collect today; after day 30 every day costs us ${usd(perDay)}. Record it in Pay & Receive when Summar confirms the payment.`
+      : `${who} owes ${usd(sale - Number(L.amount_paid || 0))} on this load. Collect today — Send Reminder from Pay & Receive.`);
+    if (summar) {
+      const feeSoFar = sale * (SUMMAR.transit + SUMMAR.base + Math.max(0, days - 30) * SUMMAR.extraDay) / 100;
+      if (sDays > 30 && days >= sDays) await fire("summar_due", `Customer late with Summar — ${tag}`,
+        `${who} was due to pay Summar on ${mdy(new Date(deliv.getTime() + sDays * 86400000))} (${sDays} days). Summar fee so far ${usd(feeSoFar)}, +${usd(perDay)}/day.`);
+    } else {
+      const due = L.payment_due_date ? new Date(L.payment_due_date) : new Date(deliv.getTime() + Number(L.customer_days || 0) * 86400000);
+      if (today >= due) await fire("customer_due", `Customer payment due — ${tag}`,
+        `${who} owes ${usd(sale - Number(L.amount_paid || 0))}, due ${mdy(due)}. Record it with Apply Payment when it arrives.`);
+    }
+  }
+  return sent;
+}
+
