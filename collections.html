@@ -680,9 +680,10 @@ auth.onAuthStateChanged(user => {
 // Every load's money comes from Orders (collections-search view:'pay_receive'); nothing is re-asked.
 // Each top card is a tab (same pattern as Quotes / Messaging): To Collect, To Pay, Overdue,
 // Open Loads, Payments Recorded — one table at a time. Money a load moves:
-//   Direct: plant payment (Orders) → freight + customs at delivery (here) → customer pays us (here)
-//   Summar: wire = cost − 80% of sale (Orders) → Summar pays the plant (info) → freight + customs at
-//           delivery (here) → Summar remanente at delivery (here) → customer pays Summar (watch only)
+//   Direct: plant payment (Orders) → customs at delivery, freight 30 days after delivery (here) → customer pays us (here)
+//   Summar: wire = cost − 80% of sale (Orders) → Summar pays the plant (info) → customs at delivery,
+//           freight 30 days after delivery (here) → Summar remanente at delivery (here) → customer
+//           pays Summar, collected from day 30 (tracked here until it is recorded)
 const PRODUCT_PLACEHOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
 const PLANT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l6-4 6 4v11"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M12 7v.01"/></svg>';
 const CUSTOMER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 21v-6h6v6"/></svg>';
@@ -702,6 +703,9 @@ const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 // Summar Financial LLC factoring terms — same three numbers as trading-tool.html's SUMMAR_RATES
 // (signed 2026-09-19). Used only to estimate the fee Summar keeps from the remanente.
+// Terms confirmed by the user 2026-09-28: the customer's term is 30 days (we plan 40 in the QT/PO),
+// collecting starts on day 30; carriers are paid 30 days after delivery; customs at delivery.
+const COLLECT_FROM_DAY = 30, FREIGHT_DAYS = 30;
 const SUMMAR_RATES = { transitFeePct: 0.234, factoringBaseFeePct: 1.20, extraDayFeePct: 0.0417 };
 
 let prData = null, LOADS = [], TODAY = null, INTEREST_ANNUAL = 0.15;
@@ -791,13 +795,13 @@ function steps(L){
   } else {
     add('plant', 'out', 'orders', 'Plant payment', L.plant || 'Plant', PLANT_ICON, L.cost, beforePickup, L.plant_paid_at, 'Done in Orders');
   }
-  if (L.freight && L.freight.rate){ const r = recordsFor(L, 'freight'); add('freight', 'out', 'here', 'Freight', L.freight.carrier || 'Carrier not assigned', TRUCK_ICON, L.freight.rate, delivery, r.some(x => x.settles), 'Paid at delivery', r); }
+  if (L.freight && L.freight.rate){ const r = recordsFor(L, 'freight'); add('freight', 'out', 'here', 'Freight', L.freight.carrier || 'Carrier not assigned', TRUCK_ICON, L.freight.rate, delivery ? addDays(delivery, FREIGHT_DAYS) : null, r.some(x => x.settles), `Paid ${FREIGHT_DAYS} days after delivery`, r); }
   const customs = L.customs + L.inspection;
   if (customs > 0){ const r = recordsFor(L, 'customs'); add('customs', 'out', 'here', 'Customs', 'Customs broker', CUSTOMS_ICON, customs, delivery, r.some(x => x.settles), 'Paid at delivery', r); }
   if (L.fin === 'summar'){
     const fee = summarFeeFor(L, L.payment_days || L.client_days || 30), r = recordsFor(L, 'summar_remanente');
-    add('rem', 'in', 'here', 'Summar remanente', 'Summar', RECEIPT_ICON, L.sale ? Math.round((0.2 * L.sale - fee) * 100) / 100 : null, delivery, r.some(x => x.settles), '20% of sale − fee est. ' + fmtMoney(fee), r);
-    const cps = recordsFor(L, 'client_paid_summar'), sDue = delivery ? addDays(delivery, L.payment_days || L.client_days || 30) : null;
+    add('rem', 'in', 'here', 'Summar remanente', 'Summar', RECEIPT_ICON, L.sale ? Math.round((0.2 * L.sale - fee) * 100) / 100 : null, delivery, r.some(x => x.settles), `20% of sale − Summar fee ${fmtMoney(fee)} (${L.payment_days || L.client_days || 30} days)`, r);
+    const cps = recordsFor(L, 'client_paid_summar'), sDue = delivery ? addDays(delivery, COLLECT_FROM_DAY) : null;
     add('client', 'watch', 'here', 'Client pays Summar', L.client, RECEIPT_ICON, L.sale, sDue, cps.length > 0, 'Summar collects · after day 30 each day costs us ' + fmtMoney(summarPerDay(L)), cps);
   } else {
     const owed = L.sale != null ? L.sale - L.amount_paid : null;
@@ -934,14 +938,14 @@ function tabSummar(){
   const perDay = summarAtRiskPerDay(), feeSoFar = open.filter(r => delivered(r.L)).reduce((n, r) => n + (summarFeeFor(r.L, r.sd.soFar) || 0), 0);
   return `<div class="card"><h2>Client → Summar — every Summar load until the customer pays</h2>
     <div style="display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;margin:0 0 12px;"><span class="muted">Open Summar loads: <b style="color:var(--ink);">${open.length}</b></span><span class="muted">Summar fee so far on delivered loads: <b style="color:#FF9C8A;">${fmtMoney(feeSoFar)}</b></span><span class="muted">Costing us now, every day: <b style="color:#FF9C8A;">${fmtMoney(perDay)}</b></span></div>
-    <div class="table-scroll"><table class="pr-table pr-aging"><thead><tr><th>Order</th><th>Customer</th><th>Sale</th><th>Delivered</th><th>Fee-free until</th><th>Customer due</th><th>Days</th><th>Summar fee</th><th>Status</th><th></th></tr></thead><tbody>
-    ${rows.map(({ L, x, sd }) => { const deliv = day(L.delivered_at), freeUntil = deliv ? addDays(deliv, 30) : null, days = sd.real ? sd.days : sd.soFar;
+    <div class="table-scroll"><table class="pr-table pr-aging"><thead><tr><th>Order</th><th>Customer</th><th>Sale</th><th>Delivered</th><th>Collect From</th><th>Planned</th><th>Days</th><th>Summar fee</th><th>Status</th><th></th></tr></thead><tbody>
+    ${rows.map(({ L, x, sd }) => { const deliv = day(L.delivered_at), freeUntil = deliv ? addDays(deliv, COLLECT_FROM_DAY) : null, planned = deliv ? addDays(deliv, L.payment_days || L.client_days || 30) : null, days = sd.real ? sd.days : sd.soFar;
       const fee = deliv ? summarFeeFor(L, sd.real ? sd.days : sd.soFar) : summarFeeFor(L, sd.planned);
       const st = x.done ? `<span class="payment-badge ok">Paid ${fmtDateStr(sd.paidOn)}</span>` : !deliv ? `<span class="payment-badge active">${L.delivery_date ? 'Delivery ' + fmtDateStr(L.delivery_date).slice(0, 5) : 'Not delivered'}</span>`
-        : days > 30 ? `<span class="payment-badge overdue">+${fmtMoney(summarPerDay(L))}/day</span>` : `<span class="payment-badge ${30 - days <= 7 ? 'due-soon' : 'active'}">${30 - days}d fee-free left</span>`;
+        : days > 30 ? `<span class="payment-badge overdue">+${fmtMoney(summarPerDay(L))}/day</span>` : `<span class="payment-badge ${30 - days <= 7 ? 'due-soon' : 'active'}">Collect in ${30 - days}d</span>`;
       return `<tr${!x.done && days > 30 ? ' class="ct-row-overdue30"' : ''} style="cursor:pointer;" onclick="openDetail('${L.order_number}')">
         <td class="order-num">${escapeHtml(L.order_number)}</td><td>${escapeHtml(L.client)}</td><td class="num">${L.sale ? fmtMoney(L.sale) : '<span class="payment-badge overdue">Missing data</span>'}</td>
-        <td class="mono">${deliv ? fmtDateStr(deliv) : '—'}</td><td class="mono">${freeUntil ? fmtDateStr(freeUntil) : '—'}</td><td class="mono">${x.due ? fmtDateStr(x.due) : '—'}</td>
+        <td class="mono">${deliv ? fmtDateStr(deliv) : '—'}</td><td class="mono">${freeUntil ? fmtDateStr(freeUntil) : '—'}</td><td class="mono">${planned ? fmtDateStr(planned) : `<span class="muted">${L.payment_days || L.client_days || 30} days</span>`}</td>
         <td class="num">${deliv ? days : '—'}</td><td class="num" style="color:${deliv && days > 30 ? '#FF9C8A' : 'var(--ink)'};">${fee != null ? fmtMoney(fee) : '—'}${!deliv && fee != null ? ' <span class="muted" style="font-size:11px;">planned</span>' : ''}</td>
         <td>${st}</td><td>${!x.done && deliv && L.sale ? actBtn(x) : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No Summar loads.</td></tr>'}</tbody></table></div></div>`;
 }
@@ -995,8 +999,8 @@ function renderDetail(){
   const money = x => x && ({ label: x.label, icon: x.icon, done: x.done, date: x.done ? (x.recs[0] ? day(x.recs[0].bank_entry_date) : x.key === 'plant' ? day(L.plant_paid_at) : x.key === 'gap' ? day(L.summar_payment_sent_at) : x.key === 'client' && L.paid_at ? day(L.paid_at) : null) : x.due, x });
   const track = [mile('Offer sent', DOC_ICON, L.offer_sent_at), mile('PO sent', DOC_ICON, L.po_sent_at),
     money(byKey(L.fin === 'summar' ? 'gap' : 'plant')), mile('Picked up', TRUCK_ICON, L.picked_up_at), mile('Delivered', PIN_ICON, L.delivered_at),
-    money(byKey('freight')), money(byKey('customs')), L.fin === 'summar' ? money(byKey('rem')) : null,
-    mile('Invoice sent', SIGN_ICON, L.invoice_sent_at), money(byKey('client'))].filter(Boolean);
+    money(byKey('customs')), L.fin === 'summar' ? money(byKey('rem')) : null,
+    mile('Invoice sent', SIGN_ICON, L.invoice_sent_at), money(byKey('freight')), money(byKey('client'))].filter(Boolean);
   const nextIdx = track.findIndex(t => !t.done);
   const nodes = track.map((t, i) => (i ? `<div class="u-line${t.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${t.done ? 'done' : i === nextIdx ? 'now blink-now' : 'wait'}" style="width:74px;"><div class="u-mini-btn">${t.icon}</div><div class="u-mini-label">${escapeHtml(t.label)}</div><div class="u-mini-date">${t.date ? fmtDateStr(t.date) : ''}</div></div>`).join('');
   const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
@@ -1011,7 +1015,7 @@ function renderDetail(){
       <div class="docs-panel-heading">${MONEY_ICON.replace('<svg ', '<svg style="width:14px;height:14px;" ')} Money</div>
       <div class="docs-panel-grid">${st.map(x => { const s = status(x), shown = x.done && x.recs.length ? x.recorded : x.amount; return `<div class="doc-row"><span style="color:${x.dir === 'in' ? '#6FD3A8' : x.dir === 'out' || x.dir === 'watch' ? 'var(--amber)' : 'var(--ink-soft)'};font-weight:700;font-size:11px;">${x.dir === 'in' ? 'IN' : x.dir === 'out' ? 'OUT' : x.dir === 'watch' ? 'SUMMAR' : 'INFO'}</span><span class="doc-row-label">${escapeHtml(x.label)}</span><span class="num">${shown == null ? '—' : fmtMoney(shown)}</span><span class="doc-row-status"><span class="payment-badge ${x.done || owedNow(x) ? s.cls : 'active'}">${x.done || owedNow(x) ? s.t : 'At delivery'}</span></span><div style="flex-basis:100%;display:flex;align-items:center;gap:10px;min-height:28px;"><span class="muted" style="font-size:11.5px;flex:1;min-width:0;">${escapeHtml(x.who)} · ${escapeHtml(x.note || '')}${!x.done && x.recorded && x.key !== 'client' ? ' · recorded so far ' + fmtMoney(x.recorded) : ''}</span>${act(x)}</div></div>`; }).join('')}</div>
       <div class="docs-panel-heading">Profit</div>
-      <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (L.extra_costs_total ? line('Extra costs', -L.extra_costs_total) : '') + line(L.fin === 'summar' ? 'Summar fee (est.)' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
+      <div style="max-width:440px;margin:10px auto 0;"><table><tbody>${p ? line('Sale', L.sale) + line('Purchase cost', -p.purchase) + line('Freight', -p.freight) + line('Inspection / customs', -p.customs) + (L.extra_costs_total ? line('Extra costs', -L.extra_costs_total) : '') + line(L.fin === 'summar' ? 'Summar fee' : `Interest (${Math.round(INTEREST_ANNUAL * 100)}%/yr since invoice)`, -p.finance, '#FF9C8A') + line(isClosed(L) ? 'Real profit' : 'Profit so far', p.profit, p.profit >= 0 ? '#6FD3A8' : '#FF9C8A') : '<tr><td class="empty">Missing cost / sale in Orders.</td></tr>'}</tbody></table></div>
     </div>`;
 }
 function summarBox(L){
@@ -1019,7 +1023,7 @@ function summarBox(L){
   if (!L.sale) return '';
   const line = !deliv ? `Not delivered yet — planned ${sd.planned} days → Summar fee ${fmtMoney(summarFeeFor(L, sd.planned))}.`
     : x.done ? `Customer paid Summar ${fmtDateStr(sd.paidOn)} — ${sd.days} days from delivery → real Summar fee <b>${fmtMoney(summarFee(L))}</b>.`
-    : `Day <b>${sd.soFar}</b> since delivery · fee so far <b style="color:${sd.soFar > 30 ? '#FF9C8A' : 'var(--ink)'};">${fmtMoney(summarFeeFor(L, sd.soFar))}</b> · ${sd.soFar > 30 ? `<b style="color:#FF9C8A;">costing ${fmtMoney(summarPerDay(L))} more every day</b>` : `${30 - sd.soFar} fee-free days left, then +${fmtMoney(summarPerDay(L))}/day`}.`;
+    : `Day <b>${sd.soFar}</b> since delivery · fee so far <b style="color:${sd.soFar > 30 ? '#FF9C8A' : 'var(--ink)'};">${fmtMoney(summarFeeFor(L, sd.soFar))}</b> · ${sd.soFar > 30 ? `<b style="color:#FF9C8A;">costing ${fmtMoney(summarPerDay(L))} more every day</b>` : `start collecting ${fmtDateStr(addDays(deliv, COLLECT_FROM_DAY))} (day 30) — after that +${fmtMoney(summarPerDay(L))}/day`}.`;
   return `<div class="load-next-action" style="${deliv && !x.done && sd.soFar > 30 ? 'border-color:rgba(196,67,46,.6);background:rgba(196,67,46,.08);' : ''}"><div class="load-next-action-text"><div class="load-next-action-eyebrow">Customer → Summar</div><div style="font-size:13.5px;margin-top:2px;">${line}</div></div>${!x.done && deliv ? actBtn(x) : ''}</div>`;
 }
 function renderParty(){
