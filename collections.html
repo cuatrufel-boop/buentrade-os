@@ -1641,7 +1641,7 @@ async function invAddNote(){
 async function invApprove(){
   const inv = invCtx.inv, st = invoiceState(inv), btn = document.getElementById('invApproveBtn'); btn.disabled = true; btn.textContent = 'Approving…';
   try {
-    await callApi('shipments-apply-payment', { kind: 'invoice_approve', actor: currentActor(), invoice_id: inv.id, loads: st.items.map(x => ({ shipment_id: x.L.id, amount: Math.round(x.amount * 100) / 100 })) });
+    await callApi('shipments-apply-payment', { kind: 'invoice_approve', idempotency_key: `approve-${inv.id}`, actor: currentActor(), invoice_id: inv.id, loads: st.items.map(x => ({ shipment_id: x.L.id, amount: Math.round(x.amount * 100) / 100 })) });
     // approving their invoice also confirms each load's bill
     const step = inv.kind === 'freight' ? 'freight_confirmed' : 'customs_confirmed';
     for (const x of st.items) if (!flowDone(x.L, step)) await callApi('shipments-apply-payment', { kind: 'flow_step', step, idempotency_key: `invapprove-${inv.id}-${x.L.id}`, actor: currentActor(), order_number: x.L.order_number, detail: { invoice: inv.invoice_number } });
