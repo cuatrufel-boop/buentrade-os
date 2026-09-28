@@ -632,8 +632,8 @@ auth.onAuthStateChanged(user => {
 <!-- Real ask 2026-09-21, confirmed word by word against the signed Summar Factoring Proposal
      (9/18/2026) and directly by the user: when financing_method is 'summar', Summar — not
      BuenTrade — pays the plant the full cost of the load, using their own 80% P.O. Financing
-     advance (calculated on the SALE price per the signed proposal, not the purchase cost) plus
-     the 20% BuenTrade wires them here. BuenTrade → Summar → Planta, never BuenTrade → Planta
+     advance (80% of the SALE price per the signed proposal) plus what BuenTrade wires them here —
+     only the part of the cost that advance doesn't cover (see summarWireAmount, corrected 2026-09-28). BuenTrade → Summar → Planta, never BuenTrade → Planta
      directly for these orders. Same dark modal classes every other modal in this file already
      uses (.email-modal-box/.email-modal-overlay) — no new component. -->
 <div id="summarPaymentOverlay" class="email-modal-overlay" style="display:none;">
@@ -646,7 +646,7 @@ auth.onAuthStateChanged(user => {
         <div id="summarPaySalePrice" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:var(--ink);"></div>
       </div>
       <div style="background:rgba(255,255,255,.05);border:1.5px solid rgba(232,181,76,.4);border-radius:10px;padding:12px;text-align:center;">
-        <div style="font-size:10px;color:#E8B54C;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Wire to Summar (20%)</div>
+        <div style="font-size:10px;color:#E8B54C;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;">Wire to Summar</div>
         <div id="summarPayAmount" style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:var(--ink);"></div>
       </div>
     </div>
@@ -2410,16 +2410,26 @@ function payPlantClick(orderNumber){
 // BuenTrade — pays the plant the full cost of the load, using their own 80% P.O. Financing
 // advance (calculated on the SALE price per the signed proposal's own terms, not the purchase
 // cost — confirmed explicitly, the document text alone doesn't spell out the reconciliation)
-// plus the 20% BuenTrade wires them here. BuenTrade -> Summar -> Planta, never BuenTrade ->
+// plus what BuenTrade wires them here (cost − 80% of sale; see summarWireAmount below). BuenTrade -> Summar -> Planta, never BuenTrade ->
 // Planta directly for these orders.
 const SUMMAR_EMAIL = 'marango@summar.com';
 let summarPaymentOrderNumber = null;
+// Corrected 2026-09-28 with the user's own examples (cost 60,000 / sale 63,000 → wire 9,600; cost 20,000 / sale
+// 25,000 → wire 0): Summar advances 80% of the SALE and pays the plant 100% of the COST; BuenTrade wires Summar only
+// what that advance leaves uncovered. It used to be 20% of the sale, which always over-sent exactly our margin
+// (63,000 − 60,000 = 3,000 of ours sitting with Summar until delivery). Cost = the PO's real total_cost, never guessed.
+function summarWireAmount(o, salePrice){
+  const cost = Number(o && o.financing && o.financing.total_cost);
+  if (!(cost > 0) || !(salePrice > 0)) return null;
+  return Math.max(0, Math.round((cost - 0.80 * salePrice) * 100) / 100);
+}
 
 function showSummarPaymentBreakdown(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
   const salePrice = Number(o.sale_amount) || 0;
-  const wireAmount = salePrice * 0.20;
+  const wireAmount = summarWireAmount(o, salePrice);
+  if (wireAmount == null){ btAlert(`${orderNumber}: the plant cost or the sale price is missing, so the amount to wire Summar can't be calculated.`); return; }
   summarPaymentOrderNumber = orderNumber;
   document.getElementById('summarPaymentIntro').textContent = `${orderNumber} — ${fullProductLabel(o)} — ${o.plant_name}`;
   document.getElementById('summarPaySalePrice').textContent = '$' + salePrice.toLocaleString('en-US', { minimumFractionDigits: 2 });
@@ -2446,7 +2456,11 @@ async function sendPaymentToSummar(orderNumber){
   // Summar is a US company and this whole email is in English (see the approved copy above).
   const soProductName = so.product_spec || so.product_name || '';
   const salePrice = Number(so.total_sale) || 0;
-  const wireAmount = salePrice * 0.20;
+  const wireAmount = summarWireAmount(o, salePrice);
+  if (wireAmount == null){ await btAlert(`${orderNumber}: the plant cost or the sale price is missing, so the amount to wire Summar can't be calculated.`); return; }
+  // Nothing to wire (Summar's 80% already covers the cost): the approved text says "We have sent the payment…", which
+  // would be false — the wording for this case is waiting on the user's approval, so nothing is sent.
+  if (wireAmount === 0){ await btAlert(`${orderNumber}: Summar's 80% advance already covers the plant cost — there is nothing to wire. The message to Summar for this case isn't approved yet, so nothing was sent.`); return; }
   const filename = `SO-BT-${btNum(orderNumber)}.pdf`;
   const subject = `Payment Sent — Order BT-${btNum(orderNumber)} — ${o.plant_name} / ${soProductName}`;
   const body = `Hello,\n\nWe have sent the payment for the above order via wire transfer to the account on file.\n\n`
