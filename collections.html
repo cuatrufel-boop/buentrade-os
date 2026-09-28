@@ -743,8 +743,12 @@ async function loadCollections(){
     plant_paid_at: r.plant_paid_at, summar_payment_sent_at: r.summar_payment_sent_at, picked_up_at: r.picked_up_at, delivered_at: r.delivered_at,
     offer_sent_at: r.offer_sent_at, po_sent_at: r.po_sent_at, so_sent_at: r.so_sent_at, order_created_at: r.order_created_at,
     invoice_sent_at: r.invoice_sent_at, payment_due_date: r.payment_due_date, paid_at: r.paid_at, amount_paid: Number(r.amount_paid || 0),
-    interest_amount: r.interest_amount,
+    interest_amount: r.interest_amount, won_by: r.won_by,
   }));
+  // "viene de orders, queda en pay and receive cuando se paga a summar" — a load enters here once its
+  // Orders advance is paid: the Summar wire for a Summar load (or Summar already paid the plant, when
+  // no wire was needed), the plant payment for a direct load. Before that it lives only in Orders.
+  LOADS = LOADS.filter(L => L.fin === 'summar' ? !!(L.summar_payment_sent_at || L.plant_paid_at) : !!L.plant_paid_at);
   draw(); renderDetail();
 }
 
@@ -851,22 +855,20 @@ const payerKey = x => x.key === 'rem' ? 'Summar' : x.who;
 const payeeKey = x => x.who;
 
 // ---------- the 5 tabs ----------
-let tab = 'collect';
+let tab = 'loads';
 function cards(){
   const ci = openItems('in').filter(owedNow), co = openItems('out').filter(owedNow);
   const over = [...ci, ...co, ...openItems('watch').filter(owedNow)].filter(x => x.due && x.due < TODAY);
   const C = [
+    { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Open Loads', icon: IC.truck },
     { k: 'collect', cls: 'ok', v: fmtWhole(sum(ci)), l: 'To Collect', icon: IC.in },
     { k: 'pay', cls: 'warn', v: fmtWhole(sum(co)), l: 'To Pay', icon: IC.out },
     { k: 'summar', cls: '', v: String(summarRows().filter(r => !r.x.done).length), l: 'Client → Summar', icon: IC.warn },
     { k: 'overdue', cls: 'danger', v: String(over.length), l: 'Overdue', icon: IC.warn },
-    { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Open Loads', icon: IC.truck },
     { k: 'ledger', cls: '', v: String(ledgerRows().length), l: 'Payments Recorded', icon: IC.check },
   ];
   return `<div class="stats-row pr-cards">${C.map(c => `<div class="stat-card ${c.cls}${tab === c.k ? ' active' : ''}" style="cursor:pointer;" onclick="tab='${c.k}';draw()"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${c.icon}</svg></div><div><div class="stat-value">${c.v}</div><div class="stat-label">${c.l}</div></div></div>`).join('')}</div>`;
 }
-function howTo(from, action, impact){ const r = (k, v, c) => `<div style="display:flex;gap:8px;"><b style="color:${c};min-width:108px;flex-shrink:0;">${k}</b><span class="muted">${v}</span></div>`;
-  return `<div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;margin:-2px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);">${r('Comes from', from, 'var(--blue-bright)')}${r('You do', action, '#E8B54C')}${impact ? r('Then it changes', impact, '#6FD3A8') : ''}</div>`; }
 
 let lastAging = null;
 function agingTable(groups, dir){
@@ -902,13 +904,11 @@ function exportAgingCsv(){
 }
 function tabCollect(){
   return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Collect — by customer <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
-    ${howTo('every load in Orders — a customer owes us from delivery (direct loads); Summar owes us the remanente at delivery (Summar loads). <b>Coming</b> = loads not delivered yet.', 'when money arrives, click <b>Apply Payment</b> on that row. Click a name to see its loads.', 'the invoice (or remanente) is marked paid → that customer\u2019s balance and aging go down and their credit left goes up → To Collect drops → the payment goes to Payments Recorded → in Orders the load shows <b>Paid</b> → when nothing is left to pay or collect, the load moves to Closed with its real profit.')}
     ${agingTable(groupBy(openItems('in'), payerKey), 'in')}
     <div style="margin-top:14px;font-size:12.5px;" class="muted">Summar loads: the customer pays Summar, not us — follow them in <a href="#" onclick="tab='summar';draw();return false;" style="color:var(--blue-bright);">Client → Summar</a>.</div></div>`;
 }
 function tabPay(){
   return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Pay — by carrier, customs, plant <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
-    ${howTo('every load in Orders — freight and customs are owed at delivery; plant payment and Summar wire are paid from Orders before pickup. <b>Coming</b> = loads not delivered yet.', 'when you pay freight or customs, click <b>Record Paid</b> on that row. Plant / Summar: pay in Orders, it shows here by itself.', 'that bill is marked paid → To Pay drops → the amount you really paid replaces the estimate in the load\u2019s profit → it goes to Payments Recorded → when nothing is left, the load closes with its real profit.')}
     ${agingTable(groupBy(openItems('out'), payeeKey), 'out')}</div>`;
 }
 const dirBadge = x => x.dir === 'watch' ? '<span class="payment-badge due-soon">SUMMAR</span>' : `<span class="payment-badge ${x.dir === 'in' ? 'ok' : 'due-soon'}">${x.dir === 'in' ? 'IN' : 'OUT'}</span>`;
@@ -920,7 +920,6 @@ function actBtn(x, single){
 function tabOverdue(){
   const items = [...openItems('in'), ...openItems('out'), ...openItems('watch')].filter(x => owedNow(x) && x.due && x.due < TODAY).sort((a, b) => a.due - b.due);
   return `<div class="card"><h2>Overdue — act today</h2>
-    ${howTo('the same loads, only what is past due: money in, money out, and customers late paying Summar.', 'work down the list, oldest first — each row has its action.', 'the row leaves this list as soon as it is recorded (same effect as in To Collect / To Pay).')}
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>In / Out</th><th>Who</th><th>What</th><th>Was Due</th><th>Late</th><th>Amount</th><th></th></tr></thead><tbody>
     ${items.map(x => { const s = status(x), act = actBtn(x);
       return `<tr${x.dir === 'in' && s.days > 30 ? ' class="ct-row-overdue30"' : ''}><td class="order-num" style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')">${escapeHtml(x.L.order_number)}${finBadge(x.L)}</td><td>${dirBadge(x)}</td><td>${escapeHtml(x.who)}</td><td class="muted">${escapeHtml(x.label)}</td><td class="mono">${fmtDateStr(x.due)}</td><td><span class="payment-badge overdue">${s.t}</span></td><td class="num">${x.amount == null ? '—' : fmtMoney(x.amount)}</td><td>${act}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing overdue.</td></tr>'}</tbody></table></div></div>`;
@@ -934,7 +933,6 @@ function tabSummar(){
   const open = rows.filter(r => !r.x.done);
   const perDay = summarAtRiskPerDay(), feeSoFar = open.filter(r => delivered(r.L)).reduce((n, r) => n + (summarFeeFor(r.L, r.sd.soFar) || 0), 0);
   return `<div class="card"><h2>Client → Summar — every Summar load until the customer pays</h2>
-    ${howTo('Orders — every Summar load from the moment it exists (wire to Summar, pickup, delivery). The customer pays Summar, not us.', 'follow up with the customer before day 30. When Summar confirms the customer paid, click <b>Client Paid Summar</b> and enter the date.', 'the Summar fee stops growing and is fixed with the real days → the load\u2019s profit uses that real fee → the load closes (if nothing else is open) → it goes to Payments Recorded.')}
     <div style="display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;margin:0 0 12px;"><span class="muted">Open Summar loads: <b style="color:var(--ink);">${open.length}</b></span><span class="muted">Summar fee so far on delivered loads: <b style="color:#FF9C8A;">${fmtMoney(feeSoFar)}</b></span><span class="muted">Costing us now, every day: <b style="color:#FF9C8A;">${fmtMoney(perDay)}</b></span></div>
     <div class="table-scroll"><table class="pr-table pr-aging"><thead><tr><th>Order</th><th>Customer</th><th>Sale</th><th>Delivered</th><th>Fee-free until</th><th>Customer due</th><th>Days</th><th>Summar fee</th><th>Status</th><th></th></tr></thead><tbody>
     ${rows.map(({ L, x, sd }) => { const deliv = day(L.delivered_at), freeUntil = deliv ? addDays(deliv, 30) : null, days = sd.real ? sd.days : sd.soFar;
@@ -951,7 +949,6 @@ let loadFilter = 'open';
 function tabLoads(){
   const closed = LOADS.filter(isClosed), rows = loadFilter === 'closed' ? closed : LOADS.filter(L => !isClosed(L));
   return `<div class="card"><h2>Loads — money per load</h2>
-    ${howTo('Orders — the stage and every payment already done there.', 'click a load to see all its money in and out and record what is missing there.', 'each record updates To Collect / To Pay and the load\u2019s profit; with nothing left, the load moves to <b>Closed · profit</b> with its real profit.')}
     <div class="phase-tabs" style="margin:0 0 12px;max-width:340px;">${[['open', 'Open', LOADS.length - closed.length], ['closed', 'Closed · profit', closed.length]].map(t => `<div class="phase-tab${loadFilter === t[0] ? ' active' : ''}" onclick="loadFilter='${t[0]}';draw()">${t[1]}<span class="phase-tab-count">${t[2]}</span></div>`).join('')}</div>
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>To Collect</th><th>To Pay</th><th>Next Money</th><th>${loadFilter === 'closed' ? 'Real Profit' : 'Stage'}</th></tr></thead>
     <tbody>${rows.map(L => { const nx = nextStep(L), pi = pend(L, 'in'), po = pend(L, 'out'), p = profitOf(L);
@@ -976,7 +973,6 @@ function ledgerRows(){
 function tabLedger(){
   const rows = ledgerRows();
   return `<div class="card"><h2>Payments Recorded — in & out</h2>
-    ${howTo('what you record with Apply Payment / Record Paid (customer payments, freight, customs, Summar remanentes).', 'nothing — it is the history, to check a payment.', '')}
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Bank Date</th><th>In / Out</th><th>Who</th><th>Amount</th><th>Applied to</th><th>Account</th><th>Method / Ref</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td class="mono">${fmtDateStr(r.date)}</td><td>${r.dir === 'watch' ? '<span class="payment-badge due-soon">SUMMAR</span>' : `<span class="payment-badge ${r.dir === 'in' ? 'ok' : 'due-soon'}">${r.dir === 'in' ? 'IN' : 'OUT'}</span>`}</td><td>${escapeHtml(r.who)}${r.what ? `<div class="muted" style="font-size:11.5px;">${r.what}</div>` : ''}</td><td class="num">${fmtMoney(r.amount)}</td><td class="mono">${escapeHtml(r.applied.join(', '))}</td><td>${escapeHtml(r.account || '—')}</td><td class="muted">${escapeHtml([r.method, r.ref].filter(Boolean).join(' · ') || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No payments recorded yet.</td></tr>'}</tbody></table></div></div>`;
 }
@@ -1007,7 +1003,7 @@ function renderDetail(){
   const act = x => x.done || !x.amount || x.dir === 'info' || !owedNow(x) ? '' : actBtn(x, true);
   document.getElementById('orderDetailBox').innerHTML = `
     <div class="load-card">
-      <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}</div></div></div>
+      <div class="load-product-row"><div class="load-product-icon">${PRODUCT_PLACEHOLDER_ICON}</div><div><div class="load-product-name">${escapeHtml(L.product || '—')}</div><div class="load-product-spec">${escapeHtml(L.plant)} → ${escapeHtml(L.client)} · ${stageBadge(L)} ${finBadge(L)}${L.won_by ? ` · Trader: <b style="color:var(--ink);">${escapeHtml(L.won_by)}</b>` : ''}</div></div></div>
       ${nx ? `<div class="load-next-action"><div class="load-next-action-icon">${nx.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">Next Money</div><div class="load-next-action-label">${escapeHtml(nx.label)} — ${nx.amount == null ? 'missing cost/sale in Orders' : fmtMoney(nx.amount)} · ${owedNow(nx) ? status(nx).t : 'at delivery'}</div></div>${nx.where === 'here' && nx.amount && owedNow(nx) ? actBtn(nx, true) : nx.where === 'orders' ? `<a class="wa-btn" style="text-decoration:none;" href="orders.html">Pay in Orders →</a>` : '<span class="muted" style="font-size:12px;">At delivery</span>'}</div>` : ''}
       <div class="docs-panel-heading">Track — offer to final payment</div>
       <div class="utimeline" style="justify-content:center;">${nodes}</div>
@@ -1162,6 +1158,8 @@ function draw(){
 
 // Links from other pages (payments.html redirect, Collections links): ?customer=<id> opens Apply Payment for them.
 function applyQueryAfterLoad(){
+  const focus = new URLSearchParams(location.search).get('focus');
+  if (focus && LOADS.some(L => L.order_number === focus)) return openDetail(focus);
   const id = new URLSearchParams(location.search).get('customer');
   if (!id) return;
   const L = LOADS.find(x => x.customer_id === id);
