@@ -708,6 +708,14 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<div id="invOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:600px;">
+    <h3 id="invTitle">Invoice</h3>
+    <div id="invBody"></div>
+    <div id="invMsg" style="font-size:12.5px;margin-top:6px;color:#FF9C8A;"></div>
+    <div class="email-modal-actions" id="invActions"></div>
+  </div>
+</div>
 <div id="billOverlay" class="email-modal-overlay" style="display:none;">
   <div class="email-modal-box" style="max-width:540px;overflow:visible;">
     <h3 id="billTitle">Customs Bill</h3>
@@ -852,6 +860,24 @@ async function loadCollections(){
 //   7 Pay Carrier      when due by the carrier's payment terms, paid in full with its other bills
 // The two bills must be confirmed (and the remanente received) before collecting; paying customs /
 // the carrier waits only for its own bill and its due date.
+// ---------- Carrier / customs invoices (2026-09-28: "tienen que ser contrastados con facturas que
+// nos envian ellos... tiene que cuadrar... hasta que podamos dar visto bueno y poder pagar").
+// At-delivery providers send one invoice per load (reviewed inside the load's bill); 30-day providers
+// send one invoice for the period's loads (reviewed in their Statement). Only an approved invoice —
+// its total equal to our bills — can be paid, and it is paid exactly, all its loads at once. ----------
+const invLoads = inv => (prData.invoice_loads || []).filter(l => l.invoice_id === inv.id);
+const invNotes = inv => (prData.invoice_notes || []).filter(n => n.invoice_id === inv.id);
+const invoiceFor = (L, kind) => (prData.invoices || []).find(i => i.kind === kind && invLoads(i).some(l => l.shipment_id === L.id)) || null;
+const perLoadInvoice = (L, kind) => (kind === 'customs' ? customsDays(L) : carrierDays(L)) === 0;
+const approvedInvoiceFor = x => { const i = invoiceFor(x.L, x.key); return i && i.status === 'approved' ? i : null; };
+function invoiceState(inv){
+  const items = invLoads(inv).map(l => { const L = LOADS.find(y => y.id === l.shipment_id); return L && steps(L).find(z => z.key === inv.kind); }).filter(Boolean);
+  const ours = Math.round(items.reduce((n, x) => n + ((x.done && x.recs.length ? x.recorded : x.amount) || 0), 0) * 100) / 100;
+  return { items, ours, diff: Math.round((Number(inv.invoice_total) - ours) * 100) / 100, paid: items.length > 0 && items.every(x => x.done) };
+}
+const invBadge = inv => { if (!inv) return ''; const st = invoiceState(inv); return `<span class="payment-badge ${st.paid ? 'ok' : inv.status === 'approved' ? 'active' : 'due-soon'}">Inv #${escapeHtml(inv.invoice_number)} · ${st.paid ? 'Paid' : inv.status === 'approved' ? 'Approved' : 'In review'}</span>`; };
+const invPdf = inv => inv && inv.file_url ? ` <a href="${inv.file_url}" target="_blank" style="color:var(--blue-bright);font-size:11.5px;">PDF</a>` : '';
+
 function flowDone(L, step){ return (prData.flow_steps || []).find(f => f.shipment_id === L.id && f.step === step); }
 function flow(L){
   const st = steps(L), get = k => st.find(x => x.key === k), deliv = day(L.delivered_at);
@@ -875,10 +901,16 @@ function flow(L){
     if (s.key === 'rem'){ s.locked = !billsOk; s.why = 'Confirm the bills first.'; }
     if (s.key === 'customs_pay' || s.key === 'carrier_pay'){
       const bill = s.key === 'customs_pay' ? 'customs_bill' : 'freight_bill', terms = s.key === 'customs_pay' ? termsText(L.customs_agency_days, 0) : termsText(L.carrier_days, FREIGHT_DAYS);
+      const kind = s.key === 'customs_pay' ? 'customs' : 'freight';
+      s.inv = invoiceFor(L, kind); s.perLoad = perLoadInvoice(L, kind);
       s.locked = !ok(bill);
       s.why = `Confirm the ${byKey(bill).label} first.`;
-      // not due yet (30-day terms): payable early from Pay Now, but it doesn't take the Next Action
-      s.early = ok(bill) && !!s.from && TODAY < s.from; s.dueText = `Due ${fmtDateStr(s.from)} (${terms.toLowerCase()})`;
+      // not due yet, or (30 days) the period's invoice not approved yet: it doesn't take the Next Action
+      const approved = s.inv && s.inv.status === 'approved';
+      // at-delivery provider: its invoice is due now, so reviewing it IS the next action; 30-day provider:
+      // waits for the period's invoice, and an approved one waits for its due date
+      s.early = ok(bill) && (approved ? (!!s.from && TODAY < s.from) : !s.perLoad);
+      s.dueText = !approved ? (s.perLoad ? 'Approve their invoice in the bill first.' : `Waiting for ${s.x.who}'s invoice for the period — review it in Statements.`) : `Due ${fmtDateStr(s.from)} (${terms.toLowerCase()})`;
     }
     if (s.key === 'reminder'){ s.locked = !billsOk || !ok('rem') || (s.from && TODAY < s.from); s.why = !billsOk || !ok('rem') ? 'Do the steps before first.' : `Collect from ${fmtDateStr(s.from)} (day ${COLLECT_FROM_DAY}).`; }
     if (s.key === 'client'){ s.locked = !billsOk || !ok('rem'); s.why = 'Do the steps before first.'; }
@@ -895,8 +927,10 @@ function stepAction(L, s){
   if (s.locked) return `<span class="muted" style="font-size:12px;">${escapeHtml(s.why)}</span>`;
   if (s.key === 'customs_bill') return `<button class="wa-btn" onclick="event.stopPropagation();billOpen('${L.order_number}','customs')">Review Customs Bill →</button>`;
   if (s.key === 'freight_bill') return `<button class="wa-btn" onclick="event.stopPropagation();billOpen('${L.order_number}','freight')">Review Freight Bill →</button>`;
-  if (s.key === 'customs_pay' || s.key === 'carrier_pay'){ const all = payItems('out', s.x.who), tot = all.reduce((n, x) => n + x.amount, 0);
-    return `<button class="wa-btn" onclick="event.stopPropagation();payOpen('out','${jsArg(s.x.who)}')">Pay Now ${fmtMoney(tot)}${all.length > 1 ? ` (${all.length} loads)` : ''}</button>`; }
+  if (s.key === 'customs_pay' || s.key === 'carrier_pay'){
+    if (s.inv && s.inv.status === 'approved') return `<button class="wa-btn" onclick="event.stopPropagation();payInvoiceOpen('${s.inv.id}')">Pay Invoice #${escapeHtml(s.inv.invoice_number)} ${fmtMoney(s.inv.invoice_total)}</button>`;
+    if (s.perLoad) return `<button class="wa-btn" onclick="event.stopPropagation();billOpen('${L.order_number}','${s.key === 'customs_pay' ? 'customs' : 'freight'}')">Review Their Invoice →</button>`;
+    return `<button class="btn" onclick="event.stopPropagation();openParty('out','${jsArg(s.x.who)}')">${escapeHtml(s.x.who)} Statement →</button>`; }
   if (s.key === 'rem' || s.key === 'client') return actBtn(s.x, true);
   if (s.key === 'reminder') return `<button class="wa-btn" onclick="event.stopPropagation();sendReminder('${L.order_number}')">Send Reminder</button>`;
   return '';
@@ -1041,18 +1075,26 @@ const payeeKey = x => x.who;
 
 // ---------- the 5 tabs ----------
 let tab = 'loads';
+// The top of the screen = the money of the flow, totals of the loads still open (2026-09-28: "el
+// flujo de cada carga y la vision del gasto, profit, que sale que entra dentro de un mismo flujo").
+// Cards are totals, not tabs; the loads table below is the flow itself.
+function loadMoney(L){
+  const st = steps(L), val = x => (x.done && x.recs.length ? x.recorded : x.amount) || 0;
+  const out = st.filter(x => x.dir === 'out'), inn = st.filter(x => x.dir === 'in');
+  return { outPaid: out.filter(x => x.done).reduce((n, x) => n + val(x), 0), outPend: out.filter(x => !x.done).reduce((n, x) => n + val(x), 0),
+           inGot: inn.filter(x => x.done).reduce((n, x) => n + val(x), 0), inPend: inn.filter(x => !x.done).reduce((n, x) => n + val(x), 0) };
+}
 function cards(){
-  const ci = openItems('in').filter(owedNow), co = openItems('out').filter(owedNow);
-  const over = [...ci, ...co, ...openItems('watch').filter(owedNow)].filter(x => x.due && x.due < TODAY);
+  const open = LOADS.filter(L => !isClosed(L)), closed = LOADS.filter(isClosed), m = open.map(loadMoney), add = k => m.reduce((n, x) => n + x[k], 0);
+  const prof = a => a.reduce((n, L) => { const p = profitOf(L); return n + (p ? p.profit : 0); }, 0);
+  const sumRows = summarRows().filter(r => !r.x.done && delivered(r.L)), feeSoFar = sumRows.reduce((n, r) => n + (summarFeeFor(r.L, r.sd.soFar) || 0), 0);
   const C = [
-    { k: 'loads', cls: 'hero', v: String(LOADS.filter(L => !isClosed(L)).length), l: 'Active Loads', icon: IC.truck },
-    { k: 'collect', cls: 'ok', v: fmtWhole(sum(ci)), l: 'To Collect', icon: IC.in },
-    { k: 'pay', cls: 'warn', v: fmtWhole(sum(co)), l: 'To Pay', icon: IC.out },
-    { k: 'summar', cls: '', v: String(summarRows().filter(r => !r.x.done).length), l: 'Client → Summar', icon: IC.warn },
-    { k: 'overdue', cls: 'danger', v: String(over.length), l: 'Overdue', icon: IC.warn },
-    { k: 'ledger', cls: '', v: String(ledgerRows().length), l: 'Payments Recorded', icon: IC.check },
+    { cls: 'warn', v: fmtWhole(add('outPend')), l: 'OUT — to pay', sub: `Paid ${fmtWhole(add('outPaid'))}`, icon: IC.out },
+    { cls: 'ok', v: fmtWhole(add('inPend')), l: 'IN — to receive', sub: `Received ${fmtWhole(add('inGot'))}`, icon: IC.in },
+    { cls: 'hero', v: fmtWhole(prof(open)), l: 'Profit — open loads', sub: `Closed ${fmtWhole(prof(closed))}`, icon: IC.check },
+    { cls: 'danger', v: fmtWhole(feeSoFar), l: 'Summar fee so far', sub: `+${fmtWhole(summarAtRiskPerDay())}/day now`, icon: IC.warn },
   ];
-  return `<div class="stats-row pr-cards">${C.map(c => `<div class="stat-card ${c.cls}${tab === c.k ? ' active' : ''}" style="cursor:pointer;" onclick="tab='${c.k}';draw()"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${c.icon}</svg></div><div><div class="stat-value">${c.v}</div><div class="stat-label">${c.l}</div></div></div>`).join('')}</div>`;
+  return `<div class="stats-row pr-cards" style="grid-template-columns:repeat(4,minmax(0,1fr));">${C.map(c => `<div class="stat-card ${c.cls}"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${c.icon}</svg></div><div style="min-width:0;"><div class="stat-value">${c.v}</div><div class="stat-label">${c.l}</div><div class="muted mono" style="font-size:11.5px;margin-top:3px;">${c.sub}</div></div></div>`).join('')}</div>`;
 }
 
 let lastAging = null;
@@ -1088,7 +1130,7 @@ function exportAgingCsv(){
   a.download = `${lastAging.dir === 'in' ? 'to-collect' : 'to-pay'}-aging-${prData.today}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function tabCollect(){
-  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">To Collect — by customer <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;">Customers — who owes us <button class="btn small" onclick="exportAgingCsv()">⬇ Export CSV</button></h2>
     ${agingTable(groupBy(openItems('in'), payerKey), 'in')}
     <div style="margin-top:14px;font-size:12.5px;" class="muted">Summar loads: the customer pays Summar, not us — follow them in <a href="#" onclick="tab='summar';draw();return false;" style="color:var(--blue-bright);">Client → Summar</a>.</div></div>`;
 }
@@ -1097,7 +1139,7 @@ let cutoff = null, payFilter = '';
 function cutoffDate(){ if (!cutoff){ const t = TODAY; cutoff = ymd(new Date(t.getFullYear(), t.getMonth() + 1, 0)); } return day(cutoff); }
 function tabPay(){
   const groups = groupBy(openItems('out').filter(x => !payFilter || payeeKey(x).toLowerCase().includes(payFilter.toLowerCase())), payeeKey);
-  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">To Pay — by carrier, customs, plant
+  return `<div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">Statements — carriers & customs
       <span style="display:flex;gap:10px;align-items:center;">
         <span class="st-search-wrap" style="width:180px;"><svg class="st-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="payFilterInput" class="st-search-input" placeholder="Carrier / customs" value="${escapeHtml(payFilter)}" oninput="payFilter=this.value;draw();const i=document.getElementById('payFilterInput');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></span>
         <label class="muted" style="font-size:12px;font-weight:600;">Cutoff <input type="date" value="${ymd(cutoffDate())}" onchange="cutoff=this.value;draw()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label>
@@ -1139,16 +1181,21 @@ function tabSummar(){
         <td>${st}</td><td style="white-space:nowrap;">${!x.done && deliv && L.sale ? reminderBtn(L) + ' ' + actBtn(x) : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No Summar loads.</td></tr>'}</tbody></table></div></div>`;
 }
 let loadFilter = 'open';
+const TOOLS = [['pay', 'Statements'], ['collect', 'Customers'], ['summar', 'Summar'], ['closed', 'Closed Loads'], ['ledger', 'Payments History']];
+function toolLinks(){ return `<span style="display:flex;gap:6px;flex-wrap:wrap;">${TOOLS.map(([k, l]) => `<button class="btn small" onclick="${k === 'closed' ? "loadFilter='closed';tab='loads'" : `tab='${k}'`};draw()">${l}</button>`).join('')}</span>`; }
 function tabLoads(){
-  const closed = LOADS.filter(isClosed), rows = (loadFilter === 'closed' ? closed : LOADS.filter(L => !isClosed(L)))
+  const closedView = loadFilter === 'closed', rows = (closedView ? LOADS.filter(isClosed) : LOADS.filter(L => !isClosed(L)))
     .sort((a, b) => { const fa = flow(a), fb = flow(b); return (!!fb.current - !!fa.current) || String(a.order_number).localeCompare(String(b.order_number)); });
-  return `<div class="card"><h2 style="margin:0 0 8px;">Active Loads</h2>
-    <div class="phase-tabs" style="margin:0 0 12px;max-width:340px;">${[['open', 'Open', LOADS.length - closed.length], ['closed', 'Closed · profit', closed.length]].map(t => `<div class="phase-tab${loadFilter === t[0] ? ' active' : ''}" onclick="loadFilter='${t[0]}';draw()">${t[1]}<span class="phase-tab-count">${t[2]}</span></div>`).join('')}</div>
-    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Plant</th><th>Next Action</th><th>${loadFilter === 'closed' ? 'Real Profit' : 'Stage'}</th></tr></thead>
-    <tbody>${rows.map(L => { const p = profitOf(L);
-      return `<tr style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}</td><td style="white-space:nowrap;">${escapeHtml(L.client)}</td><td class="muted pr-product" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</td><td class="muted">${escapeHtml(L.plant || '—')}</td>
+  const money = (paid, pend, paidWord, color) => `<div class="num" style="font-size:12.5px;">${fmtMoney(paid)} <span class="muted" style="font-size:11px;">${paidWord}</span></div><div class="num" style="font-size:12.5px;color:${pend ? color : 'var(--ink-soft)'};">${fmtMoney(pend)} <span class="muted" style="font-size:11px;">pending</span></div>`;
+  return `<div class="card"><h2 style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">${closedView ? `<span><a href="#" onclick="loadFilter='open';draw();return false;" style="color:var(--blue-bright);font-size:13px;">← Active Loads</a> &nbsp;Closed Loads</span>` : 'Active Loads'}${toolLinks()}</h2>
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Next Action</th><th>OUT</th><th>IN</th><th>Profit</th><th>${closedView ? 'Closed' : 'Stage'}</th></tr></thead>
+    <tbody>${rows.map(L => { const p = profitOf(L), m = loadMoney(L);
+      return `<tr style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}<div class="muted pr-product" style="font-family:Inter,sans-serif;font-weight:400;font-size:11.5px;margin-top:3px;" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</div></td><td style="white-space:nowrap;">${escapeHtml(L.client)}</td>
         <td>${flowPreview(L)}</td>
-        <td>${loadFilter === 'closed' ? `<span class="num" style="color:${p && p.profit >= 0 ? '#6FD3A8' : '#FF9C8A'};">${p ? fmtMoney(p.profit) : '—'}</span>` : flowStageBadge(L)}</td></tr>`; }).join('') || `<tr><td colspan="6" class="empty">${loadFilter === 'closed' ? 'No closed loads yet.' : 'No loads here yet — a load arrives from Orders once it is delivered and its invoice is signed.'}</td></tr>`}</tbody></table></div></div>`;
+        <td>${money(m.outPaid, m.outPend, 'paid', 'var(--amber)')}</td>
+        <td>${money(m.inGot, m.inPend, 'received', '#6FD3A8')}</td>
+        <td class="num" style="color:${p && p.profit >= 0 ? '#6FD3A8' : '#FF9C8A'};font-weight:700;">${p ? fmtMoney(p.profit) : '—'}<div class="muted" style="font-size:10.5px;font-weight:400;">${closedView ? 'real' : 'so far'}</div></td>
+        <td>${closedView ? '<span class="payment-badge ok">Closed</span>' : flowStageBadge(L)}</td></tr>`; }).join('') || `<tr><td colspan="7" class="empty">${closedView ? 'No closed loads yet.' : 'No loads here yet — a load arrives from Orders once it is delivered and its invoice is signed.'}</td></tr>`}</tbody></table></div></div>`;
 }
 // One row per bank movement: customer payments (payment_applications) + freight / customs /
 // remanente records (shipment_money_records), both grouped by payment_batch_id.
@@ -1185,7 +1232,7 @@ function renderDetail(){
   // the rest waiting; clicking a node does its action or says why it is waiting
   const nodes = fl.f.map((s, i) => (i ? `<div class="u-line${s.done ? ' done' : ''}"></div>` : '') + `<div class="u-mini ${s.done ? 'done' : s === fl.current ? 'now blink-now' : 'wait'}" style="width:86px;cursor:pointer;" onclick="stepClick('${L.order_number}','${s.key}')"><div class="u-mini-btn">${s.icon}</div><div class="u-mini-label">${escapeHtml(s.label)}</div><div class="u-mini-date">${s.date ? fmtDateStr(s.date) : ''}</div></div>`).join('');
   const nxt = fl.current || fl.waiting;
-  const card = !nxt ? '' : `<div class="load-next-action"><div class="load-next-action-icon">${nxt.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">${fl.current ? 'Next Action' : 'Waiting'}</div><div class="load-next-action-label">${escapeHtml(nxt.label)}${nxt.x && nxt.x.amount && nxt.key !== 'reminder' ? ' — ' + fmtMoney(nxt.x.amount) : ''}${fl.current ? '' : ' · ' + escapeHtml(nxt.why)}</div>${termsPrompt(L, nxt)}</div>${fl.current ? stepAction(L, fl.current) : ''}</div>`;
+  const card = !nxt ? '' : `<div class="load-next-action"><div class="load-next-action-icon">${nxt.icon}</div><div class="load-next-action-text"><div class="load-next-action-eyebrow">${fl.current ? 'Next Action' : 'Waiting'}</div><div class="load-next-action-label">${escapeHtml(nxt.label)}${nxt.x && nxt.x.amount && nxt.key !== 'reminder' ? ' — ' + fmtMoney(nxt.x.amount) : ''}${fl.current ? '' : ' · ' + escapeHtml(nxt.early ? nxt.dueText : nxt.why)}</div>${termsPrompt(L, nxt)}</div>${fl.current ? stepAction(L, fl.current) : ''}</div>`;
   const line = (k, v, c) => `<tr><td>${k}</td><td class="num" style="${c ? 'color:' + c + ';' : ''}">${v == null ? '—' : fmtMoney(v)}</td></tr>`;
   const act = () => '';
   document.getElementById('orderDetailBox').innerHTML = `
@@ -1213,10 +1260,15 @@ function moneySummary(L, st){
     let act = '';
     if (!paid && where === 'here'){
       const ps = payStep(x.key === 'customs' ? 'customs_pay' : x.key === 'freight' ? 'carrier_pay' : null);
-      if (ps) act = ps.locked ? `<span class="muted" style="font-size:11.5px;">${escapeHtml(ps.why)}</span>` : `<button class="wa-btn" onclick="payOpen('out','${jsArg(x.who)}')">Pay Now</button>`;
+      // short labels here (the amount is already on the row)
+      if (ps) act = ps.locked ? `<span class="muted" style="font-size:11.5px;">${escapeHtml(ps.why)}</span>`
+        : ps.inv && ps.inv.status === 'approved' ? `<button class="wa-btn" onclick="payInvoiceOpen('${ps.inv.id}')">Pay Invoice</button>`
+        : ps.perLoad ? `<button class="wa-btn" onclick="billOpen('${L.order_number}','${x.key}')">Review Invoice</button>`
+        : `<button class="btn small" onclick="openParty('out','${jsArg(x.who)}')">Statement →</button>`;
       else if (x.key === 'rem') { const s5 = payStep('rem'); act = s5 && !s5.locked ? actBtn(x, true) : ''; }
     }
-    return `<tr><td style="white-space:nowrap;"><b style="font-weight:600;">${escapeHtml(label)}</b> <span class="muted" style="font-size:11.5px;">· ${escapeHtml(x.who)}</span></td><td class="num">${amt == null ? '—' : fmtMoney(amt)}</td>
+    const inv = (x.key === 'customs' || x.key === 'freight') ? invoiceFor(L, x.key) : null;
+    return `<tr><td style="white-space:nowrap;"><b style="font-weight:600;">${escapeHtml(label)}</b> <span class="muted" style="font-size:11.5px;">· ${escapeHtml(x.who)}</span>${inv ? ' ' + invBadge(inv) + invPdf(inv) : ''}</td><td class="num">${amt == null ? '—' : fmtMoney(amt)}</td>
       <td>${paid ? `<span class="payment-badge ok">${where === 'orders' ? 'Paid in Orders' : 'Paid'}${d ? ' ' + fmtDateStr(d) : ''}</span>` : `<span class="payment-badge ${late ? 'overdue' : 'due-soon'}">${d ? 'Due ' + fmtDateStr(d) : 'Pending'}</span>`}</td><td>${act}</td></tr>`;
   };
   const out = st.filter(x => x.dir === 'out'), inn = st.filter(x => x.dir === 'in' || x.dir === 'watch');
@@ -1254,29 +1306,41 @@ function renderStatement(name){
   const cut = cutoffDate();
   const items = openItems('out').filter(x => x.where === 'here' && payeeKey(x) === name).sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
   const confirmed = x => !!flowDone(x.L, x.key === 'freight' ? 'freight_confirmed' : 'customs_confirmed');
-  const dueBy = items.filter(x => owedNow(x) && confirmed(x) && x.due && x.due <= cut), sumOf = a => a.reduce((n, x) => n + (x.amount || 0), 0);
+  const dueBy = items.filter(x => owedNow(x) && x.due && x.due <= cut), sumOf = a => a.reduce((n, x) => n + (x.amount || 0), 0);
+  const invs = (prData.invoices || []).filter(i => i.payee_name === name).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const kind = items[0] ? items[0].key : (invs[0] ? invs[0].kind : 'freight');
   document.getElementById('orderDetailTitle').textContent = `${name} — statement`;
   document.getElementById('orderDetailBox').innerHTML = `<div class="load-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
-      <label class="muted" style="font-size:12.5px;font-weight:600;">Cutoff <input type="date" value="${ymd(cut)}" onchange="cutoff=this.value;draw();renderDetail()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label>
-      <span style="display:flex;gap:10px;"><button class="btn small" onclick="exportStatementCsv('${jsArg(name)}')">⬇ Export CSV</button>${dueBy.length ? `<button class="wa-btn" onclick="payOpen('out','${jsArg(name)}',null,${sumOf(dueBy).toFixed(2)})">Pay ${fmtMoney(sumOf(dueBy))}</button>` : ''}</span>
-    </div>
-    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>What</th><th>Delivered</th><th>Due</th><th>Base</th><th>Surcharges</th><th>Total</th><th></th></tr></thead><tbody>
-    ${items.map(x => { const own = owedNow(x), inCut = own && x.due && x.due <= cut, sur = x.surcharges || [];
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+      <h2 style="margin:0;">Invoices</h2>
+      <button class="wa-btn" onclick="invCreateOpen('${jsArg(name)}','${kind}')">+ Add Invoice</button></div>
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Invoice</th><th>Received</th><th>Loads</th><th>Their Total</th><th>Our Bills</th><th>Difference</th><th>Status</th><th></th></tr></thead><tbody>
+    ${invs.map(i => { const st = invoiceState(i);
+      return `<tr><td class="order-num">#${escapeHtml(i.invoice_number)}${invPdf(i)}</td><td class="mono">${fmtDateStr(day(i.created_at))}</td><td class="muted">${st.items.map(x => escapeHtml(x.L.order_number)).join(', ')}</td>
+        <td class="num">${fmtMoney(i.invoice_total)}</td><td class="num">${fmtMoney(st.ours)}</td>
+        <td class="num" style="color:${st.diff === 0 ? '#6FD3A8' : '#FF9C8A'};">${st.diff === 0 ? 'Matches' : fmtMoney(st.diff)}</td><td>${invBadge(i)}</td>
+        <td>${st.paid ? '' : i.status === 'approved' ? `<button class="wa-btn" onclick="payInvoiceOpen('${i.id}')">Pay ${fmtMoney(i.invoice_total)}</button>` : `<button class="btn small" onclick="invReviewOpen('${i.id}')">Review</button>`}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">No invoices yet.</td></tr>'}
+    </tbody></table></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0 10px;">
+      <h2 style="margin:0;">Open Bills</h2>
+      <span style="display:flex;gap:10px;align-items:center;"><label class="muted" style="font-size:12.5px;font-weight:600;">Cutoff <input type="date" value="${ymd(cut)}" onchange="cutoff=this.value;draw();renderDetail()" style="margin-left:6px;padding:5px 8px;border:1.5px solid var(--line);border-radius:7px;font-family:inherit;"></label><button class="btn small" onclick="exportStatementCsv('${jsArg(name)}')">⬇ Export CSV</button></span></div>
+    <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>What</th><th>Delivered</th><th>Due</th><th>Base</th><th>Charges</th><th>Total</th><th>Bill</th><th>Invoice</th></tr></thead><tbody>
+    ${items.map(x => { const own = owedNow(x), inCut = own && x.due && x.due <= cut, sur = x.surcharges || [], inv = invoiceFor(x.L, x.key);
       return `<tr><td class="order-num" style="cursor:pointer;" onclick="openDetail('${x.L.order_number}')">${escapeHtml(x.L.order_number)}</td><td class="muted">${escapeHtml(x.label)}</td>
-        <td class="mono">${x.L.delivered_at ? fmtDateStr(x.L.delivered_at) : '<span class="muted">Not yet</span>'}</td>
+        <td class="mono">${x.L.delivered_at ? fmtDateStr(day(x.L.delivered_at)) : '<span class="muted">Not yet</span>'}</td>
         <td><span class="payment-badge ${!own ? 'active' : inCut ? (x.due < TODAY ? 'overdue' : 'due-soon') : 'active'}">${x.due ? fmtDateStr(x.due) : '—'}</span></td>
         <td class="num">${fmtMoney(x.base ?? x.amount)}</td>
         <td style="white-space:normal;text-align:left;">${sur.map(r => `<div style="font-size:11.5px;white-space:nowrap;">${escapeHtml(r.cost_type)}${r.notes ? ' · ' + escapeHtml(r.notes) : ''} <b class="mono">${fmtMoney(r.amount)}</b></div>`).join('') || '<span class="muted">—</span>'}</td>
         <td class="num" style="font-weight:700;${inCut ? 'color:var(--amber);' : ''}">${fmtMoney(x.amount)}</td>
-        <td>${confirmed(x) ? '<span class="payment-badge ok">Confirmed</span>' : `<button class="btn small" onclick="billOpen('${x.L.order_number}','${x.key}')">Review Bill</button>`}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nothing open with this payee.</td></tr>'}
-    <tr><td colspan="6" style="font-weight:700;">Due by ${fmtDateStr(cut)}</td><td class="num" style="font-weight:700;color:var(--amber);">${fmtMoney(sumOf(dueBy))}</td><td></td></tr>
-    <tr><td colspan="6" class="muted">All open (incl. not due / not delivered)</td><td class="num muted">${fmtMoney(sumOf(items))}</td><td></td></tr>
+        <td>${confirmed(x) ? '<span class="payment-badge ok">Confirmed</span>' : `<button class="btn small" onclick="billOpen('${x.L.order_number}','${x.key}')">Review Bill</button>`}</td>
+        <td>${inv ? invBadge(inv) : '<span class="muted">—</span>'}</td></tr>`; }).join('') || '<tr><td colspan="9" class="empty">Nothing open with this payee.</td></tr>'}
+    <tr><td colspan="6" style="font-weight:700;">Due by ${fmtDateStr(cut)}</td><td class="num" style="font-weight:700;color:var(--amber);">${fmtMoney(sumOf(dueBy))}</td><td colspan="2"></td></tr>
+    <tr><td colspan="6" class="muted">All open</td><td class="num muted">${fmtMoney(sumOf(items))}</td><td colspan="2"></td></tr>
     </tbody></table></div></div>`;
 }
 function exportStatementCsv(name){
   const cut = cutoffDate(), items = openItems('out').filter(x => x.where === 'here' && payeeKey(x) === name);
-  const rows = items.map(x => [x.L.order_number, x.label, x.L.delivered_at ? fmtDateStr(x.L.delivered_at) : '', x.due ? fmtDateStr(x.due) : '', (x.base ?? x.amount ?? 0).toFixed(2),
+  const rows = items.map(x => [x.L.order_number, x.label, x.L.delivered_at ? fmtDateStr(day(x.L.delivered_at)) : '', x.due ? fmtDateStr(x.due) : '', (x.base ?? x.amount ?? 0).toFixed(2),
     (x.surcharges || []).map(r => `${r.cost_type}${r.notes ? ' (' + r.notes + ')' : ''}: ${Number(r.amount).toFixed(2)}`).join('; '), (x.amount || 0).toFixed(2), owedNow(x) && x.due && x.due <= cut ? 'yes' : 'no']);
   const csv = [['Order', 'What', 'Delivered', 'Due', 'Base', 'Surcharges', 'Total', `Due by ${fmtDateStr(cut)}`], ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -1302,11 +1366,18 @@ function renderParty(){
 // saving. Opened from one item (load page) it goes to that item only, and that item is closed with
 // the real amount paid (replaces the estimate).
 let payDir = 'in', payPlan = [], payOnly = null, payKey = null, payOutCutoff = null;
-function payItems(dir, name){ return openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here' && (dir === 'in' ? payerKey(x) : payeeKey(x)) === name && (dir !== 'out' || !!flowDone(x.L, x.key === 'freight' ? 'freight_confirmed' : 'customs_confirmed'))).sort((a, b) => (a.due || 9e15) - (b.due || 9e15)); }
+function payItems(dir, name){ return openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here' && (dir === 'in' ? payerKey(x) : payeeKey(x)) === name && (dir !== 'out' || !!approvedInvoiceFor(x))).sort((a, b) => (a.due || 9e15) - (b.due || 9e15)); }
 const BANK_LOGIN_URL = 'https://my.grovebankandtrust.com/login'; // same bank link Orders uses for plant payments
-function payOpen(dir, name, onlyId, prefill){
-  // money out is never partial: all open bills of that payee (or those due by the statement's cutoff), in full
-  payOutCutoff = dir === 'out' && prefill ? cutoffDate() : null;
+// money out is paid by invoice, exactly, all its loads at once — anything else opens the payee's Statement
+let payInvoice = null;
+function payInvoiceOpen(invId){
+  const inv = (prData.invoices || []).find(i => i.id === invId); if (!inv || inv.status !== 'approved') return;
+  payInvoice = inv; payOpen('out', inv.payee_name, null, null, true);
+}
+function payOpen(dir, name, onlyId, prefill, fromInvoice){
+  if (dir === 'out' && !fromInvoice) return openParty('out', name);
+  if (!fromInvoice) payInvoice = null;
+  payOutCutoff = null;
   if (dir === 'out') onlyId = null;
   payDir = dir; payOnly = onlyId || null; payKey = `pr-${dir}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const names = [...new Set(openItems(dir).filter(x => owedNow(x) && x.amount && x.where === 'here').map(dir === 'in' ? payerKey : payeeKey))];
@@ -1337,10 +1408,10 @@ function rpClose(){ document.getElementById('rpOverlay').style.display = 'none';
 function rpRender(){
   const who = document.getElementById('rpFrom').value, amt = readMoney('rpAmt');
   if (payDir === 'out'){
-    const bills = payItems('out', who).filter(x => !payOutCutoff || (x.due && x.due <= payOutCutoff));
+    const bills = payInvoice ? invoiceState(payInvoice).items.filter(x => !x.done) : [];
     payPlan = bills.map(x => ({ x, a: x.amount, settles: true }));
     setMoney('rpAmt', payPlan.reduce((n, p) => n + p.a, 0).toFixed(2));
-    document.getElementById('rpAlloc').innerHTML = `<table><thead><tr><th>Order</th><th>What</th><th>Due</th><th>Paying</th></tr></thead><tbody>${payPlan.map(p => `<tr><td class="order-num">${escapeHtml(p.x.L.order_number)}</td><td class="muted">${escapeHtml(p.x.label)}</td><td class="mono">${fmtDateStr(p.x.due) || '—'}</td><td class="num" style="color:#6FD3A8;">${fmtMoney(p.a)}</td></tr>`).join('')}</tbody></table><div class="muted" style="font-size:12px;margin-top:8px;">Paid in full — no partial payments.</div>`;
+    document.getElementById('rpAlloc').innerHTML = `<table><thead><tr><th>Order</th><th>What</th><th>Due</th><th>Paying</th></tr></thead><tbody>${payPlan.map(p => `<tr><td class="order-num">${escapeHtml(p.x.L.order_number)}</td><td class="muted">${escapeHtml(p.x.label)}</td><td class="mono">${fmtDateStr(p.x.due) || '—'}</td><td class="num" style="color:#6FD3A8;">${fmtMoney(p.a)}</td></tr>`).join('')}</tbody></table><div class="muted" style="font-size:12px;margin-top:8px;">${payInvoice ? `Invoice #${escapeHtml(payInvoice.invoice_number)} — approved, paid exactly.` : ''}</div>`;
     return;
   }
   const open = payOnly ? allSteps().filter(x => x.id === payOnly) : payItems(payDir, who), ex = open.find(x => Math.abs(x.amount - amt) < 0.01);
@@ -1372,7 +1443,7 @@ async function rpSave(){
     }
     const byKind = groupBy(plan.filter(p => !(p.x.key === 'client' && p.x.dir === 'in')), p => p.x.dir === 'watch' ? 'client_paid_summar' : ({ freight: 'freight', customs: 'customs', rem: 'summar_remanente' })[p.x.key]);
     for (const [kind, ps] of byKind){
-      await callApi('shipments-apply-payment', { kind, idempotency_key: payKey + '-' + kind, actor: currentActor(), party_name: who,
+      await callApi('shipments-apply-payment', { kind, idempotency_key: payKey + '-' + kind, actor: currentActor(), party_name: who, invoice_id: payInvoice && (kind === 'freight' || kind === 'customs') ? payInvoice.id : undefined,
         bank_entry_date: bankDate, collection_account: account, payment_method: method, payment_reference: reference,
         allocations: ps.map(p => ({ shipment_id: p.x.L.id, amount: Math.round(p.a * 100) / 100, settles: p.settles })) });
     }
@@ -1453,7 +1524,10 @@ function billOpen(orderNumber, kind){ billCtx = { orderNumber, kind, key: `bill-
 function billClose(){ document.getElementById('billOverlay').style.display = 'none'; }
 function billRender(){
   const L = LOADS.find(x => x.order_number === billCtx.orderNumber), x = steps(L).find(s => s.key === billCtx.kind), lines = billLines(L, billCtx.kind);
-  const confirmed = !!flowDone(L, billCtx.kind === 'customs' ? 'customs_confirmed' : 'freight_confirmed');
+  const confirmedStep = !!flowDone(L, billCtx.kind === 'customs' ? 'customs_confirmed' : 'freight_confirmed'), billInv = invoiceFor(L, billCtx.kind);
+  // the charges stay editable while their invoice is being reviewed (a missing charge found on the
+  // call gets added here); closed once the invoice is approved or the bill is paid
+  const confirmed = x.done || (billInv && billInv.status === 'approved') || (confirmedStep && !billInv);
   const days = billCtx.kind === 'customs' ? L.customs_agency_days : L.carrier_days;
   document.getElementById('billTitle').textContent = billCtx.kind === 'customs' ? 'Customs Bill' : 'Freight Bill';
   document.getElementById('billSub').textContent = `${L.order_number} — ${x.who} · ${termsText(days, billCtx.kind === 'customs' ? 0 : FREIGHT_DAYS)}`;
@@ -1468,8 +1542,15 @@ function billRender(){
       <button class="btn" id="billAddBtn" onclick="billAdd()">Add</button></div>
     <div id="billNoteWrap" style="display:none;margin-top:8px;"><input id="billNote" class="pr-text-input" placeholder="What the Other charge is"></div>`}`;
   btEnhanceAllSelects(document.getElementById('billBody'));
+  // at-delivery provider: this load's own invoice is reviewed right here (approving it confirms the bill)
+  const perLoad = perLoadInvoice(L, billCtx.kind), inv = invoiceFor(L, billCtx.kind);
+  document.getElementById('billBody').insertAdjacentHTML('beforeend', perLoad
+    ? `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:13px;"><b>Their invoice</b> ${inv ? invBadge(inv) + invPdf(inv) + (inv.status !== 'approved' ? ` <span class="muted" style="font-size:12px;">${invoiceState(inv).diff === 0 ? 'matches' : 'difference ' + fmtMoney(invoiceState(inv).diff)}</span>` : '') : '<span class="muted">not added yet</span>'}</span>
+        ${!inv ? `<button class="wa-btn" onclick="invCreateOpen('${jsArg(x.who)}','${billCtx.kind}','${L.id}')">Add Their Invoice →</button>` : inv.status !== 'approved' ? `<button class="wa-btn" onclick="invReviewOpen('${inv.id}')">Review Invoice →</button>` : ''}</div>`
+    : `<div class="muted" style="font-size:12px;margin-top:14px;">${escapeHtml(x.who)} is paid ${termsText(days, FREIGHT_DAYS).toLowerCase()}: their invoice for the period is reviewed in their Statement.</div>`);
   document.getElementById('billMsg').textContent = '';
-  document.getElementById('billConfirmBtn').style.display = confirmed ? 'none' : '';
+  document.getElementById('billConfirmBtn').style.display = confirmed || perLoad || confirmedStep ? 'none' : '';
   document.getElementById('billConfirmBtn').textContent = `Confirm Bill ${fmtMoney(x.amount)}`;
 }
 async function billAdd(){
@@ -1493,6 +1574,80 @@ async function billConfirm(){
     showToast(`${billCtx.kind === 'customs' ? 'Customs' : 'Freight'} bill confirmed`, `${fmtMoney(x.amount)} on ${x.who}'s account${n ? ' · next: ' + n.label : ''}`);
   } catch (e) { document.getElementById('billMsg').textContent = 'Error: ' + e.message; }
   document.getElementById('billConfirmBtn').disabled = false;
+}
+
+// ---------- Their invoice: add it (number, total, PDF, the loads it covers), review it until it
+// matches (call notes), approve it — only then it can be paid ----------
+let invCtx = null;
+function invCreateOpen(payee, kind, onlyShipmentId){
+  // loads it can cover: this payee's open bills of that kind not on another invoice (one fixed load for an at-delivery provider)
+  const cands = openItems('out').filter(x => x.key === kind && payeeKey(x) === payee && !invoiceFor(x.L, kind) && (!onlyShipmentId || x.L.id === onlyShipmentId) && (onlyShipmentId || !!flowDone(x.L, kind === 'freight' ? 'freight_confirmed' : 'customs_confirmed')));
+  invCtx = { mode: 'create', payee, kind, cands, fixed: !!onlyShipmentId, key: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  document.getElementById('invTitle').textContent = `Add Invoice — ${payee}`;
+  document.getElementById('invBody').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 170px;gap:10px;">
+      <div class="email-modal-field" style="margin:0;"><label>Invoice #</label><input id="invNumber" class="pr-text-input" placeholder="Their invoice number"></div>
+      <div class="email-modal-field" style="margin:0;"><label>Their Total</label>${moneyInputHtml('invTotal')}</div></div>
+    <div class="email-modal-field" style="margin-top:10px;"><label>Invoice PDF</label><input id="invFile" type="file" accept="application/pdf,image/*" style="display:none;" onchange="document.getElementById('invFileName').textContent = this.files[0] ? this.files[0].name : 'No file attached'"><span style="display:flex;gap:10px;align-items:center;"><button type="button" class="btn small" onclick="document.getElementById('invFile').click()">Attach PDF</button><span id="invFileName" class="muted" style="font-size:12.5px;">No file attached</span></span></div>
+    <div class="email-modal-field"><label>Loads on this invoice</label>
+      <table class="pr-table"><tbody>${cands.map(x => `<tr><td style="text-align:left;"><span style="display:inline-flex;gap:10px;align-items:center;cursor:pointer;" onclick="if(event.target.tagName!=='INPUT'){const c=this.querySelector('input');if(!c.disabled){c.checked=!c.checked;invSumRender();}}"><input type="checkbox" class="invPick" value="${x.L.id}" ${invCtx.fixed ? 'checked disabled' : ''} onchange="invSumRender()" style="width:16px;height:16px;accent-color:#5AAAFF;"> <span class="order-num">${escapeHtml(x.L.order_number)}</span> <span class="muted" style="font-size:11.5px;">${x.L.delivered_at ? 'delivered ' + fmtDateStr(day(x.L.delivered_at)) : ''}</span></span></td><td class="num">${fmtMoney(x.amount)}</td></tr>`).join('') || '<tr><td class="empty">No confirmed bills without an invoice.</td></tr>'}</tbody></table>
+      <div id="invSum" class="muted" style="font-size:12.5px;margin-top:6px;text-align:right;"></div></div>`;
+  document.getElementById('invActions').innerHTML = `<button class="btn secondary" onclick="invClose()">Close</button><button class="wa-btn" id="invSaveBtn" onclick="invSave()">Save Invoice</button>`;
+  document.getElementById('invMsg').textContent = '';
+  document.getElementById('invOverlay').style.display = 'flex'; invSumRender();
+}
+function invPicked(){ return [...document.querySelectorAll('.invPick')].filter(c => c.checked).map(c => invCtx.cands.find(x => x.L.id === c.value)); }
+function invSumRender(){ const el = document.getElementById('invSum'); if (el) el.innerHTML = `Our bills for the selected loads: <b class="mono" style="color:var(--ink);">${fmtMoney(invPicked().reduce((n, x) => n + x.amount, 0))}</b>`; }
+function fileToBase64(file){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(file); }); }
+async function invSave(){
+  const msg = document.getElementById('invMsg'), number = document.getElementById('invNumber').value.trim(), total = readMoney('invTotal'), picked = invPicked(), file = document.getElementById('invFile').files[0];
+  if (!number) return msg.textContent = 'Enter their invoice number.';
+  if (!(total > 0)) return msg.textContent = 'Enter the invoice total.';
+  if (!picked.length) return msg.textContent = 'Pick the loads on this invoice.';
+  if (!file) return msg.textContent = 'Attach the invoice PDF.';
+  const btn = document.getElementById('invSaveBtn'); btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await callApi('shipments-apply-payment', { kind: 'invoice_create', bill: invCtx.kind, idempotency_key: invCtx.key, actor: currentActor(), payee_name: invCtx.payee, invoice_number: number, invoice_total: total,
+      loads: picked.map(x => ({ shipment_id: x.L.id, amount: Math.round(x.amount * 100) / 100 })), file_name: file.name, content_type: file.type || 'application/pdf', file_base64: await fileToBase64(file) });
+    await loadCollections(); invReviewOpen(res.invoice.id); renderDetail(); if (document.getElementById('billOverlay').style.display === 'flex') billRender();
+  } catch (e) { msg.textContent = 'Error: ' + e.message; btn.disabled = false; btn.textContent = 'Save Invoice'; }
+}
+function invReviewOpen(invId){
+  const inv = (prData.invoices || []).find(i => i.id === invId); if (!inv) return;
+  invCtx = { mode: 'review', inv, key: `invnote-${Date.now()}` };
+  const st = invoiceState(inv), match = st.diff === 0;
+  document.getElementById('invTitle').textContent = `Invoice #${inv.invoice_number} — ${inv.payee_name}`;
+  document.getElementById('invBody').innerHTML = `
+    <div style="margin-bottom:10px;">${invBadge(inv)}${invPdf(inv)}${inv.approved_at ? ` <span class="muted" style="font-size:12px;">approved ${fmtDateStr(day(inv.approved_at))} by ${escapeHtml(inv.approved_by || '')}</span>` : ''}</div>
+    <table class="pr-table"><tbody>${st.items.map(x => `<tr><td style="text-align:left;"><span class="order-num">${escapeHtml(x.L.order_number)}</span> <span class="muted" style="font-size:11.5px;">${(x.surcharges || []).length ? 'base ' + fmtMoney(x.base) + ' + ' + (x.surcharges || []).map(r => escapeHtml(r.cost_type) + ' ' + fmtMoney(r.amount)).join(', ') : ''}</span>${inv.status !== 'approved' ? ` <a href="#" onclick="event.preventDefault();invClose();billOpen('${x.L.order_number}','${inv.kind}')" style="color:var(--blue-bright);font-size:11.5px;">edit charges</a>` : ''}</td><td class="num">${fmtMoney(x.amount)}</td></tr>`).join('')}
+      <tr><td style="text-align:left;font-weight:700;">Our bills</td><td class="num" style="font-weight:700;">${fmtMoney(st.ours)}</td></tr>
+      <tr><td style="text-align:left;font-weight:700;">Their invoice</td><td class="num" style="font-weight:700;">${fmtMoney(inv.invoice_total)}</td></tr>
+      <tr><td style="text-align:left;font-weight:700;">Difference</td><td class="num" style="font-weight:700;color:${match ? '#6FD3A8' : '#FF9C8A'};">${match ? 'Matches ✓' : fmtMoney(st.diff)}</td></tr></tbody></table>
+    ${match || inv.status === 'approved' ? '' : `<div class="muted" style="font-size:12px;margin-top:8px;">It has to match before it can be approved: check line by line, call them, add a missing charge (edit charges) or get a corrected invoice.</div>`}
+    <div class="email-modal-field" style="margin-top:14px;"><label>Review notes</label>
+      ${invNotes(inv).map(n => `<div style="font-size:12.5px;padding:6px 0;border-top:1px solid var(--line);"><span class="mono muted" style="font-size:11px;">${fmtDateStr(day(n.created_at))} · ${escapeHtml(n.actor)}</span><br>${escapeHtml(n.note)}</div>`).join('') || '<div class="muted" style="font-size:12px;">No notes yet.</div>'}
+      ${inv.status !== 'approved' ? `<div style="display:flex;gap:8px;margin-top:8px;"><input id="invNote" class="pr-text-input" placeholder="Who you called, what they said"><button class="btn" onclick="invAddNote()">Add Note</button></div>` : ''}</div>`;
+  document.getElementById('invActions').innerHTML = `<button class="btn secondary" onclick="invClose()">Close</button>${inv.status !== 'approved' ? `<button class="wa-btn" id="invApproveBtn" onclick="invApprove()" ${match ? '' : 'disabled style="opacity:.45;cursor:not-allowed;"'}>Approve Invoice</button>` : st.paid ? '' : `<button class="wa-btn" onclick="invClose();payInvoiceOpen('${inv.id}')">Pay ${fmtMoney(inv.invoice_total)}</button>`}`;
+  document.getElementById('invMsg').textContent = '';
+  document.getElementById('invOverlay').style.display = 'flex';
+}
+function invClose(){ document.getElementById('invOverlay').style.display = 'none'; }
+async function invAddNote(){
+  const note = document.getElementById('invNote').value.trim(); if (!note) return;
+  const nb = document.querySelector('#invBody .btn[onclick="invAddNote()"]'); if (nb){ nb.disabled = true; nb.textContent = 'Saving…'; }
+  try { await callApi('shipments-apply-payment', { kind: 'invoice_note', actor: currentActor(), invoice_id: invCtx.inv.id, note, idempotency_key: invCtx.key + '-' + Date.now() }); await loadCollections(); invReviewOpen(invCtx.inv.id); }
+  catch (e) { document.getElementById('invMsg').textContent = 'Error: ' + e.message; }
+}
+async function invApprove(){
+  const inv = invCtx.inv, st = invoiceState(inv), btn = document.getElementById('invApproveBtn'); btn.disabled = true; btn.textContent = 'Approving…';
+  try {
+    await callApi('shipments-apply-payment', { kind: 'invoice_approve', actor: currentActor(), invoice_id: inv.id, loads: st.items.map(x => ({ shipment_id: x.L.id, amount: Math.round(x.amount * 100) / 100 })) });
+    // approving their invoice also confirms each load's bill
+    const step = inv.kind === 'freight' ? 'freight_confirmed' : 'customs_confirmed';
+    for (const x of st.items) if (!flowDone(x.L, step)) await callApi('shipments-apply-payment', { kind: 'flow_step', step, idempotency_key: `invapprove-${inv.id}-${x.L.id}`, actor: currentActor(), order_number: x.L.order_number, detail: { invoice: inv.invoice_number } });
+    invClose(); await loadCollections(); if (document.getElementById('billOverlay').style.display === 'flex') billClose();
+    showToast('Invoice approved', `#${inv.invoice_number} — ${fmtMoney(inv.invoice_total)} ready to pay`);
+  } catch (e) { document.getElementById('invMsg').textContent = e.data && e.data.message ? e.data.message : 'Error: ' + e.message; btn.disabled = false; btn.textContent = 'Approve Invoice'; }
 }
 
 // ---------- USD money field — same recipe as the Trading Tool ($ prefix, no arrows), shown as
@@ -1585,7 +1740,8 @@ function sendConfirmWhatsapp(){ const { contact, copy } = confirmState; window.o
 function closeConfirm(){ document.getElementById('confirmOverlay').style.display = 'none'; confirmState = null; }
 
 function draw(){
-  document.getElementById('prView').innerHTML = cards() + ({ collect: tabCollect, pay: tabPay, summar: tabSummar, overdue: tabOverdue, loads: tabLoads, ledger: tabLedger }[tab])();
+  const back = tab === 'loads' ? '' : `<div style="margin:-6px 0 12px;"><a href="#" onclick="tab='loads';loadFilter='open';draw();return false;" style="color:var(--blue-bright);font-size:13px;">← Active Loads</a></div>`;
+  document.getElementById('prView').innerHTML = cards() + back + ({ collect: tabCollect, pay: tabPay, summar: tabSummar, overdue: tabOverdue, loads: tabLoads, ledger: tabLedger }[tab])();
 }
 
 // Links from other pages (payments.html redirect, Collections links): ?customer=<id> opens Apply Payment for them.

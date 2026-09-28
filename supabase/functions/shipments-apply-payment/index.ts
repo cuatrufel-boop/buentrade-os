@@ -15,6 +15,10 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog, finalizeShipmentPaid } from "../_shared/matching.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+// created only when an invoice PDF is uploaded (a module-level client made calls hang ~77 s)
+let storageClient: any = null;
+const storageFor = () => (storageClient ??= createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } }).storage);
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -26,6 +30,9 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     if (body.kind === "surcharge") return await addSurcharge(body);
+    if (body.kind === "invoice_create") return await invoiceCreate(body);
+    if (body.kind === "invoice_note") return await invoiceNote(body);
+    if (body.kind === "invoice_approve") return await invoiceApprove(body);
     if (body.kind === "flow_step") return await flowStep(body);
     if (body.kind && body.kind !== "customer") return await recordMoney(body);
     const missing = ["actor", "customer_id", "amount", "bank_entry_date", "collection_account"].filter((k) => body[k] == null);
@@ -157,6 +164,14 @@ async function recordMoney(body: Record<string, any>) {
   if (existing.length) return jsonResponse({ recorded: true, idempotent_replay: true, records: existing });
 
   const ids = allocations.map((a: any) => a.shipment_id);
+  if (kind === "freight" || kind === "customs") {
+    // "tiene que cuadrar... hasta que podamos dar visto bueno y poder pagar": no approved invoice, no payment
+    if (!body.invoice_id) return jsonResponse({ error: "a carrier / customs payment needs its approved invoice (invoice_id)" }, 400);
+    const [inv] = await sql`select * from provider_invoices where id = ${body.invoice_id}`;
+    if (!inv || inv.status !== "approved" || inv.kind !== kind) return jsonResponse({ error: "that invoice is not approved for this bill" }, 400);
+    const covered = new Set((await sql`select shipment_id from provider_invoice_loads where invoice_id = ${inv.id}`).map((r: any) => r.shipment_id));
+    if (ids.some((id: string) => !covered.has(id))) return jsonResponse({ error: "a load being paid is not on that invoice" }, 400);
+  }
   const ships = await sql`
     select sh.id, sh.order_number, po.financing_method from shipments sh
     left join purchase_orders po on po.order_number = sh.order_number where sh.id = any(${ids})
@@ -175,9 +190,9 @@ async function recordMoney(body: Record<string, any>) {
       const sh = byId.get(a.shipment_id);
       const [row] = await tx`
         insert into shipment_money_records
-          (shipment_id, order_number, kind, direction, party_name, amount, settles, bank_entry_date, account, payment_method, payment_reference, payment_batch_id, actor, idempotency_key)
+          (shipment_id, order_number, kind, direction, party_name, amount, settles, bank_entry_date, account, payment_method, payment_reference, payment_batch_id, actor, idempotency_key, invoice_id)
         values
-          (${sh.id}, ${sh.order_number}, ${kind}, ${KINDS[kind]}, ${party_name}, ${Number(a.amount)}, ${a.settles}, ${bank_entry_date}, ${collection_account}, ${payment_method}, ${payment_reference}, ${batchId}, ${actor}, ${idempotency_key + ':' + sh.id})
+          (${sh.id}, ${sh.order_number}, ${kind}, ${KINDS[kind]}, ${party_name}, ${Number(a.amount)}, ${a.settles}, ${bank_entry_date}, ${collection_account}, ${payment_method}, ${payment_reference}, ${batchId}, ${actor}, ${idempotency_key + ':' + sh.id}, ${body.invoice_id ?? null})
         returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "shipment_money_records", record_id: row.id, before: null, after: row });
@@ -244,5 +259,68 @@ async function flowStep(body: Record<string, any>) {
     return r;
   });
   return jsonResponse({ recorded: true, step: row });
+}
+
+// ============ Carrier / customs invoices (2026-09-28) ============
+// Entered with number, total and PDF, linked to the loads it covers (one load when the provider is
+// paid at delivery; the period's loads when paid at 30 days). Stays in_review — with the trader's
+// call notes — until its total equals the sum of our bills for those loads; then approved.
+async function invoiceCreate(body: Record<string, any>) {
+  const { actor, payee_name, bill: kind, invoice_number, invoice_total, loads, file_name = null, file_base64 = null, content_type = null, idempotency_key } = body;
+  const missing = ["actor", "payee_name", "bill", "invoice_number", "invoice_total", "loads", "idempotency_key"].filter((k) => body[k] == null || body[k] === "");
+  if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
+  if (!["customs", "freight"].includes(kind)) return jsonResponse({ error: "bill must be customs or freight" }, 400);
+  if (!(Number(invoice_total) > 0)) return jsonResponse({ error: "invoice_total must be greater than 0" }, 400);
+  if (!Array.isArray(loads) || !loads.length || loads.some((l: any) => !l.shipment_id || !(Number(l.amount) > 0))) return jsonResponse({ error: "loads must be a non-empty list of { shipment_id, amount > 0 }" }, 400);
+  const [done] = await sql`select * from provider_invoices where idempotency_key = ${idempotency_key}`;
+  if (done) return jsonResponse({ created: true, idempotent_replay: true, invoice: done });
+  const taken = await sql`select l.shipment_id from provider_invoice_loads l join provider_invoices i on i.id = l.invoice_id where i.kind = ${kind} and l.shipment_id = any(${loads.map((l: any) => l.shipment_id)})`;
+  if (taken.length) return jsonResponse({ error: "a selected load is already on another invoice for this bill" }, 400);
+  let storagePath: string | null = null;
+  if (file_base64) {
+    let bytes: Uint8Array;
+    try { bytes = Uint8Array.from(atob(file_base64), (c) => c.charCodeAt(0)); } catch { return jsonResponse({ error: "file_base64 is not valid base64" }, 400); }
+    if (bytes.byteLength > 15 * 1024 * 1024) return jsonResponse({ error: "file_too_large", message: "Files must be 15MB or smaller." }, 400);
+    storagePath = `${kind}/${crypto.randomUUID()}-${String(file_name || "invoice.pdf").replace(/[^A-Za-z0-9._-]/g, "_")}`;
+    const { error } = await storageFor().from("provider-invoices").upload(storagePath, bytes, { contentType: content_type || "application/pdf" });
+    if (error) return jsonResponse({ error: `storage upload failed: ${error.message}` }, 500);
+  }
+  const inv = await sql.begin(async (tx) => {
+    const [i] = await tx`
+      insert into provider_invoices (payee_name, kind, invoice_number, invoice_total, file_name, storage_path, created_by, idempotency_key)
+      values (${payee_name}, ${kind}, ${String(invoice_number).trim()}, ${Number(invoice_total)}, ${file_name}, ${storagePath}, ${actor}, ${idempotency_key}) returning *
+    `;
+    for (const l of loads) await tx`insert into provider_invoice_loads (invoice_id, shipment_id, amount) values (${i.id}, ${l.shipment_id}, ${Number(l.amount)})`;
+    await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "provider_invoices", record_id: i.id, before: null, after: { ...i, loads } });
+    return i;
+  });
+  return jsonResponse({ created: true, invoice: inv });
+}
+async function invoiceNote(body: Record<string, any>) {
+  const { actor, invoice_id, note, idempotency_key } = body;
+  if (!actor || !invoice_id || !(note && String(note).trim()) || !idempotency_key) return jsonResponse({ error: "missing required fields: actor, invoice_id, note, idempotency_key" }, 400);
+  const [done] = await sql`select * from provider_invoice_notes where idempotency_key = ${idempotency_key}`;
+  if (done) return jsonResponse({ added: true, idempotent_replay: true, note: done });
+  const [r] = await sql`insert into provider_invoice_notes (invoice_id, note, actor, idempotency_key) values (${invoice_id}, ${String(note).trim()}, ${actor}, ${idempotency_key}) returning *`;
+  return jsonResponse({ added: true, note: r });
+}
+// approve only when it matches: the page sends the loads with our CURRENT bill amounts (charges may
+// have been added while reviewing); they replace the stored ones and must add up to the invoice total
+async function invoiceApprove(body: Record<string, any>) {
+  const { actor, invoice_id, loads } = body;
+  if (!actor || !invoice_id || !Array.isArray(loads) || !loads.length) return jsonResponse({ error: "missing required fields: actor, invoice_id, loads" }, 400);
+  const [inv] = await sql`select * from provider_invoices where id = ${invoice_id}`;
+  if (!inv) return jsonResponse({ error: "unknown invoice" }, 404);
+  if (inv.status === "approved") return jsonResponse({ approved: true, idempotent_replay: true, invoice: inv });
+  const ours = loads.reduce((n: number, l: any) => n + Number(l.amount), 0);
+  if (Math.abs(ours - Number(inv.invoice_total)) > 0.005) return jsonResponse({ error: "does_not_match", message: `Invoice ${inv.invoice_number} is ${Number(inv.invoice_total).toFixed(2)}, our bills add up to ${ours.toFixed(2)}. It has to match before it can be approved.` }, 400);
+  const out = await sql.begin(async (tx) => {
+    await tx`delete from provider_invoice_loads where invoice_id = ${invoice_id}`;
+    for (const l of loads) await tx`insert into provider_invoice_loads (invoice_id, shipment_id, amount) values (${invoice_id}, ${l.shipment_id}, ${Number(l.amount)})`;
+    const [i] = await tx`update provider_invoices set status = 'approved', approved_by = ${actor}, approved_at = now() where id = ${invoice_id} returning *`;
+    await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "provider_invoices", record_id: invoice_id, before: inv, after: i });
+    return i;
+  });
+  return jsonResponse({ approved: true, invoice: out });
 }
 

@@ -14,6 +14,10 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+// created only when an invoice PDF needs a signed link (a module-level client made some calls hang ~77 s)
+let storageClient: any = null;
+const storageFor = () => (storageClient ??= createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } }).storage);
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -180,11 +184,20 @@ async function payReceive(annualRate: number) {
   `;
   const records = await sql`select * from shipment_money_records order by created_at`;
   const flowSteps = await sql`select shipment_id, step, done_at, actor from shipment_flow_steps`;
+  const invoices = await sql`select * from provider_invoices order by created_at`;
+  const invoiceLoads = await sql`select * from provider_invoice_loads`;
+  const invoiceNotes = await sql`select * from provider_invoice_notes order by created_at`;
+  // the invoice PDF opens from a short-lived signed link (the bucket is private)
+  for (const i of invoices) {
+    if (!i.storage_path) continue;
+    const { data } = await storageFor().from("provider-invoices").createSignedUrl(i.storage_path, 3600);
+    i.file_url = data?.signedUrl ?? null;
+  }
   const surcharges = await sql`select id, order_number, cost_type, amount, notes, payable_kind, created_at from order_extra_costs where payable_kind is not null order by created_at`;
   const customerPayments = await sql`
     select pa.*, c.trade_name as customer_name from payment_applications pa
     left join customers c on c.id = pa.customer_id order by pa.applied_at
   `;
-  return { loads, records, surcharges, flow_steps: flowSteps, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }) }; // Miami business day
+  return { loads, records, surcharges, flow_steps: flowSteps, invoices, invoice_loads: invoiceLoads, invoice_notes: invoiceNotes, customer_payments: customerPayments, interest_rate_annual: annualRate, today: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }) }; // Miami business day
 }
 
