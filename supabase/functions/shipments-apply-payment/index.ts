@@ -203,6 +203,10 @@ async function addSurcharge(body: Record<string, any>) {
   if (!["freight", "customs"].includes(payable_kind)) return jsonResponse({ error: "payable_kind must be freight or customs" }, 400);
   if (!SURCHARGE_TYPES.includes(cost_type)) return jsonResponse({ error: "cost_type must be one of: " + SURCHARGE_TYPES.join(", ") }, 400);
   if (cost_type === "Other" && !(notes && String(notes).trim())) return jsonResponse({ error: "write what the Other surcharge is in notes" }, 400);
+  // each charge belongs to one bill (user 2026-09-28): Lumper fee → carrier; every other named
+  // charge (Storage included) → customs; "Other" can go on either bill
+  const bill = cost_type === "Lumper fee" ? "freight" : cost_type === "Other" ? payable_kind : "customs";
+  if (bill !== payable_kind) return jsonResponse({ error: `${cost_type} goes on the ${bill === "freight" ? "carrier" : "customs"} bill` }, 400);
   if (!(Number(amount) > 0)) return jsonResponse({ error: "amount must be greater than 0" }, 400);
   const [done] = await sql`select * from order_extra_costs where idempotency_key = ${idempotency_key}`;
   if (done) return jsonResponse({ added: true, idempotent_replay: true, surcharge: done });
@@ -226,7 +230,7 @@ async function flowStep(body: Record<string, any>) {
   const { actor, order_number, step, detail = null, idempotency_key } = body;
   const missing = ["actor", "order_number", "step", "idempotency_key"].filter((k) => body[k] == null);
   if (missing.length) return jsonResponse({ error: "missing required fields", missing }, 400);
-  if (!["freight_confirmed", "customer_reminder_sent", "customs_deferred"].includes(step)) return jsonResponse({ error: "step must be freight_confirmed, customer_reminder_sent or customs_deferred" }, 400);
+  if (!["freight_confirmed", "customs_confirmed", "customer_reminder_sent"].includes(step)) return jsonResponse({ error: "step must be freight_confirmed, customs_confirmed or customer_reminder_sent" }, 400);
   const [sh] = await sql`select id from shipments where order_number = ${order_number}`;
   if (!sh) return jsonResponse({ error: "unknown order_number" }, 404);
   const [done] = await sql`select * from shipment_flow_steps where shipment_id = ${sh.id} and step = ${step}`;
