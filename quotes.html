@@ -648,7 +648,9 @@
   #qPanel_messaging a{color:var(--blue-bright);text-decoration:none;}
   #qPanel_messaging a:hover{text-decoration:underline;}
   /* Terms to teach (Market Flash) — same chip system as Plants' Pending Matches */
-  .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+  .plr-candidates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;align-items:flex-start;}
+  .plr-browse{align-items:flex-start;}
+  .plr-chip.plr-chip-multi{border-radius:14px;text-align:center;line-height:1.35;}
   .plr-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:20px;background:var(--card);color:var(--blue-bright);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;font-family:inherit;}
   .plr-chip:hover{background:var(--blue);color:#fff;}
   .plr-chip-current{background:var(--blue);color:#fff;}
@@ -1923,17 +1925,25 @@ function qmRenderSource(){
     </div></div>`;
   terms.innerHTML = qmTermsOpen && pending.length ? qmTermsHtml(pending) : '';
 }
+// a bulletin term is taught to a group of catalog products (every temperature / packaging of one cut) — the chip lists
+// each one by its full catalog name (user 2026-09-29: "quedamos que full names")
+function qmMfFullNames(o){
+  const names = o.full_names && o.full_names.length ? o.full_names : [o.label_en];
+  return names.map(n => escapeHtml(n)).join('<br>');
+}
+function qmMfChipCls(o){ return o && o.full_names && o.full_names.length > 1 ? ' plr-chip-multi' : '';
+}
 function qmTermsHtml(pending){
   const opt = k => qmMf.catalog_options.find(o => o.key === k);
   const rows = pending.map((p, i) => {
     const picked = qmMfPicks[p.term] || null;
     const shown = [...new Set([...(picked ? [picked] : []), ...p.suggested_keys])];
     const chips = shown.map(k => { const o = opt(k); if (!o) return ''; const cur = k === picked;
-      return `<button type="button" class="plr-chip${cur ? ' plr-chip-current' : ''}" onclick="qmMfPick(${i}, '${escapeHtml(k).replace(/'/g, "\\'")}')">${cur ? '✓ ' : ''}${escapeHtml(o.label_en)}</button>`; }).join('');
+      return `<button type="button" class="plr-chip${cur ? ' plr-chip-current' : ''}${qmMfChipCls(o)}" onclick="qmMfPick(${i}, '${escapeHtml(k).replace(/'/g, "\\'")}')">${cur ? '✓ ' : ''}${qmMfFullNames(o)}</button>`; }).join('');
     const rest = qmMf.catalog_options.filter(o => !shown.includes(o.key) && (!p.species || o.species === p.species));
     const browse = (qmMfBrowse[p.term] || !shown.length) ? `
       <input type="text" class="plr-browse-search" placeholder="Search ${rest.length} products…" autocomplete="off" oninput="qmMfFilter(this)" data-for="qmMfBrowse_${i}">
-      <div class="plr-browse" id="qmMfBrowse_${i}">${rest.map(o => `<button type="button" class="plr-chip" data-label="${escapeHtml([o.label_en, o.label_es, o.search].join(' ').toLowerCase())}" onclick="qmMfPick(${i}, '${escapeHtml(o.key).replace(/'/g, "\\'")}')">${escapeHtml(o.label_en)}</button>`).join('')}</div>` : '';
+      <div class="plr-browse" id="qmMfBrowse_${i}">${rest.map(o => `<button type="button" class="plr-chip${qmMfChipCls(o)}" data-label="${escapeHtml([o.label_en, o.label_es, o.search, ...(o.full_names || [])].join(' ').toLowerCase())}" onclick="qmMfPick(${i}, '${escapeHtml(o.key).replace(/'/g, "\\'")}')">${qmMfFullNames(o)}</button>`).join('')}</div>` : '';
     const toggle = (shown.length && !qmMfBrowse[p.term]) ? `<button type="button" class="plr-browse-toggle" onclick="qmMfBrowse[qmMfPending()[${i}].term]=true;qmRenderSource()">View rest of catalog (${rest.length})</button>` : '';
     return `<tr><td style="text-align:left;min-width:220px;"><b>${escapeHtml(p.term)}</b>${p.buyers ? ` <span class="rq-sheet-pill ok" style="margin-left:6px;">${p.buyers} client${p.buyers === 1 ? '' : 's'} buy this</span>` : ''}<span class="muted" style="display:block;font-size:11.5px;margin-top:3px;">${escapeHtml(p.example.length > 120 ? p.example.slice(0, 120) + '…' : p.example)}</span></td>
       <td style="text-align:left;"><div class="plr-candidates">${chips}</div>${toggle}${browse}</td>

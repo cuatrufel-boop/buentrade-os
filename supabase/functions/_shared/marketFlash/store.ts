@@ -27,7 +27,7 @@ const toks = (s: string) => norm(s).split(" ").filter(Boolean).map(stem);
 
 export async function loadCatalog(sql: any) {
   const cats = await sql`select id, name, name_en from categories`;
-  const prods = await sql`select id, category_id, name, name_en, subcategory, subcategory_en from products`;
+  const prods = await sql`select id, category_id, name, name_en, subcategory, subcategory_en, full_name_en from products`;
   const catById = new Map<string, any>(cats.map((c: any) => [c.id, c]));
   const fams = new Map<string, Family>(), names = new Map<string, Family>();
   for (const p of prods) {
@@ -51,7 +51,8 @@ export async function loadCatalog(sql: any) {
   }
   const productsByCategory = new Map<string, number>();
   for (const p of prods) productsByCategory.set(p.category_id, (productsByCategory.get(p.category_id) || 0) + 1);
-  return { cats, prods, catById, families: [...fams.values()], names: [...names.values()], productsByCategory };
+  const fullName = new Map<string, string>(prods.map((p: any) => [p.id, p.full_name_en]));
+  return { cats, prods, catById, families: [...fams.values()], names: [...names.values()], productsByCategory, fullName };
 }
 type Catalog = Awaited<ReturnType<typeof loadCatalog>>;
 
@@ -162,7 +163,9 @@ export async function listMarketFlash(sql: any) {
   const b = await latestBulletin(sql);
   const cat = await loadCatalog(sql);
   const options = [...cat.families, ...cat.names.filter((n) => cat.families.filter((f) => f.category_id === n.category_id && f.name_en === n.name_en).length > 1)]
-    .map((f) => ({ key: f.key, kind: f.kind, species: f.species, category_en: f.category_en, label_en: f.label_en, label_es: f.label_es, search: f.search, product_count: f.product_ids.length, category_id: f.category_id, name_en: f.name_en, subcategory_en: f.subcategory_en }));
+    .map((f) => ({ key: f.key, kind: f.kind, species: f.species, category_en: f.category_en, label_en: f.label_en, label_es: f.label_es, search: f.search, product_count: f.product_ids.length,
+      // the full catalog names this option covers — what the trader sees ("full names", user 2026-09-29)
+      full_names: f.product_ids.map((id) => cat.fullName.get(id)).filter(Boolean).sort(), category_id: f.category_id, name_en: f.name_en, subcategory_en: f.subcategory_en }));
   if (!b) return { bulletin: null, product: [], protein: {}, market: {}, pending: [], catalog_options: options, counts: { product: 0, protein: 0, market: 0, pending: 0 } };
   const bullets = await sql`select id, kind, levels, species, market, product_entity, text_es, quote_en, source_note, page, computed, valid_until from market_flash_bullets where bulletin_id = ${b.id} order by key`;
   bullets.sort((a: any, b: any) => prio(a.kind) - prio(b.kind)); // current price first, wider context after
