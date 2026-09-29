@@ -1270,7 +1270,7 @@ async function renderCustomerCredit(id){
 // Each note is read by the system (2026-09-29): how often they buy one of their products is saved straight to that
 // product (Products tab) when it can only be one product; anything it can't decide alone waits under the note as
 // Pending for the trader; the rest is kept as what we know about them.
-let aboutData = { notes: [], insights: [], products: [] };
+let aboutData = { notes: [], insights: [], products: [], catalog: [] };
 const ABOUT_TOPIC = { personal: 'Personal', business: 'Business', preference: 'Preference', payment: 'Payment' };
 function aboutInsightHtml(i){
   const pend = '<span class="payment-badge due-soon">Pending</span>';
@@ -1289,6 +1289,18 @@ function aboutInsightHtml(i){
         <button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','dismiss')">Dismiss</button>
       </div></div>`;
   }
+  if (i.kind === 'product' && i.status === 'applied')
+    return `<div class="about-insight"><span class="payment-badge ok">${i.created_link ? 'Added to products' : 'In their products'}</span><span>${escapeHtml(i.summary_en)} <span class="muted">→ ${escapeHtml(i.product_name || '')}</span></span>${i.created_link ? `<button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','undo')">Undo</button>` : ''}</div>`;
+  if (i.kind === 'product' && i.status === 'pending'){
+    const cand = new Set((i.product_candidates || []).map(c => c.product_id));
+    const prods = [...(i.product_candidates || []), ...aboutData.catalog.filter(p => !cand.has(p.product_id))];
+    return `<div class="about-insight"><span>${pend}</span><span>${escapeHtml(i.summary_en)} <span style="color:#FFC876;">· ${escapeHtml(i.question_en || '')}</span></span>
+      <div class="about-insight-actions">
+        <select id="ai_x_${i.id}" style="width:320px;"><option value="" selected>Which product?</option>${prods.map(p => `<option value="${p.product_id}">${escapeHtml(p.product_name)}</option>`).join('')}</select>
+        <button type="button" class="btn" onclick="aboutAddProduct('${i.id}')">Add to products</button>
+        <button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','dismiss')">Dismiss</button>
+      </div></div>`;
+  }
   if (i.kind === 'fact' && i.status === 'pending')
     return `<div class="about-insight"><span>${pend}</span><span>${escapeHtml(i.summary_en)} <span style="color:#FFC876;">· ${escapeHtml(i.question_en || '')}</span></span>
       <div class="about-insight-actions"><button type="button" class="btn" onclick="aboutDecide('${i.id}','keep')">Keep</button><button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','dismiss')">Dismiss</button></div></div>`;
@@ -1299,7 +1311,9 @@ function aboutInsightHtml(i){
 function aboutNoteInsightsHtml(n){
   if (!n.insights_status) return `<div class="about-insight muted" id="about_reading_${n.id}">Reading the note…</div>`;
   if (n.insights_status === 'failed') return `<div class="about-insight"><span class="payment-badge overdue">Not read</span><span class="muted">The system couldn't read this note.</span><button type="button" class="btn secondary" onclick="aboutRead('${n.id}')">Read again</button></div>`;
-  const rows = aboutData.insights.filter(i => i.note_id === n.id).map(aboutInsightHtml).filter(Boolean);
+  // what needs the trader first, then what went to the products, then what we learned
+  const rank = i => (i.status === 'pending' ? 0 : i.kind === 'fact' ? 2 : 1);
+  const rows = aboutData.insights.filter(i => i.note_id === n.id).sort((a, b) => rank(a) - rank(b)).map(aboutInsightHtml).filter(Boolean);
   return rows.length ? rows.join('') : '<div class="about-insight muted">Nothing to save from this note.</div>';
 }
 async function renderCustomerAbout(){
@@ -1309,7 +1323,7 @@ async function renderCustomerAbout(){
   let d;
   try { d = await callApi('messaging', { action: 'list_notes', customer_id: id }); } catch (e) { el.innerHTML = `<div class="empty">Couldn't load the notes: ${escapeHtml(e.message)}</div>`; return; }
   if (viewingCustomerId !== id) return;
-  aboutData = { customerId: id, notes: d.notes || [], insights: d.insights || [], products: d.products || [] };
+  aboutData = { customerId: id, notes: d.notes || [], insights: d.insights || [], products: d.products || [], catalog: d.catalog || [] };
   const notes = aboutData.notes;
   const pending = aboutData.insights.filter(i => i.status === 'pending').length;
   const biz = (typeof businessTypes !== 'undefined' ? businessTypes : []).find(b => b.id === c.business_type_id);
@@ -1343,7 +1357,15 @@ async function aboutRead(noteId){
 async function aboutDecide(insightId, decision){
   try { await callApi('messaging', { action: 'decide_insight', actor: currentActor(), id: insightId, decision }); } catch (e) { await btAlert('Could not save: ' + e.message); return; }
   await renderCustomerAbout();
-  if (decision === 'undo' && typeof loadCustomerProducts === 'function') loadCustomerProducts(viewingCustomerId);
+  if (decision === 'undo' && typeof loadCustomerProducts === 'function') loadCustomerProducts(viewingCustomerId); // cadence or added product
+}
+async function aboutAddProduct(insightId){
+  const pid = document.getElementById(`ai_x_${insightId}`).value;
+  if (!pid) { await btAlert('Pick which product it is.'); return; }
+  try { await callApi('messaging', { action: 'decide_insight', actor: currentActor(), id: insightId, decision: 'apply', product_id: pid }); }
+  catch (e) { await btAlert('Could not save: ' + e.message); return; }
+  await renderCustomerAbout();
+  if (typeof loadCustomerProducts === 'function') loadCustomerProducts(viewingCustomerId);
 }
 async function aboutApplyCadence(insightId){
   const link = document.getElementById(`ai_p_${insightId}`).value, cad = document.getElementById(`ai_c_${insightId}`).value;

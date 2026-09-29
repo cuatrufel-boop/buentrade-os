@@ -221,12 +221,15 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
   const SPECIES: Record<string, string> = { Pork: "pork", Beef: "beef", Chicken: "chicken", Turkey: "turkey" };
   for (const r of catSpecies) if (SPECIES[r.name_en]) speciesByProduct.set(r.id, SPECIES[r.name_en]);
 
+  // how each client likes to be reached, read from their notes (shown to the trader next to the message)
+  const prefs = await sql`select customer_id, summary_en from customer_note_insights where kind = 'fact' and topic = 'preference' and status = 'applied' order by created_at desc`;
   const draftBy = new Map<string, any>(drafts.map((d: any) => [`${d.customer_id}|${d.reason_key}`, d]));
   const fromUsBy = new Map<string, number>(fromUs.map((r: any) => [`${r.customer_id}|${r.product_id}`, r.loads]));
 
   const clients = customers.map((c: any) => {
     const myLinks = links.filter((l: any) => l.customer_id === c.id);
     const myNotes = notes.filter((n: any) => n.customer_id === c.id);
+    const myPrefs = prefs.filter((f: any) => f.customer_id === c.id).map((f: any) => f.summary_en);
     const mySent = sentAll.filter((m: any) => m.customer_id === c.id);
     const sentTodayBy = new Map<string, any>();
     for (const m of mySent) if (m.today && !sentTodayBy.has(m.reason_key)) sentTodayBy.set(m.reason_key, m);
@@ -317,7 +320,7 @@ async function list(actor: string, onlyCustomerId: string | null = null) {
     return {
       id: c.id, trade_name: c.trade_name, contact_name: c.contact_name, first_name: firstName(c),
       city: c.city, state: c.state, country: c.country, email: c.email, phone: c.whatsapp || c.phone, business_type_id: c.business_type_id,
-      products, notes: myNotes.map((n: any) => ({ id: n.id, note: n.note, created_at: n.created_at, used: n.used })),
+      products, notes: myNotes.map((n: any) => ({ id: n.id, note: n.note, created_at: n.created_at, used: n.used })), preferences: myPrefs,
       works: works.filter((w: any) => w.customer_id === c.id).map((w: any) => ({ kind: w.reason_kind, sent: w.sent, requests: w.requests })),
       options, asked_today: mySent.filter((m: any) => m.asked_today).length, score: pending.length ? Math.max(...pending.map((o) => o.score)) : 0,
       uncovered: products.reduce((n: number, p: any) => n + (p.loads_month ? Math.max(0, p.loads_month - p.from_us_month) : 0), 0),
@@ -721,8 +724,11 @@ async function deleteNote(body: any) {
 // Code, not the model, decides what is applied: a cadence is applied only when the model marked it clear AND named
 // exactly one of this client's own product links AND the numbers are whole and sane.
 const NOTE_READ_SCHEMA = {
-  type: "object", additionalProperties: false, required: ["cadences", "facts", "unclear"],
+  type: "object", additionalProperties: false, required: ["products", "cadences", "facts", "unclear"],
   properties: {
+    products: { type: "array", items: { type: "object", additionalProperties: false,
+      required: ["words", "catalog_ids", "clear", "summary_en", "question_en"],
+      properties: { words: { type: "string" }, catalog_ids: { type: "array", items: { type: "string" } }, clear: { type: "boolean" }, summary_en: { type: "string" }, question_en: { type: "string" } } } },
     cadences: { type: "array", items: { type: "object", additionalProperties: false,
       required: ["words", "link_ids", "clear", "loads_per_cycle", "frequency_days", "summary_en", "question_en"],
       properties: {
@@ -766,10 +772,13 @@ const cadenceText = (loads: number | null, days: number | null) => {
 
 async function noteInsights(noteIds: string[]) {
   if (!noteIds.length) return [];
-  return await sql`select i.*, p.full_name_en as product_name,
+  return await sql`select i.*, coalesce(p.full_name_en, ip.full_name_en) as product_name,
       coalesce((select json_agg(json_build_object('link_id', cp.id, 'product_name', pp.full_name_en) order by pp.full_name_en)
-        from customer_products cp join products pp on pp.id = cp.product_id where cp.id = any(i.candidate_link_ids)), '[]') as candidates
+        from customer_products cp join products pp on pp.id = cp.product_id where cp.id = any(i.candidate_link_ids)), '[]') as candidates,
+      coalesce((select json_agg(json_build_object('product_id', pp.id, 'product_name', pp.full_name_en) order by pp.full_name_en)
+        from products pp where pp.id = any(i.candidate_product_ids)), '[]') as product_candidates
     from customer_note_insights i left join customer_products l on l.id = i.link_id left join products p on p.id = l.product_id
+      left join products ip on ip.id = i.product_id
     where i.note_id = any(${noteIds}) order by i.created_at, i.kind`;
 }
 
@@ -782,13 +791,19 @@ async function readNote(body: any) {
 
   const links = await sql`select cp.id as link_id, cp.frequency_days, cp.loads_per_cycle, p.full_name_en, p.full_name_es
     from customer_products cp join products p on p.id = cp.product_id where cp.customer_id = ${n.customer_id} order by p.full_name_en`;
+  const catalog = await sql`select id, full_name_en, full_name_es from products order by full_name_en`;
   const system = `You read a note a meat trader (BuenTrade, selling US pork/beef/chicken to clients in Mexico) wrote about ONE client, and extract what helps the trader reach that client at the right moment. Notes are short, in Spanish or English, often informal.
-Return three lists:
-1. cadences — every statement of how much / how often the client buys a product (from all their suppliers). Convert to whole numbers: loads_per_cycle loads every frequency_days days (a week = 7, two weeks / "quincena" = 14, a month = 30, two months = 60, three months = 90; "2 a la semana" = 2 every 7; "cada 40 días" = 1 every 40). link_ids = the link_id(s) from the client's product list that the words could refer to — ONLY ids from that list, never invented. clear = true only if ALL hold: the words can refer to exactly ONE product in the list (fresh/fresco vs frozen/congelado, box vs combo, and the cut must all fit — if the note doesn't say fresh or frozen and the list has both, it is NOT clear), and the amount and period are both stated (no "a veces", "bastante", "varias"). If not clear, question_en asks the trader exactly what is missing in one short sentence (e.g. "Fresh or frozen?", "Which product — they have no pork belly in their list yet."), and link_ids lists the plausible ones (may be empty). If clear, question_en is "". Put 0 in loads_per_cycle / frequency_days when that part is unknown. summary_en: e.g. "Buys 2 loads of pork jowl a month".
-2. facts — everything else worth knowing to reach this client, one fact per item, plain short English: personal (family, trips, health, celebrations), business (new plant, new branch, new customers, problems, volume changes), preference (how/when they like to be contacted, products they like or dislike, price sensitivity), payment (how/when they pay, delays). Only what the note says — never add or infer.
+Read it WORD BY WORD — every detail matters (names, family, hobbies, places, trips, food, health, plans, who decides, competitors, suppliers, what they buy). Return four lists:
+0. products — every product the note says the client buys, bought, uses or wants (from us or anyone). catalog_ids = the id(s) from the CATALOG that the words could be — ONLY ids from the catalog, never invented. clear = true only if exactly ONE catalog product fits everything the note states (cut, bone-in/boneless, skin, fresh/fresco vs frozen/congelado, box/caja vs combo); if the note doesn't state something that tells several catalog products apart, it is NOT clear — list them all. If nothing in the catalog fits, catalog_ids is empty and question_en says "<product> isn't in the catalog." summary_en e.g. "Bought pork jowl in combo". If clear, question_en is "".
+1. cadences — every statement of how much / how often the client buys a product (from all their suppliers). Convert to whole numbers: loads_per_cycle loads every frequency_days days (a week = 7, two weeks / "quincena" = 14, a month = 30, two months = 60, three months = 90; "2 a la semana" = 2 every 7; "cada 40 días" = 1 every 40). link_ids = the link_id(s) from the client's product list that the words could refer to, or — for a product not in their list yet — its catalog_id(s); ONLY ids from those lists, never invented. clear = true only if ALL hold: the words can refer to exactly ONE product in the list (fresh/fresco vs frozen/congelado, box vs combo, and the cut must all fit — if the note doesn't say fresh or frozen and the list has both, it is NOT clear), and the amount and period are both stated (no "a veces", "bastante", "varias"). If not clear, question_en asks the trader exactly what is missing in one short sentence (e.g. "Fresh or frozen?", "Which product — they have no pork belly in their list yet."), and link_ids lists the plausible ones (may be empty). If clear, question_en is "". Put 0 in loads_per_cycle / frequency_days when that part is unknown. summary_en: e.g. "Buys 2 loads of pork jowl a month".
+2. facts — everything else worth knowing (do not repeat a product already in "products" unless the fact adds something, e.g. that we can't find a supplier for it) to reach this client, one fact per item, plain short English: personal (family, trips, health, celebrations), business (new plant, new branch, new customers, problems, volume changes), preference (how/when they like to be contacted, products they like or dislike, price sensitivity), payment (how/when they pay, delays). Only what the note says — never add or infer.
 3. unclear — parts of the note you cannot interpret with confidence (an unknown word or abbreviation, an ambiguous reference): summary_en = your best reading, question_en = what to ask the trader.
+ONE question per thing: never ask about the same thing in two lists (a product not in the catalog is asked only in "products"; which fresh/frozen variant for a cadence is asked only in "cadences"). A cadence needs a stated number AND period — "mucha", "bastante" is not a cadence (it goes in products/facts).
 Empty lists are fine. Never invent products, numbers or facts.`;
-  const user = `Client's products (link_id — product — current cadence):
+  const user = `CATALOG (catalog_id — product):
+${catalog.map((p: any) => `${p.id} — ${p.full_name_en}${p.full_name_es ? ` / ${p.full_name_es}` : ""}`).join("\n")}
+
+Client's products (link_id — product — current cadence):
 ${links.map((l: any) => `${l.link_id} — ${l.full_name_en}${l.full_name_es ? ` / ${l.full_name_es}` : ""} — ${cadenceText(l.loads_per_cycle, l.frequency_days)}`).join("\n") || "(no products yet)"}
 
 Note (written ${new Date(n.created_at).toISOString().slice(0, 10)}):
@@ -802,14 +817,43 @@ Note (written ${new Date(n.created_at).toISOString().slice(0, 10)}):
   }
 
   const own = new Map(links.map((l: any) => [l.link_id, l]));
+  const inCatalog = new Set(catalog.map((p: any) => p.id));
   await sql.begin(async (tx: any) => {
     const [again] = await tx`select insights_status from customer_notes where id = ${note_id} for update`;
     if (again?.insights_status === "done") return; // read twice at the same time — keep the first
+    for (const pr of out.products || []) {
+      const ids = [...new Set((pr.catalog_ids || []).filter((x: string) => inCatalog.has(x)))] as string[];
+      const summary = String(pr.summary_en || pr.words || "").trim() || "A product they buy";
+      if (pr.clear === true && ids.length === 1) {
+        const [have] = await tx`select * from customer_products where customer_id = ${n.customer_id} and product_id = ${ids[0]}`;
+        let link = have, created = false;
+        if (!have) {
+          [link] = await tx`insert into customer_products (customer_id, product_id) values (${n.customer_id}, ${ids[0]}) returning *`;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customer_products", record_id: link.id, after: link });
+          created = true;
+        }
+        await tx`insert into customer_note_insights (note_id, customer_id, kind, status, summary_en, product_id, candidate_product_ids, link_id, created_link, decided_by, decided_at)
+          values (${note_id}, ${n.customer_id}, 'product', 'applied', ${summary}, ${ids[0]}, ${ids}, ${link.id}, ${created}, 'system', now())`;
+      } else {
+        // every option is already one of their products → nothing to add (a cadence item asks which one, if any)
+        if (ids.length) { const [{ k }] = await tx`select count(*)::int as k from customer_products where customer_id = ${n.customer_id} and product_id = any(${ids})`; if (k === ids.length) continue; }
+        const q = String(pr.question_en || "").trim() || (ids.length ? "Which product is it?" : "It isn't in the catalog.");
+        await tx`insert into customer_note_insights (note_id, customer_id, kind, status, summary_en, question_en, candidate_product_ids)
+          values (${note_id}, ${n.customer_id}, 'product', 'pending', ${summary}, ${q}, ${ids})`;
+      }
+    }
     for (const c of out.cadences || []) {
-      const ids = [...new Set((c.link_ids || []).filter((x: string) => own.has(x)))] as string[];
+      // a catalog id means a product just added above (or already linked) → its link for this client
+      const resolved: string[] = [];
+      for (const x of c.link_ids || []) {
+        if (own.has(x)) resolved.push(x);
+        else if (inCatalog.has(x)) { const [l] = await tx`select id from customer_products where customer_id = ${n.customer_id} and product_id = ${x}`; if (l) resolved.push(l.id); }
+      }
+      const ids = [...new Set(resolved)];
       const loads = Number.isInteger(c.loads_per_cycle) && c.loads_per_cycle > 0 ? c.loads_per_cycle : null;
       const days = Number.isInteger(c.frequency_days) && c.frequency_days > 0 && c.frequency_days <= 365 ? c.frequency_days : null;
-      const apply = c.clear === true && ids.length === 1 && loads && days;
+      if (!loads || !days) continue; // no number or no period ("compra mucha") → not a cadence; the product / fact covers it
+      const apply = c.clear === true && ids.length === 1;
       const summary = String(c.summary_en || c.words || "").trim() || "How often they buy";
       if (apply) {
         const [before] = await tx`select * from customer_products where id = ${ids[0]} for update`;
@@ -852,7 +896,31 @@ async function decideInsight(body: any) {
       const [after] = await tx`update customer_note_insights set status = ${decision === "keep" ? "applied" : "dismissed"}, decided_by = ${actor}, decided_at = now() where id = ${id} returning *`;
       return { status: 200, payload: { insight: after } };
     }
-    if (i.kind !== "cadence") return { status: 400, payload: { error: "only a cadence can be applied or undone" } };
+    if (i.kind === "product") {
+      if (decision === "undo") {
+        if (i.status !== "applied" || !i.created_link) return { status: 200, payload: { insight: i, duplicate: true } };
+        const [link] = i.link_id ? await tx`select * from customer_products where id = ${i.link_id} for update` : [];
+        if (link) {
+          await tx`delete from customer_products where id = ${link.id}`;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "delete", table_name: "customer_products", record_id: link.id, before: link });
+        }
+        const [after] = await tx`update customer_note_insights set status = 'undone', decided_by = ${actor}, decided_at = now() where id = ${id} returning *`;
+        return { status: 200, payload: { insight: after } };
+      }
+      if (i.status !== "pending") return { status: 200, payload: { insight: i, duplicate: true } };
+      const [prod] = body.product_id ? await tx`select id from products where id = ${body.product_id}` : [];
+      if (!prod) return { status: 400, payload: { error: "pick a product from the catalog" } };
+      const [have] = await tx`select * from customer_products where customer_id = ${i.customer_id} and product_id = ${prod.id}`;
+      let link = have;
+      if (!have) {
+        [link] = await tx`insert into customer_products (customer_id, product_id) values (${i.customer_id}, ${prod.id}) returning *`;
+        await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "customer_products", record_id: link.id, after: link });
+      }
+      const [after] = await tx`update customer_note_insights set status = 'applied', product_id = ${prod.id}, link_id = ${link.id}, created_link = ${!have},
+          decided_by = ${actor}, decided_at = now() where id = ${id} returning *`;
+      return { status: 200, payload: { insight: after } };
+    }
+    if (i.kind !== "cadence") return { status: 400, payload: { error: "only a cadence or a product can be applied or undone" } };
     if (decision === "undo") {
       if (i.status !== "applied") return { status: 200, payload: { insight: i, duplicate: true } };
       if (i.link_id) {
@@ -944,7 +1012,8 @@ Deno.serve(async (req) => {
       const insights = await noteInsights(notes.map((n: any) => n.id));
       const products = await sql`select cp.id as link_id, p.full_name_en as product_name from customer_products cp join products p on p.id = cp.product_id
         where cp.customer_id = ${body.customer_id} order by p.full_name_en`;
-      return jsonResponse({ notes, insights, products });
+      const catalog = await sql`select id as product_id, full_name_en as product_name from products order by full_name_en`;
+      return jsonResponse({ notes, insights, products, catalog });
     }
     // the news the messages can use (last NEWS_DAYS days), each with its source — shown on Quotes → Messaging → Sources
     if (body.action === "news") { await ensureNewsToday(); return jsonResponse({ news: await sql`select topic, fact_es, published_on, url, source, mx_states, us_states from market_news where published_on >= current_date - ${NEWS_DAYS}::int order by published_on desc` }); }
