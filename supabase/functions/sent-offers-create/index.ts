@@ -22,7 +22,7 @@
 // Functions don't have this restriction.
 
 import postgres from "npm:postgres@3.4.4";
-import { computeCustomerExposure, earliestDeliveryDate, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { computeCustomerExposure, customerCreditRelief, earliestDeliveryDate, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -101,6 +101,8 @@ Deno.serve(async (req) => {
             message: `⚠ ${customer.trade_name} tiene $${exposure.outstanding.toLocaleString()} USD pendientes de pago (límite de crédito: $${exposure.creditLimit.toLocaleString()} USD). Para liberar cupo debemos ponernos al día con el pago de las facturas vencidas.`,
             outstanding_balance: exposure.outstanding, offer_amount: total_sale, credit_limit: exposure.creditLimit,
             projected_total: exposure.outstanding + Number(total_sale),
+            // 2026-09-29: the customer-facing line names the date it fits from / the invoice that frees it
+            ...await creditReliefFields(customer_id, Number(total_sale), earliestDeliveryDate(delivery_dates)),
           };
         }
       }
@@ -182,6 +184,7 @@ Deno.serve(async (req) => {
             offer_amount: total_sale,
             credit_limit: exposure.creditLimit,
             projected_total: projected,
+            ...await creditReliefFields(customer_id, Number(total_sale), earliestDeliveryDate(delivery_dates)),
           };
         }
       }
@@ -192,3 +195,8 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: String(err) }, 500);
   }
 });
+
+async function creditReliefFields(customerId: string, amount: number, asOf: string | null) {
+  const r = await customerCreditRelief(sql, customerId, amount, asOf);
+  return { fits_from: r?.fitsFrom ?? null, pay_invoice: r?.payInvoice ?? null };
+}

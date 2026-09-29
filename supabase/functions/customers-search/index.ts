@@ -4,7 +4,7 @@
 // resolves a list of customer_id from customer_products this way).
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse } from "../_shared/matching.ts";
+import { creditSchedule, customerOpenLoads, jsonResponse } from "../_shared/matching.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -13,6 +13,24 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    // credit_for (2026-09-29): the customer's credit line for its profile — limit and every sold,
+    // unpaid load with the day it's due, from the same list the offer credit check uses
+    if (body.credit_for) {
+      const [c] = await sql`select credit_limit, payment_days from customers where id = ${body.credit_for}`;
+      const loads = await customerOpenLoads(sql, body.credit_for);
+      const sched = c?.credit_limit != null ? creditSchedule(loads, Number(c.credit_limit)) : null;
+      return jsonResponse({ credit: { credit_limit: c?.credit_limit ?? null, payment_days: c?.payment_days ?? null, loads, today: new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }), schedule: sched?.steps ?? [] } });
+    }
+    // credit_for_ids: the same "can sell today / from date" for a list of customers (Clients list, Quotes)
+    if (Array.isArray(body.credit_for_ids)) {
+      const out: Record<string, any> = {};
+      for (const c of await sql`select id, credit_limit from customers where id = any(${body.credit_for_ids})`) {
+        if (c.credit_limit == null) { out[c.id] = null; continue; }
+        const sc = creditSchedule(await customerOpenLoads(sql, c.id), Number(c.credit_limit));
+        out[c.id] = { credit_limit: Number(c.credit_limit), available_today: sc.available_today, steps: sc.steps };
+      }
+      return jsonResponse({ credit: out });
+    }
     const ids = Array.isArray(body.ids) ? body.ids : null;
     const q = (body.q || "").trim();
     const limit = Math.min(Number(body.limit) || 200, 500);

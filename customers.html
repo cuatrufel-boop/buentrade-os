@@ -447,6 +447,10 @@ auth.onAuthStateChanged(user => {
       </div>
     </div>
 
+    <!-- credit line (2026-09-29, same look as Pay & Receive's profit-so-far bar): available today,
+         and every sold, unpaid load on the bar with the day it frees its credit -->
+    <div id="custCredit" style="margin:0 0 18px;"></div>
+
     <div class="tab-row">
       <button type="button" class="tab-btn active" id="custTabBtn_products" onclick="setCustomerTab('products')">Products</button>
       <button type="button" class="tab-btn" id="custTabBtn_details" onclick="setCustomerTab('details')">Details</button>
@@ -684,7 +688,7 @@ auth.onAuthStateChanged(user => {
              California, Mexico") needs ~198px and was wrapping to 2 lines in some rows but not
              others, breaking uniform row height. Measured every customer's actual rendered
              location text live and sized the column to the true longest one plus padding. -->
-        <thead><tr><th>Customer</th><th style="width:240px;">Location</th><th style="width:150px;">Credit Limit (USD)</th><th style="width:110px;">Contact</th></tr></thead>
+        <thead><tr><th>Customer</th><th style="width:240px;">Location</th><th style="width:150px;">Credit Limit (USD)</th><th style="width:190px;">Can Sell Today</th><th style="width:110px;">Contact</th></tr></thead>
         <tbody id="customerRows"></tbody>
       </table>
     </div>
@@ -948,6 +952,13 @@ function onCustomerCountryChange(){
   else document.getElementById('state').value = '';
 }
 
+// Credit the trader can still use per customer (customers-search credit_for_ids): today, and from
+// each later day a load falls due. Shared by the list and the profile's credit card.
+let customerCredit = {};
+const creditUsd = v => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const creditColor = (v, limit) => v <= 0 ? '#FF9C8A' : v < limit * 0.5 ? '#E8B54C' : '#6FD3A8';
+const creditDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
 async function loadCustomers(){
   try {
     await Promise.all([loadCustomsAgencies(), loadCurrenciesCountriesStates(), loadIncoterms()]);
@@ -955,6 +966,8 @@ async function loadCustomers(){
     customers = res.results || [];
     renderCustomers();
     renderCustomerStats();
+    // what the trader can still sell each one (2026-09-29, "vista rápida del trader para poder ofrecer")
+    try { customerCredit = (await callApi('customers-search', { credit_for_ids: customers.map(c => c.id) })).credit || {}; renderCustomers(); } catch (e) {}
   } catch (e) {
     document.getElementById('emptyState').style.display = 'block';
     document.getElementById('emptyState').textContent = 'Error loading customers: ' + e.message;
@@ -1214,6 +1227,32 @@ async function renderCustomerHistory(){
   if (viewingCustomerId) renderEntityHistory('custHistory', 'customer', viewingCustomerId, 'cu');
 }
 
+// Credit line of the open customer: limit, what the unpaid sold loads use, what's available today.
+// A load frees its credit only when it's paid; the date shown is when it's due (entrega + días de
+// crédito). Same list as the offer credit check (customers-search credit_for → customerOpenLoads).
+async function renderCustomerCredit(id){
+  const el = document.getElementById('custCredit'); el.innerHTML = '';
+  let cr; try { cr = (await callApi('customers-search', { credit_for: id })).credit; } catch (e) { return; }
+  if (viewingCustomerId !== id || !cr) return;
+  const usd = v => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const mdy = d => d ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : '—';
+  const MONO = "font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;";
+  const box = inner => `<div style="border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);padding:16px 20px;">${inner}</div>`;
+  if (cr.credit_limit == null){ el.innerHTML = box(`<span style="font-family:'Space Grotesk',sans-serif;font-weight:700;">Credit</span> <span class="muted" style="font-size:12.5px;margin-left:8px;">No credit limit set — add it in Details.</span>`); return; }
+  const limit = Number(cr.credit_limit), loads = (cr.loads || []).map(l => ({ ...l, due: l.due ? String(l.due).slice(0, 10) : null })), used = loads.reduce((n, l) => n + Number(l.amount), 0), avail = limit - used;
+  const days = d => d ? Math.round((new Date(d + 'T00:00:00Z') - new Date(cr.today + 'T00:00:00Z')) / 86400000) : null;
+  const color = l => { const n = days(l.due); return n != null && n < 0 ? '#FF9C8A' : n != null && n <= 7 ? '#E8B54C' : '#5AAAFF'; };
+  const state = l => { const n = days(l.due); return !l.due ? 'no date yet' : n < 0 ? `${-n}d overdue` : `due ${mdy(l.due)}`; };
+  const total = Math.max(limit, used) || 1;
+  const later = (cr.schedule || []).slice(1).filter(x => x.available > Math.max(0, avail)); // only the dates something can be sold
+  el.innerHTML = box(`
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:700;">Can sell today</span><span style="${MONO}font-size:26px;font-weight:700;color:${creditColor(avail, limit)};">${usd(Math.max(0, avail))} <span class="muted" style="font-size:12px;font-weight:500;">of ${usd(limit)} · used ${usd(used)}</span></span></div>
+    ${later.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${later.map(x => `<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;background:rgba(255,255,255,.04);"><span class="muted">From ${creditDay(x.from)}</span> <b style="${MONO}color:${creditColor(x.available, limit)};">${usd(Math.max(0, x.available))}</b></span>`).join('')}</div>` : ''}
+    <div style="display:flex;height:14px;border-radius:99px;overflow:hidden;margin:14px 0 10px;background:rgba(255,255,255,.06);">${loads.map(l => `<div title="${escapeHtml(l.order_number)}" style="width:${l.amount / total * 100}%;background:${color(l)};border-right:2px solid rgba(15,31,51,.6);"></div>`).join('')}${avail > 0 ? `<div style="width:${avail / total * 100}%;background:#6FD3A8;opacity:.45;"></div>` : ''}</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;">${loads.map(l => `<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:3px;background:${color(l)};"></span><b style="${MONO}">${escapeHtml(l.order_number)}</b><b style="${MONO}">${usd(l.amount)}</b><span class="muted">${state(l)}${l.delivered ? '' : ' · in transit'}</span></span>`).join('')}${avail > 0 ? `<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:3px;background:#6FD3A8;opacity:.6;"></span><span class="muted">Available</span><b style="${MONO}">${usd(avail)}</b></span>` : ''}</div>
+    ${loads.length ? `<div class="muted" style="font-size:11.5px;margin-top:10px;">Each load frees its credit only when it's paid. The dates assume each load is paid when due (30 days after delivery); never more than ${usd(limit)} unpaid at the same time.</div>` : ''}`);
+}
+
 function countryName(countryId){
   const match = countries.find(c => c.id === countryId);
   return match ? match.name_en : null;
@@ -1271,6 +1310,8 @@ function renderCustomers(){
       </td>
       <td class="muted">${escapeHtml(location)}</td>
       <td class="num">${creditLimit}</td>
+      <td class="num">${(() => { const cr = customerCredit[c.id]; if (!cr) return '<span class="muted">—</span>'; const next = cr.steps.find(x => x.available > Math.max(0, cr.available_today));
+        return `<b style="color:${creditColor(cr.available_today, cr.credit_limit)};">${creditUsd(Math.max(0, cr.available_today))}</b>${next ? `<div class="muted" style="font-size:11px;margin-top:2px;">${creditUsd(next.available)} from ${creditDay(next.from)}</div>` : ''}`; })()}</td>
       <td>
       <div style="display:flex;justify-content:center;align-items:center;gap:10px;">
         ${(c.whatsapp || c.phone) ? `<a class="wa-btn" style="padding:6px 10px;" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}
@@ -1334,6 +1375,7 @@ function viewCustomer(id){
   viewCard.style.display = 'block';
   document.getElementById('viewTitle').textContent = c.trade_name || '';
   renderCustomerLogo(c);
+  renderCustomerCredit(id);
   document.getElementById('v_legal_name').textContent = c.legal_name || '—';
   const stateName = c.state || (allStates.find(s => s.id === c.state_id) || {}).name_en || null;
   document.getElementById('v_location').textContent = [c.city, stateName, countryName(c.country_id)].filter(Boolean).join(', ') || '—';

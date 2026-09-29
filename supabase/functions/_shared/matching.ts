@@ -165,6 +165,32 @@ export async function matchOrCreateLocationId(tx: any, locationName: string | nu
 // from the projected exposure. A shipment with no payment_due_date yet (not delivered) always
 // still counts — there's no future date to reason about it being paid by. Passing no asOfDate
 // (existing callers before this date) keeps the exact previous flat-sum behavior.
+// 2026-09-29 (user), three corrections to the rule above:
+//  - the credit is freed ONLY when the payment is received ("se libera solo cuando se recibe el
+//    pago y el trader cierra la carga con el pago"): an unpaid load past its due date keeps
+//    counting — only loads due between today and the new delivery are presumed paid by then;
+//  - every sold, unpaid load counts at its SALE value, delivered or in transit, Summar or direct
+//    ("no importa quién la financió") — a Summar load is paid once the customer paid Summar;
+//  - a load not delivered yet is due on its planned delivery + the customer's credit days, so a
+//    new load delivered after that date can still fit ("que no se junten las cargas").
+// customerOpenLoads is the one list every credit number here is built from.
+export async function customerOpenLoads(sql: any, customerId: string) {
+  return await sql`
+    select sh.order_number, sh.sale_amount::float8 as amount, sh.payment_due_date is not null as delivered,
+      coalesce(sh.payment_due_date,
+        (select min(d::date) from purchase_orders p, jsonb_array_elements_text(p.delivery_dates) d where p.order_number = sh.order_number) + coalesce(c.payment_days, 0)) as due
+    from shipments sh join customers c on c.id = sh.customer_id
+    where sh.customer_id = ${customerId} and sh.paid_at is null and sh.sale_amount is not null
+      and not exists (select 1 from shipment_money_records m where m.shipment_id = sh.id and m.kind = 'client_paid_summar')
+    order by 4 nulls last, sh.order_number
+  `;
+}
+const bizToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // Miami business day
+const ymdOf = (d: any) => d == null ? null : (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+// what still counts on a given day: presumed paid only if due on/after today and before that day
+function exposureOn(loads: any[], asOf: string | null, today: string) {
+  return loads.filter((l) => { const due = ymdOf(l.due); return !(asOf && due && due >= today && due < asOf); }).reduce((n, l) => n + Number(l.amount), 0);
+}
 export async function computeCustomerExposure(
   sql: any,
   customerId: string,
@@ -172,12 +198,37 @@ export async function computeCustomerExposure(
 ): Promise<{ creditLimit: number; outstanding: number } | null> {
   const [customer] = await sql`select credit_limit from customers where id = ${customerId}`;
   if (customer?.credit_limit == null) return null;
-  const [{ outstanding }] = await sql`
-    select coalesce(sum(sale_amount), 0) as outstanding from shipments
-    where customer_id = ${customerId} and paid_at is null
-      and (${asOfDate}::date is null or payment_due_date is null or payment_due_date >= ${asOfDate}::date)
-  `;
-  return { creditLimit: Number(customer.credit_limit), outstanding: Number(outstanding) };
+  const loads = await customerOpenLoads(sql, customerId);
+  return { creditLimit: Number(customer.credit_limit), outstanding: exposureOn(loads, asOfDate, bizToday()) };
+}
+// What the trader can still sell this customer, today and on each later day a load falls due
+// (presumed paid on time — the credit is really freed only when the payment arrives). 2026-09-29:
+// "el trader debe ver claramente cuánto le puede vender y qué fecha a cada cliente."
+export function creditSchedule(loads: any[], limit: number) {
+  const today = bizToday(), steps: { from: string; available: number }[] = [];
+  const days = [today, ...[...new Set(loads.map((l) => ymdOf(l.due)).filter((d): d is string => !!d && d >= today))].sort()
+    .map((d) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); })];
+  for (const d of days) {
+    const available = limit - exposureOn(loads, d, today);
+    if (!steps.length || available !== steps[steps.length - 1].available) steps.push({ from: d, available });
+  }
+  return { today, available_today: steps[0].available, steps };
+}
+// When a new sale doesn't fit on its date: the first delivery day it would fit (the day after the
+// load that frees enough is due — presumed paid on time), and the one invoice whose payment frees
+// enough right away. Either can be null (e.g. an overdue load blocks every date until it's paid).
+export async function customerCreditRelief(sql: any, customerId: string, amount: number, asOfDate: string | null) {
+  const [customer] = await sql`select credit_limit from customers where id = ${customerId}`;
+  if (customer?.credit_limit == null) return null;
+  const limit = Number(customer.credit_limit), loads = await customerOpenLoads(sql, customerId), today = bizToday();
+  const start = asOfDate && asOfDate > today ? asOfDate : today;
+  const days = [start, ...loads.map((l) => ymdOf(l.due)).filter((d): d is string => !!d && d >= start)
+    .map((d) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); })].sort();
+  const fitsFrom = days.find((d) => exposureOn(loads, d, today) + amount <= limit) ?? null;
+  const excess = exposureOn(loads, asOfDate, today) + amount - limit;
+  const counted = loads.filter((l) => { const due = ymdOf(l.due); return l.delivered && !(asOfDate && due && due >= today && due < asOfDate); });
+  const pay = excess > 0 ? counted.find((l) => Number(l.amount) >= excess) : null;
+  return { fitsFrom, payInvoice: pay ? { number: `INV-${pay.order_number}`, amount: Number(pay.amount) } : null };
 }
 
 // Same "which date do we mean" resolution used by every caller of computeCustomerExposure that
