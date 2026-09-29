@@ -110,9 +110,7 @@
   .phase-tab{flex:1;text-align:center;padding:9px 6px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:background .15s,color .15s;user-select:none;}
   .phase-tab:hover{color:var(--ink);}
   .phase-tab.active{background:rgba(232,181,76,.15);color:#E8B54C;}
-  .dash-filter{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;}
-  .dash-filter .tag{cursor:pointer;}
-  .dash-filter .tag.on{background:rgba(232,181,76,.15);color:#E8B54C;border-color:rgba(232,181,76,.55);}
+  .phase-tab-count{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;margin-top:2px;opacity:.75;}
   .refresh{float:right;font-size:12.5px;color:var(--blue-bright);cursor:pointer;text-decoration:underline;}
   .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
@@ -244,8 +242,10 @@ auth.onAuthStateChanged(user => {
   <div class="phase-tabs" id="dashTabs"></div>
 
   <div id="dashPanel_today">
-    <div class="dash-filter" id="todayFilter"></div>
-    <div class="tbl-wrap" id="todayWrap"><div class="empty">Loading today…</div></div>
+    <div class="tbl-wrap" style="padding:12px 14px;">
+      <div class="phase-tabs" id="todayFilter" style="margin:0 0 10px;"></div>
+      <div id="todayWrap"><div class="empty">Loading today…</div></div>
+    </div>
   </div>
 
   <div id="dashPanel_goals" style="display:none;">
@@ -333,7 +333,8 @@ async function loadToday(){
 function renderToday(){
   const wrap = document.getElementById('todayWrap'), all = dashToday || [];
   const groups = [...new Set(all.map(i => i.group))];
-  document.getElementById('todayFilter').innerHTML = [['', 'All'], ...groups.map(g => [g, TODAY_GROUP[g] || g])].map(([g, l]) => `<span class="tag sent${todayArea === g ? ' on' : ''}" onclick="todayArea='${g}';renderToday()">${l} ${g ? all.filter(i => i.group === g).length : all.length}</span>`).join('');
+  // Orders' segmented phase selector: area name with its count underneath (2026-09-29, "diseño BuenTrade")
+  document.getElementById('todayFilter').innerHTML = [['', 'All'], ...groups.map(g => [g, TODAY_GROUP[g] || g])].map(([g, l]) => `<div class="phase-tab${todayArea === g ? ' active' : ''}" onclick="todayArea='${g}';renderToday()">${l}<span class="phase-tab-count">${g ? all.filter(i => i.group === g).length : all.length}</span></div>`).join('');
   const items = todayArea ? all.filter(i => i.group === todayArea) : all;
   if (!items.length){ wrap.innerHTML = '<div class="empty">Nothing urgent today — all caught up.</div>'; return; }
   wrap.innerHTML = `<table><thead><tr><th style="width:90px;">When</th><th style="width:100px;">Area</th><th style="text-align:left;">To do</th><th style="width:110px;"></th></tr></thead><tbody>
