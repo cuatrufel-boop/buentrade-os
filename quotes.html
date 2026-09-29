@@ -1720,7 +1720,8 @@ function qmRender(){
   const pendingAll = qmItems('todo').length;
   const badge = document.getElementById('qmTabCount');
   badge.style.display = pendingAll ? '' : 'none'; badge.textContent = pendingAll;
-  document.getElementById('qm_notice').innerHTML = '';
+  const missing = qmTab === 'todo' ? qmData.clients.filter(c => c.trade_name && (c.products || []).some(p => !p.cadence)) : [];
+  document.getElementById('qm_notice').innerHTML = missing.length ? `<div class="card" style="padding:10px 16px;margin-bottom:12px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;"><span><b>${missing.length} client${missing.length === 1 ? ' is' : 's are'} missing how often they buy</b> <span class="muted">· ${missing.slice(0, 4).map(c => escapeHtml(c.trade_name.trim())).join(', ')}${missing.length > 4 ? ` +${missing.length - 4}` : ''} — the better you know them, the better the messages</span></span><a class="btn secondary" style="text-decoration:none;" href="customers.html">Complete in their profiles →</a></div>` : '';
   qmRenderSource();
   const tab = QM_TABS.find(t => t.kind === qmTab);
   document.getElementById('qm_title').textContent = tab.title;
@@ -1779,33 +1780,29 @@ function qmRefreshRow(c){
 
 // Row detail: the full message (+ another angle), where it comes from, and everything we know about the client.
 function qmDetailHtml(c){
-  const biz = qmData.business_types.find(b => b.id === c.business_type_id);
+  // Only what's needed to send THIS message (2026-09-29, "mucha info irrelevante aquí"): the message (editable), its
+  // send buttons, the one product it talks about, the client's notes when there are any, and what works once it's known.
+  // Everything else about the client is in their profile.
   const d = qmTab === 'sent' ? null : c.compose;
   const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (d && d.message);
-  return `<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:22px;">
-    <div>
+  const prod = d && d.product_id ? c.products.find(p => p.product_id === d.product_id) : null;
+  const profile = tab => `customers.html?open=${c.id}&tab=${tab}`;
+  return `<div style="max-width:760px;">
       <div class="qm-sec">${qmTab === 'sent' ? 'Message sent' : 'Message'}</div>
       ${qmTab === 'sent' || !text ? `<div style="font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">${text ? escapeHtml(text) : '<span class="muted">Writing…</span>'}</div>`
-        : `<textarea id="qm_msg_${c.id}" rows="4" onclick="event.stopPropagation()" oninput="qmEdit('${c.id}', this.value)" style="width:100%;box-sizing:border-box;font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1.5px solid rgba(90,170,255,.4);border-radius:10px;padding:12px 14px;color:var(--ink);font-family:inherit;resize:vertical;">${escapeHtml(d.edited ?? text)}</textarea>`}
-      ${d && d.news ? `<div class="muted" style="font-size:11.5px;margin-top:6px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener">${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
-      <div class="muted" style="font-size:11.5px;margin-top:6px;">${qmTab === 'sent' ? '' : 'Edit it here — what you leave is what gets sent, and your edits teach the system how you write. Never edit it inside WhatsApp: the system can’t see that.'}</div>
-      <div style="margin-top:10px;display:flex;gap:8px;"><button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></div>
-      <div class="qm-sec" style="margin-top:16px;">Business</div>
-      <div style="font-size:13px;">${biz ? `${escapeHtml(biz.name_en)}<span class="muted" style="display:block;font-size:11px;">${escapeHtml(biz.name_es || '')}</span>` : '<span class="muted">Not set — set it in the client’s profile (Clients)</span>'}</div>
-    </div>
-    <div>
-      <div class="qm-sec">What they buy · all suppliers</div>
-      ${c.products.map(p => `<div class="qm-vol"><span class="${p.cadence ? '' : 'qm-unk'}">${escapeHtml(p.name_en)}<span class="muted" style="display:block;font-size:11px;">${p.cadence ? `${escapeHtml(p.cadence)} · ${p.from_us_month} from us this month` : 'Missing: how often they buy it'}</span></span></div>`).join('')}
-      ${c.products.some(p => !p.cadence) ? `<a class="btn secondary" style="display:inline-block;margin-top:8px;text-decoration:none;" href="customers.html?open=${c.id}&tab=products" onclick="event.stopPropagation()">Complete it in the profile →</a>` : ''}
-    </div>
-    <div>
-      <div class="qm-sec">What they told you</div>
-      ${c.notes.length ? c.notes.map(n => `<div class="qm-note-row"><span class="muted" style="font-family:var(--dash-font-mono);font-size:11px;">${escapeHtml(String(n.created_at).slice(5, 10))}</span><span style="flex:1;">${escapeHtml(n.note)}</span></div>`).join('') : '<div class="muted" style="font-size:12.5px;">Nothing yet — the more you know, the better the message.</div>'}
-      <a class="btn secondary" style="display:inline-block;margin-top:8px;text-decoration:none;" href="customers.html?open=${c.id}&tab=about" onclick="event.stopPropagation()">Add in the profile →</a>
-      <div class="qm-sec" style="margin-top:14px;">What works</div>
-      <div style="font-size:12.5px;">${c.works.length ? c.works.map(w => `<div>${QM_KIND_LABEL[w.kind] || w.kind} · ${w.requests} of ${w.sent} led to a request</div>`).join('') : '<span class="muted">Learning — nothing sent yet</span>'}</div>
-    </div>
-  </div>`;
+        : `<textarea id="qm_msg_${c.id}" rows="3" onclick="event.stopPropagation()" oninput="qmEdit('${c.id}', this.value)" style="width:100%;box-sizing:border-box;font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1.5px solid rgba(90,170,255,.4);border-radius:10px;padding:12px 14px;color:var(--ink);font-family:inherit;resize:vertical;">${escapeHtml(d.edited ?? text)}</textarea>
+      <div class="muted" style="font-size:11.5px;margin-top:4px;">Edit here, not in WhatsApp.</div>`}
+      ${d && d.news ? `<div class="muted" style="font-size:11.5px;margin-top:4px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener">${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
+      ${qmTab === 'sent' || !text ? '' : `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        ${c.phone ? `<button type="button" class="btn" onclick="event.stopPropagation();qmSendWa('${c.id}')">WhatsApp</button>` : ''}
+        ${c.email ? `<button type="button" class="btn secondary" onclick="event.stopPropagation();qmSendEmail('${c.id}')">Email</button>` : ''}
+        <button type="button" class="btn secondary" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></div>`}
+      ${prod ? `<div style="margin-top:14px;font-size:13px;"><b>${escapeHtml(prod.name_en)}</b> <span class="muted">· ${prod.cadence ? `${escapeHtml(prod.cadence)} · ${prod.from_us_month} from us this month` : 'Missing: how often they buy it'}</span>
+        ${prod.cadence ? '' : ` <a href="${profile('products')}" onclick="event.stopPropagation()" style="color:var(--blue-bright);">Complete in profile →</a>`}</div>` : ''}
+      ${c.notes.length ? `<div class="qm-sec" style="margin-top:14px;">What they told you</div>${c.notes.map(n => `<div class="qm-note-row"><span class="muted" style="font-family:var(--dash-font-mono);font-size:11px;">${escapeHtml(String(n.created_at).slice(5, 10))}</span><span style="flex:1;">${escapeHtml(n.note)}</span></div>`).join('')}`
+        : `<div style="margin-top:12px;font-size:12.5px;"><a href="${profile('about')}" onclick="event.stopPropagation()" style="color:var(--blue-bright);">Add a note in the profile →</a></div>`}
+      ${c.works.length ? `<div class="qm-sec" style="margin-top:14px;">What works</div><div style="font-size:12.5px;">${c.works.map(w => `<div>${QM_KIND_LABEL[w.kind] || w.kind} · ${w.requests} of ${w.sent} led to a request</div>`).join('')}</div>` : ''}
+    </div>`;
 }
 
 // One composed message per client, written on demand (4 at a time) and kept for the day.
