@@ -390,7 +390,7 @@ async function moneyAlerts(gmailToken: string): Promise<number> {
     ].filter(Boolean);
     await fire("entered", `Pay & Receive — ${tag}`, `Delivered and signed — this load is now in Pay & Receive. Next: ${plan.join("; ")}.`);
     if (freight && !recorded.includes("freight") && days >= carrierDays) await fire("freight_due", `Freight due — ${tag}`,
-      `Pay freight ${usd(freight)}${L.carrier ? ` to ${L.carrier}` : ""} (due ${on(carrierDays)}). Pay it from the carrier's statement in Pay & Receive.`);
+      `Pay freight ${usd(freight)}${L.carrier ? ` to ${L.carrier}` : ""} (due ${on(carrierDays)}). Pay it from the load's Pay Carrier step in Pay & Receive.`);
 
     // Day 29 — the flow's Collect step unlocks for every load (Summar or direct)
     if (days >= COLLECT_FROM_DAY) await fire("summar_day30", `Day ${COLLECT_FROM_DAY} — collect from the customer — ${tag}`, summar

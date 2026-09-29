@@ -872,7 +872,7 @@ async function loadCollections(){
 // ---------- Carrier / customs invoices (2026-09-28: "tienen que ser contrastados con facturas que
 // nos envian ellos... tiene que cuadrar... hasta que podamos dar visto bueno y poder pagar").
 // At-delivery providers send one invoice per load (reviewed inside the load's bill); 30-day providers
-// send one invoice for the period's loads (reviewed in their Statement). Only an approved invoice —
+// send one invoice for the period's loads (added from a load's Pay Carrier / Pay Customs step). Only an approved invoice —
 // its total equal to our bills — can be paid, and it is paid exactly, all its loads at once. ----------
 const invLoads = inv => (prData.invoice_loads || []).filter(l => l.invoice_id === inv.id);
 const invNotes = inv => (prData.invoice_notes || []).filter(n => n.invoice_id === inv.id);
@@ -1415,7 +1415,7 @@ function billRender(){
     ? `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:13px;"><b>Their invoice</b> ${inv ? invBadge(inv) + invPdf(inv) + (inv.status !== 'approved' ? ` <span class="muted" style="font-size:12px;">${invoiceState(inv).diff === 0 ? 'matches' : 'difference ' + fmtMoney(invoiceState(inv).diff)}</span>` : '') : '<span class="muted">not added yet</span>'}</span>
         ${!inv ? `<button class="wa-btn" onclick="invCreateOpen('${jsArg(x.who)}','${billCtx.kind}','${L.id}')">Add Their Invoice →</button>` : inv.status !== 'approved' ? `<button class="wa-btn" onclick="invReviewOpen('${inv.id}')">Review Invoice →</button>` : ''}</div>`
-    : `<div class="muted" style="font-size:12px;margin-top:14px;">${escapeHtml(x.who)} is paid ${termsText(days, FREIGHT_DAYS).toLowerCase()}: their invoice for the period is reviewed in their Statement.</div>`);
+    : `<div class="muted" style="font-size:12px;margin-top:14px;">${escapeHtml(x.who)} is paid ${termsText(days, FREIGHT_DAYS).toLowerCase()}: add their invoice for the period from this load's ${billCtx.kind === 'customs' ? 'Pay Customs' : 'Pay Carrier'} step.</div>`);
   document.getElementById('billMsg').textContent = '';
   document.getElementById('billConfirmBtn').style.display = confirmed || perLoad || confirmedStep ? 'none' : '';
   document.getElementById('billConfirmBtn').textContent = `Confirm Bill ${fmtMoney(x.amount)}`;
@@ -1611,19 +1611,22 @@ function closeConfirm(){ document.getElementById('confirmOverlay').style.display
 // carga"). Filters by customer / carrier or customs / delivery dates / status; the cards add up
 // only what is filtered (filter a carrier → what we owe it). Most urgent loads first.
 let F = { q: '', customer: '', provider: '', status: 'all', from: '', to: '' };
+// a bill of ours (customs / carrier) past its due date — the load is late even if the customer isn't
+const overdueOut = L => steps(L).some(x => x.dir === 'out' && x.where === 'here' && !x.done && x.amount && x.due && x.due < TODAY);
+const isLate = L => { const c = clock(L); return (c && !c.done && c.lvl === 'red') || overdueOut(L); };
 function filteredLoads(){
   const q = F.q.trim().toLowerCase(), rank = { red: 0, amber: 1, ok: 2 };
   return LOADS.filter(L => {
     const c = clock(L), closed = isClosed(L), dd = day(L.delivered_at);
     if (F.status === 'open' && closed) return false;
     if (F.status === 'closed' && !closed) return false;
-    if (F.status === 'late' && (closed || !c || c.done || c.lvl !== 'red')) return false;
+    if (F.status === 'late' && (closed || !isLate(L))) return false;
     if (F.customer && L.client !== F.customer) return false;
     if (F.provider && (L.freight && L.freight.carrier) !== F.provider && L.customs_agency !== F.provider) return false;
     if (F.from && dd && dd < day(F.from)) return false;
     if (F.to && dd && dd > day(F.to)) return false;
     return !q || [L.order_number, L.client, L.product, L.plant, L.freight && L.freight.carrier, L.customs_agency].some(v => v && String(v).toLowerCase().includes(q));
-  }).sort((a, b) => { const ca = clock(a) || {}, cb = clock(b) || {}; return (rank[ca.lvl] ?? 3) - (rank[cb.lvl] ?? 3) || (cb.d || 0) - (ca.d || 0); });
+  }).sort((a, b) => { const ca = clock(a) || {}, cb = clock(b) || {}, ra = isLate(a) ? 0 : rank[ca.lvl] ?? 3, rb = isLate(b) ? 0 : rank[cb.lvl] ?? 3; return ra - rb || (cb.d || 0) - (ca.d || 0); });
 }
 function filterSelect(id, key, allLabel, values, width){
   return `<select id="${id}" style="width:${width}px;" onchange="F.${key}=this.value;draw()"><option value="">${allLabel}</option>${[...new Set(values.filter(Boolean))].sort().map(v => `<option value="${escapeHtml(v)}"${F[key] === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>`;
@@ -1642,7 +1645,7 @@ function draw(){
     </div>
     <div class="table-scroll"><table class="pr-table"><thead><tr><th>Order</th><th>Customer</th><th>Clock</th><th>Next Action</th><th>Costing</th><th>OUT pending</th><th>IN pending</th><th>Stage</th></tr></thead><tbody>
     ${rows.map(L => { const c = clock(L), m = loadMoney(L), closed = isClosed(L);
-      return `<tr${c && !c.done && c.lvl === 'red' ? ' class="ct-row-overdue30"' : ''} style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}<div class="muted pr-product" style="font-family:Inter,sans-serif;font-weight:400;font-size:11.5px;margin-top:3px;" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</div></td>
+      return `<tr${!closed && isLate(L) ? ' class="ct-row-overdue30"' : ''} style="cursor:pointer;" onclick="openDetail('${L.order_number}')"><td class="order-num">${escapeHtml(L.order_number)}${finBadge(L)}<div class="muted pr-product" style="font-family:Inter,sans-serif;font-weight:400;font-size:11.5px;margin-top:3px;" title="${escapeHtml(L.product || '')}">${escapeHtml(L.product || '—')}</div></td>
         <td style="white-space:nowrap;">${escapeHtml(L.client)}</td><td>${clockBadge(c)}</td><td>${flowPreview(L)}</td>
         <td class="num" style="color:${c ? LVL[c.lvl] : 'var(--ink-soft)'};">${c && !c.done ? fmtMoney(c.fee) + `<div class="muted" style="font-size:10.5px;">+${fmtMoney(c.per)}/day</div>` : '—'}</td>
         <td class="num" style="color:${m.outPend ? 'var(--amber)' : 'var(--ink-soft)'};">${fmtMoney(m.outPend)}</td><td class="num" style="color:${m.inPend ? '#6FD3A8' : 'var(--ink-soft)'};">${fmtMoney(m.inPend)}</td>
