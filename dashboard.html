@@ -214,52 +214,26 @@ auth.onAuthStateChanged(user => {
   <h1>Today <span id="todayDate" style="color:var(--ink-soft);font-weight:400;font-size:15px;"></span> <span class="refresh" onclick="loadToday()">↻ refresh</span></h1>
   <div class="tbl-wrap" id="todayWrap"><div class="empty">Loading today…</div></div>
 
-  <h1>This Month <span class="refresh" onclick="loadAll()">↻ refresh</span></h1>
-  <div class="kpis" id="kpis"><div class="empty">Loading…</div></div>
+  <!-- CEO / CFO (2026-09-29): "facturación mes, año, si estamos bien con la meta, cuánto nos falta
+       vender para llegar". Goal = loads per month (app_settings monthly_load_goal = 3); a load counts
+       when its order is created. Loads in transit / AR / plant payments / offers live in their own
+       modules (Orders, Pay & Receive, Offers) and in Today — not repeated here. -->
+  <h1>CEO / CFO <span class="refresh" onclick="loadAll()">↻ refresh</span></h1>
+  <div class="kpis" id="ceoGoals"><div class="empty">Loading…</div></div>
+  <div class="kpis" id="ceoMoney" style="margin-top:14px;"></div>
 
-  <!-- Real ask 2026-09-14 ("top orden mas grande, ventas totales, ventas del periodo, top 5 de
-       productos, top 5 de traders"): built with what's actually on file (7 real shipments) — a
-       "trader" is only ever the free-text email that closed the offer (sent_offers.won_by, no
-       normalized user table), and product quantity mostly falls back to the quoted sent_offers
-       weight since real_weight is rarely captured yet. See dashboard-summary for the real query. -->
-  <h1>Sales Overview</h1>
-  <div class="kpis" id="salesKpis"><div class="empty">Loading…</div></div>
+  <h1>Loads per Month <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— last 12 months, against the goal</span></h1>
+  <div class="tbl-wrap" id="ceoChart" style="padding:18px 20px;"></div>
+
+  <h1>Where Sales Come From <span style="color:var(--ink-soft);font-weight:400;font-size:15px;" id="ceoYearLbl"></span></h1>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;">
+    <div class="tbl-wrap" style="margin:0;"><table id="tblTopCustomers"><thead><tr><th>Customer</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+    <div class="tbl-wrap" style="margin:0;"><table id="tblTopProducts"><thead><tr><th>Product</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+    <div class="tbl-wrap" style="margin:0;"><table id="tblTopTraders"><thead><tr><th>Trader</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+  </div>
 
   <h1>Best Orders <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by margin</span></h1>
   <div class="tbl-wrap"><table id="tblTopMargin"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Sale</th><th>Margin</th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Top 5 Products <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by revenue</span></h1>
-  <div class="tbl-wrap"><table id="tblTopProductsRevenue"><thead><tr><th>Product</th><th>Orders</th><th>Total Sales</th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Top 5 Products <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by quantity</span></h1>
-  <div class="tbl-wrap"><table id="tblTopProductsQty"><thead><tr><th>Product</th><th>Orders</th><th>Total Weight</th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Top 5 Traders</h1>
-  <div class="tbl-wrap"><table id="tblTopTraders"><thead><tr><th>Trader</th><th>Orders Won</th><th>Total Sales</th></tr></thead><tbody></tbody></table></div>
-
-  <!-- Real addition 2026-09-22 ("alerta de cadencia próxima") — internal-only triage list, never
-       shown to the customer. Based on OUR OWN sales history with them, not their real total buying
-       cycle — see dashboard-summary's own comment on why this is fine here but was removed from the
-       customer-facing signal. -->
-  <h1>Customers Possibly Due <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by their stated cadence vs. our own sales history, not a certainty</span></h1>
-  <div class="tbl-wrap"><table id="tblCadenceDue"><thead><tr><th>Customer</th><th>Product</th><th>Stated Cadence</th><th>Days Since Our Last Sale</th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Accounts Receivable</h1>
-  <div class="tbl-wrap"><table id="tblOutstanding"><thead><tr><th>Customer</th><th>Outstanding</th><th>Credit Limit</th><th>Overdue</th></tr></thead><tbody></tbody></table></div>
-
-  <!-- Real ask 2026-09-08: "todos los pagos a plantas deben ser in advance" — no aging like
-       receivables (a payment should never sit unpaid by policy — orders.html's own sequential gate
-       already blocks confirming pickup without it). What actually helps: a cash-OUT forecast, every
-       won order still owed to its plant, ranked by how close it is to actually needing that
-       payment to move forward. -->
-  <h1>Pending Plant Payments (Accounts Payable)</h1>
-  <div class="tbl-wrap"><table id="tblPlantPayments"><thead><tr><th>Order</th><th>Plant</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Active Shipments</h1>
-  <div class="tbl-wrap"><table id="tblShipments"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Status</th><th>Delivery Date</th><th>Payment</th><th></th></tr></thead><tbody></tbody></table></div>
-
-  <h1>Offers (sent)</h1>
-  <div class="tbl-wrap"><table id="tblOffers"><thead><tr><th>Customer</th><th>Product</th><th>Plant</th><th>Channel</th><th>Status</th><th>Sent</th></tr></thead><tbody></tbody></table></div>
 </main>
 </div><!-- /appContent -->
 
@@ -278,7 +252,7 @@ async function callApi(fn, body){
   return data;
 }
 
-const money = n => n == null ? '—' : '$' + Number(n).toLocaleString(undefined, {maximumFractionDigits:0});
+const money = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', {maximumFractionDigits:0});
 const dt = s => s ? new Date(s).toLocaleDateString() : '—';
 
 // Real 4 stages (pending_pickup/picked_up/unloading/delivered) — matches offers.html's Status
@@ -294,22 +268,9 @@ function showErr(msg){
 async function loadAll(){
   document.getElementById('errBox').innerHTML = '';
   try {
-    const [summary, shipments, offers] = await Promise.all([
-      callApi('dashboard-summary'),
-      callApi('shipments-search', {}),
-      callApi('sent-offers-search', {}),
-    ]);
-    renderKpis(summary);
-    renderSalesKpis(summary);
+    const [summary, ceo] = await Promise.all([callApi('dashboard-summary'), callApi('dashboard-summary', { view: 'ceo' })]);
+    renderCeo(ceo.ceo);
     renderTopMargin(summary.top_orders_by_margin);
-    renderTopProductsRevenue(summary.top_products_by_revenue);
-    renderTopProductsQty(summary.top_products_by_quantity);
-    renderTopTraders(summary.top_traders);
-    renderCadenceDue(summary.cadence_due);
-    renderOutstanding(summary.outstanding_by_customer);
-    renderPendingPlantPayments(summary.pending_plant_payments, summary.pending_plant_payments_total);
-    renderShipments(shipments.results);
-    renderOffers(offers.results);
   } catch (e) {
     showErr('Error calling API: ' + e.message);
   }
@@ -344,34 +305,49 @@ async function loadToday(){
     </tbody></table>`;
 }
 
-function renderKpis(s){
-  const overdue = (s.overdue || []).length;
-  const upcoming = (s.upcoming_due || []).length;
-  document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="kpi-label">Invoiced This Month</div><div class="kpi-value">${money(s.invoiced_this_month)}</div></div>
-    <div class="kpi"><div class="kpi-label">Overdue Accounts</div><div class="kpi-value ${overdue?'red':''}">${overdue}</div></div>
-    <div class="kpi"><div class="kpi-label">Due Soon (7 days)</div><div class="kpi-value ${upcoming?'amber':''}">${upcoming}</div></div>
-  `;
-}
 
 // Real ask 2026-09-14: total/monthly sales and the single biggest order — all sourced from
 // shipments (real won orders), never sent_offers (would overcount lost/pending quotes).
-function renderSalesKpis(s){
-  const biggest = s.biggest_order;
-  document.getElementById('salesKpis').innerHTML = `
-    <div class="kpi"><div class="kpi-label">Total Sales (All-Time)</div><div class="kpi-value">${money(s.total_sales_all_time)}</div></div>
-    <div class="kpi"><div class="kpi-label">Sales This Month</div><div class="kpi-value">${money(s.sales_this_month)}</div></div>
-    <div class="kpi">
-      <div class="kpi-label">Biggest Order</div>
-      <div class="kpi-value" style="font-size:19px;">${biggest ? money(biggest.sale_amount) : '—'}</div>
-      ${biggest ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${escapeHtml(biggest.order_number)} — ${escapeHtml(biggest.customer_name || '')}</div>` : ''}
-    </div>
-  `;
-}
 
 // Margin is the real, final shipments.net_profit once an order is paid — until then it's the
 // exact same live estimate collections.html's own aging report already shows as "profit so far",
 // tagged Estimated here so it's never confused with a locked-in number.
+// ---------- CEO / CFO ----------
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const bar = (pct, color) => `<div style="height:8px;border-radius:99px;background:rgba(255,255,255,.12);margin-top:10px;overflow:hidden;"><div style="height:100%;width:${Math.min(100, pct)}%;background:${color};border-radius:99px;"></div></div>`;
+function renderCeo(c){
+  const G = '#6FD3A8', R = '#FF9C8A', A = 'var(--amber)';
+  const m = c.month, y = c.year_total, left = Math.max(0, c.goal - m.loads), daysLeft = c.days_in_month - c.day_of_month;
+  const monthSub = m.loads >= c.goal ? `Goal met${m.loads > c.goal ? ` · +${m.loads - c.goal} over` : ''}`
+    : `${left} load${left === 1 ? '' : 's'} to go · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left${c.avg_sale ? ` · ≈ ${money(left * c.avg_sale)} in sales` : ''}`;
+  const gap = y.loads - y.expected_by_now;
+  const yearSub = gap >= 0 ? `Ahead of pace by ${gap.toFixed(1)} loads` : `Behind pace by ${(-gap).toFixed(1)} loads (${y.expected_by_now.toFixed(1)} expected by today)`;
+  const kpi = (label, value, sub, color, pct) => `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value" style="${color ? 'color:' + color + ';' : ''}">${value}</div>${pct != null ? bar(pct, color || G) : ''}<div style="font-size:12px;color:rgba(255,255,255,.75);margin-top:8px;">${sub}</div></div>`;
+  const pctM = m.sales ? (m.margin / m.sales * 100) : 0, pctY = y.sales ? (y.margin / y.sales * 100) : 0;
+  document.getElementById('ceoGoals').innerHTML =
+    kpi(`Loads · ${MONTHS[Number(c.ym.slice(5)) - 1]} ${c.year}`, `${m.loads} <span style="font-size:15px;color:rgba(255,255,255,.7);">of ${c.goal}</span>`, monthSub, m.loads >= c.goal ? G : A, m.loads / c.goal * 100) +
+    kpi(`Loads · ${c.year}`, `${y.loads} <span style="font-size:15px;color:rgba(255,255,255,.7);">of ${y.goal}</span>`, yearSub, gap >= 0 ? G : R, y.loads / y.goal * 100) +
+    kpi(`Sales · ${MONTHS[Number(c.ym.slice(5)) - 1]}`, money(m.sales), `${c.year}: ${money(y.sales)}`) +
+    kpi(`Profit · ${MONTHS[Number(c.ym.slice(5)) - 1]}`, money(m.margin), `${pctM.toFixed(1)}% margin · ${c.year}: ${money(y.margin)} (${pctY.toFixed(1)}%)`, m.margin >= 0 ? G : R);
+  document.getElementById('ceoMoney').innerHTML =
+    kpi('To collect', money(c.to_collect), 'Customers still owe on loads in Pay & Receive', G) +
+    kpi('To pay', money(c.to_pay), 'Customs and freight still unpaid on those loads', A);
+  // loads per month, one series, the goal as a dashed reference line; hover shows the month's numbers
+  const max = Math.max(c.goal, ...c.months.map(x => x.loads)) || 1, H = 160;
+  document.getElementById('ceoChart').innerHTML = `<div style="position:relative;height:${H + 26}px;">
+      <div style="position:absolute;left:0;right:0;bottom:${26 + c.goal / max * H}px;border-top:2px dashed rgba(255,255,255,.55);"></div>
+      <div style="position:absolute;left:0;bottom:${30 + c.goal / max * H}px;font-size:11px;color:rgba(255,255,255,.75);">Goal ${c.goal} loads</div>
+      <div style="position:absolute;left:0;right:0;bottom:0;height:${H + 26}px;display:flex;align-items:flex-end;gap:10px;">
+        ${c.months.map(x => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;" title="${MONTHS[Number(x.ym.slice(5)) - 1]} ${x.ym.slice(0, 4)} · ${x.loads} load${x.loads === 1 ? '' : 's'} · sales ${money(x.sales)} · profit ${money(x.margin)}">
+          ${x.loads ? `<div style="font-size:11px;color:#fff;margin-bottom:4px;">${x.loads}</div>` : ''}
+          <div style="width:70%;max-width:38px;height:${x.loads / max * H}px;min-height:${x.loads ? 2 : 0}px;background:var(--blue-bright);border-radius:4px 4px 0 0;"></div>
+          <div style="height:22px;line-height:22px;font-size:11px;color:rgba(255,255,255,.6);">${MONTHS[Number(x.ym.slice(5)) - 1]}</div></div>`).join('')}
+      </div></div>`;
+  document.getElementById('ceoYearLbl').textContent = `— ${c.year}`;
+  const fill = (id, rows) => { document.querySelector(`#${id} tbody`).innerHTML = rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.loads}</td><td>${money(r.sales)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No loads yet this year.</td></tr>'; };
+  fill('tblTopCustomers', c.top_customers); fill('tblTopProducts', c.top_products); fill('tblTopTraders', c.top_traders);
+}
+
 function renderTopMargin(rows){
   const tbody = document.querySelector('#tblTopMargin tbody');
   if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No orders yet.</td></tr>'; return; }
@@ -385,125 +361,25 @@ function renderTopMargin(rows){
     </tr>`).join('');
 }
 
-function renderTopProductsRevenue(rows){
-  const tbody = document.querySelector('#tblTopProductsRevenue tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No orders yet.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.product_name)}</td><td>${r.order_count}</td><td>${money(r.total_sales)}</td></tr>`).join('');
-}
 
 // Real gap, shown honestly rather than hidden: real_weight (the actual customs weight) is rarely
 // captured today, so this mostly totals the quoted sent_offers.weight — the same fallback
 // collections.html/orders.html already use wherever real_weight would otherwise be missing.
-function renderTopProductsQty(rows){
-  const tbody = document.querySelector('#tblTopProductsQty tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No orders yet.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.product_name)}</td><td>${r.order_count}</td><td>${Number(r.total_weight || 0).toLocaleString()} lb</td></tr>`).join('');
-}
 
 // "Trader" is only ever the free-text email that closed the offer (sent_offers.won_by) — there's
 // no normalized user/employee table behind it yet, so this shows exactly that email, nothing more.
-function renderTopTraders(rows){
-  const tbody = document.querySelector('#tblTopTraders tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="3" class="empty">No won offers yet.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.trader)}</td><td>${r.order_count}</td><td>${money(r.total_sales)}</td></tr>`).join('');
-}
 
-function renderCadenceDue(rows){
-  const tbody = document.querySelector('#tblCadenceDue tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing flagged right now.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => {
-    const cadence = `Every ${r.frequency_days} day${r.frequency_days === 1 ? '' : 's'}` + (r.loads_per_cycle != null ? ` · ${r.loads_per_cycle} load${r.loads_per_cycle === 1 ? '' : 's'}/cycle` : '');
-    return `<tr><td>${escapeHtml(r.trade_name)}</td><td>${escapeHtml(r.product_name || '')}</td><td>${escapeHtml(cadence)}</td><td>${r.days_since_our_last_sale}</td></tr>`;
-  }).join('');
-}
 
 // Real ask 2026-09-16: "en que momento me avisa" — the red "Cupo" tag on offers.html is passive
 // (only seen if a trader happens to open that screen); this same over-limit fact now also shows
 // right here on the landing page every trader sees first, so it doesn't depend on remembering to
 // check offers.html. Same raw numbers (outstanding, credit_limit) dashboard-summary already
 // returns — no new query, just a highlight this table never had.
-function renderOutstanding(rows){
-  const tbody = document.querySelector('#tblOutstanding tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing pending collection.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => {
-    const overLimit = r.credit_limit != null && Number(r.outstanding) > Number(r.credit_limit);
-    return `
-    <tr${overLimit ? ' style="background:rgba(196,67,46,.08);"' : ''}>
-      <td>${escapeHtml(r.customer_name)}</td>
-      <td>${money(r.outstanding)}</td>
-      <td>${r.credit_limit != null ? money(r.credit_limit) : '<span style="color:var(--ink-soft)">not set</span>'}</td>
-      <td>${overLimit ? '<span class="tag unpaid">Over limit</span> ' : ''}${r.overdue_count > 0 ? `<span class="tag lost">${r.overdue_count} overdue</span>` : (overLimit ? '' : '—')}</td>
-    </tr>`;
-  }).join('');
-}
 
-function renderPendingPlantPayments(rows, total){
-  const h1 = document.querySelector('#tblPlantPayments').closest('div').previousElementSibling;
-  if (h1 && h1.tagName === 'H1') h1.innerHTML = `Pending Plant Payments (Accounts Payable) <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— ${money(total || 0)} owed</span>`;
-  const tbody = document.querySelector('#tblPlantPayments tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">Nothing owed to plants.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => {
-    const blocked = r.status === 'pending_pickup';
-    return `
-    <tr>
-      <td><strong>${escapeHtml(r.order_number)}</strong></td>
-      <td>${escapeHtml(r.plant_name || '—')}</td>
-      <td>${money(r.total_cost)}</td>
-      <td><span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
-      <td>${blocked ? '<span class="tag unpaid">Blocking pickup</span>' : ''}</td>
-    </tr>`;
-  }).join('');
-}
 
-function renderShipments(rows){
-  const tbody = document.querySelector('#tblShipments tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">No shipments yet.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => {
-    const next = NEXT_STATUS[r.status];
-    const payTag = r.paid_at ? '<span class="tag paid">Paid</span>' : (r.status === 'delivered' ? '<span class="tag unpaid">Unpaid</span>' : '—');
-    const payBtn = (r.status === 'delivered' && !r.paid_at) ? `<button class="btn secondary" onclick="markPaid('${r.id}')">Mark Paid</button>` : '';
-    const advanceBtn = next ? `<button class="btn" onclick="advance('${r.id}','${next}')">${NEXT_LABEL[r.status]}</button>` : '';
-    return `
-    <tr>
-      <td><strong>${escapeHtml(r.order_number)}</strong></td>
-      <td>${escapeHtml(r.customer_name || '—')}</td>
-      <td>${escapeHtml((r.product_spec || r.product_name) || '—')}</td>
-      <td><span class="tag ${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
-      <td>${dt(r.delivered_at || r.border_delivery_date)}</td>
-      <td>${payTag}</td>
-      <td>${advanceBtn}${payBtn}</td>
-    </tr>`;
-  }).join('');
-}
 
-function renderOffers(rows){
-  const tbody = document.querySelector('#tblOffers tbody');
-  if (!rows || !rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">No offers yet.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td>${escapeHtml(r.customer_name)}</td>
-      <td>${escapeHtml((r.product_spec || r.product_name))}</td>
-      <td>${escapeHtml(r.plant_name)}</td>
-      <td>${r.channel}</td>
-      <td><span class="tag ${r.status}">${r.status}</span></td>
-      <td>${dt(r.sent_at)}</td>
-    </tr>
-  `).join('');
-}
 
-async function advance(shipmentId, status){
-  try {
-    await callApi('shipments-update-status', { actor: currentActor(), shipment_id: shipmentId, status });
-    await loadAll();
-  } catch (e) { showErr('Could not advance the shipment: ' + e.message); }
-}
 
-async function markPaid(shipmentId){
-  try {
-    await callApi('shipments-mark-paid', { actor: currentActor(), shipment_id: shipmentId });
-    await loadAll();
-  } catch (e) { showErr('Could not mark as paid: ' + e.message); }
-}
 
 function escapeHtml(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));

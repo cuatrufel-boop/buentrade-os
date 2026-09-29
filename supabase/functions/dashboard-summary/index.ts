@@ -12,6 +12,65 @@ import { bizDay, COLLECT_FROM_DAY, payReceiveLoads } from "../_shared/moneyStatu
 // act. "Esto debe estar super sensible y estratégico, de aquí depende el éxito del día de cada trader":
 // it warns BEFORE things are late (due within SOON_DAYS), not only after. Built only from real data —
 // the same money dates as the alerts (_shared/moneyStatus.ts) and the same credit rule as Quotes.
+// One order's margin: final (net_profit) once paid, otherwise the live estimate collections-search shows
+// as profit so far — sale − purchase − US freight − inspection − extra costs − interest since invoice.
+function orderMargin(r: Record<string, any>, annualRate: number) {
+  const base = { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, product_spec: r.product_spec, sale_amount: r.sale_amount, created_at: r.created_at };
+  if (r.paid_at != null) return { ...base, margin: Number(r.net_profit ?? 0), is_final: true };
+  const invoiceDate = r.invoice_sent_at ?? r.delivered_at ?? r.created_at;
+  const daysSinceInvoice = invoiceDate ? Math.max(0, Math.round((Date.now() - new Date(invoiceDate).getTime()) / 86400000)) : 0;
+  const realWeight = r.real_weight != null ? Number(r.real_weight) : null;
+  const purchaseCost = (realWeight != null && r.cost_per_lb != null) ? realWeight * Number(r.cost_per_lb) : (r.total_cost != null ? Number(r.total_cost) : null);
+  const interestSoFar = Number(r.sale_amount) * (annualRate / 365) * daysSinceInvoice;
+  const margin = purchaseCost != null ? Number(r.sale_amount) - purchaseCost - Number(r.us_freight_amount ?? 0) - Number(r.inspection_amount ?? 0) - Number(r.extra_costs_total) - interestSoFar : null;
+  return { ...base, margin, is_final: false };
+}
+
+// ---------- CEO / CFO view (2026-09-29) ----------
+// "Facturación mes, año, si estamos bien con la meta, si nos falta cuánto tenemos que vender para llegar."
+// Goal = loads per month (app_settings monthly_load_goal, the user said 3); a load counts in the month its
+// order was created (shipments.created_at, Miami). Year goal = monthly goal × 12.
+async function ceoView() {
+  const [{ value: goalStr }] = await sql`select coalesce((select value from app_settings where key = 'monthly_load_goal'), '3') as value`;
+  const [{ value: rateStr }] = await sql`select coalesce((select value from app_settings where key = 'collections_interest_rate_annual'), '0.15') as value`;
+  const goal = Number(goalStr), rate = parseFloat(rateStr);
+  const rows = await sql`
+    select sh.order_number, sh.sale_amount, sh.paid_at, sh.net_profit, sh.invoice_sent_at, sh.delivered_at, sh.created_at,
+      to_char(sh.created_at at time zone 'America/New_York', 'YYYY-MM') as ym, sh.customer_id, trim(c.trade_name) as customer, o.won_by,
+      o.customer_name, o.product_name, o.product_spec, o.cost_per_lb, o.total_cost, o.us_freight_amount, o.inspection_amount, so2.real_weight,
+      coalesce((select sum(amount) from order_extra_costs where order_number = sh.order_number), 0) as extra_costs_total
+    from shipments sh join sent_offers o on o.id = sh.sent_offer_id
+    left join sales_orders so2 on so2.order_number = sh.order_number left join customers c on c.id = sh.customer_id`;
+  const today = bizDay(new Date()), ym = today.toISOString().slice(0, 7), year = ym.slice(0, 4);
+  const months: Record<string, { loads: number; sales: number; margin: number }> = {};
+  for (let i = 11; i >= 0; i--) { const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1)); months[d.toISOString().slice(0, 7)] = { loads: 0, sales: 0, margin: 0 }; }
+  const custY: Record<string, { loads: number; sales: number }> = {}, prodY: Record<string, { loads: number; sales: number }> = {}, tradY: Record<string, { loads: number; sales: number }> = {};
+  let yLoads = 0, ySales = 0, yMargin = 0;
+  for (const r of rows) {
+    const m = orderMargin(r, rate), sale = Number(r.sale_amount || 0), mg = Number(m.margin || 0);
+    if (months[r.ym]) { months[r.ym].loads++; months[r.ym].sales += sale; months[r.ym].margin += mg; }
+    if (r.ym.startsWith(year)) {
+      yLoads++; ySales += sale; yMargin += mg;
+      const add = (o: any, k: string) => { if (!k) return; o[k] ??= { loads: 0, sales: 0 }; o[k].loads++; o[k].sales += sale; };
+      add(custY, r.customer || r.customer_name); add(prodY, r.product_spec || r.product_name); add(tradY, traderDisplayName(r.won_by) || r.won_by);
+    }
+  }
+  const top = (o: any) => Object.entries(o).map(([name, v]: any) => ({ name, ...v })).sort((a: any, b: any) => b.sales - a.sales).slice(0, 5);
+  const daysInMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate(), dayOfMonth = today.getUTCDate();
+  const monthIndex = today.getUTCMonth() + 1; // months of the year so far, this one included
+  // money still in the street / owed (Pay & Receive's open loads, same shared dates as Today)
+  let toCollect = 0, toPay = 0;
+  for (const m of await payReceiveLoads(sql)) { toCollect += m.owed; if (!m.customsPaid) toPay += m.customsTotal; if (!m.freightPaid) toPay += m.freightTotal; }
+  const avgSale = yLoads ? ySales / yLoads : 0;
+  return {
+    goal, ym, year, day_of_month: dayOfMonth, days_in_month: daysInMonth, avg_sale: avgSale,
+    month: months[ym], year_total: { loads: yLoads, sales: ySales, margin: yMargin, goal: goal * 12, expected_by_now: goal * (monthIndex - 1) + goal * dayOfMonth / daysInMonth },
+    months: Object.entries(months).map(([k, v]) => ({ ym: k, ...v })),
+    to_collect: toCollect, to_pay: toPay,
+    top_customers: top(custY), top_products: top(prodY), top_traders: top(tradY),
+  };
+}
+
 const SOON_DAYS = 3, PRICE_STALE_DAYS = 2; // PRICE_STALE_DAYS = Quotes' RQ_PRICE_STALE_DAYS
 const md = (d: Date) => `${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`;
 const usd0 = (v: number) => "$" + Math.round(v).toLocaleString("en-US");
@@ -92,6 +151,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     if (body.view === "today") return jsonResponse({ today: await todayList() });
+    if (body.view === "ceo") return jsonResponse({ ceo: await ceoView() });
     const [{ invoiced_this_month }] = await sql`
       select coalesce(sum(sale_amount), 0) as invoiced_this_month
       from shipments
@@ -258,22 +318,8 @@ Deno.serve(async (req) => {
       join sent_offers o on o.id = sh.sent_offer_id
       left join sales_orders so2 on so2.order_number = sh.order_number
     `;
-    const now = new Date();
     const topOrdersByMargin = marginRows
-      .map((r: Record<string, any>) => {
-        if (r.paid_at != null) {
-          return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, product_spec: r.product_spec, sale_amount: r.sale_amount, margin: Number(r.net_profit ?? 0), is_final: true };
-        }
-        const invoiceDate = r.invoice_sent_at ?? r.delivered_at ?? r.created_at;
-        const daysSinceInvoice = invoiceDate ? Math.max(0, Math.round((now.getTime() - new Date(invoiceDate).getTime()) / 86400000)) : 0;
-        const realWeight = r.real_weight != null ? Number(r.real_weight) : null;
-        const purchaseCost = (realWeight != null && r.cost_per_lb != null) ? realWeight * Number(r.cost_per_lb) : (r.total_cost != null ? Number(r.total_cost) : null);
-        const interestSoFar = Number(r.sale_amount) * (annualRate / 365) * daysSinceInvoice;
-        const marginEstimate = purchaseCost != null
-          ? Number(r.sale_amount) - purchaseCost - Number(r.us_freight_amount ?? 0) - Number(r.inspection_amount ?? 0) - Number(r.extra_costs_total) - interestSoFar
-          : null;
-        return { order_number: r.order_number, customer_name: r.customer_name, product_name: r.product_name, product_spec: r.product_spec, sale_amount: r.sale_amount, margin: marginEstimate, is_final: false };
-      })
+      .map((r: Record<string, any>) => orderMargin(r, annualRate))
       .filter((r) => r.margin != null)
       .sort((a, b) => (b.margin as number) - (a.margin as number))
       .slice(0, 5);
