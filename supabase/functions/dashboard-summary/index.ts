@@ -4,7 +4,63 @@
 // when, what's overdue right now, what's coming due soon, and where every active load stands.
 
 import postgres from "npm:postgres@3.4.4";
-import { jsonResponse, traderDisplayName } from "../_shared/matching.ts";
+import { creditSchedule, customerAvgLoad, customerOpenLoads, jsonResponse, traderDisplayName } from "../_shared/matching.ts";
+import { bizDay, COLLECT_FROM_DAY, payReceiveLoads } from "../_shared/moneyStatus.ts";
+
+// ---------- "Today" (2026-09-29, AI Copilot phase 1) ----------
+// The trader's day in one list, most urgent first, each item with the real fact behind it and where to
+// act. "Esto debe estar super sensible y estratégico, de aquí depende el éxito del día de cada trader":
+// it warns BEFORE things are late (due within SOON_DAYS), not only after. Built only from real data —
+// the same money dates as the alerts (_shared/moneyStatus.ts) and the same credit rule as Quotes.
+const SOON_DAYS = 3, PRICE_STALE_DAYS = 2; // PRICE_STALE_DAYS = Quotes' RQ_PRICE_STALE_DAYS
+const md = (d: Date) => `${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`;
+const usd0 = (v: number) => "$" + Math.round(v).toLocaleString("en-US");
+async function todayList() {
+  const items: any[] = [], today = bizDay(new Date()), dd = (d: Date) => Math.round((d.getTime() - today.getTime()) / 86400000);
+  const when = (n: number) => n < 0 ? `${-n}d overdue` : n === 0 ? "due today" : `due in ${n}d`;
+  for (const m of await payReceiveLoads(sql)) {
+    const o = m.L.order_number, href = `collections.html?focus=${encodeURIComponent(o)}`;
+    // collect from the customer: from day 29 (Summar: its fee grows after day 30), or a direct load past its due date
+    const nCollect = dd(m.collectOn), nDue = dd(m.customerDue);
+    if (nCollect <= SOON_DAYS || nDue <= SOON_DAYS) {
+      const late = m.summar ? m.days > 30 : nDue < 0;
+      items.push({ prio: late || nCollect <= 0 ? 1 : 2, group: "collect", title: `Collect ${usd0(m.owed)} from ${m.who}`, order: o, href, sort: Math.min(nCollect, nDue),
+        why: m.summar ? (m.days > 30 ? `Day ${m.days} since delivery · Summar fee grows $${m.perDay.toFixed(2)} every day` : `Day ${m.days} since delivery · collect from day ${COLLECT_FROM_DAY} (${md(m.collectOn)}) · Summar fee grows after day 30`)
+          : `Day ${m.days} since delivery · payment ${when(nDue)} (${md(m.customerDue)})` });
+    }
+    // our bills: customs and freight, before they're late
+    if (m.customsTotal > 0 && !m.customsPaid && dd(m.customsDue) <= SOON_DAYS) items.push({ prio: dd(m.customsDue) <= 0 ? 1 : 2, group: "pay", order: o, href, sort: dd(m.customsDue),
+      title: `Pay customs ${usd0(m.customsTotal)}${m.L.customs_agency ? ` to ${m.L.customs_agency}` : ""}`, why: `${when(dd(m.customsDue))} (${md(m.customsDue)}) · ${m.who}` });
+    if (m.freightTotal > 0 && !m.freightPaid && dd(m.freightDue) <= SOON_DAYS) items.push({ prio: dd(m.freightDue) <= 0 ? 1 : 2, group: "pay", order: o, href, sort: dd(m.freightDue),
+      title: `Pay freight ${usd0(m.freightTotal)}${m.L.carrier ? ` to ${m.L.carrier}` : ""}`, why: `${when(dd(m.freightDue))} (${md(m.freightDue)}) · ${m.who}` });
+    // Summar pays the remanente at delivery — if it hasn't been recorded, check it
+    if (m.summar && !m.recorded.includes("summar_remanente") && m.days >= 1) items.push({ prio: 2, group: "collect", order: o, href, sort: 0,
+      title: `Confirm the Summar remanente for ${o}`, why: `Delivered ${m.days}d ago · Summar pays it at delivery — not recorded yet` });
+  }
+  // customers over their credit line — don't offer until they pay
+  for (const c of await sql`select id, trim(trade_name) as name, credit_limit from customers where credit_limit is not null`) {
+    const loads = await customerOpenLoads(sql, c.id); if (!loads.length) continue;
+    const sc = creditSchedule(loads, Number(c.credit_limit));
+    if (sc.available_today < 0) {
+      const L = await customerAvgLoad(sql, c.id), fits = sc.steps.find((x) => x.available >= (L || 1));
+      items.push({ prio: 2, group: "credit", title: `${c.name} is over the limit by ${usd0(-sc.available_today)}`, href: `customers.html?open=${c.id}`, sort: 0,
+        why: `Don't offer yet${L ? ` · must pay ${usd0(-sc.available_today + L)} for one more load` : ""}${fits ? ` · next load fits ${md(new Date(fits.from + "T00:00:00Z"))} if paid on time` : ""}` });
+    }
+  }
+  // prices of what the clients buy, older than Quotes' stale limit
+  const stale = await sql`
+    select p.full_name_en as name, count(distinct cp.customer_id)::int as clients, max(pp.price_date) as last
+    from customer_products cp join products p on p.id = cp.product_id
+    left join plant_products pp on pp.product_id = cp.product_id and pp.current_price is not null
+    group by p.id, p.full_name_en
+    having max(pp.price_date) is null or max(pp.price_date) < (now() at time zone 'America/New_York')::date - ${PRICE_STALE_DAYS}::int
+    order by 2 desc, 3 nulls first`;
+  if (stale.length) items.push({ prio: 2, group: "prices", href: "quotes.html", sort: 0, title: `${stale.length} product${stale.length === 1 ? "" : "s"} your clients buy have old or no prices`,
+    why: stale.slice(0, 3).map((r: any) => `${r.name} (${r.clients} client${r.clients === 1 ? "" : "s"}, ${r.last ? "price " + md(new Date(r.last)) : "no price"})`).join(" · ") + (stale.length > 3 ? ` · +${stale.length - 3} more` : "") });
+  const G = { collect: 0, pay: 1, credit: 2, prices: 3 } as Record<string, number>;
+  return items.sort((a, b) => a.prio - b.prio || G[a.group] - G[b.group] || a.sort - b.sort);
+}
+
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -12,6 +68,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
 
   try {
+    const body = await req.json().catch(() => ({}));
+    if (body.view === "today") return jsonResponse({ today: await todayList() });
     const [{ invoiced_this_month }] = await sql`
       select coalesce(sum(sale_amount), 0) as invoiced_this_month
       from shipments

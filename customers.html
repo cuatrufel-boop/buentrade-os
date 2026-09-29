@@ -986,6 +986,9 @@ async function loadCustomers(){
     customers = res.results || [];
     renderCustomers();
     renderCustomerStats();
+    // ?open=<customer id> (Dashboard "Today" links): open that customer's profile straight away
+    const openId = new URLSearchParams(location.search).get('open');
+    if (openId && customers.some(c => c.id === openId) && !window._openedFromLink){ window._openedFromLink = true; viewCustomer(openId); }
     // what the trader can still sell each one (2026-09-29, "vista rápida del trader para poder ofrecer")
     try { customerCredit = (await callApi('customers-search', { credit_for_ids: customers.map(c => c.id) })).credit || {}; renderCustomers(); } catch (e) {}
   } catch (e) {

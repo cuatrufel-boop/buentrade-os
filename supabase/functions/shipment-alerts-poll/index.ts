@@ -14,6 +14,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
+import { COLLECT_FROM_DAY, payReceiveLoads, SUMMAR } from "../_shared/moneyStatus.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const API_ROOT = "https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/";
@@ -333,44 +334,17 @@ Deno.serve(async (req) => {
 //   summar_due  — the planned day (40) passed and the customer still hasn't paid Summar
 //   customer_due — a direct customer's invoice is due
 // Summar rates: same three numbers as trading-tool.html SUMMAR_RATES (contract 2026-09-19).
-const SUMMAR = { transit: 0.234, base: 1.20, extraDay: 0.0417 };
-const COLLECT_FROM_DAY = 29, FREIGHT_DAYS = 30; // confirmed by the user 2026-09-28
+// SUMMAR rates, COLLECT_FROM_DAY and FREIGHT_DAYS live in _shared/moneyStatus.ts (one place)
 const usd = (n: number) => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const mdy = (d: Date) => d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric", timeZone: "UTC" });
 
 async function moneyAlerts(gmailToken: string): Promise<number> {
-  const loads = await sql`
-    select sh.id, sh.order_number, sh.sale_amount, sh.delivered_at, sh.paid_at, sh.payment_due_date, sh.amount_paid,
-      sh.plant_paid_at, sh.summar_payment_sent_at, o.won_by, c.trade_name as customer_name, c.payment_days as customer_days,
-      po.financing_method, po.payment_days as summar_days,
-      coalesce(o.tramite_aduanal_amount, 0) + coalesce(o.inspection_amount, 0) as customs,
-      (select coalesce(f.actual_rate, f.quoted_rate) from freight_orders f where f.order_number = sh.order_number order by f.created_at desc limit 1) as freight,
-      (select pr.name from freight_orders f left join providers pr on pr.id = f.carrier_provider_id where f.order_number = sh.order_number order by f.created_at desc limit 1) as carrier,
-      (select pr.payment_days from freight_orders f left join providers pr on pr.id = f.carrier_provider_id where f.order_number = sh.order_number order by f.created_at desc limit 1) as carrier_days,
-      (select ag.payment_days from providers ag where ag.id = coalesce(o.customs_agency_provider_id, c.customs_agency_provider_id)) as customs_days,
-      sh.invoice_signed_at,
-      coalesce((select array_agg(kind) from shipment_money_records r where r.shipment_id = sh.id and r.settles), '{}') as recorded,
-      coalesce((select array_agg(alert_key) from money_alerts_sent a where a.shipment_id = sh.id), '{}') as sent
-    from shipments sh
-    join sent_offers o on o.id = sh.sent_offer_id
-    left join customers c on c.id = sh.customer_id
-    left join purchase_orders po on po.order_number = sh.order_number
-    where o.won_by is not null and sh.paid_at is null
-  `;
-  // Miami business days (America/New_York), whatever time zone the server runs in
-  const bizDay = (ts: string | Date) => new Date(new Date(ts).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) + "T00:00:00Z");
-  const today = bizDay(new Date());
+  // the loads and their dates come from _shared/moneyStatus.ts — the same facts the Dashboard's "Today" list reads
+  const loads = await payReceiveLoads(sql);
   let sent = 0;
-  for (const L of loads) {
-    const summar = L.financing_method === "summar";
-    // a load is in Pay & Receive once Orders ended: delivered and the invoice signed (2026-09-28)
-    if (!(L.delivered_at && L.invoice_signed_at)) continue;
-    const recorded: string[] = L.recorded, already: string[] = L.sent;
-    if (summar && recorded.includes("client_paid_summar")) continue; // customer paid Summar — load done
-    const sale = Number(L.sale_amount || 0), freight = Number(L.freight || 0), customs = Number(L.customs || 0);
-    const sDays = Number(L.summar_days || L.customer_days || 30), perDay = sale * SUMMAR.extraDay / 100;
+  for (const m of loads) {
+    const { L, summar, recorded, sent: already, sale, freight, customs, sDays, perDay, who, days, carrierDays, customsDays } = m;
     const remanente = sale * 0.2 - sale * (SUMMAR.transit + SUMMAR.base + Math.max(0, sDays - 30) * SUMMAR.extraDay) / 100;
-    const who = L.customer_name ? String(L.customer_name).trim() : "the customer";
     const tag = `BT-${btNum(L.order_number)} — ${who}`;
     const fire = async (key: string, title: string, body: string) => {
       if (already.includes(key)) return;
@@ -378,10 +352,7 @@ async function moneyAlerts(gmailToken: string): Promise<number> {
       await sql`insert into money_alerts_sent (shipment_id, alert_key) values (${L.id}, ${key}) on conflict do nothing`;
       sent++;
     };
-    const deliv = bizDay(L.delivered_at);
-    const days = Math.round((today.getTime() - deliv.getTime()) / 86400000);
-    const carrierDays = L.carrier_days == null ? FREIGHT_DAYS : Number(L.carrier_days), customsDays = L.customs_days == null ? 0 : Number(L.customs_days);
-    const on = (n: number) => mdy(new Date(deliv.getTime() + n * 86400000));
+    const on = (n: number) => mdy(m.at(n));
     const plan = [
       customs ? `customs ${usd(customs)} ${customsDays ? `by ${on(customsDays)}` : "now"}` : null,
       freight ? `confirm the freight (${usd(freight)}${L.carrier ? `, ${L.carrier}` : ""} + any surcharge), pay it by ${on(carrierDays)}` : null,
@@ -399,11 +370,10 @@ async function moneyAlerts(gmailToken: string): Promise<number> {
     if (summar) {
       const feeSoFar = sale * (SUMMAR.transit + SUMMAR.base + Math.max(0, days - 30) * SUMMAR.extraDay) / 100;
       if (sDays > 30 && days >= sDays) await fire("summar_due", `Customer late with Summar — ${tag}`,
-        `${who} was due to pay Summar on ${mdy(new Date(deliv.getTime() + sDays * 86400000))} (${sDays} days). Summar fee so far ${usd(feeSoFar)}, +${usd(perDay)}/day.`);
+        `${who} was due to pay Summar on ${mdy(m.at(sDays))} (${sDays} days). Summar fee so far ${usd(feeSoFar)}, +${usd(perDay)}/day.`);
     } else {
-      const due = L.payment_due_date ? new Date(L.payment_due_date) : new Date(deliv.getTime() + Number(L.customer_days || 0) * 86400000);
-      if (today >= due) await fire("customer_due", `Customer payment due — ${tag}`,
-        `${who} owes ${usd(sale - Number(L.amount_paid || 0))}, due ${mdy(due)}. Record it with Apply Payment when it arrives.`);
+      if (m.today >= m.customerDue) await fire("customer_due", `Customer payment due — ${tag}`,
+        `${who} owes ${usd(sale - Number(L.amount_paid || 0))}, due ${mdy(m.customerDue)}. Record it with Apply Payment when it arrives.`);
     }
   }
   return sent;

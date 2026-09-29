@@ -174,7 +174,7 @@ auth.onAuthStateChanged(user => {
     gate.style.display = 'none';
     app.style.display = 'block';
     document.getElementById('userBadge').textContent = user.email;
-    if (!btAuthLoaded) { btAuthLoaded = true; loadAll(); }
+    if (!btAuthLoaded) { btAuthLoaded = true; loadAll(); loadToday(); }
   } else {
     gate.style.display = 'flex';
     app.style.display = 'none';
@@ -207,6 +207,12 @@ auth.onAuthStateChanged(user => {
 <script src="js/header-chip.js"></script>
 <main>
   <div id="errBox"></div>
+
+  <!-- Today (2026-09-29, AI Copilot phase 1): the trader's day as one list, most urgent first — each
+       item says why (the real fact) and opens the place to act. Built by dashboard-summary view:today
+       (money dates shared with the alerts, credit rule shared with Quotes) + Messaging's own list. -->
+  <h1>Today <span id="todayDate" style="color:var(--ink-soft);font-weight:400;font-size:15px;"></span> <span class="refresh" onclick="loadToday()">↻ refresh</span></h1>
+  <div class="tbl-wrap" id="todayWrap"><div class="empty">Loading today…</div></div>
 
   <h1>This Month <span class="refresh" onclick="loadAll()">↻ refresh</span></h1>
   <div class="kpis" id="kpis"><div class="empty">Loading…</div></div>
@@ -307,6 +313,34 @@ async function loadAll(){
   } catch (e) {
     showErr('Error calling API: ' + e.message);
   }
+}
+
+// ---------- Today ----------
+const TODAY_GROUP = { collect: 'Collect', pay: 'Pay', messages: 'Messages', credit: 'Credit', prices: 'Prices' };
+async function loadToday(){
+  const wrap = document.getElementById('todayWrap');
+  document.getElementById('todayDate').textContent = '— ' + new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+  wrap.innerHTML = '<div class="empty">Loading today…</div>';
+  let items = [];
+  try { items = (await callApi('dashboard-summary', { view: 'today' })).today || []; }
+  catch (e) { wrap.innerHTML = `<div class="empty">Could not load today: ${escapeHtml(e.message)}</div>`; return; }
+  // clients with a message ready today — the same list Quotes → Messaging shows
+  try {
+    const m = await callApi('messaging', { action: 'list', actor: currentActor() });
+    const todo = (m.clients || []).filter(c => c.trade_name && !(c.options || []).some(o => o.sent_at && String(o.reason_key).startsWith('compose:')))
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+    if (todo.length) items.splice(items.findIndex(i => i.prio === 2 && i.group !== 'collect' && i.group !== 'pay') < 0 ? items.length : items.findIndex(i => i.prio === 2 && i.group !== 'collect' && i.group !== 'pay'), 0,
+      { prio: 2, group: 'messages', href: 'quotes.html?tab=messaging', title: `${todo.length} client${todo.length === 1 ? '' : 's'} to message today`,
+        why: 'Each one has a real reason and the message is already written · ' + todo.slice(0, 3).map(c => c.trade_name.trim()).join(', ') + (todo.length > 3 ? ` +${todo.length - 3} more` : '') });
+  } catch (e) {}
+  if (!items.length){ wrap.innerHTML = '<div class="empty">Nothing urgent today — all caught up.</div>'; return; }
+  wrap.innerHTML = `<table><thead><tr><th style="width:90px;">When</th><th style="width:100px;">Area</th><th style="text-align:left;">To do</th><th style="width:110px;"></th></tr></thead><tbody>
+    ${items.map(i => `<tr>
+      <td style="text-align:left;"><span class="tag ${i.prio === 1 ? 'lost' : 'picked_up'}">${i.prio === 1 ? 'Now' : 'Soon'}</span></td>
+      <td><span class="tag sent">${TODAY_GROUP[i.group] || i.group}</span></td>
+      <td style="text-align:left;"><div style="font-weight:600;">${escapeHtml(i.title)}</div><div style="color:var(--ink-soft);font-size:12.5px;margin-top:3px;">${escapeHtml(i.why || '')}</div></td>
+      <td><a class="btn${i.prio === 1 ? '' : ' secondary'}" style="text-decoration:none;display:inline-block;" href="${i.href}">Go →</a></td></tr>`).join('')}
+    </tbody></table>`;
 }
 
 function renderKpis(s){
