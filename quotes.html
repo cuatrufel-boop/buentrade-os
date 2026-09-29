@@ -1670,7 +1670,7 @@ function setQuoteTab(tab){
 // know about him — what he told you, dated news with its source (sanitary, border, prices in his state), the bulletin
 // facts about his cuts, his buying month, the calendar — picking the single strongest angle, in the trader's voice.
 // Each goes out through the SAME review modals as every quote (edit there, send there). Nothing is sent automatically.
-// A second message the same day (no reply by 1 pm) is "Another angle →", which asks for a different angle.
+// A second message the same day (no reply by 1 pm) is "Write a different message →", which asks for a different angle.
 const QM_TABS = [
   { kind: 'todo', label: 'Clients to Message Today', cls: 'warn', title: 'Today’s messages', sub: 'One message per client, from what we know about them and what is happening that affects them. Click a row for the source and the client’s details.',
     icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' },
@@ -1745,13 +1745,13 @@ function qmRowHtml(c, cols){
   const open = qmOpen === c.id;
   const clientCell = `<td style="min-width:170px;"><b>${escapeHtml(c.trade_name.trim())}</b><span class="muted" style="display:block;font-size:11.5px;">${escapeHtml([c.first_name, c.city].filter(Boolean).join(' · '))}</span></td>`;
   const whyCell = `<td style="text-align:left;min-width:220px;max-width:300px;">${qmWhyCell(c)}</td>`;
-  const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (c.compose && c.compose.message);
+  const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (c.compose && (c.compose.edited ?? c.compose.message));
   const msgCell = `<td style="text-align:left;max-width:400px;"><span class="${text ? '' : 'muted'}" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;line-height:1.45;">${text ? escapeHtml(text) : 'Writing…'}</span></td>`;
   let tail;
   if (qmTab === 'sent'){
     const s = c.sentToday[0];
     tail = `<td><span class="rq-sheet-pill ok">${s.sent_channel === 'email' ? 'Email' : 'WhatsApp'} · ${qmTime(s.sent_at)}</span>${c.sentToday.length > 1 ? `<span class="muted" style="display:block;font-size:11px;margin-top:3px;">${c.sentToday.length} today</span>` : ''}</td>
-      <td><button type="button" class="pkg-trigger-btn" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Another angle →</button></td>`;
+      <td><button type="button" class="pkg-trigger-btn" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></td>`;
   } else {
     const off = t => `style="padding:7px 10px;opacity:.35;cursor:default;" disabled title="${t}"`;
     const ready = !!(c.compose && c.compose.message);
@@ -1785,23 +1785,23 @@ function qmDetailHtml(c){
   return `<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:22px;">
     <div>
       <div class="qm-sec">${qmTab === 'sent' ? 'Message sent' : 'Message'}</div>
-      <div style="font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">${text ? escapeHtml(text) : '<span class="muted">Writing…</span>'}</div>
+      ${qmTab === 'sent' || !text ? `<div style="font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">${text ? escapeHtml(text) : '<span class="muted">Writing…</span>'}</div>`
+        : `<textarea id="qm_msg_${c.id}" rows="4" onclick="event.stopPropagation()" oninput="qmEdit('${c.id}', this.value)" style="width:100%;box-sizing:border-box;font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1.5px solid rgba(90,170,255,.4);border-radius:10px;padding:12px 14px;color:var(--ink);font-family:inherit;resize:vertical;">${escapeHtml(d.edited ?? text)}</textarea>`}
       ${d && d.news ? `<div class="muted" style="font-size:11.5px;margin-top:6px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener">${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
-      <div class="muted" style="font-size:11.5px;margin-top:6px;">${qmTab === 'sent' ? '' : 'Edit it in the review window when you send — your edits teach the system how you write.'}</div>
-      <div style="margin-top:10px;display:flex;gap:8px;"><button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Another angle →</button></div>
+      <div class="muted" style="font-size:11.5px;margin-top:6px;">${qmTab === 'sent' ? '' : 'Edit it here — what you leave is what gets sent, and your edits teach the system how you write. Never edit it inside WhatsApp: the system can’t see that.'}</div>
+      <div style="margin-top:10px;display:flex;gap:8px;"><button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></div>
       <div class="qm-sec" style="margin-top:16px;">Business</div>
       <div style="font-size:13px;">${biz ? `${escapeHtml(biz.name_en)}<span class="muted" style="display:block;font-size:11px;">${escapeHtml(biz.name_es || '')}</span>` : '<span class="muted">Not set — set it in the client’s profile (Clients)</span>'}</div>
     </div>
     <div>
-      <div class="qm-sec">Loads a month · all suppliers</div>
-      ${c.products.map(p => `<div class="qm-vol"><span class="${p.cadence ? '' : 'qm-unk'}">${escapeHtml(p.name_en)}<span class="muted" style="display:block;font-size:11px;">${p.cadence ? `${escapeHtml(p.cadence)} · ${p.from_us_month} from us this month` : 'Unknown'}</span></span>
-        <input class="qm-num" type="number" min="1" step="1" value="${p.monthly_input ?? ''}" placeholder="?" onclick="event.stopPropagation()" onchange="qmSetLoads('${p.link_id}', this.value)" title="Loads a month, from all suppliers"></div>`).join('')}
+      <div class="qm-sec">What they buy · all suppliers</div>
+      ${c.products.map(p => `<div class="qm-vol"><span class="${p.cadence ? '' : 'qm-unk'}">${escapeHtml(p.name_en)}<span class="muted" style="display:block;font-size:11px;">${p.cadence ? `${escapeHtml(p.cadence)} · ${p.from_us_month} from us this month` : 'Missing: how often they buy it'}</span></span></div>`).join('')}
+      ${c.products.some(p => !p.cadence) ? `<a class="btn secondary" style="display:inline-block;margin-top:8px;text-decoration:none;" href="customers.html?open=${c.id}&tab=products" onclick="event.stopPropagation()">Complete it in the profile →</a>` : ''}
     </div>
     <div>
       <div class="qm-sec">What they told you</div>
-      <textarea id="qm_note_${c.id}" class="qm-note" placeholder="e.g. building a new plant, son started university…" onclick="event.stopPropagation()"></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:6px;"><button type="button" class="pkg-trigger-btn" onclick="event.stopPropagation();qmAddNote('${c.id}')">Save note</button></div>
-      ${c.notes.map(n => `<div class="qm-note-row"><span class="muted" style="font-family:var(--dash-font-mono);font-size:11px;">${escapeHtml(String(n.created_at).slice(5, 10))}</span><span style="flex:1;">${escapeHtml(n.note)}</span><button type="button" class="qm-x" title="Delete note" onclick="event.stopPropagation();qmDeleteNote('${n.id}')">✕</button></div>`).join('')}
+      ${c.notes.length ? c.notes.map(n => `<div class="qm-note-row"><span class="muted" style="font-family:var(--dash-font-mono);font-size:11px;">${escapeHtml(String(n.created_at).slice(5, 10))}</span><span style="flex:1;">${escapeHtml(n.note)}</span></div>`).join('') : '<div class="muted" style="font-size:12.5px;">Nothing yet — the more you know, the better the message.</div>'}
+      <a class="btn secondary" style="display:inline-block;margin-top:8px;text-decoration:none;" href="customers.html?open=${c.id}&tab=about" onclick="event.stopPropagation()">Add in the profile →</a>
       <div class="qm-sec" style="margin-top:14px;">What works</div>
       <div style="font-size:12.5px;">${c.works.length ? c.works.map(w => `<div>${QM_KIND_LABEL[w.kind] || w.kind} · ${w.requests} of ${w.sent} led to a request</div>`).join('') : '<span class="muted">Learning — nothing sent yet</span>'}</div>
     </div>
@@ -1822,6 +1822,8 @@ async function qmFetchDrafts(){
   qmRender();
 }
 function qmFind(cid){ return qmData.clients.find(x => x.id === cid); }
+// the trader's edit, kept apart from the system's draft (d.message) — the send records both, and learns from the difference
+function qmEdit(cid, v){ const c = qmFind(cid); if (c && c.compose) c.compose.edited = v; }
 async function qmAnotherAngle(cid){
   const c = qmFind(cid); if (!c) return;
   const previous = (c.compose && c.compose.message) || (c.sentToday[0] && c.sentToday[0].sent_message) || '';
@@ -1849,14 +1851,14 @@ async function qmLogSend(c, message, channel){
 // Same review modals every quote goes through: editable there, and what was actually sent is what gets recorded.
 function qmSendEmail(cid){
   const c = qmFind(cid); const d = c && c.compose; if (!d || !c.email || !d.message) return;
-  const item = { id: c.id, label: c.trade_name.trim(), to: c.email, subject: d.subject || '', body: d.message, fromAlias: 'offers' };
+  const item = { id: c.id, label: c.trade_name.trim(), to: c.email, subject: d.subject || '', body: d.edited ?? d.message, fromAlias: 'offers' };
   const edited = () => ((rqEmailModalItems.find(x => x.id === c.id) || item).body || '').trim(); // the modal edits its own copy
   item.onSent = async () => { try { await qmLogSend(c, edited(), 'email'); } catch (e){ rqShowNotice(`Sent, but it couldn't be recorded: ${e.message}`); } };
   rqOpenEmailModal(`Email — ${c.trade_name.trim()}`, [item], true, 'Send');
 }
 function qmSendWa(cid){
   const c = qmFind(cid); const d = c && c.compose; if (!d || !c.phone || !d.message) return;
-  const item = { id: c.id, label: c.trade_name.trim(), phone: String(c.phone).replace(/\D/g, ''), body: d.message };
+  const item = { id: c.id, label: c.trade_name.trim(), phone: String(c.phone).replace(/\D/g, ''), body: d.edited ?? d.message };
   const edited = () => ((rqWaModalItems.find(x => x.id === c.id) || item).body || '').trim(); // the modal edits its own copy
   item.onOpened = async () => { try { await qmLogSend(c, edited(), 'whatsapp'); } catch (e){ rqShowNotice(`WhatsApp opened, but it couldn't be recorded: ${e.message}`); } };
   rqOpenWaModal(`WhatsApp — ${c.trade_name.trim()}`, [item], false);
@@ -1866,26 +1868,6 @@ async function qmReloadKeepingDrafts(){
   await qmLoad(true);
   for (const c of qmData.clients) if (kept.get(c.id)) c.compose = kept.get(c.id);
   qmRender();
-}
-async function qmAddNote(cid){
-  const el = document.getElementById('qm_note_' + cid); const note = el ? el.value.trim() : '';
-  if (!note) return;
-  try {
-    await callApi('messaging', { action: 'add_note', actor: currentActor(), customer_id: cid, note, idempotency_key: `note|${cid}|${note}|${qmToday()}` });
-    await qmReloadKeepingDrafts();
-    // what they just told you is usually the strongest angle — rewrite this client's message with it
-    const c = qmFind(cid); if (c && !c.sentToday.length){ qmOpen = cid; qmAnotherAngle(cid); }
-  } catch (e){ rqShowNotice(`Couldn't save the note: ${e.message}`); }
-}
-async function qmDeleteNote(id){
-  try { await callApi('messaging', { action: 'delete_note', actor: currentActor(), id }); await qmReloadKeepingDrafts(); }
-  catch (e){ rqShowNotice(`Couldn't delete the note: ${e.message}`); }
-}
-async function qmSetLoads(linkId, value){
-  const v = String(value).trim();
-  if (v && !(Number(v) > 0 && Number.isInteger(Number(v)))){ rqShowNotice('Loads a month must be a whole number (or empty).'); return; }
-  try { await callApi('messaging', { action: 'set_loads', actor: currentActor(), link_id: linkId, loads_month: v === '' ? null : Number(v) }); await qmReloadKeepingDrafts(); }
-  catch (e){ rqShowNotice(`Couldn't save: ${e.message}`); }
 }
 // Sources tab: today's news (each with its link) under the bulletin strip — what the messages are built from.
 async function qmRenderNews(){

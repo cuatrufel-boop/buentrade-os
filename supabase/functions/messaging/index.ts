@@ -757,6 +757,12 @@ Deno.serve(async (req) => {
       quote_origin: quoteOrigin, link_origin: linkOrigin, dismiss_origin: dismissOrigin,
     };
     if (body.action === "list") return jsonResponse(await list(body.actor ?? ""));
+    // one client's notes ("what they told you") for the client profile — the ONLY place they are written (2026-09-29)
+    if (body.action === "list_notes") {
+      if (!body.customer_id) return jsonResponse({ error: "customer_id is required" }, 400);
+      return jsonResponse({ notes: await sql`select n.id, n.note, n.created_at, n.created_by, exists (select 1 from customer_messages m where m.note_id = n.id) as used
+        from customer_notes n where n.customer_id = ${body.customer_id} order by n.created_at desc` });
+    }
     // the news the messages can use (last NEWS_DAYS days), each with its source — shown on Quotes → Messaging → Sources
     if (body.action === "news") { await ensureNewsToday(); return jsonResponse({ news: await sql`select topic, fact_es, published_on, url, source, mx_states, us_states from market_news where published_on >= current_date - ${NEWS_DAYS}::int order by published_on desc` }); }
     // diagnostics: run one news topic and show what was found and why each item was kept or dropped (writes nothing)

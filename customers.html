@@ -420,6 +420,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/bt-dialogs.js"></script>
 <script src="js/entity-history.js"></script>
 
 <div class="wrap">
@@ -460,6 +461,7 @@ auth.onAuthStateChanged(user => {
     <div class="tab-row">
       <button type="button" class="tab-btn" id="custTabBtn_credit" onclick="setCustomerTab('credit')">Credit</button>
       <button type="button" class="tab-btn active" id="custTabBtn_products" onclick="setCustomerTab('products')">Products</button>
+      <button type="button" class="tab-btn" id="custTabBtn_about" onclick="setCustomerTab('about')">About the client</button>
       <button type="button" class="tab-btn" id="custTabBtn_details" onclick="setCustomerTab('details')">Details</button>
       <button type="button" class="tab-btn" id="custTabBtn_history" onclick="setCustomerTab('history')">History</button>
     </div>
@@ -486,6 +488,10 @@ auth.onAuthStateChanged(user => {
     </div>
 
     <!-- ============ DETAILS — everything else. Switching tabs never leaves the record. ============ -->
+    <!-- ABOUT THE CLIENT (2026-09-29): the ONE place to write what we know about the client — every note is
+         dated and Messaging reads them to write messages that catch their attention ("debemos conocer al
+         cliente a fondo… IMPORTANTE"). What they buy and how often stays in the Products tab. -->
+    <div id="custTab_about" style="display:none;"><div id="custAbout"></div></div>
     <div id="custTab_details" style="display:none;">
       <div class="section-title" style="margin-top:0;">Identity</div>
       <div class="grid3" style="row-gap:10px;">
@@ -516,7 +522,6 @@ auth.onAuthStateChanged(user => {
         <div><label class="view-label">Payment Method</label><span id="v_payment_method">—</span></div>
         <div><label class="view-label">Customs Agency</label><span id="v_customs_agency">—</span></div>
       </div>
-      <div style="margin-top:10px;"><label class="view-label">Notes</label><span id="v_notes">—</span></div>
     </div>
 
     <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO SO FO INV
@@ -627,8 +632,6 @@ auth.onAuthStateChanged(user => {
         </div>
       </div>
 
-      <div class="section-title">Notes</div>
-      <div class="field"><textarea id="notes" rows="3" oninput="updateCustomerProfile()"></textarea></div>
     </div>
 
     <div class="profile-panel">
@@ -657,7 +660,6 @@ auth.onAuthStateChanged(user => {
         <div class="profile-row"><span class="view-label">CC Emails</span><span class="profile-row-value" id="cv_email_cc">—</span></div>
         <div class="profile-row"><span class="view-label">Website</span><span class="profile-row-value" id="cv_website">—</span></div>
         <div class="profile-row"><span class="view-label">Payments Contact</span><span class="profile-row-value" id="cv_payments_contact">—</span></div>
-        <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="cv_notes">—</span></div>
       </div>
     </div>
 
@@ -724,7 +726,7 @@ function openForm(customer){
     'contact_role','email','email_cc','website',
     'payments_contact_name','payments_contact_email','payments_contact_whatsapp',
     'business_type_id','preferred_currency','usual_delivery_type',
-    'usual_destination','usual_incoterm_id','usual_incoterm_place','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','notes','credit_limit'];
+    'usual_destination','usual_incoterm_id','usual_incoterm_place','payment_method','customs_agency_provider_id','preferred_exchange_rate_mode','credit_limit'];
   fields.forEach(f => document.getElementById(f).value = '');
   document.getElementById('whatsapp_number').value = '';
   document.getElementById('whatsapp_code').value = '';
@@ -822,7 +824,6 @@ function updateCustomerProfile(){
        document.getElementById('payments_contact_whatsapp').value]
         .filter(Boolean).join(' · ')
     : 'Same as buyer');
-  setV('cv_notes', document.getElementById('notes').value);
 }
 
 function closeForm(){
@@ -991,7 +992,7 @@ async function loadCustomers(){
     renderCustomerStats();
     // ?open=<customer id> (Dashboard "Today" links): open that customer's profile straight away
     const openId = new URLSearchParams(location.search).get('open');
-    if (openId && customers.some(c => c.id === openId) && !window._openedFromLink){ window._openedFromLink = true; viewCustomer(openId); }
+    if (openId && customers.some(c => c.id === openId) && !window._openedFromLink){ window._openedFromLink = true; viewCustomer(openId); const t = new URLSearchParams(location.search).get('tab'); if (t && CUST_TABS.includes(t)) setCustomerTab(t); }
     // what the trader can still sell each one (2026-09-29, "vista rápida del trader para poder ofrecer")
     try { customerCredit = (await callApi('customers-search', { credit_for_ids: customers.map(c => c.id) })).credit || {}; renderCustomers(); } catch (e) {}
   } catch (e) {
@@ -1211,13 +1212,14 @@ async function removeCustomerProduct(linkId){
   renderCustomerProducts();
 }
 
-const CUST_TABS = ['credit', 'products', 'details', 'history'];
+const CUST_TABS = ['credit', 'products', 'about', 'details', 'history'];
 function setCustomerTab(tab){
   CUST_TABS.forEach(t => {
     document.getElementById('custTab_' + t).style.display = (t === tab) ? 'block' : 'none';
     document.getElementById('custTabBtn_' + t).classList.toggle('active', t === tab);
   });
   if (tab === 'history') renderCustomerHistory();
+  if (tab === 'about') renderCustomerAbout();
 }
 
 // Real ask 2026-09-14: "yo necesito es que se guarde el pdf" — the real PDF already lands in the
@@ -1296,6 +1298,45 @@ async function renderCustomerCredit(id){
     </div>`;
   // can't sell a load today → the profile opens on Credit (unless the trader already moved to another tab)
   if ((avail < 0 || cs.pay) && document.getElementById('custTabBtn_products').classList.contains('active')) setCustomerTab('credit');
+}
+
+// ---------- About the client ----------
+// What they told you: dated notes (customer_notes via the messaging function — the same rows Messaging uses to
+// write its messages; a note already used in a message says so). Business: read from Details.
+async function renderCustomerAbout(){
+  const el = document.getElementById('custAbout'), id = viewingCustomerId, c = customers.find(x => x.id === id);
+  if (!c) return;
+  el.innerHTML = '<div class="empty">Loading…</div>';
+  let notes = [];
+  try { notes = (await callApi('messaging', { action: 'list_notes', customer_id: id })).notes || []; } catch (e) { el.innerHTML = `<div class="empty">Couldn't load the notes: ${escapeHtml(e.message)}</div>`; return; }
+  if (viewingCustomerId !== id) return;
+  const biz = (typeof businessTypes !== 'undefined' ? businessTypes : []).find(b => b.id === c.business_type_id);
+  const day = d => { const x = new Date(d); return x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }); };
+  el.innerHTML = `<div class="profile-panel">
+      <div class="profile-heading">What they told you</div>
+      <div class="muted" style="font-size:12.5px;margin:-4px 0 10px;">Anything personal or about their business (a new plant, a trip, their son started university…). Messaging uses each note to write a message that shows you know them.</div>
+      <textarea id="aboutNote" rows="2" placeholder="e.g. They are building a new plant in León" style="width:100%;box-sizing:border-box;"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn" onclick="addCustomerNote()">Save note</button></div>
+      ${notes.length ? `<div class="table-scroll" style="margin-top:10px;"><table><thead><tr><th>Date</th><th style="text-align:left;">Note</th><th>Used</th><th></th></tr></thead><tbody>
+        ${notes.map(n => `<tr><td class="muted" style="white-space:nowrap;">${day(n.created_at)}</td><td style="text-align:left;">${escapeHtml(n.note)}</td><td>${n.used ? '<span class="payment-badge ok">In a message</span>' : '<span class="payment-badge due-soon">Not used yet</span>'}</td><td><button type="button" class="btn secondary" onclick="deleteCustomerNote('${n.id}')">Delete</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty" style="padding:14px;">No notes yet.</div>'}
+    </div>
+    <div class="profile-panel" style="margin-top:14px;">
+      <div class="profile-heading">Business</div>
+      <div>${biz ? escapeHtml(biz.name_en || biz.name || '') : '<span class="muted">Not set — set it in Details</span>'}${c.city || c.state ? ` <span class="muted">· ${escapeHtml([c.city, c.state].filter(Boolean).join(', '))}</span>` : ''}</div>
+      <div class="muted" style="font-size:12.5px;margin-top:6px;">What they buy and how often is in the <a href="#" onclick="setCustomerTab('products');return false;" style="color:var(--blue-bright);">Products</a> tab.</div>
+    </div>`;
+}
+async function addCustomerNote(){
+  const note = (document.getElementById('aboutNote').value || '').trim(); if (!note) return;
+  try { await callApi('messaging', { action: 'add_note', actor: currentActor(), customer_id: viewingCustomerId, note, idempotency_key: `note|${viewingCustomerId}|${note}|${Date.now()}` }); }
+  catch (e) { await btAlert('Could not save the note: ' + e.message); return; }
+  renderCustomerAbout();
+}
+async function deleteCustomerNote(noteId){
+  if (!(await btConfirm('Delete this note?'))) return;
+  try { await callApi('messaging', { action: 'delete_note', actor: currentActor(), id: noteId }); } catch (e) { await btAlert('Could not delete: ' + e.message); return; }
+  renderCustomerAbout();
 }
 
 function countryName(countryId){
@@ -1446,7 +1487,6 @@ function viewCustomer(id){
   document.getElementById('v_payment_method').textContent = c.payment_method || '—';
   const agency = customsAgencies.find(a => a.id === c.customs_agency_provider_id);
   document.getElementById('v_customs_agency').textContent = agency ? agency.name : '—';
-  document.getElementById('v_notes').textContent = c.notes || '—';
   const waNumber = c.whatsapp || c.phone;
   const waBtn = document.getElementById('v_waBtn');
   if (waNumber){ waBtn.style.display = 'inline-flex'; waBtn.dataset.number = waNumber; }
@@ -1561,7 +1601,6 @@ async function saveCustomer(forceOverride){
     payment_method: document.getElementById('payment_method').value || null,
     customs_agency_provider_id: document.getElementById('customs_agency_provider_id').value || null,
     preferred_exchange_rate_mode: document.getElementById('preferred_exchange_rate_mode').value || null,
-    notes: document.getElementById('notes').value || null,
   };
   if (!payload.trade_name){
     document.getElementById('formMsg').textContent = 'Trade name is required.';
