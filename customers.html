@@ -958,6 +958,16 @@ let customerCredit = {};
 const creditUsd = v => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const creditColor = (v, limit) => v <= 0 ? '#FF9C8A' : v < limit * 0.5 ? '#E8B54C' : '#6FD3A8';
 const creditDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+// 2026-09-29 (user): the board must say plainly how much room there is to sell more, how much the
+// customer must pay so one more load fits, or that it's over the limit. "One load" = the
+// customer's average load (avg_load, last 10 loads).
+function creditSentence(avail, avgLoad){
+  const load = avgLoad ? ` (~${creditUsd(avgLoad)})` : '';
+  if (avail < 0) return { head: `Over the limit by ${creditUsd(-avail)} — can't sell`, color: '#FF9C8A', pay: avgLoad ? -avail + avgLoad : null, sub: avgLoad ? `To sell one more load${load} the customer must pay ${creditUsd(-avail + avgLoad)} first.` : 'The customer must pay before selling more.' };
+  if (avgLoad && avail < avgLoad) return { head: `Room to sell ${creditUsd(avail)} more`, color: '#E8B54C', pay: avgLoad - avail, sub: `Not enough for one load${load}: the customer must pay ${creditUsd(avgLoad - avail)} first.` };
+  const n = avgLoad ? Math.floor(avail / avgLoad) : null;
+  return { head: `Room to sell ${creditUsd(avail)} more`, color: '#6FD3A8', pay: null, sub: n ? `About ${n} load${n === 1 ? '' : 's'}${load} each.`.replace(' each.', n === 1 ? '.' : ' each.') : '' };
+}
 
 async function loadCustomers(){
   try {
@@ -1248,9 +1258,11 @@ async function renderCustomerCredit(id){
   const state = l => { const n = days(l.due); return !l.due ? 'no date yet' : n < 0 ? `${-n}d overdue` : `due ${mdy(l.due)}`; };
   const total = Math.max(limit, used) || 1;
   const later = (cr.schedule || []).slice(1).filter(x => x.available > Math.max(0, avail)); // only the dates something can be sold
+  const cs = creditSentence(avail, cr.avg_load);
   el.innerHTML = box(`
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:${avail < 0 ? '#FF9C8A' : 'var(--ink)'};">${avail < 0 ? 'Over the limit — cannot sell' : 'Can sell today'}</span><span style="${MONO}font-size:26px;font-weight:700;color:${creditColor(avail, limit)};">${usd(Math.abs(avail))} <span class="muted" style="font-size:12px;font-weight:500;">of ${usd(limit)} · used ${usd(used)}</span></span></div>
-    ${later.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${later.map(x => `<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;background:rgba(255,255,255,.04);"><span class="muted">From ${creditDay(x.from)}</span> <b style="${MONO}color:${creditColor(x.available, limit)};">${usd(Math.max(0, x.available))}</b></span>`).join('')}</div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:${cs.color};">${cs.head}</span><span class="muted" style="${MONO}font-size:12px;">limit ${usd(limit)} · unpaid ${usd(used)}</span></div>
+    ${cs.sub ? `<div style="font-size:13.5px;margin-top:6px;color:var(--ink);">${cs.sub}</div>` : ''}
+    ${later.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${later.map(x => `<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;background:rgba(255,255,255,.04);"><span class="muted">From ${creditDay(x.from)}, if paid on time: room</span> <b style="${MONO}color:${creditColor(x.available, limit)};">${usd(Math.max(0, x.available))}</b></span>`).join('')}</div>` : ''}
     <div style="position:relative;margin:16px 0 22px;">
       <div style="display:flex;height:14px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.06);">${segs.map(g => (g.inside ? `<div title="${escapeHtml(g.l.order_number)}" style="width:${g.inside / total * 100}%;background:#6FD3A8;border-right:2px solid rgba(15,31,51,.6);"></div>` : '') + (g.over ? `<div title="${escapeHtml(g.l.order_number)} — over the limit" style="width:${g.over / total * 100}%;background:#FF9C8A;border-right:2px solid rgba(15,31,51,.6);"></div>` : '')).join('')}${avail > 0 ? `<div style="width:${avail / total * 100}%;background:rgba(255,255,255,.1);"></div>` : ''}</div>
       <div style="position:absolute;left:${limit / total * 100}%;top:-5px;width:2px;height:24px;background:var(--ink);"></div>
@@ -1317,8 +1329,8 @@ function renderCustomers(){
       </td>
       <td class="muted">${escapeHtml(location)}</td>
       <td class="num">${creditLimit}</td>
-      <td class="num">${(() => { const cr = customerCredit[c.id]; if (!cr) return '<span class="muted">—</span>'; const next = cr.steps.find(x => x.available > Math.max(0, cr.available_today));
-        return `${cr.available_today < 0 ? `<b style="color:#FF9C8A;">Over the limit ${creditUsd(-cr.available_today)}</b>` : `<b style="color:${creditColor(cr.available_today, cr.credit_limit)};">${creditUsd(cr.available_today)}</b>`}${next ? `<div class="muted" style="font-size:11px;margin-top:2px;">${creditUsd(next.available)} from ${creditDay(next.from)}</div>` : ''}`; })()}</td>
+      <td class="num">${(() => { const cr = customerCredit[c.id]; if (!cr) return '<span class="muted">—</span>'; const cs = creditSentence(cr.available_today, cr.avg_load);
+        return `<b style="color:${cs.color};">${cr.available_today < 0 ? 'Over ' + creditUsd(-cr.available_today) : 'Room ' + creditUsd(cr.available_today)}</b>${cs.pay ? `<div class="muted" style="font-size:11px;margin-top:2px;">Pay ${creditUsd(cs.pay)} for 1 more load</div>` : ''}`; })()}</td>
       <td>
       <div style="display:flex;justify-content:center;align-items:center;gap:10px;">
         ${(c.whatsapp || c.phone) ? `<a class="wa-btn" style="padding:6px 10px;" href="https://wa.me/${escapeHtml((c.whatsapp || c.phone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="${escapeHtml(c.whatsapp || c.phone)}"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.4c0-4.55 3.7-8.25 8.26-8.25 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.84c0 4.55-3.71 8.25-8.26 8.25zm4.52-6.18c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.78.97-.15.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.07-.1-.23-.16-.48-.28z"/></svg></a>` : ''}

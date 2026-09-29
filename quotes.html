@@ -5278,11 +5278,11 @@ async function rqRenderCustomerSignals(){
   let credit = {};
   try { credit = (await callApi('customers-search', { credit_for_ids: rqMatchedCustomers.map(c => c.id) })).credit || {}; } catch (e) {}
   const usd = v => '$' + Math.max(0, Number(v)).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  const day = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const creditTag = cr => { if (!cr) return ''; const next = cr.steps.find(x => x.available > Math.max(0, cr.available_today));
-    const cls = cr.available_today <= 0 ? 'missing' : cr.available_today < cr.credit_limit * 0.5 ? 'stale' : 'price';
-    const now = cr.available_today < 0 ? `Over the limit ${usd(-cr.available_today)}` : `Can sell ${usd(cr.available_today)} today`;
-    return `<span class="pkg-tag ${cls}">${now}${next ? ` · ${usd(next.available)} from ${day(next.from)}` : ''}</span>`; };
+  // same three plain cases as the customer profile: room to sell, must pay $X for one more load, over the limit
+  const creditTag = cr => { if (!cr) return ''; const a = cr.available_today, L = cr.avg_load;
+    if (a < 0) return `<span class="pkg-tag missing">Over the limit ${usd(-a)}${L ? ` · must pay ${usd(-a + L)} for 1 more load` : ''}</span>`;
+    if (L && a < L) return `<span class="pkg-tag stale">Room ${usd(a)} · must pay ${usd(L - a)} for 1 more load</span>`;
+    return `<span class="pkg-tag price">Room to sell ${usd(a)} more</span>`; };
   await Promise.all(rqMatchedCustomers.map(async c => {
     const productIds = [...(rqCustomerProductIds[c.id] || [])];
     const el = document.getElementById(`rq_signal_${c.id}`);

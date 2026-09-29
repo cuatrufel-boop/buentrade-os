@@ -214,6 +214,12 @@ export function creditSchedule(loads: any[], limit: number) {
   }
   return { today, available_today: steps[0].available, steps };
 }
+// The size of "one more load" for this customer: the average sale of its last 10 loads (null when
+// it never bought) — so the trader reads "must pay $X to sell one more load" in real numbers.
+export async function customerAvgLoad(sql: any, customerId: string): Promise<number | null> {
+  const [r] = await sql`select avg(sale_amount)::float8 as a from (select sale_amount from shipments where customer_id = ${customerId} and sale_amount is not null order by created_at desc limit 10) x`;
+  return r?.a == null ? null : Math.round(r.a);
+}
 // When a new sale doesn't fit on its date: the first delivery day it would fit (the day after the
 // load that frees enough is due — presumed paid on time), and the one invoice whose payment frees
 // enough right away. Either can be null (e.g. an overdue load blocks every date until it's paid).
