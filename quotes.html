@@ -1780,8 +1780,8 @@ function qmRefreshRow(c){
 
 // Row detail: the full message (+ another angle), where it comes from, and everything we know about the client.
 function qmDetailHtml(c){
-  // Only what's needed to send THIS message (2026-09-29, "mucha info irrelevante aquí"): the message (editable), its
-  // send buttons, the one product it talks about, the client's notes when there are any, and what works once it's known.
+  // Only what's needed to send THIS message (2026-09-29, "mucha info irrelevante aquí"): the message (editable) — it is
+  // sent with the row's round Email / WhatsApp buttons (not repeated here, user 2026-09-29), the one product it talks about, the client's notes when there are any, and what works once it's known.
   // Everything else about the client is in their profile.
   const d = qmTab === 'sent' ? null : c.compose;
   const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (d && d.message);
@@ -1794,8 +1794,6 @@ function qmDetailHtml(c){
       <div class="muted" style="font-size:11.5px;margin-top:4px;">Edit here, not in WhatsApp.</div>`}
       ${d && d.news ? `<div class="muted" style="font-size:11.5px;margin-top:4px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener">${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
       ${qmTab === 'sent' || !text ? '' : `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-        ${c.phone ? `<button type="button" class="btn" onclick="event.stopPropagation();qmSendWa('${c.id}')">WhatsApp</button>` : ''}
-        ${c.email ? `<button type="button" class="btn secondary" onclick="event.stopPropagation();qmSendEmail('${c.id}')">Email</button>` : ''}
         <button type="button" class="btn secondary" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></div>`}
       ${(c.preferences || []).length ? `<div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;">${c.preferences.map(t => `<div style="display:flex;align-items:center;gap:8px;"><span class="rq-sheet-pill wait">Preference</span><span>${escapeHtml(t)}</span></div>`).join('')}</div>` : ''}
       ${prod ? `<div style="margin-top:14px;font-size:13px;"><b>${escapeHtml(prod.name_en)}</b> <span class="muted">· ${prod.cadence ? `${escapeHtml(prod.cadence)} · ${prod.from_us_month} from us this month` : 'Missing: how often they buy it'}</span>
