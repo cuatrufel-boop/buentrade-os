@@ -4823,10 +4823,12 @@ const RQ_CREDIT_HOLD_NOTE = 'Carga sujeta a pago de la última factura.';
 // send's warnings list (from sent-offers-create), or true/false from older callers.
 const RQ_MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function rqCreditNote(credit){
-  const w = Array.isArray(credit) ? credit.find(x => x && x.fits_from && x.pay_invoice) : null;
+  const w = Array.isArray(credit) ? credit.find(x => x && x.fits_from) : null;
   if (!w) return RQ_CREDIT_HOLD_NOTE;
   const [, m, d] = w.fits_from.split('-').map(Number);
-  return `Esta carga la podemos programar con entrega a partir del ${d} de ${RQ_MONTHS_ES[m - 1]}, o antes si se liquida la factura ${w.pay_invoice.number} ($${Number(w.pay_invoice.amount).toLocaleString('en-US', { maximumFractionDigits: 0 })}).`;
+  // no invoice to name yet (the customer's open loads are still in transit): the date alone
+  const orPay = w.pay_invoice ? `, o antes si se liquida la factura ${w.pay_invoice.number} ($${Number(w.pay_invoice.amount).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+  return `Esta carga la podemos programar con entrega a partir del ${d} de ${RQ_MONTHS_ES[m - 1]}${orPay}.`;
 }
 
 // Real ask 2026-09-22: "que el cliente se interese de verdad" — the cadence/price-trend signal
