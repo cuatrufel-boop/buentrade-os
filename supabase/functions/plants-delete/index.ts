@@ -21,6 +21,12 @@ Deno.serve(async (req) => {
 
     const [existing] = await sql`select * from plants where id = ${id}`;
     if (!existing) return jsonResponse({ error: "unknown plant id" }, 404);
+    // 2026-09-29 (user): a plant with real activity is never deleted — only one created by mistake
+    const [use] = await sql`select
+      (select count(*) from purchase_orders where plant_id = ${id})::int as orders,
+      (select count(*) from sent_offers where plant_id = ${id})::int as offers,
+      (select count(*) from price_history where plant_id = ${id})::int as prices`;
+    if (use.orders || use.offers || use.prices) return jsonResponse({ error: "in_use", message: `This plant has ${use.orders} order(s), ${use.offers} offer(s) and ${use.prices} price(s) on file — it can't be deleted.` }, 409);
 
     const [{ count: linkedProducts }] = await sql`select count(*)::int as count from plant_products where plant_id = ${id}`;
     const [{ count: linkedLocations }] = await sql`select count(*)::int as count from plant_locations where plant_id = ${id}`;

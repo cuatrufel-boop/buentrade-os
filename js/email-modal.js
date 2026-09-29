@@ -320,6 +320,39 @@ function btAlertResolve(){
   btAlertResolveFn = null;
 }
 
+// Delete confirmation that can't be clicked through by accident (2026-09-29, user: "ese delete ahí
+// está peligroso"): the trader types the exact name of what is being deleted. Resolves true/false.
+let btTypedResolveFn = null;
+function btConfirmTyped(message, expected){
+  if (!document.getElementById('btTypedOverlay')){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+<div id="btTypedOverlay" class="email-modal-overlay" style="display:none;z-index:9000;">
+  <div class="email-modal-box" style="max-width:440px;">
+    <div id="btTypedMessage" style="font-size:13.5px;color:var(--ink);line-height:1.5;white-space:pre-wrap;"></div>
+    <input id="btTypedInput" type="text" autocomplete="off" oninput="document.getElementById('btTypedOk').disabled = this.value.trim().toLowerCase() !== (this.dataset.expected || '').trim().toLowerCase()" style="width:100%;box-sizing:border-box;margin-top:12px;padding:9px 12px;border-radius:8px;border:1.5px solid rgba(255,156,138,.5);background:rgba(255,255,255,.05);color:var(--ink);font-family:inherit;font-size:13.5px;">
+    <div class="email-modal-actions" style="justify-content:flex-end;gap:10px;margin-top:18px;">
+      <button class="btn secondary" onclick="btTypedResolve(false)">Cancel</button>
+      <button class="btn danger" id="btTypedOk" disabled onclick="btTypedResolve(true)">Delete</button>
+    </div>
+  </div>
+</div>`;
+    document.body.appendChild(wrap.firstElementChild);
+  }
+  document.getElementById('btTypedMessage').textContent = message;
+  const input = document.getElementById('btTypedInput');
+  input.value = ''; input.dataset.expected = expected; input.placeholder = expected;
+  document.getElementById('btTypedOk').disabled = true;
+  document.getElementById('btTypedOverlay').style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+  return new Promise(resolve => { btTypedResolveFn = resolve; });
+}
+function btTypedResolve(ok){
+  document.getElementById('btTypedOverlay').style.display = 'none';
+  if (btTypedResolveFn) btTypedResolveFn(ok);
+  btTypedResolveFn = null;
+}
+
 // opts: { fromAlias, to, subject, text, attachments, waInfo, cc, fromDisplay, title }
 // The real send now happens inside bcOpenEmailModal itself (see the real ask quoted there) — this
 // just unwraps its { cancelled | sent | failed } result into the same throw/return contract every

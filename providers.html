@@ -519,7 +519,6 @@ auth.onAuthStateChanged(user => {
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn secondary" onclick="editProviderProfile()">Edit</button>
-        <button class="btn danger" onclick="deleteProvider(currentProviderId)">Delete</button>
       </div>
     </div>
 
@@ -609,6 +608,10 @@ auth.onAuthStateChanged(user => {
           <button class="btn" onclick="saveProviderProfile()">Save</button>
           <button class="btn secondary" onclick="cancelProviderEdit()">Cancel</button>
         </div>
+    <div id="provDangerZone" style="margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,156,138,.3);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button class="btn danger" onclick="deleteProvider(currentProviderId)">Delete provider</button>
+      <span class="muted" style="font-size:12px;">Only a provider with no loads, offers or payments can be deleted. You'll type its name to confirm.</span>
+    </div>
       </div>
       <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
     </div>
@@ -1381,7 +1384,9 @@ async function saveProviderProfile(forceOverride){
 }
 
 async function deleteProvider(id){
-  if (!confirm('Delete this provider? This also deletes its roles and rates.')) return;
+  const pv = providers.find(x => x.id === id); if (!pv) return;
+  const name = (pv.name || '').trim();
+  if (!(await btConfirmTyped(`Delete ${name}? This also deletes its roles and rates. This cannot be undone.\nType the provider's name to confirm:`, name))) return;
   try {
     await callApi('providers-delete', { actor: currentActor(), id });
   } catch (e) {

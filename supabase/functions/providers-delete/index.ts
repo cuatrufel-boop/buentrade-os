@@ -19,6 +19,12 @@ Deno.serve(async (req) => {
 
     const [existing] = await sql`select * from providers where id = ${id}`;
     if (!existing) return jsonResponse({ error: "unknown provider id" }, 404);
+    // 2026-09-29 (user): a carrier / customs agency with real activity is never deleted
+    const [use] = await sql`select
+      (select count(*) from freight_orders where carrier_provider_id = ${id})::int as freight,
+      (select count(*) from customers where customs_agency_provider_id = ${id})::int as customers,
+      (select count(*) from sent_offers where customs_agency_provider_id = ${id})::int as offers`;
+    if (use.freight || use.customers || use.offers) return jsonResponse({ error: "in_use", message: `This provider has ${use.freight} freight order(s), is the customs agency of ${use.customers} customer(s) and is on ${use.offers} offer(s) — it can't be deleted.` }, 409);
 
     await sql.begin(async (tx) => {
       const deletedRates = await tx`delete from provider_rates where provider_id = ${id} returning *`;

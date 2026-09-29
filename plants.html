@@ -551,7 +551,6 @@ auth.onAuthStateChanged(user => {
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn secondary" onclick="editPlantProfile()">Edit</button>
-        <button class="btn danger" onclick="deletePlant(currentPlantId)">Delete</button>
       </div>
     </div>
 
@@ -817,6 +816,10 @@ auth.onAuthStateChanged(user => {
         <div style="display:flex;gap:10px;">
           <button class="btn" onclick="saveProfile()">Save Profile</button>
           <button class="btn secondary" onclick="toggleProfile()">Cancel</button>
+    <div id="plantDangerZone" style="margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,156,138,.3);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button class="btn danger" onclick="deletePlant(currentPlantId)">Delete plant</button>
+      <span class="muted" style="font-size:12px;">Only a plant with no loads, offers or payments can be deleted. You'll type its name to confirm.</span>
+    </div>
         </div>
         <div id="profileMsg" style="font-size:12.5px;margin-top:10px;"></div>
       </div>
@@ -2017,7 +2020,9 @@ function renderPlantStats(){
 }
 
 async function deletePlant(id){
-  if (!confirm('Delete this plant? This removes its entire price list, aliases, and pickup locations. Historical offers/orders keep their record but lose the plant reference. This cannot be undone.')) return;
+  const pl = plants.find(x => x.id === id); if (!pl) return;
+  const name = (pl.name || '').trim();
+  if (!(await btConfirmTyped(`Delete ${name}? This removes its price list, aliases and pickup locations. This cannot be undone.\nType the plant's name to confirm:`, name))) return;
   try {
     await callApi('plants-delete', { actor: currentActor(), id });
   } catch (e) {

@@ -447,7 +447,6 @@ auth.onAuthStateChanged(user => {
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn secondary" onclick="editFromView()">Edit</button>
-        <button class="btn danger" onclick="deleteFromView()">Delete</button>
       </div>
     </div>
 
@@ -664,6 +663,10 @@ auth.onAuthStateChanged(user => {
       <button class="btn secondary" onclick="closeForm()">Cancel</button>
     </div>
     <div id="formMsg" style="font-size:12.5px;margin-top:10px;"></div>
+    <div id="dangerZone" style="margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,156,138,.3);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button class="btn danger" onclick="deleteCustomer(document.getElementById('custId').value)">Delete customer</button>
+      <span class="muted" style="font-size:12px;">Only a customer with no loads, offers or payments can be deleted. You'll type its name to confirm.</span>
+    </div>
   </div>
 
   <!-- Real ask 2026-09-09 ("ahora en clients"): same stat cards + glass-pill search +
@@ -713,6 +716,7 @@ function openForm(customer){
   document.getElementById('customerListCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'block';
   document.getElementById('formTitle').textContent = customer ? 'Edit customer' : 'New customer';
+  document.getElementById('dangerZone').style.display = customer ? 'flex' : 'none';
   const fields = ['custId','trade_name','legal_name','country_id','state','city','address','postal_code','contact_name',
     'contact_role','email','email_cc','website',
     'payments_contact_name','payments_contact_email','payments_contact_whatsapp',
@@ -1629,14 +1633,19 @@ async function saveCustomer(forceOverride){
 }
 
 async function deleteCustomer(id){
-  if (!confirm('Delete this customer? This cannot be undone.')) return;
+  const c = customers.find(x => x.id === id); if (!c) return;
+  const name = (c.trade_name || '').trim();
+  if (!(await btConfirmTyped(`Delete ${name}? This cannot be undone.\nType the customer's name to confirm:`, name))) return;
   try {
     await callApi('customers-delete', { actor: currentActor(), id });
   } catch (e) {
     await btAlert('Error deleting: ' + e.message);
     return;
   }
+  document.getElementById('formCard').style.display = 'none';
   document.getElementById('viewCard').style.display = 'none';
+  document.getElementById('customerToolbarRow').style.display = 'flex';
+  document.getElementById('customerStatsRow').style.display = '';
   document.getElementById('customerListCard').style.display = 'block';
   viewingCustomerId = null;
   loadCustomers();

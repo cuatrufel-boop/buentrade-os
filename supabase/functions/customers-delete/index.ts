@@ -17,6 +17,12 @@ Deno.serve(async (req) => {
 
     const [existing] = await sql`select * from customers where id = ${id}`;
     if (!existing) return jsonResponse({ error: "unknown customer id" }, 404);
+    // 2026-09-29 (user): a customer with real activity is never deleted — only one created by mistake
+    const [use] = await sql`select
+      (select count(*) from shipments where customer_id = ${id})::int as loads,
+      (select count(*) from sent_offers where customer_id = ${id})::int as offers,
+      (select count(*) from payment_applications where customer_id = ${id})::int as payments`;
+    if (use.loads || use.offers || use.payments) return jsonResponse({ error: "in_use", message: `This customer has ${use.loads} load(s), ${use.offers} offer(s) and ${use.payments} payment(s) — it can't be deleted.` }, 409);
 
     await sql.begin(async (tx) => {
       await tx`delete from customers where id = ${id}`;
