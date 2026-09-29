@@ -522,6 +522,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/bt-dialogs.js"></script>
 <script src="js/entity-history.js"></script>
 
 <div class="wrap">
@@ -1616,7 +1617,7 @@ async function addNewCutName(){
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new cut anyway?`);
+      const proceed = await btConfirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new cut anyway?`);
       if (!proceed) return;
       result = await callApi('cut-names-create', { actor: currentActor(), name_en, name_es, category_id, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
@@ -1656,7 +1657,7 @@ function renderManageCutNamesList(){
 async function deleteCutNameFromCatalog(id){
   const c = cutNames.find(x => x.id === id);
   if (!c) return;
-  if (!confirm(`Remove "${c.name_en} / ${c.name_es}" from the Cut Name catalog?\n\nThis only removes it from the dropdown — it does not touch any existing product.`)) return;
+  if (!await btConfirm(`Remove "${c.name_en} / ${c.name_es}" from the Cut Name catalog?\n\nThis only removes it from the dropdown — it does not touch any existing product.`)) return;
   await callApi('cut-names-delete', { actor: currentActor(), id });
   await loadCutNames();
   renderManageCutNamesList();
@@ -1724,7 +1725,7 @@ async function addNewVariation(){
   } catch (e) {
     if (e.data && e.data.error === 'possible_duplicate'){
       const match = e.data.near_duplicate_names && e.data.near_duplicate_names[0];
-      const proceed = confirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new variation anyway?`);
+      const proceed = await btConfirm(`${e.data.message}${match ? `\n\n${match.name_en} / ${match.name_es}` : ''}\n\nCreate "${name_en} / ${name_es}" as a new variation anyway?`);
       if (!proceed) return;
       result = await callApi('variations-create', { actor: currentActor(), name_en, name_es, category_id, override_duplicate_check: true, idempotency_key: idempotencyKey });
     } else {
@@ -1758,7 +1759,7 @@ function renderManageVariationsList(){
 async function deleteVariationFromCatalog(id){
   const v = variations.find(x => x.id === id);
   if (!v) return;
-  if (!confirm(`Remove "${v.name_en} / ${v.name_es}" from the Variation catalog?\n\nThis only removes it from the dropdown — it does not touch any existing product.`)) return;
+  if (!await btConfirm(`Remove "${v.name_en} / ${v.name_es}" from the Variation catalog?\n\nThis only removes it from the dropdown — it does not touch any existing product.`)) return;
   await callApi('variations-delete', { actor: currentActor(), id });
   await loadVariations();
   renderManageVariationsList();
@@ -2375,7 +2376,7 @@ function uploadPlantLogo(){
 }
 
 async function deletePlantDocument(id){
-  if (!confirm('Delete this document? This cannot be undone.')) return;
+  if (!await btConfirm('Delete this document? This cannot be undone.')) return;
   try {
     await callApi('plant-documents-delete', { actor: currentActor(), id });
   } catch (e) {
@@ -2596,7 +2597,7 @@ async function matchAllConfirmedPendingMatches(){
   const question = leftover
     ? `Apply ${eligible.length} match${eligible.length > 1 ? 'es' : ''} and leave the ${leftover} without a match in Pending Matches?`
     : `Apply ${eligible.length} match${eligible.length > 1 ? 'es' : ''}?`;
-  if (!confirm(question)) return;
+  if (!await btConfirm(question)) return;
   // Real gap found live 2026-09-10 ("no graba" — the data was actually all saved, confirmed
   // against the real DB, but a several-second run of sequential API calls with zero visible
   // feedback while a native confirm() dialog had just closed reads exactly like it did nothing.
@@ -3164,7 +3165,7 @@ async function changeTermAliasMeaning(id, newMeaningId){
 async function deleteTermAlias(id){
   const row = manageTermAliasesRows.find(a => a.id === id);
   if (!row) return;
-  if (!confirm(`Remove "${row.term}" from this plant's recognized words?\n\nFuture price lists will ask what it means again.`)) return;
+  if (!await btConfirm(`Remove "${row.term}" from this plant's recognized words?\n\nFuture price lists will ask what it means again.`)) return;
   await callApi('plant-term-aliases-delete', { actor: currentActor(), id });
   manageTermAliasesRows = manageTermAliasesRows.filter(a => a.id !== id);
   const entry = plantTermAliasMap.get(row.term);
@@ -4041,7 +4042,7 @@ async function applyPriceList(){
   // Priced lines nobody matched to a product are never guessed at — with the person's OK they go to Pending Matches in this same batch.
   const unmatchedPriced = priceListRows.filter(r => !r.matchedProductId && r.price != null && !r._sendToPending);
   if (unmatchedPriced.length && priceListRows.some(r => r.matchedProductId && r.price != null)){
-    if (!confirm(`${unmatchedPriced.length} line${unmatchedPriced.length > 1 ? 's have' : ' has'} no match. Apply the matched ones and leave these ${unmatchedPriced.length} in Pending Matches?`)) return;
+    if (!await btConfirm(`${unmatchedPriced.length} line${unmatchedPriced.length > 1 ? 's have' : ' has'} no match. Apply the matched ones and leave these ${unmatchedPriced.length} in Pending Matches?`)) return;
     unmatchedPriced.forEach(r => { r._sendToPending = true; });
   }
   const toApply = priceListRows.filter(r => r.matchedProductId && r.price != null && !r._sendToPending);
@@ -4179,7 +4180,7 @@ async function applyPriceList(){
   if (applyPlant) await checkPendingLocations(applyPlantId, applyPlant.name);
   if (uniqueMissing.length){
     const names = uniqueMissing.map(p => `• ${p.name_en || p.name}`).join('\n');
-    const goEdit = confirm(`${uniqueMissing.length} priced product(s) still have no full name (PO/FO/SO text):\n\n${names}\n\nOpen the first one now to fill it in?`);
+    const goEdit = await btConfirm(`${uniqueMissing.length} priced product(s) still have no full name (PO/FO/SO text):\n\n${names}\n\nOpen the first one now to fill it in?`);
     if (goEdit) openProductForm(uniqueMissing[0]);
   }
 }
@@ -4324,7 +4325,7 @@ async function saveLocation(){
 }
 
 async function deleteLocation(id){
-  if (!confirm('Delete this location?')) return;
+  if (!await btConfirm('Delete this location?')) return;
   try {
     await callApi('plant-locations-delete', { actor: currentActor(), id });
   } catch (e) {

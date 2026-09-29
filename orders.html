@@ -623,6 +623,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/bt-dialogs.js"></script>
 <script src="js/market-flash-send.js"></script>
 
 <!-- Real correction 2026-09-06: "la confirmacion de pago es la del banco. no soy yo diciendo que
@@ -2631,9 +2632,9 @@ async function confirmPlantPaymentWhatsApp(orderNumber){
 async function savePlantPaymentsContact(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o || !o.plant_id) return;
-  const name = prompt(`Payments contact name at ${o.plant_name || 'this plant'}:`, o.plant && o.plant.payments_contact_name || '');
+  const name = await btPrompt(`Payments contact name at ${o.plant_name || 'this plant'}:`, o.plant && o.plant.payments_contact_name || '');
   if (name === null) return;
-  const email = prompt(`Their email:`, o.plant && o.plant.payments_email || '');
+  const email = await btPrompt(`Their email:`, o.plant && o.plant.payments_email || '');
   if (email === null) return;
   const trimmedEmail = email.trim();
   if (!trimmedEmail){ await btAlert('An email is required to save this contact.'); return; }
@@ -2652,7 +2653,7 @@ async function savePlantPaymentsContact(orderNumber){
 async function recordReleaseNumber(orderNumber){
   const o = findStatusOrder(orderNumber);
   if (!o) return;
-  const value = prompt(`Release number ${o.plant_name || 'the plant'} gave you for ${orderNumber}:`, o.release_number || '');
+  const value = await btPrompt(`Release number ${o.plant_name || 'the plant'} gave you for ${orderNumber}:`, o.release_number || '');
   if (value === null) return;
   const trimmed = value.trim();
   if (!trimmed) return;

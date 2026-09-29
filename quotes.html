@@ -383,9 +383,11 @@
      where every one of these buttons ("View Quote", "Enter Price", "Send anyway", "Update Price")
      sits directly on the navy panel: same frosted-glass treatment already used for the search bar
      and quickpick chips, solid blue-bright fill on hover instead of a white rest state. */
-  .rq-board .pkg-trigger-btn{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.3);}
-  .rq-board .pkg-trigger-btn:hover{background:var(--blue-bright);color:var(--navy);border-color:var(--blue-bright);}
-  .rq-board .pkg-trigger-btn:active{background:var(--blue);}
+  /* 2026-09-29 ("revisa todos los módulos… y restaura"): the same treatment for every Quotes panel
+     (Messaging, Product Coverage…), not only the Quotes tab — no white buttons anywhere on navy */
+  .rq-board .pkg-trigger-btn,[id^="qPanel_"] .pkg-trigger-btn{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.3);}
+  .rq-board .pkg-trigger-btn:hover,[id^="qPanel_"] .pkg-trigger-btn:hover{background:var(--blue-bright);color:var(--navy);border-color:var(--blue-bright);}
+  .rq-board .pkg-trigger-btn:active,[id^="qPanel_"] .pkg-trigger-btn:active{background:var(--blue);}
   .pkg-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 
   /* ---- Three-bucket product card, explicit ask 2026-09-03: "3 cajitas" — Ready / Expired /
@@ -1081,6 +1083,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/bt-dialogs.js"></script>
 <script src="js/market-flash-send.js"></script>
 
 <div class="wrap">
@@ -2777,7 +2780,7 @@ async function rqSheetAsk(plantIds, remind){
       try {
         if (!r.link) await callApi('plant-products-link', { actor: currentActor(), plant_id: plant.id, product_id: r.pid });
         await callApi('plant-products-request-price', { actor: currentActor(), plant_id: plant.id, product_id: r.pid });
-      } catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${plant.name}: ${e.message}`); }
+      } catch (e) { btAlert(`Sent, but couldn't save the "asked" tracking for ${plant.name}: ${e.message}`); }
     }
     try { await callApi('sent-offers-search', { offer_sheet: { action: 'mark_asked', actor: currentActor(), product_ids: prodRows.map(r => r.pid), plant_id: plant.id, remind: !!remind } }); } catch (e) {}
     rqSheetState.key = '';
@@ -2811,7 +2814,7 @@ async function rqSheetDecline(plantId, productId){
     const res = await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: productId });
     const linkId = (res.plant_product && res.plant_product.id) || res.id;
     await callApi('plant-products-update', { actor: currentActor(), id: linkId, declined_at: new Date().toISOString() });
-  } catch (e) { alert(`Couldn't save: ${e.message}`); return; }
+  } catch (e) { btAlert(`Couldn't save: ${e.message}`); return; }
   loadPendingPrices();
 }
 
@@ -3626,7 +3629,7 @@ async function rqAddVariantToQuote(productId){
     result = await rqFetchPlantLinksForProduct(productId);
   } catch (e) {
     rqQuoteProductIds = rqQuoteProductIds.filter(id => id !== productId);
-    alert(`Couldn't load this product's plants: ${e.message}\n\nTry again.`);
+    btAlert(`Couldn't load this product's plants: ${e.message}\n\nTry again.`);
     renderRqPlants();
     return;
   }
@@ -4539,7 +4542,7 @@ async function rqCloseCalculator(id){
       const res = await callApi('plant-products-update', { actor: currentActor(), id: p.rqLinkId, current_price: p.rqPrice });
       p.rqPriceDate = res.plant_product.price_date;
     } catch (e) {
-      alert(`Price wasn't saved: ${e.message}`);
+      btAlert(`Price wasn't saved: ${e.message}`);
     }
   }
   p.rqCalculatorOpen = false;
@@ -4806,7 +4809,7 @@ async function rqCopyPhotoToClipboard(fileUrl, filename, btn){
     if (btn){ btn.textContent = '✓ Descargada'; setTimeout(() => { btn.disabled = false; btn.textContent = originalLabel; }, 1500); }
   } catch(e){
     if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
-    alert('No se pudo descargar (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
+    btAlert('No se pudo descargar (' + e.message + '). Se abre en una pestaña para que la guardes tú manualmente.');
     window.open(fileUrl, '_blank');
   }
 }
@@ -5397,7 +5400,7 @@ async function rqDeclinePlantProduct(linkId, plantName){
   try {
     await callApi('plant-products-update', { actor: currentActor(), id: linkId, declined_at: new Date().toISOString() });
   } catch (e) {
-    alert(`Couldn't save: ${e.message}`);
+    btAlert(`Couldn't save: ${e.message}`);
     return;
   }
   // Real fix 2026-09-04: Off-Spec is now also clickable from the Building Quote tray's own Waiting
@@ -5439,7 +5442,7 @@ async function rqSendPriceRequestFor(p, onSent){
       if (freshRow && freshRow.current_price != null){
         const freshStale = (rqPriceAgeDays(freshRow.price_date) || 0) > RQ_PRICE_STALE_DAYS;
         if (!freshStale){
-          alert(`${p.name} already sent an updated price for this product — refreshing instead of asking again.`);
+          btAlert(`${p.name} already sent an updated price for this product — refreshing instead of asking again.`);
           loadPendingPrices();
           return;
         }
@@ -5494,7 +5497,7 @@ function qAskUpdateForSweepRow(plantId, productId){
   };
   rqSendPriceRequestFor(p, async () => {
     try { await callApi('plant-products-request-price', { actor: currentActor(), plant_id: plantId, product_id: productId }); }
-    catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); }
+    catch (e) { btAlert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); }
     loadPendingPrices();
   });
 }
@@ -5519,7 +5522,7 @@ async function rqAskPossiblePlant(plantId, productId){
     try {
       await callApi('plant-products-link', { actor: currentActor(), plant_id: plantId, product_id: productId });
       await callApi('plant-products-request-price', { actor: currentActor(), plant_id: plantId, product_id: productId });
-    } catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${plant.name}: ${e.message}`); }
+    } catch (e) { btAlert(`Sent, but couldn't save the "asked" tracking for ${plant.name}: ${e.message}`); }
     loadPendingPrices();
   });
 }
@@ -5578,7 +5581,7 @@ function rqChasePendingPrices(plants){
     p.rqLastRequestedAt = today;
     if (p.rqProductId){
       try { await callApi('plant-products-request-price', { actor: currentActor(), plant_id: p.id, product_id: p.rqProductId }); }
-      catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); }
+      catch (e) { btAlert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); }
     }
     renderRqPlants();
   };
@@ -5619,7 +5622,7 @@ async function rqHandleStaleOrMissingPrices(filterProductIds, filterPlantIds){
     if (unconfirmed.length){
       rqShowNotice(`Falta confirmar el precio de venta de ${unconfirmed.map(p => p.name).join(', ')} — abre "View Quote" en cada una y confirma antes de mandar.`);
     } else {
-      alert(chase.length
+      btAlert(chase.length
         ? 'No plant has a current price for this product yet — nothing to send to the customer. Asking for fresh prices now.'
         : 'No plant has a current price for this product yet.');
     }
@@ -6208,7 +6211,7 @@ let rqDeliveryDates = [];
 
 function rqAddDeliveryDate(val){
   if (!val) return;
-  if (val < rqTodayStr()){ alert('Pick a date today or later.'); return; }
+  if (val < rqTodayStr()){ btAlert('Pick a date today or later.'); return; }
   if (!rqDeliveryDates.includes(val)){
     rqDeliveryDates.push(val);
     rqDeliveryDates.sort();
@@ -6376,7 +6379,7 @@ function rqOnAskSent(p){
     p.rqLastRequestedAt = today;
     if (p.rqProductId){
       try { await callApi('plant-products-request-price', { actor: currentActor(), plant_id: p.id, product_id: p.rqProductId }); }
-      catch (e) { alert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); renderRqPlants(); return; }
+      catch (e) { btAlert(`Sent, but couldn't save the "asked" tracking for ${p.name}: ${e.message}`); renderRqPlants(); return; }
     }
     // Asked — this plant's job here is done until it comes back with a price; it leaves Request
     // Quote the same way removeRqPlant always has, now tracked in the Pending Prices tab instead
