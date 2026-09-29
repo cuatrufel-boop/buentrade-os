@@ -56,6 +56,8 @@ FRONTEND_EXEMPT = {
 ACTION_EXEMPT = {
     ("messaging", "list"),               # read
     ("messaging", "list_notes"),         # read (one client's notes, for the client profile)
+    ("messaging", "read_note"),          # once per note: customer_notes.insights_status locked FOR UPDATE, a second read returns the first
+    ("messaging", "decide_insight"),     # state machine: acts only while pending/applied, a repeat returns duplicate
     ("messaging", "draft"),              # upsert on (customer_id, reason_key)
     ("messaging", "compose"),            # upsert on (customer_id, reason_key); the daily news scan is locked per day and unique per URL
     ("messaging", "news"),               # read (+ the same once-a-day, unique-per-URL news scan)

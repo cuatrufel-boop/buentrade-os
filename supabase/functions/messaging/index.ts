@@ -564,6 +564,10 @@ async function compose(body: any) {
   const angleCounts: Record<string, number> = {};
   const closings: string[] = [];
   for (const t of todays) { try { const j = JSON.parse(t.draft); angleCounts[j.angle] = (angleCounts[j.angle] || 0) + 1; const q = String(j.message).match(/¿[^?]*\?\s*$/); if (q) closings.push(q[0].trim()); } catch { /* skip */ } }
+  // what the system learned from his notes (confirmed only — Pending items are left out until the trader decides)
+  const learned = await sql`select i.topic, i.summary_en, i.note_id, n.created_at, exists (select 1 from customer_messages m where m.note_id = i.note_id) as used
+    from customer_note_insights i join customer_notes n on n.id = i.note_id
+    where i.customer_id = ${customer_id} and i.kind = 'fact' and i.status = 'applied' order by n.created_at desc limit 30`;
   const openings = todays.map((t: any) => { try { return JSON.parse(t.draft).message.split(/[,.?¿!]/).slice(0, 2).join(" ").trim(); } catch { return ""; } }).filter(Boolean);
   const dossier = {
     cliente: `${c.first_name || c.trade_name} (${c.trade_name.trim()})`, ciudad: [c.city, c.state].filter(Boolean).join(", ") || null,
@@ -573,6 +577,8 @@ async function compose(body: any) {
     compra: c.products.map((p: any) => ({ producto: p.short_es, temperatura: p.temp_es, cuanto_compra_en_total: p.cadence ? `dice que compra ${p.cadence.replace("load", "carga").replace("loads", "cargas").replace("a month", "al mes").replace("every", "cada").replace("days", "días")} (a todos sus proveedores; no sabemos cuándo compró por última vez)` : "no sabemos cuánto compra" })),
     dia_del_mes: `${dom} de ${dim}`,
     lo_que_te_conto: c.notes.filter((n: any) => !n.used).map((n: any) => ({ id: n.id, nota: n.note, fecha: String(n.created_at).slice(0, 10) })),
+    // facts read from ALL his notes (also the ones already used): who he is, what he prefers, how he pays
+    lo_que_sabemos_de_el: learned.map((f: any) => ({ nota_id: f.note_id, tipo: f.topic, dato: f.summary_en, fecha: new Date(f.created_at).toISOString().slice(0, 10), ya_usado_en_un_mensaje: f.used })),
     boletin: c.options.filter((o: any) => o.kind === "market").map((o: any) => ({ id: o.bullet_ids[0], dato: o.fact.fact_es, cuando: o.fact.when_es, por_que_le_importa: o.fact.angle_es })),
     datos_del_boletin_ya_usados_hoy_con_otros_clientes: usedToday,
     noticias_recientes_con_fuente: news,
@@ -595,6 +601,7 @@ Rules (mandatory):
 - You may mention an upcoming calendar date only as context for a question — add NO claim about it (not what others do, not demand).
 - A bulletin fact about a whole protein (e.g. all US pork exports) must NOT be stated as a fact about one cut ("la papada anda apretada", "hay menos cachete"): give the general fact, then ask about his cut.
 - A fact that applies to every client the same way (e.g. total US pork exports to Mexico) is the WEAKEST angle — use it only if there is nothing specific to him. Prefer a different fact than the ones already used today with other clients (listed in the dossier).
+- "lo_que_sabemos_de_el" is what we learned from the trader's notes about him. Use it to write FOR him: respect his preferences (how/when he likes to be contacted, what he likes or dislikes), fit his business reality. A personal fact already used in a message ("ya_usado_en_un_mensaje": true) must not be the angle again. NEVER mention how he pays or anything about payments ("tipo": "payment") — that is only context. If the message is built on a fact from a note, return that "nota_id" as used_note_id.
 - End with ONE easy question.
 - Angles already used today for other clients: ${JSON.stringify(angleCounts)}. If one angle is already used for 3+ clients, prefer another strong angle for this one — the day's messages must not all sound the same.
 - Do not end with the same question as these (vary the closing): ${closings.length ? closings.slice(0, 12).map((q: string) => `"${q}"`).join(", ") : "(none yet)"}.
@@ -606,7 +613,7 @@ Return also: subject (2-5 words, for email), why_en (English, max 14 words: whic
 ${style ? `How this trader writes (match his tone; where he corrected a proposal, write like his correction):\n${style}` : "No examples from this trader yet — natural, short, direct."}
 ${regenerate && previous ? `The trader wants a DIFFERENT angle than this one — do not reuse its angle or wording: "${previous}"` : ""}`;
   // Guard: the rules above are also checked in code — a message that breaks them is rewritten once with the reason.
-  const BAD = [/anda(n)? (m[aá]s )?apretad/i, /hay menos \w+ disponible/i, /muchas plantas/i, /esta semana/i, /este mes/i, /\bhoy\b/i, /ahorita/i, /d[ií]as? (desde|sin)/i, /llevas .* sin/i, /tu [uú]ltim[oa] (pedido|compra|carga)/i, /va a (subir|escasear|faltar)/i, /se va a poner/i, /antes de que (escasee|suba|siga)/i, /siga subiendo/i];
+  const BAD = [/anda(n)? (m[aá]s )?apretad/i, /hay menos \w+ disponible/i, /muchas plantas/i, /esta semana/i, /este mes/i, /\bhoy\b/i, /ahorita/i, /d[ií]as? (desde|sin)/i, /llevas .* sin/i, /tu [uú]ltim[oa] (pedido|compra|carga)/i, /va a (subir|escasear|faltar)/i, /se va a poner/i, /antes de que (escasee|suba|siga)/i, /siga subiendo/i, /\bpag(as|o|os|ar|aste|ues)\b/i];
   // the model may think before answering; give it room, and retry once if it ran out before writing
   const ask = async (u: string) => { try { return await callClaude(system, u, COMPOSE_SCHEMA, 8000); } catch (e) { if (/No text content|max_tokens/.test(String(e))) return await callClaude(system, u, COMPOSE_SCHEMA, 12000); throw e; } };
   let out = await ask(user);
@@ -630,7 +637,7 @@ ${regenerate && previous ? `The trader wants a DIFFERENT angle than this one —
     payload.product_id = hit ? hit.product_id : null;
   }
   // only ids that really belong to this client's dossier
-  if (payload.used_note_id && !c.notes.some((n: any) => n.id === payload.used_note_id)) payload.used_note_id = "";
+  if (payload.used_note_id && !c.notes.some((n: any) => n.id === payload.used_note_id) && !learned.some((f: any) => f.note_id === payload.used_note_id)) payload.used_note_id = "";
   const n = news.find((x: any) => x.id === payload.used_news_id);
   if (payload.used_news_id && !n) payload.used_news_id = "";
   if (n) { const [row] = await sql`select url, source, published_on from market_news where id = ${n.id}`; payload.news = row ? { url: row.url, source: row.source, date: String(row.published_on).slice(0, 10) } : null; }
