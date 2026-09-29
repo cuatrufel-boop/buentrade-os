@@ -5281,7 +5281,8 @@ async function rqRenderCustomerSignals(){
   const day = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const creditTag = cr => { if (!cr) return ''; const next = cr.steps.find(x => x.available > Math.max(0, cr.available_today));
     const cls = cr.available_today <= 0 ? 'missing' : cr.available_today < cr.credit_limit * 0.5 ? 'stale' : 'price';
-    return `<span class="pkg-tag ${cls}">Can sell ${usd(cr.available_today)} today${next ? ` · ${usd(next.available)} from ${day(next.from)}` : ''}</span>`; };
+    const now = cr.available_today < 0 ? `Over the limit ${usd(-cr.available_today)}` : `Can sell ${usd(cr.available_today)} today`;
+    return `<span class="pkg-tag ${cls}">${now}${next ? ` · ${usd(next.available)} from ${day(next.from)}` : ''}</span>`; };
   await Promise.all(rqMatchedCustomers.map(async c => {
     const productIds = [...(rqCustomerProductIds[c.id] || [])];
     const el = document.getElementById(`rq_signal_${c.id}`);
