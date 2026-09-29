@@ -55,6 +55,7 @@ FRONTEND_EXEMPT = {
 # upsert on a natural key) — the reason is listed next to each.
 ACTION_EXEMPT = {
     ("messaging", "list"),               # read
+    ("messaging", "list_notes"),         # read (one client's notes, for the client profile)
     ("messaging", "draft"),              # upsert on (customer_id, reason_key)
     ("messaging", "compose"),            # upsert on (customer_id, reason_key); the daily news scan is locked per day and unique per URL
     ("messaging", "news"),               # read (+ the same once-a-day, unique-per-URL news scan)
