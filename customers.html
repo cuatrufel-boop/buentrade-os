@@ -413,6 +413,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/entity-history.js"></script>
 
 <div class="wrap">
   <h1 onclick="closeCustomerDetail()" style="cursor:pointer;">Customers</h1>
@@ -509,13 +510,7 @@ auth.onAuthStateChanged(user => {
     <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO SO FO INV
          debe alojarse en el perfil de cada destinatario" — every SO and Invoice ever created for
          this customer, in date order. ============ -->
-    <div id="custTab_history" style="display:none;">
-      <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Order</th><th>Product</th><th>Weight</th><th>Amount</th><th>Sent</th></tr></thead>
-        <tbody id="custHistoryRows"></tbody>
-      </table>
-      <div id="custHistoryEmpty" class="empty" style="display:none;">No SO or Invoice has been created for this customer yet.</div>
-    </div>
+    <div id="custTab_history" style="display:none;"><div id="custHistory"></div></div>
   </div>
 
   <div class="card" id="formCard">
@@ -1216,24 +1211,7 @@ async function openDocPdf(docType, orderNumber){
 // cada destinatario... tener el historico por fecha" — every SO and Invoice ever created for this
 // customer, in date order.
 async function renderCustomerHistory(){
-  const tbody = document.getElementById('custHistoryRows');
-  const emptyEl = document.getElementById('custHistoryEmpty');
-  tbody.innerHTML = '';
-  emptyEl.style.display = 'none';
-  if (!viewingCustomerId) return;
-  let rows;
-  try { rows = (await callApi('order-documents-history', { entity_type: 'customer', entity_id: viewingCustomerId })).results || []; }
-  catch (e) { emptyEl.textContent = 'Error loading history: ' + e.message; emptyEl.style.display = 'block'; return; }
-  if (!rows.length){ emptyEl.style.display = 'block'; return; }
-  tbody.innerHTML = rows.map(r => `<tr>
-    <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-    <td>${escapeHtml(r.doc_type)}</td>
-    <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
-    <td class="muted">${escapeHtml((r.product_spec || r.product_name) || '—')}</td>
-    <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
-    <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-    <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>
-  </tr>`).join('');
+  if (viewingCustomerId) renderEntityHistory('custHistory', 'customer', viewingCustomerId, 'cu');
 }
 
 function countryName(countryId){

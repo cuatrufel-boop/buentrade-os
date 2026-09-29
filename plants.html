@@ -522,6 +522,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/entity-history.js"></script>
 
 <div class="wrap">
   <h1 onclick="closePlantView()" style="cursor:pointer;">Meat Packers</h1>
@@ -710,13 +711,7 @@ auth.onAuthStateChanged(user => {
     <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO... debe
          alojarse en el perfil de cada destinatario" — every PO ever created for this plant, in
          date order, with whether/when it actually went out. ============ -->
-    <div id="plantTab_history" style="display:none;">
-      <table>
-        <thead><tr><th>Date</th><th>Order</th><th>Product</th><th>Weight</th><th>Amount</th><th>Sent</th></tr></thead>
-        <tbody id="plantHistoryRows"></tbody>
-      </table>
-      <div id="plantHistoryEmpty" class="empty" style="display:none;">No PO has been created for this plant yet.</div>
-    </div>
+    <div id="plantTab_history" style="display:none;"><div id="plantHistory"></div></div>
 
     <!-- ============ DETAILS — contact/logistics terms, set-once fields. Switching to this tab
          never leaves the plant — it's the same record, just a different tab. ============ -->
@@ -2651,23 +2646,7 @@ async function openDocPdf(docType, orderNumber){
 // Real ask 2026-09-14: "en el momento en el que creo PO SO FO INV debe alojarse en el perfil de
 // cada destinatario... tener el historico por fecha" — every PO ever created for this plant.
 async function renderPlantHistory(){
-  const tbody = document.getElementById('plantHistoryRows');
-  const emptyEl = document.getElementById('plantHistoryEmpty');
-  tbody.innerHTML = '';
-  emptyEl.style.display = 'none';
-  if (!currentPlantId) return;
-  let rows;
-  try { rows = (await callApi('order-documents-history', { entity_type: 'plant', entity_id: currentPlantId })).results || []; }
-  catch (e) { emptyEl.textContent = 'Error loading history: ' + e.message; emptyEl.style.display = 'block'; return; }
-  if (!rows.length){ emptyEl.style.display = 'block'; return; }
-  tbody.innerHTML = rows.map(r => `<tr>
-    <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-    <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" class="doc-row-link" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
-    <td class="muted">${escapeHtml((r.product_spec || r.product_name) || '—')}</td>
-    <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
-    <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-    <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>
-  </tr>`).join('');
+  if (currentPlantId) renderEntityHistory('plantHistory', 'plant', currentPlantId, 'pl');
 }
 
 function countryName(countryId){

@@ -408,6 +408,7 @@ auth.onAuthStateChanged(user => {
   </nav>
 </header>
 <script src="js/header-chip.js"></script>
+<script src="js/entity-history.js"></script>
 
 <div class="wrap">
   <!-- Real ask 2026-09-09 ("aplicalo en logistics"): same stat cards + glass-pill search +
@@ -660,16 +661,10 @@ auth.onAuthStateChanged(user => {
     </div>
 
     <!-- ============ HISTORY — real ask 2026-09-14: "en el momento en el que creo PO SO FO INV
-         debe alojarse en el perfil de cada destinatario" — every FO ever created for this carrier,
-         in date order. Empty for a non-carrier provider (customs agency etc.), which is correct —
-         they never get an FO. ============ -->
-    <div id="provTab_history" style="display:none;">
-      <table>
-        <thead><tr><th>Date</th><th>Order</th><th>Product</th><th>Weight</th><th>Amount</th><th>Sent</th></tr></thead>
-        <tbody id="provHistoryRows"></tbody>
-      </table>
-      <div id="provHistoryEmpty" class="empty" style="display:none;">No FO has been created for this provider yet.</div>
-    </div>
+         debe alojarse en el perfil de cada destinatario"; 2026-09-29 every movement of every load
+         for this carrier / customs agency — documents, bills, surcharges, invoices, payments —
+         by date, searchable (js/entity-history.js). ============ -->
+    <div id="provTab_history" style="display:none;"><div id="provHistory"></div></div>
   </div>
 </div>
 
@@ -1243,23 +1238,7 @@ async function openDocPdf(docType, orderNumber){
 // Real ask 2026-09-14: "en el momento en el que creo PO SO FO INV debe alojarse en el perfil de
 // cada destinatario... tener el historico por fecha" — every FO ever created for this carrier.
 async function renderProviderHistory(){
-  const tbody = document.getElementById('provHistoryRows');
-  const emptyEl = document.getElementById('provHistoryEmpty');
-  tbody.innerHTML = '';
-  emptyEl.style.display = 'none';
-  if (!currentProviderId) return;
-  let rows;
-  try { rows = (await callApi('order-documents-history', { entity_type: 'carrier', entity_id: currentProviderId })).results || []; }
-  catch (e) { emptyEl.textContent = 'Error loading history: ' + e.message; emptyEl.style.display = 'block'; return; }
-  if (!rows.length){ emptyEl.style.display = 'block'; return; }
-  tbody.innerHTML = rows.map(r => `<tr>
-    <td class="muted">${new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-    <td class="order-num">${r.sent_at ? `<a href="#" onclick="openDocPdf('${r.doc_type}','${r.order_number}');return false;" style="color:var(--blue-bright);text-decoration:underline;">${escapeHtml(r.order_number)}</a>` : escapeHtml(r.order_number)}</td>
-    <td class="muted">${escapeHtml((r.product_spec || r.product_name) || '—')}</td>
-    <td class="num">${(r.weight || 0).toLocaleString('en-US')} lbs</td>
-    <td class="num">$${(r.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-    <td>${r.sent_at ? `<span class="payment-badge ok">Sent ${new Date(r.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>` : `<span class="payment-badge due-soon">Not sent</span>`}</td>
-  </tr>`).join('');
+  if (currentProviderId) renderEntityHistory('provHistory', 'provider', currentProviderId, 'pv');
 }
 
 function selectProvider(id){
