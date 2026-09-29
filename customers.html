@@ -451,11 +451,12 @@ auth.onAuthStateChanged(user => {
       </div>
     </div>
 
-    <!-- credit line (2026-09-29, same look as Pay & Receive's profit-so-far bar): available today,
-         and every sold, unpaid load on the bar with the day it frees its credit -->
-    <div id="custCredit" style="margin:0 0 18px;"></div>
+    <!-- credit (2026-09-29): the four cards above the tab bar (same layout as Logistics / Quotes /
+         Pay & Receive), the detail in the Credit tab -->
+    <div id="custCreditCards"></div>
 
     <div class="tab-row">
+      <button type="button" class="tab-btn" id="custTabBtn_credit" onclick="setCustomerTab('credit')">Credit</button>
       <button type="button" class="tab-btn active" id="custTabBtn_products" onclick="setCustomerTab('products')">Products</button>
       <button type="button" class="tab-btn" id="custTabBtn_details" onclick="setCustomerTab('details')">Details</button>
       <button type="button" class="tab-btn" id="custTabBtn_history" onclick="setCustomerTab('history')">History</button>
@@ -463,6 +464,7 @@ auth.onAuthStateChanged(user => {
 
     <!-- ============ PRODUCTS THEY BUY — default tab: what does this customer buy, at a
          glance, editable right here. ============ -->
+    <div id="custTab_credit" style="display:none;"><div id="custCredit"></div></div>
     <div id="custTab_products">
       <div class="cp-add-row">
         <div class="cp-search-box">
@@ -1199,7 +1201,7 @@ async function removeCustomerProduct(linkId){
   renderCustomerProducts();
 }
 
-const CUST_TABS = ['products', 'details', 'history'];
+const CUST_TABS = ['credit', 'products', 'details', 'history'];
 function setCustomerTab(tab){
   CUST_TABS.forEach(t => {
     document.getElementById('custTab_' + t).style.display = (t === tab) ? 'block' : 'none';
@@ -1245,13 +1247,13 @@ async function renderCustomerHistory(){
 // A load frees its credit only when it's paid; the date shown is when it's due (entrega + días de
 // crédito). Same list as the offer credit check (customers-search credit_for → customerOpenLoads).
 async function renderCustomerCredit(id){
-  const el = document.getElementById('custCredit'); el.innerHTML = '';
+  const el = document.getElementById('custCredit'), top = document.getElementById('custCreditCards'); el.innerHTML = ''; top.innerHTML = '';
   let cr; try { cr = (await callApi('customers-search', { credit_for: id })).credit; } catch (e) { return; }
   if (viewingCustomerId !== id || !cr) return;
   const usd = creditUsd, mdy = d => d ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : '—';
   const card = (cls, value, label, sub, icon) => `<div class="stat-card ${cls}"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div><div style="min-width:0;"><div class="stat-value">${value}</div><div class="stat-label">${label}</div>${sub ? `<div class="muted" style="font-size:11.5px;margin-top:3px;">${sub}</div>` : ''}</div></div>`;
   const IC = { ok: '<path d="M20 6 9 17l-5-5"/>', stop: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>', pay: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>', stack: '<path d="M3 7h18M3 12h18M3 17h18"/>' };
-  if (cr.credit_limit == null){ el.innerHTML = `<div class="stats-row" style="grid-template-columns:1fr;margin:0;">${card('warn', 'No limit', 'Credit limit not set', 'Add it in Details', IC.clock)}</div>`; return; }
+  if (cr.credit_limit == null){ top.innerHTML = `<div class="stats-row cr-cards" style="grid-template-columns:1fr;margin:0 0 14px;">${card('warn', 'No limit', 'Credit limit not set', 'Add it in Details', IC.clock)}</div>`; el.innerHTML = '<div class="empty">No credit limit set — add it in Details.</div>'; return; }
   const limit = Number(cr.credit_limit), loads = (cr.loads || []).map(l => ({ ...l, due: l.due ? String(l.due).slice(0, 10) : null })), used = loads.reduce((n, l) => n + Number(l.amount), 0), avail = limit - used;
   const cs = creditSentence(avail, cr.avg_load), L = cr.avg_load;
   const days = d => d ? Math.round((new Date(d + 'T00:00:00Z') - new Date(cr.today + 'T00:00:00Z')) / 86400000) : null;
@@ -1276,12 +1278,14 @@ async function renderCustomerCredit(id){
   const table = loads.length ? `<div class="table-scroll"><table><thead><tr><th>Order</th><th>Sale</th><th>Delivery</th><th>Due</th><th>Credit</th></tr></thead><tbody>
       ${loads.map(l => `<tr><td class="order-num">${escapeHtml(l.order_number)}</td><td class="num">${usd(l.amount)}</td><td>${l.delivered ? '<span class="payment-badge ok">Delivered</span>' : '<span class="payment-badge active">In transit</span>'}</td><td>${badge(l)}</td><td>${over.has(l.order_number) ? '<span class="payment-badge overdue">Over limit</span>' : '<span class="payment-badge ok">Within limit</span>'}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">No unpaid loads — the full limit is available.</div>';
-  el.innerHTML = `<div class="stats-row cr-cards" style="grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 14px;">${cards}</div>
-    <div class="card" style="margin:0;">
+  top.innerHTML = `<div class="stats-row cr-cards" style="grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 14px;">${cards}</div>`;
+  el.innerHTML = `<div class="card" style="margin:0;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px;"><b style="font-family:'Space Grotesk',sans-serif;color:${cs.color};">${cs.head}</b><span class="muted" style="font-size:12.5px;">${cs.sub}</span></div>
       ${loads.length ? bar : ''}${table}
       <div class="muted" style="font-size:11.5px;margin-top:10px;">Credit is freed only when a load is paid. Dates assume payment 30 days after delivery; never more than ${usd(limit)} unpaid at the same time.</div>
     </div>`;
+  // can't sell a load today → the profile opens on Credit (unless the trader already moved to another tab)
+  if ((avail < 0 || cs.pay) && document.getElementById('custTabBtn_products').classList.contains('active')) setCustomerTab('credit');
 }
 
 function countryName(countryId){
