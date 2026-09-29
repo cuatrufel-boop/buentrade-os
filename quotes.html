@@ -654,8 +654,8 @@
   .plr-browse-search{display:block;width:100%;max-width:340px;padding:7px 10px;margin-bottom:8px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;background:var(--card);color:var(--ink);box-sizing:border-box;}
   .plr-browse-search:focus{outline:none;border-color:var(--blue);}
   .plr-browse-toggle{background:none;border:none;color:var(--blue-bright);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px;font-family:inherit;}
-  .qm-drop{border:2px dashed transparent;border-radius:12px;transition:border-color .15s;}
-  .qm-drop.over{border-color:var(--blue-bright);}
+  .qm-drop{transition:border-color .15s;}
+  .qm-drop.over{border:2px dashed var(--blue-bright);}
   .qm-x:hover{color:#FF9C8A;}
   .rq-sheet-qt{width:34px;height:34px;border-radius:50%;border:2px solid var(--blue);background:transparent;color:var(--blue-bright);font:700 10px inherit;letter-spacing:.02em;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
   .rq-sheet-qt:hover{background:var(--blue);color:#fff;}
@@ -1895,7 +1895,7 @@ async function qmRenderNews(){
   el.innerHTML = qmNews.length ? rqTableSection(qmNews.map(n => `<tr>
       <td style="white-space:nowrap;"><span class="rq-sheet-pill ${n.topic === 'avian_flu' ? 'exp' : n.topic === 'border' ? 'wait' : 'ok'}">${escapeHtml(TOPIC[n.topic] || n.topic)}</span></td>
       <td style="text-align:left;font-size:12.5px;line-height:1.45;">${escapeHtml(n.fact_es)}<span class="muted" style="display:block;font-size:11px;">${escapeHtml([...(n.mx_states || []), ...(n.us_states || [])].join(', '))}</span></td>
-      <td class="num">${escapeHtml(String(n.published_on).slice(0, 10))}</td>
+      <td class="num" style="white-space:nowrap;">${(d => `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}`)(String(n.published_on).slice(0, 10))}</td>
       <td><a href="${escapeHtml(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.source || 'article')} ↗</a></td></tr>`).join(''), ['Topic', 'What happened', 'Date', 'Source'])
     : '<div class="empty">No news found in the last 14 days yet.</div>';
 }
@@ -1922,14 +1922,20 @@ function qmRenderSource(){
   const fmtD = x => new Date(String(x).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const asOf = b ? fmtD(b.as_of) : null;
   const pending = qmMfPending();
-  src.innerHTML = `<div class="card qbucket qm-drop" id="qm_drop" style="padding:12px 16px;margin-bottom:14px;"
+  // BuenTrade design (2026-09-29, user: "esto está feo"): a card like the rest of the app — title and
+  // status on the left, real .btn / .btn.secondary buttons on the right, status pills like Orders
+  src.innerHTML = `<div class="card qm-drop" id="qm_drop" style="padding:16px 20px;margin-bottom:14px;"
       ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="event.preventDefault();this.classList.remove('over');if(event.dataTransfer.files[0]) qmMfUpload(event.dataTransfer.files[0])">
-    <div class="rq-sheet-bar" style="margin-top:0;flex-wrap:wrap;">
-      <span><b>Market Flash</b> <span class="muted">· ${qmMfBusy ? escapeHtml(qmMfBusy) : b ? `latest bulletin: data as of ${asOf}, received ${fmtD(b.created_at)} · each message says when its data is from · new ones arrive by email on their own` : 'no bulletin yet · it arrives by email on its own'}</span></span>
-      <span style="display:flex;gap:8px;">
-        ${pending.length ? `<button type="button" class="pkg-trigger-btn" style="margin-left:0;" onclick="qmTermsOpen=!qmTermsOpen;qmRenderSource()">Terms to teach (${pending.length}) ${qmTermsOpen ? '↑' : '→'}</button>` : ''}
-        <button type="button" class="pkg-trigger-btn" style="margin-left:0;" ${qmMfBusy ? 'disabled' : ''} onclick="document.getElementById('qm_mf_file').click()">Upload PDF →</button>
-      </span>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><b style="font-family:'Space Grotesk',sans-serif;font-size:15px;">Market Flash</b>
+          ${qmMfBusy ? `<span class="rq-sheet-pill wait">${escapeHtml(qmMfBusy)}</span>` : b ? `<span class="rq-sheet-pill ok">Data as of ${asOf}</span><span class="rq-sheet-pill wait">Received ${fmtD(b.created_at)}</span>` : '<span class="rq-sheet-pill exp">No bulletin yet</span>'}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px;">New bulletins arrive by email on their own — or drop the PDF here. Each message says when its data is from.</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-shrink:0;">
+        ${pending.length ? `<button type="button" class="btn secondary" onclick="qmTermsOpen=!qmTermsOpen;qmRenderSource()">Terms to teach (${pending.length}) ${qmTermsOpen ? '↑' : '→'}</button>` : ''}
+        <button type="button" class="btn" ${qmMfBusy ? 'disabled' : ''} onclick="document.getElementById('qm_mf_file').click()">Upload PDF</button>
+      </div>
     </div></div>`;
   terms.innerHTML = qmTermsOpen && pending.length ? qmTermsHtml(pending) : '';
 }
