@@ -645,6 +645,23 @@
   .qm-note{width:100%;min-height:64px;resize:vertical;border-radius:10px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:#fff;font-family:inherit;font-size:13px;line-height:1.45;padding:9px 11px;box-sizing:border-box;}
   .qm-note-row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid rgba(255,255,255,.08);font-size:12.5px;line-height:1.4;}
   .qm-x{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:12px;padding:0 2px;}
+  /* row detail (2026-09-29 redesign): two equal-height panels, same pill buttons */
+  .qm-detail{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:stretch;cursor:default;}
+  .qm-panel{display:flex;flex-direction:column;gap:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px 18px;min-width:0;}
+  .qm-panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .qm-panel-foot{margin-top:auto;display:flex;justify-content:flex-end;padding-top:4px;}
+  .qm-msg-box{flex:1;min-height:110px;width:100%;box-sizing:border-box;font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1.5px solid rgba(90,170,255,.4);border-radius:10px;padding:12px 14px;color:var(--ink);font-family:inherit;resize:vertical;}
+  textarea.qm-msg-box:focus{outline:none;border-color:var(--blue-bright);}
+  div.qm-msg-box{border-color:rgba(255,255,255,.12);}
+  .qm-pill-btn{margin-left:0;height:36px;box-sizing:border-box;text-decoration:none !important;}
+  .qm-prod-name{font-weight:700;font-size:13.5px;margin-bottom:8px;}
+  .qm-pills{display:flex;gap:6px;flex-wrap:wrap;}
+  .qm-list{display:flex;flex-direction:column;gap:7px;font-size:12.5px;line-height:1.4;}
+  .qm-list-row{display:flex;gap:8px;align-items:baseline;}
+  .qm-date{font-family:var(--dash-font-mono);font-size:11px;flex-shrink:0;}
+  .qm-clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+  .qm-divider{height:1px;background:rgba(255,255,255,.08);}
+  @media (max-width:900px){.qm-detail{grid-template-columns:1fr;}}
   #qPanel_messaging a{color:var(--blue-bright);text-decoration:none;}
   #qPanel_messaging a:hover{text-decoration:underline;}
   /* Terms to teach (Market Flash) — same chip system as Plants' Pending Matches */
@@ -1782,28 +1799,39 @@ function qmRefreshRow(c){
 
 // Row detail: the full message (+ another angle), where it comes from, and everything we know about the client.
 function qmDetailHtml(c){
-  // Only what's needed to send THIS message (2026-09-29, "mucha info irrelevante aquí"): the message (editable) — it is
-  // sent with the row's round Email / WhatsApp buttons (not repeated here, user 2026-09-29), the one product it talks about, the client's notes when there are any, and what works once it's known.
-  // Everything else about the client is in their profile.
-  const d = qmTab === 'sent' ? null : c.compose;
-  const text = qmTab === 'sent' ? c.sentToday[0].sent_message : (d && d.message);
+  // Row detail, redesigned 2026-09-29 ("organízalo bonito, simétrico… botones sin tamaño proporcional… rehazlo"): two
+  // panels of the same height side by side. Left: the message (editable — it is sent with the row's round Email /
+  // WhatsApp buttons, not repeated here) and "Write a different message". Right: what the message stands on — the one
+  // product it talks about, how the client likes to be reached, what they told you, what works — and ONE button to the
+  // profile, where all of that is written. Every button is the same transparent pill, same height.
+  const sent = qmTab === 'sent', d = sent ? null : c.compose;
+  const text = sent ? c.sentToday[0].sent_message : (d && d.message);
   const prod = d && d.product_id ? c.products.find(p => p.product_id === d.product_id) : null;
   const profile = tab => `customers.html?open=${c.id}&tab=${tab}`;
-  return `<div style="max-width:760px;">
-      <div class="qm-sec">${qmTab === 'sent' ? 'Message sent' : 'Message'}</div>
-      ${qmTab === 'sent' || !text ? `<div style="font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">${text ? escapeHtml(text) : '<span class="muted">Writing…</span>'}</div>`
-        : `<textarea id="qm_msg_${c.id}" rows="3" onclick="event.stopPropagation()" oninput="qmEdit('${c.id}', this.value)" style="width:100%;box-sizing:border-box;font-size:14px;line-height:1.55;background:rgba(255,255,255,.05);border:1.5px solid rgba(90,170,255,.4);border-radius:10px;padding:12px 14px;color:var(--ink);font-family:inherit;resize:vertical;">${escapeHtml(d.edited ?? text)}</textarea>
-      <div class="muted" style="font-size:11.5px;margin-top:4px;">Edit here, not in WhatsApp.</div>`}
-      ${d && d.news ? `<div class="muted" style="font-size:11.5px;margin-top:4px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener">${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
-      ${qmTab === 'sent' || !text ? '' : `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button type="button" class="btn secondary" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></div>`}
-      ${(c.preferences || []).length ? `<div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;">${c.preferences.map(t => `<div style="display:flex;align-items:center;gap:8px;"><span class="rq-sheet-pill wait">Preference</span><span>${escapeHtml(t)}</span></div>`).join('')}</div>` : ''}
-      ${prod ? `<div style="margin-top:14px;font-size:13px;"><b>${escapeHtml(prod.name_en)}</b> <span class="muted">· ${prod.cadence ? `${escapeHtml(prod.cadence)} · ${prod.from_us_month} from us this month` : 'Missing: how often they buy it'}</span>
-        ${prod.cadence ? '' : ` <a href="${profile('products')}" onclick="event.stopPropagation()" style="color:var(--blue-bright);">Complete in profile →</a>`}</div>` : ''}
-      ${c.notes.length ? `<div class="qm-sec" style="margin-top:14px;">What they told you</div>${c.notes.map(n => `<div class="qm-note-row"><span class="muted" style="font-family:var(--dash-font-mono);font-size:11px;">${escapeHtml(String(n.created_at).slice(5, 10))}</span><span style="flex:1;">${escapeHtml(n.note)}</span></div>`).join('')}`
-        : `<div style="margin-top:12px;"><a class="btn secondary" style="text-decoration:none;" href="${profile('about')}" onclick="event.stopPropagation()">Add a note in the profile →</a></div>`}
-      ${c.works.length ? `<div class="qm-sec" style="margin-top:14px;">What works</div><div style="font-size:12.5px;">${c.works.map(w => `<div>${QM_KIND_LABEL[w.kind] || w.kind} · ${w.requests} of ${w.sent} led to a request</div>`).join('')}</div>` : ''}
-    </div>`;
+  const stop = 'onclick="event.stopPropagation()"';
+  const msg = sent || !text
+    ? `<div class="qm-msg-box">${text ? escapeHtml(text) : '<span class="muted">Writing…</span>'}</div>`
+    : `<textarea id="qm_msg_${c.id}" class="qm-msg-box" ${stop} oninput="qmEdit('${c.id}', this.value)">${escapeHtml(d.edited ?? text)}</textarea>`;
+  const left = `<section class="qm-panel">
+      <div class="qm-panel-head"><div class="qm-sec" style="margin:0;">${sent ? 'Message sent' : 'Message'}</div>${sent || !text ? '' : '<span class="muted" style="font-size:11.5px;">Edit here, not in WhatsApp.</span>'}</div>
+      ${msg}
+      ${d && d.news ? `<div class="muted" style="font-size:11.5px;">Source: <a href="${escapeHtml(d.news.url)}" target="_blank" rel="noopener" ${stop}>${escapeHtml(d.news.source || 'article')} · ${escapeHtml(d.news.date)} ↗</a> — check it before sending.</div>` : ''}
+      ${sent || !text ? '' : `<div class="qm-panel-foot"><button type="button" class="pkg-trigger-btn qm-pill-btn" onclick="event.stopPropagation();qmAnotherAngle('${c.id}')">Write a different message →</button></div>`}
+    </section>`;
+  const blocks = [];
+  if (prod) blocks.push(`<div><div class="qm-prod-name">${escapeHtml(prod.name_en)}</div>
+      <div class="qm-pills">${prod.cadence ? `<span class="rq-sheet-pill ok">${escapeHtml(prod.cadence)}</span><span class="rq-sheet-pill off">${prod.from_us_month} from us this month</span>` : '<span class="rq-sheet-pill wait">Missing: how often they buy it</span>'}</div></div>`);
+  if ((c.preferences || []).length) blocks.push(`<div class="qm-list">${c.preferences.map(t => `<div class="qm-list-row"><span class="rq-sheet-pill wait">Preference</span><span>${escapeHtml(t)}</span></div>`).join('')}</div>`);
+  if (c.notes.length) blocks.push(`<div><div class="qm-sec">What they told you</div><div class="qm-list">${c.notes.map(n => `<div class="qm-list-row"><span class="muted qm-date">${escapeHtml(String(n.created_at).slice(5, 10))}</span><span class="qm-clamp">${escapeHtml(n.note)}</span></div>`).join('')}</div></div>`);
+  if (c.works.length) blocks.push(`<div><div class="qm-sec">What works</div><div class="qm-list">${c.works.map(w => `<div class="qm-list-row"><span>${QM_KIND_LABEL[w.kind] || w.kind} · ${w.requests} of ${w.sent} led to a request</span></div>`).join('')}</div></div>`);
+  // one way to the profile: to complete the product when its cadence is missing, otherwise to add a note
+  const go = prod && !prod.cadence ? `<a class="pkg-trigger-btn qm-pill-btn" href="${profile('products')}" ${stop}>Complete in profile →</a>`
+    : `<a class="pkg-trigger-btn qm-pill-btn" href="${profile('about')}" ${stop}>Add a note in the profile →</a>`;
+  const right = `<section class="qm-panel">
+      ${blocks.join('<div class="qm-divider"></div>') || '<div class="muted" style="font-size:12.5px;">Nothing written about this client yet.</div>'}
+      <div class="qm-panel-foot">${go}</div>
+    </section>`;
+  return `<div class="qm-detail" ${stop}>${left}${right}</div>`;
 }
 
 // One composed message per client, written on demand (4 at a time) and kept for the day.
