@@ -193,6 +193,12 @@
   /* credit cards on the profile: four equal values (same as Pay & Receive's money cards) */
   .cr-cards .stat-value,.cr-cards .stat-card.hero .stat-value{font-size:22px;white-space:nowrap;}
   .payment-badge.active{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
+  .about-insights{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
+  .about-insight{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12.5px;}
+  .about-insight > span:nth-child(2){flex:1;min-width:0;}
+  .about-insight > .btn{padding:5px 12px;font-size:12px;}
+  .about-insight-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;}
+  .about-insight-actions .btn{height:38px;box-sizing:border-box;display:inline-flex;align-items:center;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
@@ -1261,22 +1267,60 @@ async function renderCustomerCredit(id){
 // ---------- About the client ----------
 // What they told you: dated notes (customer_notes via the messaging function — the same rows Messaging uses to
 // write its messages; a note already used in a message says so). Business: read from Details.
+// Each note is read by the system (2026-09-29): how often they buy one of their products is saved straight to that
+// product (Products tab) when it can only be one product; anything it can't decide alone waits under the note as
+// Pending for the trader; the rest is kept as what we know about them.
+let aboutData = { notes: [], insights: [], products: [] };
+const ABOUT_TOPIC = { personal: 'Personal', business: 'Business', preference: 'Preference', payment: 'Payment' };
+function aboutInsightHtml(i){
+  const pend = '<span class="payment-badge due-soon">Pending</span>';
+  if (i.kind === 'cadence' && i.status === 'applied')
+    return `<div class="about-insight"><span class="payment-badge ok">Saved to product</span><span>${escapeHtml(i.summary_en)} <span class="muted">→ ${escapeHtml(i.product_name || '')}</span></span><button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','undo')">Undo</button></div>`;
+  if (i.kind === 'cadence' && i.status === 'pending'){
+    const cand = new Set((i.candidates || []).map(c => c.link_id));
+    const prods = [...(i.candidates || []), ...aboutData.products.filter(p => !cand.has(p.link_id))];
+    const cur = i.frequency_days && i.loads_per_cycle ? `${i.frequency_days}|${i.loads_per_cycle}` : '';
+    const extra = cur && !CP_CADENCE.some(([v]) => v === cur) ? [[cur, `${i.loads_per_cycle} load${i.loads_per_cycle === 1 ? '' : 's'} every ${i.frequency_days} days`]] : [];
+    return `<div class="about-insight"><span>${pend}</span><span>${escapeHtml(i.summary_en)} <span style="color:#FFC876;">· ${escapeHtml(i.question_en || '')}</span></span>
+      <div class="about-insight-actions">
+        <select id="ai_p_${i.id}" style="width:320px;"><option value="" selected>Which product?</option>${prods.map(p => `<option value="${p.link_id}">${escapeHtml(p.product_name)}</option>`).join('')}</select>
+        <select id="ai_c_${i.id}" style="width:200px;"><option value=""${cur ? '' : ' selected'}>How often do they buy it?</option>${[...extra, ...CP_CADENCE].map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select>
+        <button type="button" class="btn" onclick="aboutApplyCadence('${i.id}')">Apply</button>
+        <button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','dismiss')">Dismiss</button>
+      </div></div>`;
+  }
+  if (i.kind === 'fact' && i.status === 'pending')
+    return `<div class="about-insight"><span>${pend}</span><span>${escapeHtml(i.summary_en)} <span style="color:#FFC876;">· ${escapeHtml(i.question_en || '')}</span></span>
+      <div class="about-insight-actions"><button type="button" class="btn" onclick="aboutDecide('${i.id}','keep')">Keep</button><button type="button" class="btn secondary" onclick="aboutDecide('${i.id}','dismiss')">Dismiss</button></div></div>`;
+  if (i.kind === 'fact' && i.status === 'applied')
+    return `<div class="about-insight"><span class="payment-badge active">${ABOUT_TOPIC[i.topic] || 'Note'}</span><span>${escapeHtml(i.summary_en)}</span></div>`;
+  return ''; // dismissed / undone: not shown
+}
+function aboutNoteInsightsHtml(n){
+  if (!n.insights_status) return `<div class="about-insight muted" id="about_reading_${n.id}">Reading the note…</div>`;
+  if (n.insights_status === 'failed') return `<div class="about-insight"><span class="payment-badge overdue">Not read</span><span class="muted">The system couldn't read this note.</span><button type="button" class="btn secondary" onclick="aboutRead('${n.id}')">Read again</button></div>`;
+  const rows = aboutData.insights.filter(i => i.note_id === n.id).map(aboutInsightHtml).filter(Boolean);
+  return rows.length ? rows.join('') : '<div class="about-insight muted">Nothing to save from this note.</div>';
+}
 async function renderCustomerAbout(){
   const el = document.getElementById('custAbout'), id = viewingCustomerId, c = customers.find(x => x.id === id);
   if (!c) return;
-  el.innerHTML = '<div class="empty">Loading…</div>';
-  let notes = [];
-  try { notes = (await callApi('messaging', { action: 'list_notes', customer_id: id })).notes || []; } catch (e) { el.innerHTML = `<div class="empty">Couldn't load the notes: ${escapeHtml(e.message)}</div>`; return; }
+  if (!aboutData.notes.length || aboutData.customerId !== id) el.innerHTML = '<div class="empty">Loading…</div>';
+  let d;
+  try { d = await callApi('messaging', { action: 'list_notes', customer_id: id }); } catch (e) { el.innerHTML = `<div class="empty">Couldn't load the notes: ${escapeHtml(e.message)}</div>`; return; }
   if (viewingCustomerId !== id) return;
+  aboutData = { customerId: id, notes: d.notes || [], insights: d.insights || [], products: d.products || [] };
+  const notes = aboutData.notes;
+  const pending = aboutData.insights.filter(i => i.status === 'pending').length;
   const biz = (typeof businessTypes !== 'undefined' ? businessTypes : []).find(b => b.id === c.business_type_id);
   const day = d => { const x = new Date(d); return x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }); };
   el.innerHTML = `<div class="profile-panel">
-      <div class="profile-heading">What they told you</div>
-      <div class="muted" style="font-size:12.5px;margin:-4px 0 10px;">Anything personal or about their business (a new plant, a trip, their son started university…). Messaging uses each note to write a message that shows you know them.</div>
+      <div class="profile-heading">What they told you${pending ? ` <span class="payment-badge due-soon" style="margin-left:8px;">${pending} to confirm</span>` : ''}</div>
+      <div class="muted" style="font-size:12.5px;margin:-4px 0 10px;">Anything personal or about their business, and how much they buy (e.g. "2 loads of jowls a month"). The system reads each note: how often they buy a product is saved to that product; what it isn't sure about waits here for you. Messaging uses each note to write a message that shows you know them.</div>
       <textarea id="aboutNote" rows="2" placeholder="e.g. They are building a new plant in León" style="width:100%;box-sizing:border-box;"></textarea>
       <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn" onclick="addCustomerNote()">Save note</button></div>
-      ${notes.length ? `<div class="table-scroll" style="margin-top:10px;"><table><thead><tr><th>Date</th><th style="text-align:left;">Note</th><th>Used</th><th></th></tr></thead><tbody>
-        ${notes.map(n => `<tr><td class="muted" style="white-space:nowrap;">${day(n.created_at)}</td><td style="text-align:left;">${escapeHtml(n.note)}</td><td>${n.used ? '<span class="payment-badge ok">In a message</span>' : '<span class="payment-badge due-soon">Not used yet</span>'}</td><td><button type="button" class="btn secondary" onclick="deleteCustomerNote('${n.id}')">Delete</button></td></tr>`).join('')}
+      ${notes.length ? `<div class="table-scroll" style="margin-top:10px;overflow:visible;"><table><thead><tr><th>Date</th><th style="text-align:left;">Note</th><th>Used</th><th></th></tr></thead><tbody>
+        ${notes.map(n => `<tr><td class="muted" style="white-space:nowrap;vertical-align:top;">${day(n.created_at)}</td><td style="text-align:left;">${escapeHtml(n.note)}<div class="about-insights">${aboutNoteInsightsHtml(n)}</div></td><td style="vertical-align:top;">${n.used ? '<span class="payment-badge ok">In a message</span>' : '<span class="payment-badge due-soon">Not used yet</span>'}</td><td style="vertical-align:top;"><button type="button" class="btn secondary" onclick="deleteCustomerNote('${n.id}')">Delete</button></td></tr>`).join('')}
       </tbody></table></div>` : '<div class="empty" style="padding:14px;">No notes yet.</div>'}
     </div>
     <div class="profile-panel" style="margin-top:14px;">
@@ -1284,12 +1328,38 @@ async function renderCustomerAbout(){
       <div>${biz ? escapeHtml(biz.name_en || biz.name || '') : '<span class="muted">Not set — set it in Details</span>'}${c.city || c.state ? ` <span class="muted">· ${escapeHtml([c.city, c.state].filter(Boolean).join(', '))}</span>` : ''}</div>
       <div class="muted" style="font-size:12.5px;margin-top:6px;">What they buy and how often is in the <a href="#" onclick="setCustomerTab('products');return false;" style="color:var(--blue-bright);">Products</a> tab.</div>
     </div>`;
+  el.querySelectorAll('.about-insight-actions select').forEach(s => btEnhanceSelect(s));
+  // a note saved but not read yet (the page was closed while reading) → read it now
+  notes.filter(n => !n.insights_status).forEach(n => aboutRead(n.id));
+}
+const aboutReading = new Set();
+async function aboutRead(noteId){
+  if (aboutReading.has(noteId)) return; aboutReading.add(noteId);
+  try { await callApi('messaging', { action: 'read_note', actor: currentActor(), note_id: noteId }); } catch (e) { /* shown as "Not read" with Read again */ }
+  aboutReading.delete(noteId);
+  const n = aboutData.notes.find(x => x.id === noteId);
+  if (n && aboutData.customerId === viewingCustomerId) { await renderCustomerAbout(); if (typeof loadCustomerProducts === 'function') loadCustomerProducts(viewingCustomerId); }
+}
+async function aboutDecide(insightId, decision){
+  try { await callApi('messaging', { action: 'decide_insight', actor: currentActor(), id: insightId, decision }); } catch (e) { await btAlert('Could not save: ' + e.message); return; }
+  await renderCustomerAbout();
+  if (decision === 'undo' && typeof loadCustomerProducts === 'function') loadCustomerProducts(viewingCustomerId);
+}
+async function aboutApplyCadence(insightId){
+  const link = document.getElementById(`ai_p_${insightId}`).value, cad = document.getElementById(`ai_c_${insightId}`).value;
+  if (!link) { await btAlert('Pick which product it is.'); return; }
+  if (!cad) { await btAlert('Pick how often they buy it.'); return; }
+  const [f, l] = cad.split('|').map(Number);
+  try { await callApi('messaging', { action: 'decide_insight', actor: currentActor(), id: insightId, decision: 'apply', link_id: link, frequency_days: f, loads_per_cycle: l }); }
+  catch (e) { await btAlert('Could not save: ' + e.message); return; }
+  await renderCustomerAbout();
+  if (typeof loadCustomerProducts === 'function') loadCustomerProducts(viewingCustomerId);
 }
 async function addCustomerNote(){
   const note = (document.getElementById('aboutNote').value || '').trim(); if (!note) return;
   try { await callApi('messaging', { action: 'add_note', actor: currentActor(), customer_id: viewingCustomerId, note, idempotency_key: `note|${viewingCustomerId}|${note}|${Date.now()}` }); }
   catch (e) { await btAlert('Could not save the note: ' + e.message); return; }
-  renderCustomerAbout();
+  await renderCustomerAbout(); // shows "Reading the note…" and starts reading it
 }
 async function deleteCustomerNote(noteId){
   if (!(await btConfirm('Delete this note?'))) return;

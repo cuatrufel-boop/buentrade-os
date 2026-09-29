@@ -702,6 +702,177 @@ async function deleteNote(body: any) {
   return { status: 200, payload: { deleted: true } };
 }
 
+// ---------------------------------------------------------------- notes → what the system understood (2026-09-29)
+// User: "ese campo de notas debe ser super sensible y básico, de ahí debe salir todo lo sensible para llegarle al
+// cliente; lo que no entiende lo deja en pending para aprobación y en el producto queda como respaldo". Each note is
+// read once by Claude against THIS client's products:
+//   • how often they buy one of their products, and it can only be one product → saved straight to that product's
+//     cadence (customer_products — what the Products tab dropdown and Messaging read); the old value is kept to Undo.
+//   • anything the system can't decide alone (which product, fresh or frozen, a product they don't have yet, an unknown
+//     word, a vague amount) → Pending: the trader picks / keeps / dismisses. Never guessed, never pre-selected.
+//   • everything else worth knowing to reach them (personal, business, preference, payment) → kept as facts.
+// Code, not the model, decides what is applied: a cadence is applied only when the model marked it clear AND named
+// exactly one of this client's own product links AND the numbers are whole and sane.
+const NOTE_READ_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["cadences", "facts", "unclear"],
+  properties: {
+    cadences: { type: "array", items: { type: "object", additionalProperties: false,
+      required: ["words", "link_ids", "clear", "loads_per_cycle", "frequency_days", "summary_en", "question_en"],
+      properties: {
+        words: { type: "string" }, link_ids: { type: "array", items: { type: "string" } }, clear: { type: "boolean" },
+        loads_per_cycle: { type: "integer" }, frequency_days: { type: "integer" },
+        summary_en: { type: "string" }, question_en: { type: "string" },
+      } } },
+    facts: { type: "array", items: { type: "object", additionalProperties: false, required: ["topic", "summary_en"],
+      properties: { topic: { type: "string", enum: ["personal", "business", "preference", "payment"] }, summary_en: { type: "string" } } } },
+    unclear: { type: "array", items: { type: "object", additionalProperties: false, required: ["topic", "summary_en", "question_en"],
+      properties: { topic: { type: "string", enum: ["personal", "business", "preference", "payment"] }, summary_en: { type: "string" }, question_en: { type: "string" } } } },
+  },
+};
+
+async function callNoteReader(system: string, user: string) {
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: "claude-opus-5-5", max_tokens: 8000, system, messages: [{ role: "user", content: user }],
+      output_config: { effort: "medium", format: { type: "json_schema", schema: NOTE_READ_SCHEMA } },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Anthropic API failed: ${JSON.stringify(data)}`);
+  if (data.stop_reason === "refusal") throw new Error("the model declined to read this note");
+  if (data.stop_reason === "max_tokens") throw new Error("the note reading was cut off");
+  const block = (data.content || []).find((b: any) => b.type === "text");
+  if (!block) throw new Error("no answer from the model");
+  return JSON.parse(block.text);
+}
+
+const cadenceText = (loads: number | null, days: number | null) => {
+  if (!loads || !days) return "not set";
+  const l = `${loads} load${loads === 1 ? "" : "s"}`;
+  return days === 7 ? `${l} a week` : days === 14 ? `${l} every 2 weeks` : days === 30 ? `${l} a month`
+    : days === 60 ? `${l} every 2 months` : days === 90 ? `${l} every 3 months` : `${l} every ${days} days`;
+};
+
+async function noteInsights(noteIds: string[]) {
+  if (!noteIds.length) return [];
+  return await sql`select i.*, p.full_name_en as product_name,
+      coalesce((select json_agg(json_build_object('link_id', cp.id, 'product_name', pp.full_name_en) order by pp.full_name_en)
+        from customer_products cp join products pp on pp.id = cp.product_id where cp.id = any(i.candidate_link_ids)), '[]') as candidates
+    from customer_note_insights i left join customer_products l on l.id = i.link_id left join products p on p.id = l.product_id
+    where i.note_id = any(${noteIds}) order by i.created_at, i.kind`;
+}
+
+async function readNote(body: any) {
+  const { note_id, actor } = body;
+  if (!note_id || !actor) return { status: 400, payload: { error: "note_id and actor are required" } };
+  const [n] = await sql`select * from customer_notes where id = ${note_id}`;
+  if (!n) return { status: 404, payload: { error: "unknown note" } };
+  if (n.insights_status === "done") return { status: 200, payload: { insights: await noteInsights([note_id]), duplicate: true } };
+
+  const links = await sql`select cp.id as link_id, cp.frequency_days, cp.loads_per_cycle, p.full_name_en, p.full_name_es
+    from customer_products cp join products p on p.id = cp.product_id where cp.customer_id = ${n.customer_id} order by p.full_name_en`;
+  const system = `You read a note a meat trader (BuenTrade, selling US pork/beef/chicken to clients in Mexico) wrote about ONE client, and extract what helps the trader reach that client at the right moment. Notes are short, in Spanish or English, often informal.
+Return three lists:
+1. cadences — every statement of how much / how often the client buys a product (from all their suppliers). Convert to whole numbers: loads_per_cycle loads every frequency_days days (a week = 7, two weeks / "quincena" = 14, a month = 30, two months = 60, three months = 90; "2 a la semana" = 2 every 7; "cada 40 días" = 1 every 40). link_ids = the link_id(s) from the client's product list that the words could refer to — ONLY ids from that list, never invented. clear = true only if ALL hold: the words can refer to exactly ONE product in the list (fresh/fresco vs frozen/congelado, box vs combo, and the cut must all fit — if the note doesn't say fresh or frozen and the list has both, it is NOT clear), and the amount and period are both stated (no "a veces", "bastante", "varias"). If not clear, question_en asks the trader exactly what is missing in one short sentence (e.g. "Fresh or frozen?", "Which product — they have no pork belly in their list yet."), and link_ids lists the plausible ones (may be empty). If clear, question_en is "". Put 0 in loads_per_cycle / frequency_days when that part is unknown. summary_en: e.g. "Buys 2 loads of pork jowl a month".
+2. facts — everything else worth knowing to reach this client, one fact per item, plain short English: personal (family, trips, health, celebrations), business (new plant, new branch, new customers, problems, volume changes), preference (how/when they like to be contacted, products they like or dislike, price sensitivity), payment (how/when they pay, delays). Only what the note says — never add or infer.
+3. unclear — parts of the note you cannot interpret with confidence (an unknown word or abbreviation, an ambiguous reference): summary_en = your best reading, question_en = what to ask the trader.
+Empty lists are fine. Never invent products, numbers or facts.`;
+  const user = `Client's products (link_id — product — current cadence):
+${links.map((l: any) => `${l.link_id} — ${l.full_name_en}${l.full_name_es ? ` / ${l.full_name_es}` : ""} — ${cadenceText(l.loads_per_cycle, l.frequency_days)}`).join("\n") || "(no products yet)"}
+
+Note (written ${new Date(n.created_at).toISOString().slice(0, 10)}):
+"""${n.note}"""`;
+
+  let out: any;
+  try { out = await callNoteReader(system, user); }
+  catch (e) {
+    await sql`update customer_notes set insights_status = 'failed' where id = ${note_id}`;
+    return { status: 502, payload: { error: `Couldn't read the note: ${String((e as Error).message || e)}` } };
+  }
+
+  const own = new Map(links.map((l: any) => [l.link_id, l]));
+  await sql.begin(async (tx: any) => {
+    const [again] = await tx`select insights_status from customer_notes where id = ${note_id} for update`;
+    if (again?.insights_status === "done") return; // read twice at the same time — keep the first
+    for (const c of out.cadences || []) {
+      const ids = [...new Set((c.link_ids || []).filter((x: string) => own.has(x)))] as string[];
+      const loads = Number.isInteger(c.loads_per_cycle) && c.loads_per_cycle > 0 ? c.loads_per_cycle : null;
+      const days = Number.isInteger(c.frequency_days) && c.frequency_days > 0 && c.frequency_days <= 365 ? c.frequency_days : null;
+      const apply = c.clear === true && ids.length === 1 && loads && days;
+      const summary = String(c.summary_en || c.words || "").trim() || "How often they buy";
+      if (apply) {
+        const [before] = await tx`select * from customer_products where id = ${ids[0]} for update`;
+        const [after] = await tx`update customer_products set frequency_days = ${days}, loads_per_cycle = ${loads} where id = ${ids[0]} returning *`;
+        await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "customer_products", record_id: ids[0], before, after });
+        await tx`insert into customer_note_insights (note_id, customer_id, kind, status, summary_en, link_id, candidate_link_ids, frequency_days, loads_per_cycle, before_frequency_days, before_loads_per_cycle, decided_by, decided_at)
+          values (${note_id}, ${n.customer_id}, 'cadence', 'applied', ${summary}, ${ids[0]}, ${ids}, ${days}, ${loads}, ${before.frequency_days}, ${before.loads_per_cycle}, 'system', now())`;
+      } else {
+        const q = String(c.question_en || "").trim() || (!ids.length ? "Which product is it? It isn't in their products yet." : "Which product is it?");
+        await tx`insert into customer_note_insights (note_id, customer_id, kind, status, summary_en, question_en, candidate_link_ids, frequency_days, loads_per_cycle)
+          values (${note_id}, ${n.customer_id}, 'cadence', 'pending', ${summary}, ${q}, ${ids}, ${days}, ${loads})`;
+      }
+    }
+    for (const f of out.facts || []) {
+      const s = String(f.summary_en || "").trim(); if (!s) continue;
+      await tx`insert into customer_note_insights (note_id, customer_id, kind, topic, status, summary_en, decided_by, decided_at)
+        values (${note_id}, ${n.customer_id}, 'fact', ${f.topic}, 'applied', ${s}, 'system', now())`;
+    }
+    for (const u of out.unclear || []) {
+      const s = String(u.summary_en || "").trim(); if (!s) continue;
+      await tx`insert into customer_note_insights (note_id, customer_id, kind, topic, status, summary_en, question_en)
+        values (${note_id}, ${n.customer_id}, 'fact', ${u.topic}, 'pending', ${s}, ${String(u.question_en || "").trim() || "Is this right?"})`;
+    }
+    await tx`update customer_notes set insights_status = 'done' where id = ${note_id}`;
+  });
+  return { status: 200, payload: { insights: await noteInsights([note_id]) } };
+}
+
+// The trader decides a pending item (or undoes an applied cadence). Pending cadence → Apply needs the product
+// (link_id, one of THIS client's) and the numbers; a pending fact → Keep. Undo puts the product's old cadence back.
+async function decideInsight(body: any) {
+  const { id, decision, actor } = body;
+  if (!id || !actor || !["apply", "keep", "dismiss", "undo"].includes(decision)) return { status: 400, payload: { error: "id, actor and decision (apply|keep|dismiss|undo) are required" } };
+  const r = await sql.begin(async (tx: any) => {
+    const [i] = await tx`select * from customer_note_insights where id = ${id} for update`;
+    if (!i) return { status: 404, payload: { error: "unknown item" } };
+    if (decision === "dismiss" || decision === "keep") {
+      if (i.status !== "pending") return { status: 200, payload: { insight: i, duplicate: true } };
+      if (decision === "keep" && i.kind !== "fact") return { status: 400, payload: { error: "a cadence is applied with a product, not kept" } };
+      const [after] = await tx`update customer_note_insights set status = ${decision === "keep" ? "applied" : "dismissed"}, decided_by = ${actor}, decided_at = now() where id = ${id} returning *`;
+      return { status: 200, payload: { insight: after } };
+    }
+    if (i.kind !== "cadence") return { status: 400, payload: { error: "only a cadence can be applied or undone" } };
+    if (decision === "undo") {
+      if (i.status !== "applied") return { status: 200, payload: { insight: i, duplicate: true } };
+      if (i.link_id) {
+        const [before] = await tx`select * from customer_products where id = ${i.link_id} for update`;
+        if (before) {
+          const [after] = await tx`update customer_products set frequency_days = ${i.before_frequency_days}, loads_per_cycle = ${i.before_loads_per_cycle} where id = ${i.link_id} returning *`;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "customer_products", record_id: i.link_id, before, after });
+        }
+      }
+      const [after] = await tx`update customer_note_insights set status = 'undone', decided_by = ${actor}, decided_at = now() where id = ${id} returning *`;
+      return { status: 200, payload: { insight: after } };
+    }
+    // apply a pending cadence
+    if (i.status !== "pending") return { status: 200, payload: { insight: i, duplicate: true } };
+    const linkId = body.link_id, days = Number(body.frequency_days ?? i.frequency_days), loads = Number(body.loads_per_cycle ?? i.loads_per_cycle);
+    const [link] = linkId ? await tx`select * from customer_products where id = ${linkId} and customer_id = ${i.customer_id} for update` : [];
+    if (!link) return { status: 400, payload: { error: "pick one of this client's products" } };
+    if (!(Number.isInteger(days) && days > 0 && days <= 365 && Number.isInteger(loads) && loads > 0)) return { status: 400, payload: { error: "pick how often they buy it" } };
+    const [after] = await tx`update customer_products set frequency_days = ${days}, loads_per_cycle = ${loads} where id = ${linkId} returning *`;
+    await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "customer_products", record_id: linkId, before: link, after });
+    const [ins] = await tx`update customer_note_insights set status = 'applied', link_id = ${linkId}, frequency_days = ${days}, loads_per_cycle = ${loads},
+        before_frequency_days = ${link.frequency_days}, before_loads_per_cycle = ${link.loads_per_cycle}, decided_by = ${actor}, decided_at = now() where id = ${id} returning *`;
+    return { status: 200, payload: { insight: ins } };
+  });
+  return r;
+}
+
 // Monthly volume, written in the SAME existing cadence fields Clients uses (every 30 days, N loads).
 async function setLoads(body: any) {
   const { link_id, loads_month, actor } = body;
@@ -753,15 +924,20 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const handlers: Record<string, (b: any) => Promise<{ status: number; payload: any }>> = {
-      draft, compose, send, add_note: addNote, delete_note: deleteNote, set_loads: setLoads,
+      draft, compose, send, add_note: addNote, delete_note: deleteNote, set_loads: setLoads, read_note: readNote, decide_insight: decideInsight,
       quote_origin: quoteOrigin, link_origin: linkOrigin, dismiss_origin: dismissOrigin,
     };
     if (body.action === "list") return jsonResponse(await list(body.actor ?? ""));
     // one client's notes ("what they told you") for the client profile — the ONLY place they are written (2026-09-29)
     if (body.action === "list_notes") {
       if (!body.customer_id) return jsonResponse({ error: "customer_id is required" }, 400);
-      return jsonResponse({ notes: await sql`select n.id, n.note, n.created_at, n.created_by, exists (select 1 from customer_messages m where m.note_id = n.id) as used
-        from customer_notes n where n.customer_id = ${body.customer_id} order by n.created_at desc` });
+      const notes = await sql`select n.id, n.note, n.created_at, n.created_by, n.insights_status, exists (select 1 from customer_messages m where m.note_id = n.id) as used
+        from customer_notes n where n.customer_id = ${body.customer_id} order by n.created_at desc`;
+      // with what was understood from each note (applied / pending) and the client's products to pick from
+      const insights = await noteInsights(notes.map((n: any) => n.id));
+      const products = await sql`select cp.id as link_id, p.full_name_en as product_name from customer_products cp join products p on p.id = cp.product_id
+        where cp.customer_id = ${body.customer_id} order by p.full_name_en`;
+      return jsonResponse({ notes, insights, products });
     }
     // the news the messages can use (last NEWS_DAYS days), each with its source — shown on Quotes → Messaging → Sources
     if (body.action === "news") { await ensureNewsToday(); return jsonResponse({ news: await sql`select topic, fact_es, published_on, url, source, mx_states, us_states from market_news where published_on >= current_date - ${NEWS_DAYS}::int order by published_on desc` }); }

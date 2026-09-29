@@ -138,7 +138,14 @@ async function todayList() {
       title: `Offer ${f.name} to ${f.clients.slice(0, 3).join(", ")}${f.n > 3 ? ` +${f.n - 3}` : ""}`,
       why: `${f.n === 1 ? "1 client buys" : `${f.n} clients buy`} it · best price $${Number(f.sig?.latestBest ?? 0).toFixed(2)}/lb (${md(new Date(f.last))})${good ? ` · ${Math.abs(f.pct).toFixed(1)}% below its 30-day market average` : f.pct != null ? ` · ${f.pct > 0 ? "+" : ""}${f.pct.toFixed(1)}% vs 30-day average` : " · current price"}` });
   }
-  const G = { collect: 0, pay: 1, sell: 2, credit: 3, prices: 4 } as Record<string, number>;
+  // what the system read in a client note but couldn't decide alone (which product, an unknown word…) — the
+  // trader confirms it in the client's profile, About the client (2026-09-29)
+  for (const r of await sql`select c.id, trim(c.trade_name) as name, count(*)::int as n, array_agg(i.question_en order by i.created_at) as questions
+      from customer_note_insights i join customers c on c.id = i.customer_id where i.status = 'pending' group by c.id, c.trade_name order by min(i.created_at)`)
+    items.push({ prio: 2, group: "notes", href: `customers.html?open=${r.id}&tab=about`, sort: 0,
+      title: `Confirm ${r.n} thing${r.n === 1 ? "" : "s"} from your notes about ${r.name}`,
+      why: r.questions.filter(Boolean).slice(0, 2).join(" · ") + (r.n > 2 ? ` · +${r.n - 2} more` : "") });
+  const G = { collect: 0, pay: 1, sell: 2, credit: 3, prices: 4, notes: 5 } as Record<string, number>;
   return items.sort((a, b) => a.prio - b.prio || G[a.group] - G[b.group] || a.sort - b.sort);
 }
 
