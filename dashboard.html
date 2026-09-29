@@ -84,6 +84,35 @@
   .btn.secondary{background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);}
   .empty{padding:30px;text-align:center;color:var(--ink-soft);}
   .err{background:rgba(196,67,46,.14);border:1px solid rgba(196,67,46,.4);color:#FF9C8A;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;}
+  /* same stat cards and segmented tab bar as Clients / Orders / Pay & Receive (2026-09-29: "mismo formato de otros módulos") */
+  .stats-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+  .stat-card{border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;}
+  .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .stat-icon svg{width:18px;height:18px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:700;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .stat-card.hero .stat-value{font-size:28px;}
+  .stat-label{font-size:11.5px;color:rgba(255,255,255,.7);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:1px;display:flex;align-items:center;gap:5px;}
+  .stat-label::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+  @media (max-width:900px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .stat-card.hero{background:linear-gradient(135deg, rgba(90,170,255,.32), rgba(90,170,255,.08));border:1px solid rgba(90,170,255,.55);box-shadow:0 3px 12px -3px rgba(90,170,255,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.hero .stat-icon{background:rgba(90,170,255,.15);border:1.5px solid rgba(90,170,255,.55);color:#5AAAFF;}
+  .stat-card.hero .stat-label::before{background:#5AAAFF;box-shadow:0 0 7px 1.5px rgba(90,170,255,.8);}
+  .stat-card.ok{background:linear-gradient(135deg, rgba(15,138,95,.35), rgba(15,138,95,.1));border:1px solid rgba(111,211,168,.55);box-shadow:0 3px 12px -3px rgba(15,138,95,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.ok .stat-icon{background:rgba(15,138,95,.18);border:1.5px solid rgba(111,211,168,.55);color:#6FD3A8;}
+  .stat-card.ok .stat-label::before{background:#6FD3A8;box-shadow:0 0 7px 1.5px rgba(111,211,168,.8);}
+  .stat-card.danger{background:linear-gradient(135deg, rgba(196,67,46,.32), rgba(196,67,46,.08));border:1px solid rgba(255,156,138,.55);box-shadow:0 3px 12px -3px rgba(196,67,46,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.danger .stat-icon{background:rgba(196,67,46,.18);border:1.5px solid rgba(255,156,138,.55);color:#FF9C8A;}
+  .stat-card.danger .stat-label::before{background:#FF9C8A;box-shadow:0 0 7px 1.5px rgba(255,156,138,.8);}
+  .stat-card.warn{background:linear-gradient(135deg, rgba(255,200,118,.32), rgba(255,200,118,.08));border:1px solid rgba(255,200,118,.55);box-shadow:0 3px 12px -3px rgba(255,200,118,.4), inset 0 1px 0 rgba(255,255,255,.1);}
+  .stat-card.warn .stat-icon{background:rgba(255,200,118,.15);border:1.5px solid rgba(255,200,118,.55);color:#FFC876;}
+  .stat-card.warn .stat-label::before{background:#FFC876;box-shadow:0 0 7px 1.5px rgba(255,200,118,.8);}
+  .phase-tabs{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:4px;gap:3px;margin:0 0 18px;}
+  .phase-tab{flex:1;text-align:center;padding:9px 6px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;transition:background .15s,color .15s;user-select:none;}
+  .phase-tab:hover{color:var(--ink);}
+  .phase-tab.active{background:rgba(232,181,76,.15);color:#E8B54C;}
+  .dash-filter{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;}
+  .dash-filter .tag{cursor:pointer;}
+  .dash-filter .tag.on{background:rgba(232,181,76,.15);color:#E8B54C;border-color:rgba(232,181,76,.55);}
   .refresh{float:right;font-size:12.5px;color:var(--blue-bright);cursor:pointer;text-decoration:underline;}
   .nav-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:14px;flex-wrap:wrap;}
   .nav-pill{display:inline-flex;align-items:center;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.2px;color:#fff;text-decoration:none;padding:7px 15px;border-radius:999px;transition:color .25s ease;white-space:nowrap;}
@@ -207,33 +236,33 @@ auth.onAuthStateChanged(user => {
 <script src="js/header-chip.js"></script>
 <main>
   <div id="errBox"></div>
+  <!-- Dashboard (2026-09-29): same layout as the other modules — cards on top, the tab bar, one view per
+       tab (no long scroll where the data gets lost). Today = the trader's day (Copilot v1); Goals & Money
+       = the CEO / CFO view; Sales Mix = where sales come from. -->
+  <h1>Dashboard <span id="todayDate" style="color:var(--ink-soft);font-weight:400;font-size:15px;"></span> <span class="refresh" onclick="loadAll();loadToday()">↻ refresh</span></h1>
+  <div class="stats-row" id="dashCards" style="grid-template-columns:repeat(4,minmax(0,1fr));"><div class="empty">Loading…</div></div>
+  <div class="phase-tabs" id="dashTabs"></div>
 
-  <!-- Today (2026-09-29, AI Copilot phase 1): the trader's day as one list, most urgent first — each
-       item says why (the real fact) and opens the place to act. Built by dashboard-summary view:today
-       (money dates shared with the alerts, credit rule shared with Quotes) + Messaging's own list. -->
-  <h1>Today <span id="todayDate" style="color:var(--ink-soft);font-weight:400;font-size:15px;"></span> <span class="refresh" onclick="loadToday()">↻ refresh</span></h1>
-  <div class="tbl-wrap" id="todayWrap"><div class="empty">Loading today…</div></div>
-
-  <!-- CEO / CFO (2026-09-29): "facturación mes, año, si estamos bien con la meta, cuánto nos falta
-       vender para llegar". Goal = loads per month (app_settings monthly_load_goal = 3); a load counts
-       when its order is created. Loads in transit / AR / plant payments / offers live in their own
-       modules (Orders, Pay & Receive, Offers) and in Today — not repeated here. -->
-  <h1>CEO / CFO <span class="refresh" onclick="loadAll()">↻ refresh</span></h1>
-  <div class="kpis" id="ceoGoals"><div class="empty">Loading…</div></div>
-  <div class="kpis" id="ceoMoney" style="margin-top:14px;"></div>
-
-  <h1>Loads per Month <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— last 12 months, against the goal</span></h1>
-  <div class="tbl-wrap" id="ceoChart" style="padding:18px 20px;"></div>
-
-  <h1>Where Sales Come From <span style="color:var(--ink-soft);font-weight:400;font-size:15px;" id="ceoYearLbl"></span></h1>
-  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;">
-    <div class="tbl-wrap" style="margin:0;"><table id="tblTopCustomers"><thead><tr><th>Customer</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
-    <div class="tbl-wrap" style="margin:0;"><table id="tblTopProducts"><thead><tr><th>Product</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
-    <div class="tbl-wrap" style="margin:0;"><table id="tblTopTraders"><thead><tr><th>Trader</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+  <div id="dashPanel_today">
+    <div class="dash-filter" id="todayFilter"></div>
+    <div class="tbl-wrap" id="todayWrap"><div class="empty">Loading today…</div></div>
   </div>
 
-  <h1>Best Orders <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by margin</span></h1>
-  <div class="tbl-wrap"><table id="tblTopMargin"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Sale</th><th>Margin</th></tr></thead><tbody></tbody></table></div>
+  <div id="dashPanel_goals" style="display:none;">
+    <div class="kpis" id="ceoGoals" style="grid-template-columns:repeat(3,minmax(0,1fr));"><div class="empty">Loading…</div></div>
+    <h1>Loads per Month <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— last 12 months, against the goal</span></h1>
+    <div class="tbl-wrap" id="ceoChart" style="padding:18px 20px;"></div>
+  </div>
+
+  <div id="dashPanel_mix" style="display:none;">
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:20px;">
+      <div class="tbl-wrap" style="margin:0;"><table id="tblTopCustomers"><thead><tr><th>Customer</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+      <div class="tbl-wrap" style="margin:0;"><table id="tblTopProducts"><thead><tr><th>Product</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+      <div class="tbl-wrap" style="margin:0;"><table id="tblTopTraders"><thead><tr><th>Trader</th><th>Loads</th><th>Sales</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <h1>Best Orders <span style="color:var(--ink-soft);font-weight:400;font-size:15px;">— by margin</span></h1>
+    <div class="tbl-wrap"><table id="tblTopMargin"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Sale</th><th>Margin</th></tr></thead><tbody></tbody></table></div>
+  </div>
 </main>
 </div><!-- /appContent -->
 
@@ -267,6 +296,7 @@ function showErr(msg){
 
 async function loadAll(){
   document.getElementById('errBox').innerHTML = '';
+  setDashTab(dashTab);
   try {
     const [summary, ceo] = await Promise.all([callApi('dashboard-summary'), callApi('dashboard-summary', { view: 'ceo' })]);
     renderCeo(ceo.ceo);
@@ -295,6 +325,13 @@ async function loadToday(){
       { prio: 2, group: 'messages', href: 'quotes.html?tab=messaging', title: `${todo.length} client${todo.length === 1 ? '' : 's'} to message today`,
         why: 'Each one has a real reason and the message is already written · ' + todo.slice(0, 3).map(c => c.trade_name.trim()).join(', ') + (todo.length > 3 ? ` +${todo.length - 3} more` : '') });
   } catch (e) {}
+  dashToday = items; renderDashCards(); setDashTab(dashTab); renderToday();
+}
+function renderToday(){
+  const wrap = document.getElementById('todayWrap'), all = dashToday || [];
+  const groups = [...new Set(all.map(i => i.group))];
+  document.getElementById('todayFilter').innerHTML = [['', 'All'], ...groups.map(g => [g, TODAY_GROUP[g] || g])].map(([g, l]) => `<span class="tag sent${todayArea === g ? ' on' : ''}" onclick="todayArea='${g}';renderToday()">${l} ${g ? all.filter(i => i.group === g).length : all.length}</span>`).join('');
+  const items = todayArea ? all.filter(i => i.group === todayArea) : all;
   if (!items.length){ wrap.innerHTML = '<div class="empty">Nothing urgent today — all caught up.</div>'; return; }
   wrap.innerHTML = `<table><thead><tr><th style="width:90px;">When</th><th style="width:100px;">Area</th><th style="text-align:left;">To do</th><th style="width:110px;"></th></tr></thead><tbody>
     ${items.map(i => `<tr>
@@ -315,7 +352,27 @@ async function loadToday(){
 // ---------- CEO / CFO ----------
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const bar = (pct, color) => `<div style="height:8px;border-radius:99px;background:rgba(255,255,255,.12);margin-top:10px;overflow:hidden;"><div style="height:100%;width:${Math.min(100, pct)}%;background:${color};border-radius:99px;"></div></div>`;
+let dashCeo = null, dashToday = null, dashTab = 'today', todayArea = '';
+const DASH_TABS = [['today', 'Today'], ['goals', 'Goals & Money'], ['mix', 'Sales Mix']];
+function setDashTab(t){
+  dashTab = t;
+  DASH_TABS.forEach(([k]) => { document.getElementById('dashPanel_' + k).style.display = k === t ? '' : 'none'; });
+  document.getElementById('dashTabs').innerHTML = DASH_TABS.map(([k, l]) => `<div class="phase-tab${k === t ? ' active' : ''}" onclick="setDashTab('${k}')">${l}${k === 'today' && dashToday ? ` <span style="opacity:.7;">(${dashToday.length})</span>` : ''}</div>`).join('');
+}
+// the four cards on top — the day, the month's goal, the month's profit, the money in the street
+function renderDashCards(){
+  if (!dashCeo || !dashToday) return;
+  const c = dashCeo, m = c.month, now = dashToday.filter(i => i.prio === 1).length, mon = MONTHS[Number(c.ym.slice(5)) - 1];
+  const card = (cls, value, label, sub, icon, tab) => `<div class="stat-card ${cls}" style="cursor:pointer;" onclick="setDashTab('${tab}')"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div><div style="min-width:0;"><div class="stat-value">${value}</div><div class="stat-label">${label}</div><div style="font-size:11.5px;color:rgba(255,255,255,.7);margin-top:3px;">${sub}</div></div></div>`;
+  const left = Math.max(0, c.goal - m.loads);
+  document.getElementById('dashCards').innerHTML =
+    card(now ? 'danger' : 'ok', now ? `${now} now` : 'All clear', 'Today', `${dashToday.length} thing${dashToday.length === 1 ? '' : 's'} to do`, '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>', 'today') +
+    card(m.loads >= c.goal ? 'ok' : 'warn', `${m.loads} of ${c.goal}`, `Loads · ${mon}`, m.loads >= c.goal ? 'Goal met' : `${left} to go`, '<rect x="1" y="7" width="15" height="10" rx="1"/><path d="M16 10h3.5L22 14v3h-6z"/><circle cx="6" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/>', 'goals') +
+    card(m.margin >= 0 ? 'hero' : 'danger', money(m.margin), `Profit · ${mon}`, `${m.sales ? (m.margin / m.sales * 100).toFixed(1) : '0.0'}% on ${money(m.sales)}`, '<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>', 'goals') +
+    card('warn', money(c.to_collect), 'To collect', `To pay ${money(c.to_pay)}`, '<path d="M12 5v14M19 12l-7 7-7-7"/>', 'goals');
+}
 function renderCeo(c){
+  dashCeo = c; renderDashCards();
   const G = '#6FD3A8', R = '#FF9C8A', A = 'var(--amber)';
   const m = c.month, y = c.year_total, left = Math.max(0, c.goal - m.loads), daysLeft = c.days_in_month - c.day_of_month;
   const monthSub = m.loads >= c.goal ? `Goal met${m.loads > c.goal ? ` · +${m.loads - c.goal} over` : ''}`
@@ -329,7 +386,7 @@ function renderCeo(c){
     kpi(`Loads · ${c.year}`, `${y.loads} <span style="font-size:15px;color:rgba(255,255,255,.7);">of ${y.goal}</span>`, yearSub, gap >= 0 ? G : R, y.loads / y.goal * 100) +
     kpi(`Sales · ${MONTHS[Number(c.ym.slice(5)) - 1]}`, money(m.sales), `${c.year}: ${money(y.sales)}`) +
     kpi(`Profit · ${MONTHS[Number(c.ym.slice(5)) - 1]}`, money(m.margin), `${pctM.toFixed(1)}% margin · ${c.year}: ${money(y.margin)} (${pctY.toFixed(1)}%)`, m.margin >= 0 ? G : R);
-  document.getElementById('ceoMoney').innerHTML =
+  document.getElementById('ceoGoals').innerHTML +=
     kpi('To collect', money(c.to_collect), 'Customers still owe on loads in Pay & Receive', G) +
     kpi('To pay', money(c.to_pay), 'Customs and freight still unpaid on those loads', A);
   // loads per month, one series, the goal as a dashed reference line; hover shows the month's numbers
@@ -343,7 +400,6 @@ function renderCeo(c){
           <div style="width:70%;max-width:38px;height:${x.loads / max * H}px;min-height:${x.loads ? 2 : 0}px;background:var(--blue-bright);border-radius:4px 4px 0 0;"></div>
           <div style="height:22px;line-height:22px;font-size:11px;color:rgba(255,255,255,.6);">${MONTHS[Number(x.ym.slice(5)) - 1]}</div></div>`).join('')}
       </div></div>`;
-  document.getElementById('ceoYearLbl').textContent = `— ${c.year}`;
   const fill = (id, rows) => { document.querySelector(`#${id} tbody`).innerHTML = rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.loads}</td><td>${money(r.sales)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No loads yet this year.</td></tr>'; };
   fill('tblTopCustomers', c.top_customers); fill('tblTopProducts', c.top_products); fill('tblTopTraders', c.top_traders);
 }
