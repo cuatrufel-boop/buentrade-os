@@ -316,7 +316,7 @@ async function loadAll(){
 }
 
 // ---------- Today ----------
-const TODAY_GROUP = { collect: 'Collect', pay: 'Pay', messages: 'Messages', credit: 'Credit', prices: 'Prices' };
+const TODAY_GROUP = { collect: 'Collect', pay: 'Pay', sell: 'Sell', messages: 'Messages', credit: 'Credit', prices: 'Prices' };
 async function loadToday(){
   const wrap = document.getElementById('todayWrap');
   document.getElementById('todayDate').textContent = '— ' + new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
@@ -329,7 +329,8 @@ async function loadToday(){
     const m = await callApi('messaging', { action: 'list', actor: currentActor() });
     const todo = (m.clients || []).filter(c => c.trade_name && !(c.options || []).some(o => o.sent_at && String(o.reason_key).startsWith('compose:')))
       .sort((a, b) => (b.score || 0) - (a.score || 0));
-    if (todo.length) items.splice(items.findIndex(i => i.prio === 2 && i.group !== 'collect' && i.group !== 'pay') < 0 ? items.length : items.findIndex(i => i.prio === 2 && i.group !== 'collect' && i.group !== 'pay'), 0,
+    const at = items.findIndex(i => i.group === 'credit' || i.group === 'prices'); // after collect / pay / sell
+    if (todo.length) items.splice(at < 0 ? items.length : at, 0,
       { prio: 2, group: 'messages', href: 'quotes.html?tab=messaging', title: `${todo.length} client${todo.length === 1 ? '' : 's'} to message today`,
         why: 'Each one has a real reason and the message is already written · ' + todo.slice(0, 3).map(c => c.trade_name.trim()).join(', ') + (todo.length > 3 ? ` +${todo.length - 3} more` : '') });
   } catch (e) {}

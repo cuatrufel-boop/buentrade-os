@@ -306,7 +306,7 @@ export async function computeProductPriceSignal(
 // starting assumption (2%); revisit once real price_history accumulates and this gets used for
 // real. Real order history comes from sales_orders (a row only exists once an offer is actually
 // won, see sent-offers-mark-won) — never sent_offers, which also holds quotes that never closed.
-const PRICE_FAVORABLE_THRESHOLD_PCT = -2;
+export const PRICE_FAVORABLE_THRESHOLD_PCT = -2;
 
 export async function computeCustomerProductSignal(
   sql: any,

@@ -973,7 +973,7 @@ const creditDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { 
 // customer's average load (avg_load, last 10 loads).
 function creditSentence(avail, avgLoad){
   const load = avgLoad ? ` (~${creditUsd(avgLoad)})` : '';
-  if (avail < 0) return { head: `Over the limit by ${creditUsd(-avail)} — can't sell`, color: '#FF9C8A', pay: avgLoad ? -avail + avgLoad : null, sub: avgLoad ? `To sell one more load${load} the customer must pay ${creditUsd(-avail + avgLoad)} first.` : 'The customer must pay before selling more.' };
+  if (avail < 0) return { head: `Over the limit by ${creditUsd(-avail)} — keep offering, ask for payment`, color: '#FF9C8A', pay: avgLoad ? -avail + avgLoad : null, sub: avgLoad ? `To sell one more load${load} the customer must pay ${creditUsd(-avail + avgLoad)} first.` : 'The customer must pay before selling more.' };
   if (avgLoad && avail < avgLoad) return { head: `Room to sell ${creditUsd(avail)} more`, color: '#E8B54C', pay: avgLoad - avail, sub: `Not enough for one load${load}: the customer must pay ${creditUsd(avgLoad - avail)} first.` };
   const n = avgLoad ? Math.floor(avail / avgLoad) : null;
   return { head: `Room to sell ${creditUsd(avail)} more`, color: '#6FD3A8', pay: null, sub: n ? `About ${n} load${n === 1 ? '' : 's'}${load} each.`.replace(' each.', n === 1 ? '.' : ' each.') : '' };
@@ -1268,7 +1268,7 @@ async function renderCustomerCredit(id){
   const loadFits = (cr.schedule || []).find(x => x.available >= (L || 1));
   // 2026-09-29 (user): BuenTrade design — the Clients / Pay & Receive stat cards and Orders' table with pill badges
   const cards = [
-    avail < 0 ? card('danger', usd(-avail), 'Over the limit', "Can't sell today", IC.stop) : card(cs.pay ? 'warn' : 'ok', usd(avail), 'Room to sell', L ? `One load ~${usd(L)}` : '', IC.ok),
+    avail < 0 ? card('danger', usd(-avail), 'Over the limit', 'Keep offering · ask for payment', IC.stop) : card(cs.pay ? 'warn' : 'ok', usd(avail), 'Room to sell', L ? `One load ~${usd(L)}` : '', IC.ok),
     card(cs.pay ? 'warn' : 'ok', cs.pay ? usd(cs.pay) : '—', 'Pay for 1 more load', cs.pay ? 'Customer must pay first' : 'Not needed', IC.pay),
     card('hero', usd(used), 'Unpaid now', `Limit ${usd(limit)}`, IC.stack),
     card('ok', loadFits ? (loadFits.from === cr.today ? 'Today' : creditDay(loadFits.from)) : '—', 'Next load fits', loadFits ? `If paid on time · room ${usd(loadFits.available)}` : 'Only after payments', IC.clock),

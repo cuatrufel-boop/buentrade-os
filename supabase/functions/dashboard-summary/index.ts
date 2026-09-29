@@ -4,7 +4,7 @@
 // when, what's overdue right now, what's coming due soon, and where every active load stands.
 
 import postgres from "npm:postgres@3.4.4";
-import { creditSchedule, customerAvgLoad, customerOpenLoads, jsonResponse, traderDisplayName } from "../_shared/matching.ts";
+import { computeProductPriceSignal, creditSchedule, customerAvgLoad, customerOpenLoads, jsonResponse, PRICE_FAVORABLE_THRESHOLD_PCT, traderDisplayName } from "../_shared/matching.ts";
 import { bizDay, COLLECT_FROM_DAY, payReceiveLoads } from "../_shared/moneyStatus.ts";
 
 // ---------- "Today" (2026-09-29, AI Copilot phase 1) ----------
@@ -42,9 +42,12 @@ async function todayList() {
     const loads = await customerOpenLoads(sql, c.id); if (!loads.length) continue;
     const sc = creditSchedule(loads, Number(c.credit_limit));
     if (sc.available_today < 0) {
+      // 2026-09-29 (user): never stop offering an over-limit customer — "se pierde la comunicación y menos
+      // paga": keep offering and ask for the payment, naming the invoice and its amount
       const L = await customerAvgLoad(sql, c.id), fits = sc.steps.find((x) => x.available >= (L || 1));
+      const inv = loads.filter((l: any) => l.delivered).sort((a: any, b: any) => String(a.due).localeCompare(String(b.due)))[0];
       items.push({ prio: 2, group: "credit", title: `${c.name} is over the limit by ${usd0(-sc.available_today)}`, href: `customers.html?open=${c.id}`, sort: 0,
-        why: `Don't offer yet${L ? ` · must pay ${usd0(-sc.available_today + L)} for one more load` : ""}${fits ? ` · next load fits ${md(new Date(fits.from + "T00:00:00Z"))} if paid on time` : ""}` });
+        why: `Keep offering — ${inv ? `ask them to pay INV-${inv.order_number} (${usd0(Number(inv.amount))}) to free credit` : "ask for payment of their open loads"}${L ? ` · they must pay ${usd0(-sc.available_today + L)} for one more load` : ""}${fits ? ` · next load fits ${md(new Date(fits.from + "T00:00:00Z"))} if paid on time` : ""}` });
     }
   }
   // prices of what the clients buy, older than Quotes' stale limit
@@ -57,7 +60,26 @@ async function todayList() {
     order by 2 desc, 3 nulls first`;
   if (stale.length) items.push({ prio: 2, group: "prices", href: "quotes.html", sort: 0, title: `${stale.length} product${stale.length === 1 ? "" : "s"} your clients buy have old or no prices`,
     why: stale.slice(0, 3).map((r: any) => `${r.name} (${r.clients} client${r.clients === 1 ? "" : "s"}, ${r.last ? "price " + md(new Date(r.last)) : "no price"})`).join(" · ") + (stale.length > 3 ? ` · +${stale.length - 3} more` : "") });
-  const G = { collect: 0, pay: 1, credit: 2, prices: 3 } as Record<string, number>;
+  // what to offer first: products the clients buy that have a current price (≤ PRICE_STALE_DAYS old), most
+  // competitive first — best plant price vs. its own 30-day market average (Quotes' price signal); a
+  // favorable one (≤ PRICE_FAVORABLE_THRESHOLD_PCT) leads, then the other fresh ones by how many clients buy it
+  const fresh = await sql`
+    select cp.product_id, p.full_name_en as name, max(ph.price_date) as last,
+      array_agg(distinct trim(c.trade_name)) as clients, count(distinct cp.customer_id)::int as n
+    from customer_products cp join products p on p.id = cp.product_id join customers c on c.id = cp.customer_id
+    join price_history ph on ph.product_id = cp.product_id
+    group by cp.product_id, p.full_name_en
+    having max(ph.price_date) >= (now() at time zone 'America/New_York')::date - ${PRICE_STALE_DAYS}::int`;
+  const sell: any[] = [];
+  for (const f of fresh) { const sig = await computeProductPriceSignal(sql, f.product_id); sell.push({ ...f, sig, pct: sig?.trend ? sig.trend.pctChange : null }); }
+  sell.sort((a, b) => ((a.pct ?? 0) <= PRICE_FAVORABLE_THRESHOLD_PCT ? 0 : 1) - ((b.pct ?? 0) <= PRICE_FAVORABLE_THRESHOLD_PCT ? 0 : 1) || (a.pct ?? 0) - (b.pct ?? 0) || b.n - a.n);
+  for (const f of sell.slice(0, 5)) {
+    const good = f.pct != null && f.pct <= PRICE_FAVORABLE_THRESHOLD_PCT;
+    items.push({ prio: 2, group: "sell", href: `quotes.html?products=${f.product_id}`, sort: f.pct ?? 0,
+      title: `Offer ${f.name} to ${f.clients.slice(0, 3).join(", ")}${f.n > 3 ? ` +${f.n - 3}` : ""}`,
+      why: `${f.n === 1 ? "1 client buys" : `${f.n} clients buy`} it · best price $${Number(f.sig?.latestBest ?? 0).toFixed(2)}/lb (${md(new Date(f.last))})${good ? ` · ${Math.abs(f.pct).toFixed(1)}% below its 30-day market average` : f.pct != null ? ` · ${f.pct > 0 ? "+" : ""}${f.pct.toFixed(1)}% vs 30-day average` : " · current price"}` });
+  }
+  const G = { collect: 0, pay: 1, sell: 2, credit: 3, prices: 4 } as Record<string, number>;
   return items.sort((a, b) => a.prio - b.prio || G[a.group] - G[b.group] || a.sort - b.sort);
 }
 
