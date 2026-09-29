@@ -998,11 +998,14 @@ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 // STAGING Trading OS API — see providers.html/plants.html for the full note. Every read/write
 // goes through an Edge Function; there is no direct table access from this page anymore.
 const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+// Run the functions next to the database (us-east-1), not near the browser (2026-09-29, measured: a function
+// running in Europe spent ~830 ms connecting to the US database and 86 ms per query; pinned: 80 ms and 3 ms).
+const API_REGION = '?forceFunctionRegion=us-east-1';
 const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
 const APP_ORIGIN = 'https://wonderful-longma-8b07c7.netlify.app';
 
 async function callApi(fn, body){
-  const res = await fetch(API_ROOT + fn, {
+  const res = await fetch(API_ROOT + fn + API_REGION, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
     body: JSON.stringify(body || {}),

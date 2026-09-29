@@ -491,6 +491,9 @@ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 // goes through an Edge Function. The one deliberate exception is file Storage (order-documents
 // PDFs) — storageClient below, pointed at staging's bucket, same pattern as offers.html.
 const API_ROOT = 'https://geqhjykbxvxugvnpnygn.supabase.co/functions/v1/';
+// Run the functions next to the database (us-east-1), not near the browser (2026-09-29, measured: a function
+// running in Europe spent ~830 ms connecting to the US database and 86 ms per query; pinned: 80 ms and 3 ms).
+const API_REGION = '?forceFunctionRegion=us-east-1';
 const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
 // Same fixed origin trading-tool.html's createAndShareInvoice uses for its sign-invoice.html link —
 // must NOT be window.location.origin, which would bake in "http://localhost:8901" (or whatever
@@ -498,7 +501,7 @@ const API_KEY = 'sb_publishable_p7na-oT05z2cPHXdzgzD6Q_Y29Hv3pe';
 const APP_ORIGIN = 'https://wonderful-longma-8b07c7.netlify.app';
 
 async function callApi(fn, body){
-  const res = await fetch(API_ROOT + fn, {
+  const res = await fetch(API_ROOT + fn + API_REGION, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'apikey': API_KEY },
     body: JSON.stringify(body || {}),
