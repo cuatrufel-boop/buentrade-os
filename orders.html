@@ -581,7 +581,9 @@ auth.onAuthStateChanged(user => {
     if (btAuthLoaded) return;
     btAuthLoaded = true;
     runPendingWonDocConfirm().then(() => {
-      loadStatusOrders();
+      // ?open=<order> (profile History links, 2026-09-29): just open that load — unlike ?focus=
+      // (alerts), which fires the load's urgent action
+      loadStatusOrders().then(() => { const op = new URLSearchParams(location.search).get('open'); if (op && findStatusOrder(op)) openOrderDetail(op); });
       initPushNotifications();
       // Real correction 2026-09-14: disabling this outright (2026-09-13, "no me gusta ahi debe ser
       // cuando entras a cada modulo") broke the ?focus= deep-link the push/email alerts

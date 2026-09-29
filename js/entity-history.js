@@ -32,7 +32,7 @@
     const rows = s.rows.filter(m => (!s.type || m.kind === s.type) && (!s.from || m.day >= s.from) && (!s.to || m.day <= s.to)
       && (!q || [m.order_number, m.label, m.ref].some(v => v && String(v).toLowerCase().includes(q))));
     const date = (key, lab) => `<label class="muted" style="font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;">${lab}<input type="date" value="${s[key]}" onchange="entityHistorySet('${id}','${key}',this.value)" style="height:38px;box-sizing:border-box;padding:0 8px;border-radius:7px;border:1.5px solid rgba(90,170,255,.4);background:rgba(255,255,255,.05);color:var(--blue-bright);font-weight:700;font-size:12px;font-family:'Inter',sans-serif;color-scheme:dark;"></label>`;
-    const loadLink = n => n.split(', ').map(o => `<a href="${s.inPR.has(o) ? 'collections.html' : 'orders.html'}?focus=${encodeURIComponent(o)}" style="color:var(--blue-bright);">${escapeHtml(o)}</a>`).join(', ');
+    const loadLink = n => n.split(', ').map(o => `<a href="${s.inPR.has(o) ? 'collections.html?focus=' : 'orders.html?open='}${encodeURIComponent(o)}" style="color:var(--blue-bright);">${escapeHtml(o)}</a>`).join(', ');
     const docCell = m => m.file_url ? `<a href="${m.file_url}" target="_blank" style="color:var(--blue-bright);">Invoice PDF</a>`
       : m.doc ? `<a href="#" onclick="openDocPdf('${m.doc}','${m.order_number}');return false;" style="color:var(--blue-bright);">${m.doc} PDF</a>` : '';
     const total = rows.filter(m => m.kind === 'payment').reduce((n, m) => n + (m.amount || 0), 0);
