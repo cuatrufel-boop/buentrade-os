@@ -189,6 +189,10 @@
   .payment-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;border:1px solid transparent;display:inline-block;}
   .payment-badge.ok{background:transparent;color:#6FD3A8;border-color:rgba(15,138,95,.4);}
   .payment-badge.due-soon{background:transparent;color:#FFC876;border-color:rgba(255,200,118,.4);}
+  .payment-badge.overdue{background:transparent;color:#FF9C8A;border-color:rgba(196,67,46,.4);}
+  /* credit cards on the profile: four equal values (same as Pay & Receive's money cards) */
+  .cr-cards .stat-value,.cr-cards .stat-card.hero .stat-value{font-size:22px;white-space:nowrap;}
+  .payment-badge.active{background:transparent;color:var(--blue-bright);border-color:rgba(90,170,255,.4);}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .name-link:hover{text-decoration:underline;}
@@ -1244,32 +1248,40 @@ async function renderCustomerCredit(id){
   const el = document.getElementById('custCredit'); el.innerHTML = '';
   let cr; try { cr = (await callApi('customers-search', { credit_for: id })).credit; } catch (e) { return; }
   if (viewingCustomerId !== id || !cr) return;
-  const usd = v => '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  const mdy = d => d ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : '—';
-  const MONO = "font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;";
-  const box = inner => `<div style="border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);padding:16px 20px;">${inner}</div>`;
-  if (cr.credit_limit == null){ el.innerHTML = box(`<span style="font-family:'Space Grotesk',sans-serif;font-weight:700;">Credit</span> <span class="muted" style="font-size:12.5px;margin-left:8px;">No credit limit set — add it in Details.</span>`); return; }
+  const usd = creditUsd, mdy = d => d ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : '—';
+  const card = (cls, value, label, sub, icon) => `<div class="stat-card ${cls}"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div><div style="min-width:0;"><div class="stat-value">${value}</div><div class="stat-label">${label}</div>${sub ? `<div class="muted" style="font-size:11.5px;margin-top:3px;">${sub}</div>` : ''}</div></div>`;
+  const IC = { ok: '<path d="M20 6 9 17l-5-5"/>', stop: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>', pay: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>', stack: '<path d="M3 7h18M3 12h18M3 17h18"/>' };
+  if (cr.credit_limit == null){ el.innerHTML = `<div class="stats-row" style="grid-template-columns:1fr;margin:0;">${card('warn', 'No limit', 'Credit limit not set', 'Add it in Details', IC.clock)}</div>`; return; }
   const limit = Number(cr.credit_limit), loads = (cr.loads || []).map(l => ({ ...l, due: l.due ? String(l.due).slice(0, 10) : null })), used = loads.reduce((n, l) => n + Number(l.amount), 0), avail = limit - used;
+  const cs = creditSentence(avail, cr.avg_load), L = cr.avg_load;
   const days = d => d ? Math.round((new Date(d + 'T00:00:00Z') - new Date(cr.today + 'T00:00:00Z')) / 86400000) : null;
-  // bar (user 2026-09-29: "verde hasta 100, rojo después del límite"): each load in order, green
-  // while it fits under the limit, red for the part above it; a mark at the limit
+  // the first day one more load fits, if every load is paid on time
+  const loadFits = (cr.schedule || []).find(x => x.available >= (L || 1));
+  // 2026-09-29 (user): BuenTrade design — the Clients / Pay & Receive stat cards and Orders' table with pill badges
+  const cards = [
+    avail < 0 ? card('danger', usd(-avail), 'Over the limit', "Can't sell today", IC.stop) : card(cs.pay ? 'warn' : 'ok', usd(avail), 'Room to sell', L ? `One load ~${usd(L)}` : '', IC.ok),
+    card(cs.pay ? 'warn' : 'ok', cs.pay ? usd(cs.pay) : '—', 'Pay for 1 more load', cs.pay ? 'Customer must pay first' : 'Not needed', IC.pay),
+    card('hero', usd(used), 'Unpaid now', `Limit ${usd(limit)}`, IC.stack),
+    card('ok', loadFits ? (loadFits.from === cr.today ? 'Today' : creditDay(loadFits.from)) : '—', 'Next load fits', loadFits ? `If paid on time · room ${usd(loadFits.available)}` : 'Only after payments', IC.clock),
+  ].join('');
+  // bar: green up to the limit, red above it ("verde hasta 100, rojo después")
   let run = 0; const segs = loads.map(l => { const a = Number(l.amount), inside = Math.max(0, Math.min(a, limit - run)); run += a; return { l, inside, over: a - inside }; });
-  const color = l => { const g = segs.find(x => x.l === l); return g && g.over > 0 ? '#FF9C8A' : '#6FD3A8'; };
-  const state = l => { const n = days(l.due); return !l.due ? 'no date yet' : n < 0 ? `${-n}d overdue` : `due ${mdy(l.due)}`; };
   const total = Math.max(limit, used) || 1;
-  const later = (cr.schedule || []).slice(1).filter(x => x.available > Math.max(0, avail)); // only the dates something can be sold
-  const cs = creditSentence(avail, cr.avg_load);
-  el.innerHTML = box(`
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:${cs.color};">${cs.head}</span><span class="muted" style="${MONO}font-size:12px;">limit ${usd(limit)} · unpaid ${usd(used)}</span></div>
-    ${cs.sub ? `<div style="font-size:13.5px;margin-top:6px;color:var(--ink);">${cs.sub}</div>` : ''}
-    ${later.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${later.map(x => `<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;background:rgba(255,255,255,.04);"><span class="muted">From ${creditDay(x.from)}, if paid on time: room</span> <b style="${MONO}color:${creditColor(x.available, limit)};">${usd(Math.max(0, x.available))}</b></span>`).join('')}</div>` : ''}
-    <div style="position:relative;margin:16px 0 22px;">
-      <div style="display:flex;height:14px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.06);">${segs.map(g => (g.inside ? `<div title="${escapeHtml(g.l.order_number)}" style="width:${g.inside / total * 100}%;background:#6FD3A8;border-right:2px solid rgba(15,31,51,.6);"></div>` : '') + (g.over ? `<div title="${escapeHtml(g.l.order_number)} — over the limit" style="width:${g.over / total * 100}%;background:#FF9C8A;border-right:2px solid rgba(15,31,51,.6);"></div>` : '')).join('')}${avail > 0 ? `<div style="width:${avail / total * 100}%;background:rgba(255,255,255,.1);"></div>` : ''}</div>
-      <div style="position:absolute;left:${limit / total * 100}%;top:-5px;width:2px;height:24px;background:var(--ink);"></div>
-      <div class="muted" style="position:absolute;left:${limit / total * 100}%;top:22px;transform:translateX(${used > limit ? '-50%' : '-100%'});font-size:10.5px;white-space:nowrap;">Limit ${usd(limit)}</div>
-    </div>
-    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;">${loads.map(l => `<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:3px;background:${color(l)};"></span><b style="${MONO}">${escapeHtml(l.order_number)}</b><b style="${MONO}">${usd(l.amount)}</b><span class="muted" style="${days(l.due) != null && days(l.due) < 0 ? 'color:#FF9C8A;' : ''}">${state(l)}${l.delivered ? '' : ' · in transit'}</span></span>`).join('')}${avail > 0 ? `<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:3px;background:rgba(255,255,255,.25);"></span><span class="muted">Available</span><b style="${MONO}">${usd(avail)}</b></span>` : ''}</div>
-    ${loads.length ? `<div class="muted" style="font-size:11.5px;margin-top:10px;">Each load frees its credit only when it's paid. The dates assume each load is paid when due (30 days after delivery); never more than ${usd(limit)} unpaid at the same time.</div>` : ''}`);
+  const bar = `<div style="position:relative;margin:4px 0 26px;">
+      <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.06);">${segs.map(g => (g.inside ? `<div title="${escapeHtml(g.l.order_number)}" style="width:${g.inside / total * 100}%;background:#6FD3A8;border-right:2px solid rgba(15,31,51,.7);"></div>` : '') + (g.over ? `<div title="${escapeHtml(g.l.order_number)} — over the limit" style="width:${g.over / total * 100}%;background:#FF9C8A;border-right:2px solid rgba(15,31,51,.7);"></div>` : '')).join('')}</div>
+      <div style="position:absolute;left:${limit / total * 100}%;top:-4px;width:2px;height:18px;background:var(--ink);"></div>
+      <div class="muted" style="position:absolute;left:${limit / total * 100}%;top:16px;transform:translateX(${used > limit ? '-50%' : '-100%'});font-size:10.5px;white-space:nowrap;">Limit ${usd(limit)}</div></div>`;
+  const badge = l => { const n = days(l.due); return !l.due ? '<span class="payment-badge">No date</span>' : n < 0 ? `<span class="payment-badge overdue">${-n}d overdue</span>` : n <= 7 ? `<span class="payment-badge due-soon">Due in ${n}d</span>` : `<span class="payment-badge active">Due ${mdy(l.due)}</span>`; };
+  const over = new Set(segs.filter(g => g.over > 0).map(g => g.l.order_number));
+  const table = loads.length ? `<div class="table-scroll"><table><thead><tr><th>Order</th><th>Sale</th><th>Delivery</th><th>Due</th><th>Credit</th></tr></thead><tbody>
+      ${loads.map(l => `<tr><td class="order-num">${escapeHtml(l.order_number)}</td><td class="num">${usd(l.amount)}</td><td>${l.delivered ? '<span class="payment-badge ok">Delivered</span>' : '<span class="payment-badge active">In transit</span>'}</td><td>${badge(l)}</td><td>${over.has(l.order_number) ? '<span class="payment-badge overdue">Over limit</span>' : '<span class="payment-badge ok">Within limit</span>'}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="empty">No unpaid loads — the full limit is available.</div>';
+  el.innerHTML = `<div class="stats-row cr-cards" style="grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 14px;">${cards}</div>
+    <div class="card" style="margin:0;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px;"><b style="font-family:'Space Grotesk',sans-serif;color:${cs.color};">${cs.head}</b><span class="muted" style="font-size:12.5px;">${cs.sub}</span></div>
+      ${loads.length ? bar : ''}${table}
+      <div class="muted" style="font-size:11.5px;margin-top:10px;">Credit is freed only when a load is paid. Dates assume payment 30 days after delivery; never more than ${usd(limit)} unpaid at the same time.</div>
+    </div>`;
 }
 
 function countryName(countryId){
