@@ -153,6 +153,7 @@ export interface ExtractedImageItem {
   isFormula: boolean; // true when the price cell is a formula (e.g. "DPS*1.2+0.12"), not a number
   temperature: "Fresh" | "Frozen" | "Unknown"; // from the image itself, or from the surrounding email text passed as context
   facilities: string[]; // the plant/facility names printed in this row's Plant column (e.g. ["EG", "Fremont"]), [] when the image has none
+  facilitiesWithLoads: string[]; // the subset of those whose own sub-row shows a load count (a number, not "-") in any date column — where the product ships from
 }
 
 const IMAGE_EXTRACTION_SCHEMA = {
@@ -169,8 +170,9 @@ const IMAGE_EXTRACTION_SCHEMA = {
           isFormula: { type: "boolean", description: "true when the price cell shows a formula (e.g. 'DPS*1.2+0.12') instead of a plain number — price is meaningless in that case, ignore it downstream." },
           temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if the image itself states it (a column, a header) OR if the surrounding email text (given as context) says what this whole picture is — e.g. an email saying 'below are our fresh offers, attached is our frozen list' means every row in the image is Fresh. Unknown only if genuinely neither says." },
           facilities: { type: "array", items: { type: "string" }, description: "The plant/facility names printed in the Plant column for this product row, exactly as printed (e.g. 'EG', 'Fremont') — one entry per facility sub-row of this product. [] when the image has no such column." },
+          facilitiesWithLoads: { type: "array", items: { type: "string" }, description: "Of this product's facility sub-rows, the facility names whose OWN sub-row has a load count (a number such as 1, 2) in any of the per-date columns. A sub-row showing only '-' in every date column has no loads and is NOT listed. This is where the product actually ships from. [] when none, or when the image has no facility/date grid." },
         },
-        required: ["item", "packStyle", "price", "isFormula", "temperature", "facilities"],
+        required: ["item", "packStyle", "price", "isFormula", "temperature", "facilities", "facilitiesWithLoads"],
         additionalProperties: false,
       },
     },
@@ -185,7 +187,7 @@ You are also given the plain-text body of the email this image came from, for co
 
 Rules:
 - Extract ONE item per product row: its item name/code, its pack-style code, its price, and its temperature.
-- Ignore the per-date availability columns entirely — do not extract dates or load counts. The item, pack-style, price, temperature and the facility names matter.
+- Do not extract dates or load counts as values. But DO use them for one thing: each facility sub-row either has a load count (a number) in some date column or shows only "-". Report in "facilitiesWithLoads" the facilities whose own sub-row has a number — that is the city the product ships from.
 - When a product has one sub-row per facility (a "Plant" column with e.g. EG and Fremont) with the identical item, pack-style, and price, extract the product ONCE and list every facility name printed for it in "facilities", exactly as printed.
 - If the price cell contains a formula (e.g. "DPS*1.2+0.12") instead of a plain number, set isFormula true and price 0 — never invent a numeric value for a formula.
 - Transcribe the item name and pack-style exactly as printed, including abbreviations — do not expand or translate them.

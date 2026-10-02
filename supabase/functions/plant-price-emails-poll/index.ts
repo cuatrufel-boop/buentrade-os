@@ -189,9 +189,12 @@ async function extractImageItems(
       // temperature the image or the text did state.
       const temp = it.temperature !== "Unknown" ? it.temperature : defaultTemp;
       const rawText = temp ? `${temp} — ${it.item} ${it.packStyle}` : `${it.item} ${it.packStyle}`;
-      // City from the picture's Plant column. One facility → its "City, ST". Several facilities share one price row and a product
-      // keeps ONE pickup city, so with more than one the city is left empty rather than guessed.
-      const cities = [...new Set((it.facilities || []).map((f: string) => FACILITY_ALIASES[f.trim().toLowerCase()]).filter(Boolean))];
+      // City = the facility whose own sub-row carries the load count (the "1" under a date), the way a person reads the grid
+      // ("1 carga fob Fremont"). When the picture shows no load on any sub-row, the only facility printed is used; if loads sit on
+      // several, or nothing says, the city stays empty rather than guessed.
+      const toCities = (arr: string[] | undefined) => [...new Set((arr || []).map((f: string) => FACILITY_ALIASES[f.trim().toLowerCase()]).filter(Boolean))];
+      const withLoads = toCities(it.facilitiesWithLoads);
+      const cities = withLoads.length ? withLoads : toCities(it.facilities).length === 1 ? toCities(it.facilities) : [];
       items.push({
         rawText: rawText.trim(), price: it.price,
         freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
