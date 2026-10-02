@@ -294,6 +294,9 @@
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
+  .pph-table{width:100%;max-width:420px;border-collapse:collapse;}
+  .pph-table th{text-align:left;font-size:10.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;padding:4px 10px;}
+  .pph-table td{padding:5px 10px;font-size:12.5px;border-top:1px solid var(--line);}
   .name-link:hover{text-decoration:underline;}
   /* Real ask 2026-09-09: the Plants list and per-plant Products & Prices list are real <table>s
      now (see renderPlants()/renderPlantProducts()) — .pkg-table-wrap/.pkg-row no longer used
@@ -4383,9 +4386,32 @@ function renderPlantProducts(){
         <div class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}</div>
       </td>
       <td class="num">${fmtPriceCell(p)}</td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${photoBtn}${specBtn}<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${photoBtn}${specBtn}<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="togglePlantPriceHistory('${p.id}', this)">Price History</button><button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
     </tr>`;
   }).join('');
+}
+
+// This plant's price history for one product, newest first, right under its row (2026-10-02, user: "no veo en Smithfield los
+// precios que se subieron ayer"). The row above only ever shows the CURRENT price; every earlier one is in price_history (read
+// through the same price-history-search the Products screen uses). Read-only — nothing here writes.
+async function togglePlantPriceHistory(productId, btn){
+  const tr = btn.closest('tr');
+  const open = tr.nextElementSibling && tr.nextElementSibling.classList.contains('pph-row');
+  if (open){ tr.nextElementSibling.remove(); return; }
+  const row = document.createElement('tr');
+  row.className = 'pph-row';
+  row.innerHTML = '<td colspan="3" style="padding:6px 8px 12px;"><div class="muted" style="font-size:12.5px;">Loading…</div></td>';
+  tr.after(row);
+  const plant = plants.find(x => x.id === currentPlantId);
+  let data;
+  try { data = await callApi('price-history-search', { product_id: productId }); }
+  catch (e){ row.firstElementChild.innerHTML = `<div class="muted" style="font-size:12.5px;">Error: ${escapeHtml(e.message)}</div>`; return; }
+  const mine = (data.results || []).filter(r => String(r.plant_name || '').trim() === String((plant && plant.name) || '').trim());
+  if (!mine.length){ row.firstElementChild.innerHTML = '<div class="muted" style="font-size:12.5px;">No price recorded for this product at this plant yet.</div>'; return; }
+  const day = d => new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  row.firstElementChild.innerHTML = `<table class="pph-table"><thead><tr><th>Date</th><th>Price</th></tr></thead><tbody>
+    ${mine.map(r => `<tr><td>${escapeHtml(day(r.price_date))}</td><td>$${Number(r.price).toFixed(4)}/lb</td></tr>`).join('')}
+  </tbody></table>`;
 }
 
 function normalizeProductName(s){

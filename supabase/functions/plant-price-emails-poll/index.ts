@@ -701,7 +701,9 @@ Deno.serve(async (req) => {
       // (a trader cares more that a specific ask got answered than a generic count). Fire-and-
       // forget on purpose: a notification failing to send should never fail the whole poll run or
       // block the next message from processing.
-      if (allAppliedForNotification.length && TRADER_NOTIFICATION_EMAILS.length) {
+      // A deliberate re-read of one old message (test_message_id) never alerts anyone: on 2026-10-02 re-running the Sept 30 Wholestone
+      // list emailed "32 prices just applied" to the trader's inbox. Alerts are for what the real */15 cron reads.
+      if (!testMessageId && allAppliedForNotification.length && TRADER_NOTIFICATION_EMAILS.length) {
         const useRequested = resolvedForTrader.length > 0;
         const items = useRequested ? resolvedForTrader : allAppliedForNotification;
         const lines = items.map((r) => `${r.name} — $${r.price.toFixed(4)}/lb`).join("\n");
@@ -721,7 +723,7 @@ Deno.serve(async (req) => {
       // Offer Sheets part 4: this plant answered an open sheet that asked it → mark answered and alert the sheet's owner.
       // The sheet itself shows the new price as NEW on its own (read live); this is only the "it just came in" signal.
       // Never fails the poll run — a missed alert must not block the next email.
-      if (appliedForSheets.size) {
+      if (!testMessageId && appliedForSheets.size) {
         try {
           const answered = await sql`
             update offer_sheet_plants sp set answered_at = now()
