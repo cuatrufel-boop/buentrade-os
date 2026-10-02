@@ -295,21 +295,16 @@
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
   .pcell{display:flex;align-items:center;justify-content:flex-start;gap:10px;flex-wrap:wrap;padding-left:6px;}
-  .pcell-date{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--ink);min-width:44px;}
   .pprice{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;padding:3px 13px;border-radius:20px;border:1.5px solid transparent;white-space:nowrap;min-width:76px;text-align:center;box-sizing:border-box;}
   .pprice.ok{color:#6FD3A8;border-color:rgba(111,211,168,.5);background:rgba(111,211,168,.08);}
   .pprice.stale{color:#FFC876;border-color:rgba(255,200,118,.5);background:rgba(255,200,118,.08);}
-  .pstatus{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 9px;border-radius:20px;border:1px solid transparent;white-space:nowrap;min-width:78px;text-align:center;box-sizing:border-box;}
-  .pstatus.ok{color:#6FD3A8;border-color:rgba(111,211,168,.45);}
-  .pstatus.stale{color:#FFC876;border-color:rgba(255,200,118,.45);}
-  .pph-prev{display:inline-flex;align-items:baseline;gap:7px;padding-left:10px;border-left:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
-  .pph-click{cursor:pointer;}
-  .pph-click:hover{color:var(--ink);}
-  .pph-delta{font-weight:700;color:var(--ink-soft);}
-  .pph-delta.down{color:#6FD3A8;}
-  .pph-delta.up{color:#FF9C8A;}
-  .pph-chev{color:var(--blue-bright);font-size:10px;}
-  .pph-list{margin:4px auto 0;max-width:170px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pdate{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;padding:3px 12px;border-radius:20px;border:1px solid transparent;white-space:nowrap;min-width:128px;text-align:center;box-sizing:border-box;}
+  .pdate.ok{color:#6FD3A8;border-color:rgba(111,211,168,.45);}
+  .pdate.stale{color:#FFC876;border-color:rgba(255,200,118,.45);}
+  .pdate-click{cursor:pointer;}
+  .pdate-click:hover{background:rgba(255,255,255,.08);}
+  .pph-chev{font-size:10px;margin-left:3px;}
+  .pph-list{margin:4px 0 0 92px;max-width:170px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
   .pph-item{display:flex;justify-content:space-between;padding:2px 2px;border-top:1px solid var(--line);}
   .name-link:hover{text-decoration:underline;}
   /* Real ask 2026-09-09: the Plants list and per-plant Products & Prices list are real <table>s
@@ -2871,35 +2866,29 @@ function fmtPriceCell(p){
   // (green = current, amber = old), with a quiet caption underneath saying when it is from.
   const earlier = earlierPricesParts(p);
   // BuenTrade design (same pill recipe as the payment badges in Orders): the price is a pill — green while current, amber once it
-  // is past PRICE_STALE_DAYS — and when it is from is a status pill next to its date ("today" / "8 days old").
-  const priceTone = stale ? 'stale' : 'ok';
-  if (!dateStr) return `<div class="pcell"><span class="pprice ${priceTone}">$${Number(p.current_price).toFixed(2)}</span>${earlier.line}</div>${earlier.list}`;
+  // is past PRICE_STALE_DAYS — and the date of the last upload is a second pill ("Oct 2 · today" / "Sep 24 · 8 days old") that is
+  // also the button for the price history when there is one (▾).
+  const tone = stale ? 'stale' : 'ok';
+  const price = `<span class="pprice ${tone}">$${Number(p.current_price).toFixed(2)}</span>`;
+  if (!dateStr) return `<div class="pcell">${price}</div>`;
   const ageText = age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} old`;
-  return `<div class="pcell"><span class="pprice ${priceTone}">$${Number(p.current_price).toFixed(2)}</span>` +
-    `<span class="pcell-date">${dateStr}</span><span class="pstatus ${priceTone}">${ageText}</span>${earlier.line}</div>${earlier.list}`;
+  const hist = earlierPricesParts(p);
+  return `<div class="pcell">${price}<span class="pdate ${tone}${hist.count ? ' pdate-click' : ''}"${hist.count ? ` onclick="togglePriceList(this)" title="Price History (${hist.count})"` : ''}>${dateStr} · ${ageText}${hist.count ? ' <span class="pph-chev">▾</span>' : ''}</span></div>${hist.list}`;
 }
 
-// The price cell is ONE line: "$1.26  Oct 2 · today │ Sep 30 · $1.22 ▲ 0.04 ▾". The last part is the previous price and its change;
-// when there are more earlier prices it is clickable (▾) and opens them under the line, newest first. Read from price_history;
-// nothing is deleted or overwritten.
+// The earlier prices of this plant for the product (price_history), newest first. The last-upload pill in the cell opens them under
+// the row. The entry that IS the current price is not repeated. Nothing is deleted or overwritten.
 function earlierPricesParts(p){
   const cur = toDateOnly(p.price_date);
   const rows = (plantPriceHistory[p.id] || []).filter(r => !(toDateOnly(r.price_date) === cur && Number(r.price) === Number(p.current_price)));
-  if (!rows.length) return { line: '', list: '' };
+  if (!rows.length) return { count: 0, list: '' };
   const day = r => { const d = toDateOnly(r.price_date); return d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'; };
-  const prev = rows[0], diff = Number(p.current_price) - Number(prev.price);
-  const delta = Math.abs(diff) < 0.005 ? '<span class="pph-delta">=</span>'
-    : `<span class="pph-delta ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} ${Math.abs(diff).toFixed(2)}</span>`;
-  const many = rows.length > 1;
-  return {
-    line: `<span class="pph-prev${many ? ' pph-click' : ''}"${many ? ` onclick="togglePriceList(this)" title="Price History (${rows.length})"` : ''}><span>${day(prev)} · $${Number(prev.price).toFixed(2)}</span>${delta}${many ? '<span class="pph-chev">▾</span>' : ''}</span>`,
-    list: many ? `<div class="pph-list" style="display:none;">${rows.map(r => `<div class="pph-item"><span>${day(r)}</span><span>$${Number(r.price).toFixed(2)}</span></div>`).join('')}</div>` : '',
-  };
+  return { count: rows.length, list: `<div class="pph-list" style="display:none;">${rows.map(r => `<div class="pph-item"><span>${day(r)}</span><span>$${Number(r.price).toFixed(2)}</span></div>`).join('')}</div>` };
 }
-function togglePriceList(line){
-  const list = line.closest('.pcell').nextElementSibling, open = list.style.display === 'none';
+function togglePriceList(pill){
+  const list = pill.closest('.pcell').nextElementSibling, open = list.style.display === 'none';
   list.style.display = open ? 'block' : 'none';
-  line.querySelector('.pph-chev').textContent = open ? '▴' : '▾';
+  pill.querySelector('.pph-chev').textContent = open ? '▴' : '▾';
 }
 
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
