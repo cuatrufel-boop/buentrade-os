@@ -2,7 +2,7 @@
 // as productMatcher.ts/applyPlantProductMatch.ts — one shared connection for plant-price-emails-
 // poll instead of a fresh HTTP call per unresolved line.
 
-import { normalize, writeAuditLog } from "./matching.ts";
+import { canonicalPendingText, writeAuditLog } from "./matching.ts";
 
 export type CreatePendingMatchResult =
   | { pending_match: Record<string, any>; idempotent_replay?: true }
@@ -37,13 +37,13 @@ export async function createPendingMatch(
   // + signal type, and refresh IT (new price, new candidates, bumped to "now") instead of creating
   // a duplicate. A row that was already resolved is left alone — a fresh, genuinely new occurrence
   // after that gets its own new row, same as today.
-  const normalizedText = normalize(raw_text);
-  const [existingUnresolved] = await sql`
+  const key = canonicalPendingText(raw_text);
+  const open = await sql`
     select * from plant_pending_matches
     where plant_id = ${plant_id} and signal_type = ${signal_type} and resolved_at is null
-      and lower(trim(regexp_replace(raw_text, '\\s+', ' ', 'g'))) = ${normalizedText}
-    order by created_at desc limit 1
+    order by created_at desc
   `;
+  const existingUnresolved = open.find((r: any) => canonicalPendingText(r.raw_text) === key);
 
   const result = await sql.begin(async (tx: any) => {
     if (existingUnresolved) {

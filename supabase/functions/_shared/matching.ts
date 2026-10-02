@@ -22,6 +22,14 @@ export function normalize(s: string | null | undefined): string {
   return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// The same line arrives written differently from one email to the next — a temperature word folded in twice ("Frozen — Frozen Bi Rib End"
+// vs "Frozen — Bi Rib End"), or a leading "Frozen " with no dash. The review queue must treat those as ONE product, so its key is this.
+export function canonicalPendingText(s: string | null | undefined): string {
+  return normalize(s)
+    .replace(/^(frozen|fresh)\b\s*(?:—|-)?\s*(?:(?:frozen|fresh)\b\s*)?(?=\S)/, "$1 — ")
+    .replace(/\s+/g, " ").trim();
+}
+
 export function normalizeLoose(s: string | null | undefined): string {
   return normalize(s).replace(/\b(pork|beef|chicken|lamb)\b/g, "").replace(/\s+/g, " ").trim();
 }
