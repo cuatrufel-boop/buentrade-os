@@ -1977,7 +1977,9 @@ function renderPlants(){
   // + proteins subtitle stack in column 1 like a product's EN/ES name, WhatsApp/Email actions move
   // to their own right-aligned column.
   wrap.innerHTML = filtered.map(p => {
-    const proteins = plantProteins[p.id] ? [...plantProteins[p.id]].sort().join(', ') : '—';
+    // species of what it sells; a plant with no products linked yet shows its own fixed category (every plant has one)
+    const ownCat = categoryEnById(p.category_id);
+    const proteins = plantProteins[p.id] ? [...plantProteins[p.id]].sort().join(', ') : (ownCat || '—');
     const pendingCount = plantPendingMatchCounts[p.id] || 0;
     const pendingStale = !!plantPendingMatchStale[p.id];
     const pendingBadgeHtml = pendingCount
