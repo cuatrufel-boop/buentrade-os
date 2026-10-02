@@ -294,13 +294,15 @@
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
-  .pph-prev{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:7px;padding-top:6px;border-top:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pph-prev{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:3px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pph-click{cursor:pointer;}
+  .pph-click:hover{color:var(--ink);}
   .pph-delta{font-weight:700;color:var(--ink-soft);}
   .pph-delta.down{color:#6FD3A8;}
   .pph-delta.up{color:#FF9C8A;}
-  .pph-toggle{display:block;margin:6px auto 0;background:var(--card);color:var(--blue-bright);border:1.5px solid var(--blue);border-radius:20px;padding:2px 11px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;}
-  .pph-list{margin:6px auto 0;max-width:190px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
-  .pph-item{display:flex;justify-content:space-between;padding:3px 2px;border-top:1px solid var(--line);}
+  .pph-chev{color:var(--blue-bright);font-size:10px;}
+  .pph-list{margin:4px auto 0;max-width:170px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pph-item{display:flex;justify-content:space-between;padding:2px 2px;border-top:1px solid var(--line);}
   .name-link:hover{text-decoration:underline;}
   /* Real ask 2026-09-09: the Plants list and per-plant Products & Prices list are real <table>s
      now (see renderPlants()/renderPlantProducts()) — .pkg-table-wrap/.pkg-row no longer used
@@ -2865,27 +2867,25 @@ function fmtPriceCell(p){
     `<div style="font-size:11.5px;margin-top:2px;color:var(--ink-soft);">${dateStr} · ${ageText}</div>` + earlierPricesHtml(p);
 }
 
-// Under the current price: the PREVIOUS price with how much it moved (so yesterday's/the last upload's is visible without a click),
-// and — only when there are more — a small "Price History (n)" button that opens every earlier price, newest first. Read from
-// price_history; nothing is deleted or overwritten. (2026-10-02: the first version listed every price open and stretched each row.)
+// Under the current price, ONE quiet line: the previous price and how much it moved ("Sep 30 · $1.22 ▲ 0.04 ▾"). When there are
+// more earlier prices the line itself opens them (newest first). Read from price_history; nothing is deleted or overwritten.
 function earlierPricesHtml(p){
   const cur = toDateOnly(p.price_date);
   const rows = (plantPriceHistory[p.id] || []).filter(r => !(toDateOnly(r.price_date) === cur && Number(r.price) === Number(p.current_price)));
   if (!rows.length) return '';
   const day = r => { const d = toDateOnly(r.price_date); return d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'; };
   const prev = rows[0], diff = Number(p.current_price) - Number(prev.price);
-  const delta = Math.abs(diff) < 0.005 ? '<span class="pph-delta">same</span>'
-    : `<span class="pph-delta ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} $${Math.abs(diff).toFixed(2)}</span>`;
-  const more = rows.length > 1
-    ? `<button type="button" class="pph-toggle" onclick="togglePriceList(this)">Price History (${rows.length}) ▾</button>
-       <div class="pph-list" style="display:none;">${rows.map(r => `<div class="pph-item"><span>${day(r)}</span><span>$${Number(r.price).toFixed(2)}</span></div>`).join('')}</div>`
-    : '';
-  return `<div class="pph-prev"><span>${day(prev)} · $${Number(prev.price).toFixed(2)}</span>${delta}</div>${more}`;
+  const delta = Math.abs(diff) < 0.005 ? '<span class="pph-delta">=</span>'
+    : `<span class="pph-delta ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} ${Math.abs(diff).toFixed(2)}</span>`;
+  const many = rows.length > 1;
+  return `<div class="pph-prev${many ? ' pph-click' : ''}"${many ? ` onclick="togglePriceList(this)" title="Price History (${rows.length})"` : ''}>
+      <span>${day(prev)} · $${Number(prev.price).toFixed(2)}</span>${delta}${many ? '<span class="pph-chev">▾</span>' : ''}</div>` +
+    (many ? `<div class="pph-list" style="display:none;">${rows.map(r => `<div class="pph-item"><span>${day(r)}</span><span>$${Number(r.price).toFixed(2)}</span></div>`).join('')}</div>` : '');
 }
-function togglePriceList(btn){
-  const list = btn.nextElementSibling, open = list.style.display === 'none';
+function togglePriceList(line){
+  const list = line.nextElementSibling, open = list.style.display === 'none';
   list.style.display = open ? 'block' : 'none';
-  btn.textContent = btn.textContent.replace(/[▾▴]/, open ? '▴' : '▾');
+  line.querySelector('.pph-chev').textContent = open ? '▴' : '▾';
 }
 
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
