@@ -2714,19 +2714,25 @@ function toggleProfile(){
     onPlantCountryChange('pe');
     if (plant.state_id) document.getElementById('pe_state_id').value = plant.state_id;
     document.getElementById('pe_state').value = plant.state || '';
+    // no number saved yet → the country-code dropdown starts on the plant's own country code, never empty
+    const peCountry = countries.find(c => c.id === plant.country_id);
+    const defCode = (peCountry && DIAL_CODES[peCountry.iso2]) || '+1';
     const pePhone = splitPhone(plant.phone);
-    document.getElementById('pe_phone_code').value = pePhone.code;
+    document.getElementById('pe_phone_code').value = pePhone.code || defCode;
     document.getElementById('pe_phone_number').value = pePhone.number;
     const peWa = splitPhone(plant.whatsapp);
-    document.getElementById('pe_whatsapp_code').value = peWa.code;
+    document.getElementById('pe_whatsapp_code').value = peWa.code || defCode;
     document.getElementById('pe_whatsapp_number').value = peWa.number;
     const pePaymentsWa = splitPhone(plant.payments_whatsapp);
-    document.getElementById('pe_payments_whatsapp_code').value = pePaymentsWa.code;
+    document.getElementById('pe_payments_whatsapp_code').value = pePaymentsWa.code || defCode;
     document.getElementById('pe_payments_whatsapp_number').value = pePaymentsWa.number;
     const parsed = parsePaymentTerms(plant.payment_terms);
     document.getElementById('pe_payment_terms_type').value = parsed.type;
     document.getElementById('pe_payment_terms_days').value = parsed.days;
     togglePlantProfilePaymentDays();
+    // the dropdown labels (Country, Payment Terms, phone codes) are separate from the <select> values set above and only
+    // refresh on a 'change' — without this they showed "—" even though the value was there (2026-10-02, user: "los dejas sin info")
+    document.querySelectorAll('#profileEdit select[data-bt-enhanced]').forEach(sel => { if (sel.btSync) sel.btSync(); });
     document.getElementById('profileMsg').textContent = '';
     document.getElementById('profileEdit').style.display = 'block';
     document.getElementById('profileView').style.display = 'none';

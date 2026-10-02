@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     if (contactProblems.length) return jsonResponse({ error: "invalid_contact_fields", problems: contactProblems }, 400);
 
     const {
-      actor, supplier_id, name, category_id, country_id = null, city_id = null, state_id = null, state = null,
+      actor, supplier_id, name, category_id, country_id = null, city_id = null, city = null, state_id = null, state = null,
       address = null, internal_code = null, contact_name = null, email = null, email_cc = null,
       phone = null, whatsapp = null, whatsapp_cc = null,
       payments_contact_name = null, payments_email = null, payments_whatsapp = null,
@@ -80,13 +80,13 @@ Deno.serve(async (req) => {
     const plant = await sql.begin(async (tx) => {
       const [plant] = await tx`
         insert into plants (
-          supplier_id, name, category_id, country_id, city_id, state_id, state, address, internal_code,
+          supplier_id, name, category_id, country_id, city_id, city, state_id, state, address, internal_code,
           contact_name, email, email_cc, phone, whatsapp, whatsapp_cc,
           payments_contact_name, payments_email, payments_whatsapp,
           docs_included, payment_terms, required_documentation, website, notes, internal_notes,
           logo_url, logo_url_dark, idempotency_key
         ) values (
-          ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${state_id}, ${state}, ${address}, ${internal_code},
+          ${supplier_id}, ${name}, ${category_id}, ${country_id}, ${city_id}, ${city}, ${state_id}, ${state}, ${address}, ${internal_code},
           ${contact_name}, ${email}, ${email_cc}, ${phone}, ${whatsapp}, ${whatsapp_cc},
           ${payments_contact_name}, ${payments_email}, ${payments_whatsapp},
           ${docs_included}, ${payment_terms}, ${required_documentation}, ${website}, ${notes}, ${internal_notes},
