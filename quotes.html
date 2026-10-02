@@ -2816,7 +2816,7 @@ async function rqSheetAsk(plantIds, remind){
     const body = `Hi ${rqFirstName(plant.contact_name || plant.name)},\n\nCould you send your current price and pickup location for:\n${lines.join('\n')}\n\nThanks!`;
     const subject = `${specs.join(' / ')} — price request`;
     const phone = (plant.whatsapp || plant.phone || '').replace(/\D/g, '');
-    if (plant.email) emailItems.push({ id: plant.id, label: plant.name, to: plant.email, subject, body, fromAlias: 'purchasing', onSent: onDone(plant, prodRows) });
+    if (plant.email) emailItems.push({ id: plant.id, label: plant.name, to: plant.email, cc: rqPlantCc(plant), subject, body, fromAlias: 'purchasing', onSent: onDone(plant, prodRows) });
     else if (phone) waItems.push({ id: plant.id, label: plant.name, phone, body: body + RQ_EMAIL_SIGNATURE, onOpened: onDone(plant, prodRows) });
   });
   const openWa = () => { if (waItems.length) rqOpenWaModal(`Ask for prices — WhatsApp (${waItems.length})`, waItems); };
@@ -3772,7 +3772,7 @@ async function rqAutoAskCategoryPlants(plants, productId){
     };
     if (link.current_price == null && plant.email){
       try {
-        await sendEmailApiRaw('purchasing', plant.email, `${rqSpecEnForPlant(plantObj) || ''} — price request`, rqPriceRequestBody(plantObj), null, null);
+        await sendEmailApiRaw('purchasing', plant.email, `${rqSpecEnForPlant(plantObj) || ''} — price request`, rqPriceRequestBody(plantObj), null, null, rqPlantCc(plant) ? rqPlantCc(plant).split(',') : undefined);
         await callApi('plant-products-request-price', { actor: currentActor(), plant_id: plant.id, product_id: productId });
         plantObj.rqLastRequestedAt = new Date().toISOString();
       } catch (e) { failedNames.push(plant.name); } // the link is still real even if today's email attempt failed
@@ -5485,7 +5485,7 @@ async function rqSendPriceRequestFor(p, onSent){
   if (p.email){
     rqEmailModalOnClose = openWa;
     rqOpenEmailModal(`Ask for price — ${p.name}`, [{
-      id: p.id, label: p.name, to: p.email, subject, body, fromAlias: 'purchasing', onSent,
+      id: p.id, label: p.name, to: p.email, cc: rqPlantCc(p), subject, body, fromAlias: 'purchasing', onSent,
     }], true, 'Ask for Price');
   } else {
     openWa();
@@ -5515,7 +5515,7 @@ function qAskUpdateForSweepRow(plantId, productId){
   if (!r) return;
   const p = {
     id: plantId, rqProductId: productId, name: r.plant.name,
-    email: r.plant.email, whatsapp: r.plant.whatsapp, phone: r.plant.phone, contact_name: r.plant.contact_name,
+    email: r.plant.email, email_cc: r.plant.email_cc, whatsapp: r.plant.whatsapp, phone: r.plant.phone, contact_name: r.plant.contact_name,
     rqPrice: r.current_price, rqPriceDate: r.price_date,
   };
   rqSendPriceRequestFor(p, async () => {
@@ -5538,7 +5538,7 @@ async function rqAskPossiblePlant(plantId, productId){
   if (!plant || !prod) return;
   const p = {
     id: plantId, rqProductId: productId, name: plant.name,
-    email: plant.email, whatsapp: plant.whatsapp, phone: plant.phone, contact_name: plant.contact_name,
+    email: plant.email, email_cc: plant.email_cc, whatsapp: plant.whatsapp, phone: plant.phone, contact_name: plant.contact_name,
     rqPrice: null, rqPriceDate: null,
   };
   rqSendPriceRequestFor(p, async () => {
@@ -5610,7 +5610,7 @@ function rqChasePendingPrices(plants){
   };
   if (withEmail.length){
     rqOpenEmailModal(`Ask for updated prices — ${withEmail.length}`, withEmail.map(p => ({
-      id: p.id, label: p.name, to: p.email,
+      id: p.id, label: p.name, to: p.email, cc: rqPlantCc(p),
       subject: `${rqSpecEnForPlant(p) || ''} — ${p.rqPrice == null ? 'price request' : 'updated price request'}`,
       body: rqPriceRequestBody(p), fromAlias: 'purchasing', onSent: onSentFor(p),
     })));
@@ -5810,6 +5810,12 @@ function rqOpenEmailModal(title, items, isOffer, sendLabel){
 // in the browser is the wrong app entirely (or nothing, if none is registered). No fs=1 param —
 // that forces Gmail's bare standalone compose page with no inbox/account chrome around it; without
 // it, this opens as the normal compose popup inside the trader's actual signed-in Gmail inbox.
+// A plant's other contacts (plants.email_cc, comma-separated) — they go in CC of every price request, so the request
+// reaches every contact we have there and not only the primary one (2026-10-02). Never repeats the To address.
+function rqPlantCc(p){
+  const to = String((p && p.email) || '').trim().toLowerCase();
+  return [...new Set(String((p && p.email_cc) || '').split(',').map(s => s.trim()).filter(Boolean))].filter(e => e.toLowerCase() !== to).join(',');
+}
 function rqGmailComposeUrl(to, subject, body, cc){
   const params = new URLSearchParams({ view: 'cm', to, su: subject, body });
   if (cc) params.set('cc', cc);
