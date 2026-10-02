@@ -407,7 +407,9 @@ Answer with ONLY a JSON array (no prose), up to 6 items: [{"headline_es": "...",
       messages: [{ role: "user", content: instruction }],
     }),
   });
-  const data = await res.json();
+  const raw = await res.text();
+  let data: any;
+  try { data = JSON.parse(raw); } catch { throw new Error(`news search: Anthropic API answered ${res.status} without JSON: ${raw.slice(0, 300)}`); }
   if (!res.ok) throw new Error(`news search failed (${topic}): ${JSON.stringify(data).slice(0, 300)}`);
   const found = new Set<string>();
   for (const b of data.content || []) {
@@ -754,7 +756,9 @@ async function callNoteReader(system: string, user: string) {
       output_config: { effort: "medium", format: { type: "json_schema", schema: NOTE_READ_SCHEMA } },
     }),
   });
-  const data = await res.json();
+  const raw = await res.text();
+  let data: any;
+  try { data = JSON.parse(raw); } catch { throw new Error(`Anthropic API answered ${res.status} without JSON: ${raw.slice(0, 300)}`); }
   if (!res.ok) throw new Error(`Anthropic API failed: ${JSON.stringify(data)}`);
   if (data.stop_reason === "refusal") throw new Error("the model declined to read this note");
   if (data.stop_reason === "max_tokens") throw new Error("the note reading was cut off");
