@@ -1351,6 +1351,7 @@ function addCatalogModalResolve(result){
 let plants = [];
 let temperatures = [];
 let packagings = [];
+let plantPriceHistory = {}; // product_id -> every price this plant has carried for it, newest first
 let plantProducts = []; // products linked to the currently selected plant
 let currentPlantId = null;
 let pendingPhotoFile = null;
@@ -2814,6 +2815,13 @@ async function loadPlantProducts(){
     // Most recently priced first, stale/never-priced ones sinking to the bottom — the trader
     // wants to see what just got loaded, not scroll past it to find it alphabetically.
     .sort((a, b) => (b.price_date || '').localeCompare(a.price_date || ''));
+  // every earlier price of this plant (all products, one call) — listed under each current price, newest first
+  plantPriceHistory = {};
+  const historyFor = currentPlantId;
+  try {
+    const h = await callApi('price-history-search', { plant_id: historyFor });
+    if (historyFor === currentPlantId) (h.results || []).forEach(r => (plantPriceHistory[r.product_id] = plantPriceHistory[r.product_id] || []).push(r));
+  } catch (e) { /* the table still shows the current prices */ }
   renderPlantProducts();
 }
 
@@ -2850,7 +2858,21 @@ function fmtPriceCell(p){
   if (!dateStr) return `<div class="num" style="font-size:16px;font-weight:700;">$${Number(p.current_price).toFixed(2)}</div>`;
   const ageText = age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} old`;
   return `<div class="num" style="font-size:16px;font-weight:700;color:${stale ? '#FFC876' : '#6FD3A8'};">$${Number(p.current_price).toFixed(2)}</div>` +
-    `<div style="font-size:11.5px;margin-top:2px;color:var(--ink-soft);">${dateStr} · ${ageText}</div>`;
+    `<div style="font-size:11.5px;margin-top:2px;color:var(--ink-soft);">${dateStr} · ${ageText}</div>` + earlierPricesHtml(p);
+}
+
+// Every earlier price this plant carried for the product, newest first, under the current one (2026-10-02, user: "deben quedar
+// todos" — the row only showed the latest price, so yesterday's and the 24th's were invisible). Read from price_history; the
+// entry that IS the current price is not repeated.
+function earlierPricesHtml(p){
+  const cur = toDateOnly(p.price_date);
+  const rows = (plantPriceHistory[p.id] || []).filter(r => !(toDateOnly(r.price_date) === cur && Number(r.price) === Number(p.current_price)));
+  if (!rows.length) return '';
+  return `<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:4px;">${rows.map(r => {
+    const d = toDateOnly(r.price_date);
+    const dateStr = d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+    return `<div class="num" style="font-size:11.5px;color:var(--ink-soft);">${dateStr} · $${Number(r.price).toFixed(2)}</div>`;
+  }).join('')}</div>`;
 }
 
 // ===== Price list intake — paste a plant's price list, match each line to a catalog product
@@ -4386,32 +4408,9 @@ function renderPlantProducts(){
         <div class="pkg-plant-sub">${escapeHtml(p.full_name_es || '—')}</div>
       </td>
       <td class="num">${fmtPriceCell(p)}</td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${photoBtn}${specBtn}<button type="button" class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="togglePlantPriceHistory('${p.id}', this)">Price History</button><button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${photoBtn}${specBtn}<button class="btn secondary" style="padding:5px 10px;font-size:12px;" onclick="editProduct('${p.id}')">Edit</button></td>
     </tr>`;
   }).join('');
-}
-
-// This plant's price history for one product, newest first, right under its row (2026-10-02, user: "no veo en Smithfield los
-// precios que se subieron ayer"). The row above only ever shows the CURRENT price; every earlier one is in price_history (read
-// through the same price-history-search the Products screen uses). Read-only — nothing here writes.
-async function togglePlantPriceHistory(productId, btn){
-  const tr = btn.closest('tr');
-  const open = tr.nextElementSibling && tr.nextElementSibling.classList.contains('pph-row');
-  if (open){ tr.nextElementSibling.remove(); return; }
-  const row = document.createElement('tr');
-  row.className = 'pph-row';
-  row.innerHTML = '<td colspan="3" style="padding:6px 8px 12px;"><div class="muted" style="font-size:12.5px;">Loading…</div></td>';
-  tr.after(row);
-  const plant = plants.find(x => x.id === currentPlantId);
-  let data;
-  try { data = await callApi('price-history-search', { product_id: productId }); }
-  catch (e){ row.firstElementChild.innerHTML = `<div class="muted" style="font-size:12.5px;">Error: ${escapeHtml(e.message)}</div>`; return; }
-  const mine = (data.results || []).filter(r => String(r.plant_name || '').trim() === String((plant && plant.name) || '').trim());
-  if (!mine.length){ row.firstElementChild.innerHTML = '<div class="muted" style="font-size:12.5px;">No price recorded for this product at this plant yet.</div>'; return; }
-  const day = d => new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  row.firstElementChild.innerHTML = `<table class="pph-table"><thead><tr><th>Date</th><th>Price</th></tr></thead><tbody>
-    ${mine.map(r => `<tr><td>${escapeHtml(day(r.price_date))}</td><td>$${Number(r.price).toFixed(4)}/lb</td></tr>`).join('')}
-  </tbody></table>`;
 }
 
 function normalizeProductName(s){

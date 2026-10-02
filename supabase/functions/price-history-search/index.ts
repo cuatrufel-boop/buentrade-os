@@ -51,6 +51,13 @@ Deno.serve(async (req) => {
       return jsonResponse(r, "error" in r ? 400 : 200);
     }
 
+    // One plant's whole price history, every product, in one read (2026-10-02): what the plant's Products & Prices table lists
+    // under each current price. Read-only; the per-product read below is unchanged.
+    if (body.plant_id && !body.product_id) {
+      const rows = await sql`select ph.product_id, ph.price, ph.price_date, ph.created_at from price_history ph where ph.plant_id = ${body.plant_id} order by ph.price_date desc, ph.created_at desc limit 5000`;
+      return jsonResponse({ results: rows });
+    }
+
     const { product_id } = body;
     if (!product_id) return jsonResponse({ error: "product_id is required" }, 400);
 
