@@ -294,7 +294,9 @@
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
-  .pph-prev{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:3px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pcell{display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap;}
+  .pcell-date{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pph-prev{display:inline-flex;align-items:baseline;gap:7px;padding-left:10px;border-left:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
   .pph-click{cursor:pointer;}
   .pph-click:hover{color:var(--ink);}
   .pph-delta{font-weight:700;color:var(--ink-soft);}
@@ -2861,29 +2863,32 @@ function fmtPriceCell(p){
   const stale = age != null && age > PRICE_STALE_DAYS;
   // Same two-line cell as the Collections aging report: the amount is the loud element, colored by how current it is
   // (green = current, amber = old), with a quiet caption underneath saying when it is from.
-  if (!dateStr) return `<div class="num" style="font-size:16px;font-weight:700;">$${Number(p.current_price).toFixed(2)}</div>`;
+  const earlier = earlierPricesParts(p);
+  if (!dateStr) return `<div class="pcell"><span class="num" style="font-size:16px;font-weight:700;">$${Number(p.current_price).toFixed(2)}</span>${earlier.line}</div>${earlier.list}`;
   const ageText = age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} old`;
-  return `<div class="num" style="font-size:16px;font-weight:700;color:${stale ? '#FFC876' : '#6FD3A8'};">$${Number(p.current_price).toFixed(2)}</div>` +
-    `<div style="font-size:11.5px;margin-top:2px;color:var(--ink-soft);">${dateStr} · ${ageText}</div>` + earlierPricesHtml(p);
+  return `<div class="pcell"><span class="num" style="font-size:16px;font-weight:700;color:${stale ? '#FFC876' : '#6FD3A8'};">$${Number(p.current_price).toFixed(2)}</span>` +
+    `<span class="pcell-date">${dateStr} · ${ageText}</span>${earlier.line}</div>${earlier.list}`;
 }
 
-// Under the current price, ONE quiet line: the previous price and how much it moved ("Sep 30 · $1.22 ▲ 0.04 ▾"). When there are
-// more earlier prices the line itself opens them (newest first). Read from price_history; nothing is deleted or overwritten.
-function earlierPricesHtml(p){
+// The price cell is ONE line: "$1.26  Oct 2 · today │ Sep 30 · $1.22 ▲ 0.04 ▾". The last part is the previous price and its change;
+// when there are more earlier prices it is clickable (▾) and opens them under the line, newest first. Read from price_history;
+// nothing is deleted or overwritten.
+function earlierPricesParts(p){
   const cur = toDateOnly(p.price_date);
   const rows = (plantPriceHistory[p.id] || []).filter(r => !(toDateOnly(r.price_date) === cur && Number(r.price) === Number(p.current_price)));
-  if (!rows.length) return '';
+  if (!rows.length) return { line: '', list: '' };
   const day = r => { const d = toDateOnly(r.price_date); return d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'; };
   const prev = rows[0], diff = Number(p.current_price) - Number(prev.price);
   const delta = Math.abs(diff) < 0.005 ? '<span class="pph-delta">=</span>'
     : `<span class="pph-delta ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} ${Math.abs(diff).toFixed(2)}</span>`;
   const many = rows.length > 1;
-  return `<div class="pph-prev${many ? ' pph-click' : ''}"${many ? ` onclick="togglePriceList(this)" title="Price History (${rows.length})"` : ''}>
-      <span>${day(prev)} · $${Number(prev.price).toFixed(2)}</span>${delta}${many ? '<span class="pph-chev">▾</span>' : ''}</div>` +
-    (many ? `<div class="pph-list" style="display:none;">${rows.map(r => `<div class="pph-item"><span>${day(r)}</span><span>$${Number(r.price).toFixed(2)}</span></div>`).join('')}</div>` : '');
+  return {
+    line: `<span class="pph-prev${many ? ' pph-click' : ''}"${many ? ` onclick="togglePriceList(this)" title="Price History (${rows.length})"` : ''}><span>${day(prev)} · $${Number(prev.price).toFixed(2)}</span>${delta}${many ? '<span class="pph-chev">▾</span>' : ''}</span>`,
+    list: many ? `<div class="pph-list" style="display:none;">${rows.map(r => `<div class="pph-item"><span>${day(r)}</span><span>$${Number(r.price).toFixed(2)}</span></div>`).join('')}</div>` : '',
+  };
 }
 function togglePriceList(line){
-  const list = line.nextElementSibling, open = list.style.display === 'none';
+  const list = line.closest('.pcell').nextElementSibling, open = list.style.display === 'none';
   list.style.display = open ? 'block' : 'none';
   line.querySelector('.pph-chev').textContent = open ? '▴' : '▾';
 }
