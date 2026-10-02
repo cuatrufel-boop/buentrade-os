@@ -84,6 +84,7 @@ Rules for "items" (priced products):
 - Prices are usually written as whole-number shorthand with NO decimal point — "$98" means $0.98/lb, "220" means $2.20/lb. Convert these: divide by 100. A price that ALREADY has a decimal point (e.g. "0.95", "$1.20") is correct as written — do not divide it again.
 - A single sentence can genuinely contain several distinct product+price pairs (e.g. "Fresh COV $0.95/lb, Frozen COV $0.98/lb, Frozen Poly $0.96/lb" is three separate items, not one). Extract each one separately.
 - If the SAME product name appears twice with two different prices (e.g. once under a "Fresh" section and once under a "Frozen" section), extract BOTH as separate items — never merge or drop one.
+- When the SAME product is quoted at two prices that differ only by documents ("$0.35/lb FOB no docs or $0.37/lb FOB with docs"), extract ONLY the no-docs price. No-docs is the default; never emit the with-docs price as a second item.
 - A price stated with a formula instead of a number (e.g. "DPS*1.2+0.12") is not extractable — skip it, do not guess a numeric value.
 - A line that only says "Call for availability", "N/A", "Check with X", or similar with no real number is not extractable — skip it.
 - A month name, a "Week of X" note, a date range (e.g. "OCT", "SEPT/OCT", "Week of 10/5"), a specific ship date ("to ship on 9/11", "October ship", "late Sep ship"), a production-date note ("(Nov 2025 Prod)"), or a shipping origin/incoterm ("FOB Sioux Falls, SD", "FOB Midwest", "EXW Midwest") next to an item is never part of the product's own name — it says when/where/on what terms that price applies. Extract the item and price normally but leave all of that out of "name" entirely; it changes on every list and would otherwise make the same real product look like a different one each time.
@@ -151,6 +152,7 @@ export interface ExtractedImageItem {
   price: number | null; // USD/lb as a decimal; null when isFormula is true
   isFormula: boolean; // true when the price cell is a formula (e.g. "DPS*1.2+0.12"), not a number
   temperature: "Fresh" | "Frozen" | "Unknown"; // from the image itself, or from the surrounding email text passed as context
+  facilities: string[]; // the plant/facility names printed in this row's Plant column (e.g. ["EG", "Fremont"]), [] when the image has none
 }
 
 const IMAGE_EXTRACTION_SCHEMA = {
@@ -166,8 +168,9 @@ const IMAGE_EXTRACTION_SCHEMA = {
           price: { type: "number", description: "The price in USD per lb as a decimal (e.g. 0.92). Use 0 when isFormula is true." },
           isFormula: { type: "boolean", description: "true when the price cell shows a formula (e.g. 'DPS*1.2+0.12') instead of a plain number — price is meaningless in that case, ignore it downstream." },
           temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if the image itself states it (a column, a header) OR if the surrounding email text (given as context) says what this whole picture is — e.g. an email saying 'below are our fresh offers, attached is our frozen list' means every row in the image is Fresh. Unknown only if genuinely neither says." },
+          facilities: { type: "array", items: { type: "string" }, description: "The plant/facility names printed in the Plant column for this product row, exactly as printed (e.g. 'EG', 'Fremont') — one entry per facility sub-row of this product. [] when the image has no such column." },
         },
-        required: ["item", "packStyle", "price", "isFormula", "temperature"],
+        required: ["item", "packStyle", "price", "isFormula", "temperature", "facilities"],
         additionalProperties: false,
       },
     },
@@ -182,8 +185,8 @@ You are also given the plain-text body of the email this image came from, for co
 
 Rules:
 - Extract ONE item per product row: its item name/code, its pack-style code, its price, and its temperature.
-- Ignore the per-date availability columns entirely — do not extract dates, load counts, or plant/facility sub-rows. Only the item, pack-style, price, and temperature matter.
-- If a row appears twice (e.g. once per facility) with the identical item, pack-style, and price, extract it only once.
+- Ignore the per-date availability columns entirely — do not extract dates or load counts. The item, pack-style, price, temperature and the facility names matter.
+- When a product has one sub-row per facility (a "Plant" column with e.g. EG and Fremont) with the identical item, pack-style, and price, extract the product ONCE and list every facility name printed for it in "facilities", exactly as printed.
 - If the price cell contains a formula (e.g. "DPS*1.2+0.12") instead of a plain number, set isFormula true and price 0 — never invent a numeric value for a formula.
 - Transcribe the item name and pack-style exactly as printed, including abbreviations — do not expand or translate them.
 - Never invent a row that isn't actually in the image.`;

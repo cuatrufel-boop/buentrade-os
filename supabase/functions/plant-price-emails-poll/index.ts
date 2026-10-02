@@ -66,6 +66,8 @@ const MAX_EMAIL_AGE_DAYS = 3;
 // there's no state in the file to read this from. Both are real, confirmed facilities already in
 // the locations catalog (verified live), not guessed here.
 const WHOLESTONE_FACILITY_STATE: Record<string, string> = { Fremont: "NE", "Eagle Grove": "IA" };
+// The picture's Plant column prints "EG" for Eagle Grove.
+const FACILITY_ALIASES: Record<string, string> = { eg: "Eagle Grove", "eagle grove": "Eagle Grove", fremont: "Fremont" };
 
 // Temperature is read from the whole email the way a person reads it: the attachment's file name and the subject first, then the
 // body ("frozen product offerings"). It only counts when exactly one of frozen / fresh is named; naming both (or neither) says nothing.
@@ -149,7 +151,7 @@ async function extractXlsxItems(
 // picture is our fresh offers, the attachment is frozen" framing text ANY plant might use — not
 // just Wholestone's.
 async function extractImageItems(
-  payload: any, msgId: string, authHeaders: Record<string, string>, emailContext: string,
+  payload: any, msgId: string, authHeaders: Record<string, string>, emailContext: string, defaultTemp: "Fresh" | "Frozen" | null = null,
 ): Promise<{ rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]> {
   const findImageParts = (p: any): any[] => {
     const out: any[] = [];
@@ -182,11 +184,18 @@ async function extractImageItems(
       // email body every other extractor sees and resolves temperature from it when the image
       // itself doesn't state one — same idea as the text path's section-header folding, general to
       // any plant's wording, not hardcoded to Wholestone's.
-      const rawText = it.temperature === "Unknown" ? `${it.item} ${it.packStyle}` : `${it.temperature} — ${it.item} ${it.packStyle}`;
+      // The email's own words did not say (it named both "fresh and frozen"): the structure still does — when the same email
+      // attaches the FROZEN list (the file is called "Freezer List"), the unlabeled picture is the fresh one. Never overrides a
+      // temperature the image or the text did state.
+      const temp = it.temperature !== "Unknown" ? it.temperature : defaultTemp;
+      const rawText = temp ? `${temp} — ${it.item} ${it.packStyle}` : `${it.item} ${it.packStyle}`;
+      // City from the picture's Plant column. One facility → its "City, ST". Several facilities share one price row and a product
+      // keeps ONE pickup city, so with more than one the city is left empty rather than guessed.
+      const cities = [...new Set((it.facilities || []).map((f: string) => FACILITY_ALIASES[f.trim().toLowerCase()]).filter(Boolean))];
       items.push({
         rawText: rawText.trim(), price: it.price,
         freightIncluded: false, // FOB per this plant's own stated terms — never assumed for others
-        locationName: null, // this table's price is the same across every facility it lists
+        locationName: cities.length === 1 ? `${cities[0]}, ${WHOLESTONE_FACILITY_STATE[cities[0]]}` : null,
       });
     }
   }
@@ -605,8 +614,12 @@ Deno.serve(async (req) => {
       // price grid (confirmed real for Wholestone's "fresh offers" — no plain-text or HTML-table
       // equivalent exists for it at all). extractImageItems no-ops (empty array, no API call) for
       // any message with no inline images, so this costs nothing for every other plant's mail.
-      const imageItems = await extractImageItems(msgData.payload, m.id, authHeaders, bodyText);
-      const items: Item[] = [...textItems, ...xlsxItems, ...imageItems];
+      const xlsxIsFrozenList = xlsxItems.length > 0 && xlsxItems.every((it) => /^Frozen — /.test(it.rawText));
+      const imageItems = await extractImageItems(msgData.payload, m.id, authHeaders, bodyText, xlsxIsFrozenList ? "Fresh" : null);
+      // The sentence the trader wrote in the body is applied LAST: a price stated in the message ("Salivary Glands … $0.35/lb FOB no
+      // docs") is that day's explicit offer and must be the one that stays current — it used to run first, so the spreadsheet's
+      // inventory row for the same product ($0.48) overwrote it (Wholestone, Sept 30). Every price still lands in the history.
+      const items: Item[] = [...xlsxItems, ...imageItems, ...textItems];
 
       let applied = 0, pending = 0, skipped = lines.length - textItems.length;
       const errors: string[] = llmError ? [`llm extraction: ${llmError}`] : [];
