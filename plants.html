@@ -294,8 +294,14 @@
   .empty{color:var(--ink-soft);text-align:center;padding:24px;}
   .row-actions{display:flex;gap:6px;}
   .name-link{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer;}
-  .pcell{display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap;}
-  .pcell-date{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+  .pcell{display:flex;align-items:center;justify-content:flex-start;gap:10px;flex-wrap:wrap;padding-left:6px;}
+  .pcell-date{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--ink);min-width:44px;}
+  .pprice{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;padding:3px 13px;border-radius:20px;border:1.5px solid transparent;white-space:nowrap;min-width:76px;text-align:center;box-sizing:border-box;}
+  .pprice.ok{color:#6FD3A8;border-color:rgba(111,211,168,.5);background:rgba(111,211,168,.08);}
+  .pprice.stale{color:#FFC876;border-color:rgba(255,200,118,.5);background:rgba(255,200,118,.08);}
+  .pstatus{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 9px;border-radius:20px;border:1px solid transparent;white-space:nowrap;min-width:78px;text-align:center;box-sizing:border-box;}
+  .pstatus.ok{color:#6FD3A8;border-color:rgba(111,211,168,.45);}
+  .pstatus.stale{color:#FFC876;border-color:rgba(255,200,118,.45);}
   .pph-prev{display:inline-flex;align-items:baseline;gap:7px;padding-left:10px;border-left:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
   .pph-click{cursor:pointer;}
   .pph-click:hover{color:var(--ink);}
@@ -2864,10 +2870,13 @@ function fmtPriceCell(p){
   // Same two-line cell as the Collections aging report: the amount is the loud element, colored by how current it is
   // (green = current, amber = old), with a quiet caption underneath saying when it is from.
   const earlier = earlierPricesParts(p);
-  if (!dateStr) return `<div class="pcell"><span class="num" style="font-size:16px;font-weight:700;">$${Number(p.current_price).toFixed(2)}</span>${earlier.line}</div>${earlier.list}`;
+  // BuenTrade design (same pill recipe as the payment badges in Orders): the price is a pill — green while current, amber once it
+  // is past PRICE_STALE_DAYS — and when it is from is a status pill next to its date ("today" / "8 days old").
+  const priceTone = stale ? 'stale' : 'ok';
+  if (!dateStr) return `<div class="pcell"><span class="pprice ${priceTone}">$${Number(p.current_price).toFixed(2)}</span>${earlier.line}</div>${earlier.list}`;
   const ageText = age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} old`;
-  return `<div class="pcell"><span class="num" style="font-size:16px;font-weight:700;color:${stale ? '#FFC876' : '#6FD3A8'};">$${Number(p.current_price).toFixed(2)}</span>` +
-    `<span class="pcell-date">${dateStr} · ${ageText}</span>${earlier.line}</div>${earlier.list}`;
+  return `<div class="pcell"><span class="pprice ${priceTone}">$${Number(p.current_price).toFixed(2)}</span>` +
+    `<span class="pcell-date">${dateStr}</span><span class="pstatus ${priceTone}">${ageText}</span>${earlier.line}</div>${earlier.list}`;
 }
 
 // The price cell is ONE line: "$1.26  Oct 2 · today │ Sep 30 · $1.22 ▲ 0.04 ▾". The last part is the previous price and its change;
