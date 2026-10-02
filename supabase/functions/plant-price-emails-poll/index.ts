@@ -115,7 +115,11 @@ async function extractXlsxItems(
   if (descCol === -1 || priceCol === -1) return [];
 
   const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null; needsReview?: boolean }[] = [];
-  const listTemp = temperatureFromContext(`${part.filename || ""} ${subject}`, bodyText);
+  // One source at a time, strongest first: the attachment's own file name ("Freezer List …"), then the subject, then the body. They used
+  // to be glued into ONE string (file name + subject), so a subject naming both ("WP Fresh & Frozen Offers") cancelled the file name's
+  // clear "Freezer" signal → the lines lost their "Frozen —" prefix and the matcher saw 2–6 candidates per line instead of 0–1
+  // (Wholestone, Sept 30: 44 lines went to Pending).
+  const listTemp = temperatureFromContext(part.filename || "", subject, bodyText);
   for (const row of rows.slice(1)) {
     const price = Number(row[priceCol]);
     const desc = String(row[descCol] || "").trim();
@@ -365,7 +369,7 @@ Deno.serve(async (req) => {
     const results = [];
     for (const m of listData.messages || []) {
       const [already] = await sql`select message_id from plant_price_emails_processed where message_id = ${m.id}`;
-      if (already) { results.push({ id: m.id, skipped: "already_processed" }); continue; }
+      if (already && debugMessageId !== m.id) { results.push({ id: m.id, skipped: "already_processed" }); continue; } // the read-only diagnostic may re-read a processed message
 
       const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, { headers: authHeaders });
       const msgData = await msgRes.json();
@@ -485,6 +489,16 @@ Deno.serve(async (req) => {
           first20Lines: lines.slice(0, 20),
           allLines: lines,
           htmlLength: html.length,
+          xlsx: await (async () => { // read-only: every sheet of the first .xlsx, so what the list really contains can be checked
+            const findX = (p: any): any => { if (p.filename && p.filename.toLowerCase().endsWith(".xlsx")) return p; for (const c of p.parts || []) { const f = findX(c); if (f) return f; } return null; };
+            const part = findX(msgData.payload); if (!part?.body?.attachmentId) return null;
+            const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}/attachments/${part.body.attachmentId}`, { headers: authHeaders });
+            const a = await r.json(); if (!r.ok || !a.data) return null;
+            const bin = atob(a.data.replace(/-/g, "+").replace(/_/g, "/")); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const wb = XLSX.read(bytes, { type: "array" });
+            return { filename: part.filename, sheets: wb.SheetNames.map((n: string) => ({ name: n, rows: (XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1 }) as any[][]).slice(0, 120) })) };
+          })(),
+          attachments: (function listAtt(p: any): any[] { const o: any[] = []; if (p.filename) o.push({ filename: p.filename, mimeType: p.mimeType, size: p.body?.size }); for (const c of p.parts || []) o.push(...listAtt(c)); return o; })(msgData.payload),
           htmlSnippet: html.slice(0, 6000),
           imageParts,
           fetchedImage: fetchedImage ? { filename: fetchedImage.filename, mimeType: fetchedImage.mimeType, size: fetchedImage.base64.length } : null,

@@ -1453,6 +1453,10 @@ function editProduct(id){
 // plant-products-update). Same toggle-a-hidden-row pattern offers.html already uses for its own
 // per-offer History (toggleHistory/renderHistoryPanel) — one open at a time.
 let priceHistoryOpenId = null;
+// Every price on file, newest first (the endpoint returns up to 200). This constant was deleted by accident in commit 7297c3a,
+// which made the whole history panel throw a ReferenceError and show nothing; it used to be 5 ("+N older prices not shown"),
+// so a product repriced daily never showed its full history (2026-10-02, user: "los precios de nuevo a viejo… completo").
+const PRICE_HISTORY_DISPLAY_COUNT = 200;
 
 async function togglePriceHistory(productId){
   const row = document.getElementById('price_history_row_' + productId);
@@ -1475,6 +1479,27 @@ async function togglePriceHistory(productId){
   renderPriceHistoryPanel(productId, data.results || [], data.trend || null);
 }
 
+// Real ask 2026-09-17 (settled after going back and forth on 30-day vs. count-based): two
+// independent, honest facts, never one invented number. "signal" here is computeProductPriceSignal's
+// real shape: { latestBest, trend: {avgPrior30d, pctChange} | null, previous: {price, priceDate} | null }.
+// (Restored 2026-10-02 — commit 7297c3a deleted these two helpers by accident with the bulletin-suggestions block.)
+function priceTrendBadgeHtml(signal){
+  if (!signal || !signal.trend) return '<span class="price-trend-badge none">Not enough history in the last 30 days for a trend</span>';
+  const pct = Math.round(signal.trend.pctChange);
+  if (pct <= -1) return `<span class="price-trend-badge down">▼ ${Math.abs(pct)}% vs last 30-day average</span>`;
+  if (pct >= 1) return `<span class="price-trend-badge up">▲ ${pct}% vs last 30-day average</span>`;
+  return '<span class="price-trend-badge none">Flat vs last 30-day average</span>';
+}
+
+// "Precio anterior vs precio actual" — always shown whenever ANY earlier price exists at all, no
+// 30-day requirement, so a sparsely-priced product still gives the trader a plain fact to read out
+// to a customer even when the 30-day trend badge above has nothing to show.
+function pricePreviousLineHtml(signal){
+  if (!signal || !signal.previous) return '';
+  const prevDate = new Date(signal.previous.priceDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `<div class="prod-name-es" style="margin-top:6px;">Previous: $${Number(signal.previous.price).toFixed(4)}/lb (${prevDate}) → Now: $${Number(signal.latestBest).toFixed(4)}/lb</div>`;
+}
+
 function renderPriceHistoryPanel(productId, rows, signal){
   const panel = document.getElementById('price_history_panel_' + productId);
   if (!rows.length){
@@ -1487,12 +1512,14 @@ function renderPriceHistoryPanel(productId, rows, signal){
     <div style="padding:10px 4px;">
       ${priceTrendBadgeHtml(signal)}
       ${pricePreviousLineHtml(signal)}
+      <div style="max-height:340px;overflow-y:auto;">
       <table class="price-history-table">
         <thead><tr><th>Date</th><th>Plant</th><th>Price</th></tr></thead>
         <tbody>
           ${shown.map(r => `<tr><td>${new Date(r.price_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${escapeHtml(r.plant_name)}</td><td>$${Number(r.price).toFixed(4)}/lb</td></tr>`).join('')}
         </tbody>
       </table>
+      </div>
       ${hiddenCount > 0 ? `<div class="prod-name-es" style="margin-top:6px;">+ ${hiddenCount} older price${hiddenCount === 1 ? '' : 's'} on file, not shown.</div>` : ''}
     </div>`;
 }
