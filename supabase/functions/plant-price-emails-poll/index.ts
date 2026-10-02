@@ -404,7 +404,11 @@ Deno.serve(async (req) => {
       // us phrase is never a real submission — skip it before any plant matching runs at all.
       if (
         subject.includes("prices you were waiting on just came in") || subject.includes("price you were waiting on just came in") ||
-        subject.includes("prices just applied") || subject.includes("price just applied")
+        subject.includes("prices just applied") || subject.includes("price just applied") ||
+        // Same loop family, found 2026-10-02: shipment-alerts-poll mails the trader "🔴 CRITICO — Pedir Release Number — BT-2026-1009 — Tyson Foods"
+        // from this same inbox; the internal-sender subject fallback read "Tyson" in it and re-processed it as a Tyson price email every hour.
+        // Every alert it sends carries an order number (BT-####), which a real price submission's subject never does.
+        /pedir release number/i.test(subject) || /\bBT-\d{4}/i.test(subject)
       ) {
         await sql`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
         results.push({ id: m.id, skipped: "self_notification_email" });
