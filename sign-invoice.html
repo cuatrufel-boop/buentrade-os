@@ -189,7 +189,6 @@ async function callApi(fn, body){
 // signed PDF the trader already sent, now with the customer's real signature embedded. ============
 const COMPANY = { name1: 'Buen', name2: 'Trade', legalName: 'BuenTrade LLC', address: '1525 N Park Dr, Suite 104, Weston, FL 33326', phone: '+1 754 248 1016' };
 const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
-const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
 const BUENTRADE_WIRE = { bankName: 'Grove Bank & Trust', bankAddress: '2701 South Bayshore Drive, Miami, FL 33133', aba: '066004600', accountNumber: '8000012824', accountTitle: 'Buentrade LLC', accountAddress: '1525 N Park Dr Suite 104, Weston, FL 33326, USA' };
 const INVOICE_TERMS = "This Invoice is issued by BuenTrade LLC. By signing in acknowledgment, the Customer confirms receipt of the merchandise described under the terms stated herein and accepts the outstanding balance and payment due date. The product is delivered as described, subject to standard industry tolerances in weight and count. Any discrepancy must be reported to BuenTrade LLC in writing within 24 hours of signing this invoice.";
 
@@ -240,16 +239,14 @@ function pdfKeyValueRows(doc, x, y, rows){
   });
   return cursorY;
 }
-function pdfTerms(doc, y, title, text, disclaimer){
+function pdfTerms(doc, y, title, text){
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(30, 106, 219);
   doc.text(title, 40, y);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 130, 145);
   const split = doc.splitTextToSize(text, 532);
   doc.text(split, 40, y + 14);
-  doc.setFontSize(7.5); doc.setTextColor(190, 60, 60);
-  const disclaimerY = y + 14 + split.length * 10 + 12;
-  doc.text(disclaimer, 40, disclaimerY);
-  return disclaimerY + 10;
+  // Where the block ends, with the breathing room the layout below it was built around.
+  return y + 14 + split.length * 10 + 22;
 }
 function pdfFooter(doc, lang){
   doc.setDrawColor(226, 233, 242); doc.setLineWidth(0.75); doc.line(40, 758, 572, 758);
@@ -353,7 +350,7 @@ function buildInvoicePdf(composed, so, customer, signatureDataUrl, signedByName,
   wireLines.forEach((line, i) => doc.text(line, 40, ty + 14 + i * 12));
   ty += 14 + wireLines.length * 12 + 10;
 
-  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS, DRAFT_DISCLAIMER_EN);
+  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS);
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(30, 106, 219);
   doc.text('FIRMA DE CONFORMIDAD DEL CLIENTE', 40, termsEndY + 14);

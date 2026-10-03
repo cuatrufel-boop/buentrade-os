@@ -476,6 +476,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
 <script src="js/pickup-picker.js"></script>
+<script src="js/fo-pdf.js"></script>
 <script src="js/quote-more-clients.js"></script>
 <script src="js/date-picker.js"></script>
 <script>
@@ -2831,9 +2832,6 @@ const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
 const CONTACT_EMAIL_FO = 'logistics@buentradegroup.com';
 const PO_TERMS = "This Purchase Order is issued by BuenTrade LLC and is subject to our standard terms of purchase. Product must meet applicable USDA and food-safety requirements for the stated product and packaging. Vendor must confirm pickup readiness with the assigned carrier at least 24 hours in advance of the scheduled pickup date. Any change in product availability, weight, or pickup date must be reported to BuenTrade LLC immediately. This order is valid only for the product, quantity, and price stated above.";
 const SO_TERMS = "Esta Confirmación de Venta es emitida por BuenTrade LLC. Al aceptar esta confirmación, el Comprador acepta la cantidad, el precio y las condiciones de entrega aquí indicadas. El producto se vende tal como se describe, sujeto a las tolerancias normales de la industria en peso y conteo. El pago vence según las condiciones indicadas arriba a partir de la fecha de entrega, salvo que se acuerde algo distinto por escrito. Cualquier discrepancia en producto, peso o condición debe reportarse a BuenTrade LLC por escrito dentro de las 24 horas siguientes a la entrega.";
-const FO_TERMS = "This Freight Order is issued by BuenTrade LLC. Carrier must maintain adequate cargo insurance and is responsible for the value of the cargo transported, whether or not covered by Carrier's own insurance, in case of loss or damage. Carrier must confirm the pickup appointment with the origin facility at least 24 hours in advance and must check in for any required USDA inspection before 6:00 AM on the scheduled delivery or in-transit date; late check-in may result in delay, layover, and inspection fees for which Carrier is responsible. Late pickups, late deliveries, or no-shows may result in charges passed on to Carrier. Cancellation of this confirmed load that requires BuenTrade LLC to source a replacement carrier at additional cost will result in a charge-back to Carrier. Carrier is entitled to reasonable detention charges for time held beyond the agreed free time at pickup or delivery, provided the rate has been agreed with BuenTrade LLC in writing prior to dispatch. No accessorial charge (layover, redelivery, storage, or otherwise) will be honored unless authorized in writing by BuenTrade LLC in advance.";
-const DRAFT_DISCLAIMER_EN = 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.';
-const DRAFT_DISCLAIMER_ES = 'Términos en borrador, no revisados por un abogado — confirmar con el área legal antes de usarlos en una disputa.';
 // Real BuenTrade wire details, provided by the user 2026-09-05 — never invent banking information.
 const BUENTRADE_WIRE = {
   bankName: 'Grove Bank & Trust',
@@ -2947,7 +2945,7 @@ function pdfKeyValueRows(doc, x, y, rows, o = {}){
   return cursorY;
 }
 
-function pdfTerms(doc, y, title, text, disclaimer, o = {}){
+function pdfTerms(doc, y, title, text, o = {}){
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(o.titleSize || 9);
   doc.setTextColor(30, 106, 219);
@@ -2957,11 +2955,8 @@ function pdfTerms(doc, y, title, text, disclaimer, o = {}){
   doc.setTextColor(120, 130, 145);
   const split = doc.splitTextToSize(text, 532);
   doc.text(split, 40, y + (o.gap || 14));
-  doc.setFontSize(o.disclaimerSize || 7.5);
-  doc.setTextColor(190, 60, 60);
-  const disclaimerY = y + (o.gap || 14) + split.length * (o.lineH || 10) + 12;
-  if (disclaimer !== false) doc.text(disclaimer || 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
-  return disclaimerY + 10;
+  // Where the block ends, with the breathing room the layouts below it were built around.
+  return y + (o.gap || 14) + split.length * (o.lineH || 10) + 22;
 }
 
 function pdfSignatureBlock(doc, y, leftLabel, rightLabel){
@@ -3116,7 +3111,7 @@ async function buildInvoiceDoc(orderNumber, signatureDataUrl, signedByName){
   wireLines.forEach((line, i) => doc.text(line, 40, ty + 14 + i * 12));
   ty += 14 + wireLines.length * 12 + 10;
 
-  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS, DRAFT_DISCLAIMER_EN);
+  const termsEndY = pdfTerms(doc, ty, 'TERMS', INVOICE_TERMS);
 
   if (signatureDataUrl){
     doc.setFont('helvetica', 'bold');
@@ -3301,7 +3296,7 @@ async function buildPODoc(orderNumber){
   noteLines.forEach((n, i) => doc.text(n, 40, ty + 17 + i * 15));
   const notesEnd = ty + 17 + (noteLines.length - 1) * 15;
 
-  pdfTerms(doc, notesEnd + 46, 'TERMS', PO_TERMS, false, { titleSize: 10, size: 8.5, lineH: 12, gap: 17 });
+  pdfTerms(doc, notesEnd + 46, 'TERMS', PO_TERMS, { titleSize: 10, size: 8.5, lineH: 12, gap: 17 });
   pdfFooter(doc, 'en');
   return { doc, po, plant };
 }
@@ -3616,7 +3611,7 @@ async function buildSODoc(orderNumber){
     ty += 20;
   }
 
-  pdfTerms(doc, ty + 10, 'TÉRMINOS', SO_TERMS, DRAFT_DISCLAIMER_ES);
+  pdfTerms(doc, ty + 10, 'TÉRMINOS', SO_TERMS);
   pdfFooter(doc, 'es');
   return { doc, so, customer };
 }
@@ -3668,79 +3663,11 @@ async function buildFODocs(orderNumber){
   catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
   const docs = result.documents;
 
-  // Real ask 2026-09-20: "cada cliente tiene una [aduana] asignada... el sistema global tiene que
-  // tomar la aduana asignada a cada cliente y conectarla para que reciba los docs cuando se recoge
-  // la carga" — same lookup shareCustoms already uses (customer's own customs_agency_provider_id,
-  // falling back to the sent_offer's) now also resolves the FO's real delivery destination — the
-  // agency's own name+address — instead of the generic carrier-crossing placeholder or a blank
-  // "Border" field. One resolution here feeds both the PDF (composed.delivery_address) and the
-  // email/WhatsApp subject+body (fo.destination), so they can never show two different addresses.
-  let agencyAddress = null;
-  const foShipment = ((await callApi('shipments-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
-  let foAgencyId = foShipment && foShipment.customer_id
-    ? (((await callApi('customers-search', { ids: [foShipment.customer_id] })).results || [])[0] || {}).customs_agency_provider_id
-    : null;
-  if (!foAgencyId){
-    const foSentOffer = ((await callApi('sent-offers-search', { order_number: orderNumber, limit: 1 })).results || [])[0];
-    foAgencyId = foSentOffer && foSentOffer.customs_agency_provider_id;
-  }
-  if (foAgencyId){
-    const foAgency = ((await callApi('providers-search', { id: foAgencyId })).results || [])[0];
-    if (foAgency) agencyAddress = [foAgency.name, foAgency.address, foAgency.city, foAgency.country].filter(Boolean).join(', ');
-  }
-
+  // The delivery place (the customs agency assigned to the customer, with its address and phone), the pick-up facility, the dates, the
+  // temperature and the release number all come composed from the server (orders-compose-fo): the PDF and the email/WhatsApp text read the same record.
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
-    if (agencyAddress){ composed.delivery_address = agencyAddress; fo.destination = agencyAddress; }
-    const doc = pdfDoc();
-    pdfHeader(doc, 'Freight Order', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
-
-    pdfInfoBlock(doc, 40, 168, 'CARRIER', [
-      carrier ? carrier.name : 'TBD — not yet booked',
-      carrier && [carrier.city, carrier.country].filter(Boolean).join(', '),
-      carrier && carrier.phone,
-      carrier && (carrier.mc_number || carrier.dot_number)
-        ? `MC# ${carrier.mc_number || '—'}  ·  DOT# ${carrier.dot_number || '—'}` : null,
-    ]);
-    pdfInfoBlock(doc, 320, 168, 'CLIENT (BROKER)', ['BuenTrade LLC', COMPANY.address, COMPANY.phone]);
-
-    const yLeft = pdfKeyValueRows(doc, 40, 240, [
-      ['DATE', todayStr()],
-      ['PICK-UP ADDRESS', composed.pick_up_address],
-      ['DELIVERY ADDRESS', composed.delivery_address],
-      ['STOP OVER (IF NECESSARY)', '____________________'],
-      ['PICK-UP / DELIVERY DATE', fmtDatesList(composed.delivery_dates)],
-    ]);
-    const yRight = pdfKeyValueRows(doc, 320, 240, [
-      ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
-      ['WEIGHT', composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : null],
-      ['CLIENT ORDER #', 'FO-BT-' + btNum(orderNumber)],
-      ['APPT. / CHECK-IN #', '____________________'],
-      ['RELEASE #', '____________________'],
-    ]);
-    const y2 = pdfKeyValueRows(doc, 40, Math.max(yLeft, yRight) + 30, [
-      ['CUSTOMS BROKER', composed.customs_broker || 'TBD'],
-    ]);
-    const y = Math.max(yLeft, yRight, y2);
-
-    doc.autoTable({
-      startY: y + 12,
-      head: [['Product', 'Service', 'Agreed Rate']],
-      body: [[
-        composed.product_name || '—',
-        'Inland Freight',
-        '$' + (composed.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-      ]],
-      theme: 'grid',
-      headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-      styles: { fontSize: 9.5, cellPadding: 7 },
-      margin: { left: 40, right: 40 },
-    });
-
-    const ty = doc.lastAutoTable.finalY + 30;
-    const termsEndY = pdfTerms(doc, ty, 'TERMS', FO_TERMS);
-    pdfSignatureBlock(doc, termsEndY + 20, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
-    pdfFooter(doc, 'en');
+    const doc = bcRenderFO(composed, carrier, orderNumber);
     built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-BT-${btNum(orderNumber)}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;

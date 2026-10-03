@@ -27,14 +27,17 @@ const call = async (name, body) => { const res = await handlers[name](new Reques
 function world(w) {
   const log = [];
   const norm = (strings, vals) => strings.reduce((a, s, i) => a + s + (i < vals.length ? '$' + (i + 1) : ''), '').replace(/\s+/g, ' ').trim().toLowerCase();
-  const facs = w.facilities.map((f) => ({ id: f.id, location_id: f.location_id, location_name: f.location_name, address: f.address || null, city: f.city, state: f.state, plant_id: w.plant.id }));
+  const facs = w.facilities.map((f) => ({ id: f.id, location_id: f.location_id, location_name: f.location_name, address: f.address || null, phone: f.phone || null, city: f.city, state: f.state, plant_id: w.plant.id }));
   const routes = [
     [/^select \* from sent_offers where id =/, () => [w.offer]],
     [/^select \* from purchase_orders where order_number/, () => [w.po]],
     [/^select \* from plants where id/, () => [w.plantRow]],
     [/from plants p left join countries c/, () => [{ country_name: w.plant.country_name, iso2: w.plant.iso2, state_name: w.plant.state_name, state_code: w.plant.state_code }]],
     [/^select name from plants where id/, () => [{ name: w.plant.name }]],
-    [/^select o\.plant_id, o\.product_id, o\.us_freight_rate_id, p\.name as plant_name from sent_offers/, () => [{ plant_id: w.plant.id, product_id: 'prod-1', us_freight_rate_id: w.offer.us_freight_rate_id, plant_name: w.plant.name }]],
+    [/^select o\.plant_id, o\.product_id, o\.us_freight_rate_id, o\.customer_id, o\.customs_agency_provider_id, p\.name as plant_name from sent_offers/, () => [{ plant_id: w.plant.id, product_id: 'prod-1', us_freight_rate_id: w.offer.us_freight_rate_id, customer_id: 'cust-1', customs_agency_provider_id: w.offer.customs_agency_provider_id, plant_name: w.plant.name }]],
+    [/^select delivery_dates from purchase_orders where order_number/, () => [{ delivery_dates: w.po.delivery_dates }]],
+    [/^select release_number from shipments where order_number/, () => [{ release_number: w.release || null }]],
+    [/^select a\.\* from providers a where a\.id = coalesce/, () => { const id = w.customerAgencyId || w.offer.customs_agency_provider_id; const a = w.agencies.find((x) => x.id === id); return a ? [a] : []; }],
     [/^select o\.plant_id, p\.name as plant_name from sent_offers/, () => [{ plant_id: w.plant.id, plant_name: w.plant.name }]],
     [/from plant_locations pl left join locations l on l\.id = pl\.location_id where pl\.plant_id = \$1 order by/, () => facs],
     [/from plant_locations pl left join locations l on l\.id = pl\.location_id where pl\.plant_id = \$1 and pl\.location_id = \$2/, (v) => facs.filter((f) => f.location_id === v[1])],
@@ -66,7 +69,7 @@ function world(w) {
     [/^update freight_orders set origin/, (v) => [{ id: v[1], origin: v[0] }]],
     [/^update shipments set pickup_location_id/, (v) => [{ id: 'sh1', pickup_location_id: v[0] }]],
     [/^select \* from freight_orders where order_number = \$1$/, () => w.freightRows || []],
-    [/^select \* from providers where id/, () => [{ id: 'carrier-1', name: 'Carrier' }]],
+    [/^select \* from providers where id/, () => [{ id: 'carrier-1', name: 'Carrier', contact_name: 'Carrier Contact', phone: '+1 5550001111' }]],
     [/^select id from locations where lower\(city\)/, () => w.knownLocationId ? [{ id: w.knownLocationId }] : []],
     [/^insert into locations/, () => [{ id: 'loc-new' }]],
     [/^update plant_locations set address/, (v) => [{ id: v[1], address: v[0] }]],
@@ -208,6 +211,25 @@ const MARK = { actor: 'test@bt', sent_offer_id: 'offer-1', confirmed_delivery_da
       r = await call('composeFo', { order_number: 'BT-2026-9000' });
       const doc = r.body.documents && r.body.documents[0];
       if (r.status !== 200 || !doc || !doc.document.pick_up_address.includes(withAddr.address.trim().replace(/[\s,;]+$/, '')) || doc.fo.origin !== doc.document.pick_up_address) bad.push(plant.name + ': the Freight Order tells the carrier the facility with its street address — ' + r.status);
+      // the form fields: pick-up block + the facility's OWN phone(s), PU / delivery dates, temperature with degrees, release TBD until given, vendor contact
+      const d = doc && doc.document;
+      const sameSite = facs.filter((x) => (x.address || '').trim().toLowerCase() === (withAddr.address || '').trim().toLowerCase() && x.city === withAddr.city);
+      const wantPhones = [...new Set(sameSite.map((x) => (x.phone || '').trim()).filter(Boolean))].join(' / ') || null;
+      if (!d || d.pick_up_lines[0] !== plant.name.trim().replace(/\s+/g, ' ') || !d.pick_up_lines.join(' ').includes(withAddr.address.trim().replace(/[\s,;]+$/, '')) || d.pick_up_phone !== wantPhones) bad.push(plant.name + ': FO pick-up block / facility phones — ' + JSON.stringify(d && [d.pick_up_lines, d.pick_up_phone, wantPhones]));
+      if (!d || d.pick_up_date !== '2026-10-10' || d.delivery_date !== '2026-10-12') bad.push(plant.name + ': FO PU date is the PO\'s date and the delivery date is PU + 2 days (Saturday rolls to Monday) — ' + (d && [d.pick_up_date, d.delivery_date]));
+      if (!d || d.temperature_setting !== '-10°F (Frozen)') bad.push(plant.name + ': FO temperature setting carries the degrees — ' + (d && d.temperature_setting));
+      if (!d || d.release_number !== null) bad.push(plant.name + ': FO release # is empty (TBD on the PDF) until the plant gives it');
+      if (!d || !d.carrier || d.carrier.contact_name !== 'Carrier Contact') bad.push(plant.name + ': FO vendor carries the carrier\'s contact');
+      // release number once the plant gave it
+      w = mkWorld(plant, { offer: { us_freight_rate_id: 'rate-1' }, world: { rate: { location_id: withAddr.location_id, city: withAddr.city, state: withAddr.state }, freightRows: fr, release: 'REL-777' } }); log = world(w);
+      r = await call('composeFo', { order_number: 'BT-2026-9000' });
+      if (r.status !== 200 || r.body.documents[0].document.release_number !== 'REL-777') bad.push(plant.name + ': FO shows the release number once the plant gave it');
+      // delivery = the customs agency (customer's) with its street address and phone
+      const ag = { id: 'ag-1', name: 'Agency Ok', address: '12120 River Bank Dr', city: 'Laredo', country: 'United States', phone: '+1 9567255141' };
+      w = mkWorld(plant, { offer: { us_freight_rate_id: 'rate-1' }, world: { rate: { location_id: withAddr.location_id, city: withAddr.city, state: withAddr.state }, freightRows: fr, agencies: [ag], customerAgencyId: 'ag-1' } }); log = world(w);
+      r = await call('composeFo', { order_number: 'BT-2026-9000' });
+      const dd = r.body.documents && r.body.documents[0];
+      if (r.status !== 200 || !dd || dd.document.delivery_lines.join('|') !== 'Agency Ok|12120 River Bank Dr|Laredo' || dd.document.delivery_phone !== '+1 9567255141' || dd.fo.destination !== 'Agency Ok, 12120 River Bank Dr, Laredo, United States') bad.push(plant.name + ': FO delivery block = customs agency with street address and phone — ' + JSON.stringify(dd && [dd.document.delivery_lines, dd.document.delivery_phone, dd.fo.destination]));
     }
     const fr2 = [{ id: 'fo1', order_number: 'BT-2026-9000', sent_offer_id: 'offer-1', carrier_provider_id: 'carrier-1', origin: plant.name, destination: 'Border', quoted_rate: 4000 }];
     w = mkWorld(plant, { world: { freightRows: fr2 } }); log = world(w);

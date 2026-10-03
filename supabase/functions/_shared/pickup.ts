@@ -9,7 +9,7 @@ import type { Facility, PickupInput, PickupResolution } from "./poDocument.ts";
 // rate booked on the offer and the location the plant's price for this product ships from.
 export async function loadPickupInput(sql: any, o: { plantId: string; productId: string | null; orderNumber: string | null; rateId: string | null }): Promise<PickupInput> {
   const facilities = await sql`
-    select pl.id, pl.location_id, pl.location_name, pl.address, l.city, l.state
+    select pl.id, pl.location_id, pl.location_name, pl.address, pl.phone, l.city, l.state
     from plant_locations pl left join locations l on l.id = pl.location_id
     where pl.plant_id = ${o.plantId} order by pl.location_name, pl.created_at`;
   const [shipment] = o.orderNumber ? await sql`select pickup_location_id from shipments where order_number = ${o.orderNumber}` : [];
