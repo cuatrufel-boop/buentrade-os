@@ -3611,7 +3611,19 @@ async function buildSODoc(orderNumber){
     ty += 20;
   }
 
-  pdfTerms(doc, ty + 10, 'TÉRMINOS', SO_TERMS);
+  // NOTES: temperature and export docs line, same as PO
+  const noteLines = composed.notes && composed.notes.length ? composed.notes : [composed.docs_note];
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(30, 106, 219);
+  doc.text('NOTAS', 40, ty + 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(9);
+  noteLines.forEach((n, i) => doc.text(n, 40, ty + 27 + i * 15));
+  const notesEnd = ty + 27 + (noteLines.length - 1) * 15;
+
+  pdfTerms(doc, notesEnd + 26, 'TÉRMINOS', SO_TERMS);
   pdfFooter(doc, 'es');
   return { doc, so, customer };
 }
