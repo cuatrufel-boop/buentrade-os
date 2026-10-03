@@ -2823,7 +2823,7 @@ const COMPANY = {
   name1: 'Buen', name2: 'Trade',
   legalName: 'BuenTrade LLC',
   address: '1525 N Park Dr, Suite 104, Weston, FL 33326',
-  phone: '+34 666 318 864',
+  phone: '+1 754 248 1016',
 };
 const CONTACT_EMAIL_PO = 'purchasing@buentradegroup.com';
 const CONTACT_EMAIL_SO = 'offers@buentradegroup.com';
@@ -2910,28 +2910,28 @@ function pdfHeader(doc, docTitle, orderNumber, contactEmail){
 // Mexican address (common — full street + colonia + CP + city) ran past this column's width and
 // bled straight into the second column's text with no line break, making both unreadable. Each
 // line now wraps to the column width instead of printing as one unbroken run.
-function pdfInfoBlock(doc, x, y, label, lines){
+function pdfInfoBlock(doc, x, y, label, lines, o = {}){
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(o.labelSize || 9);
   doc.setTextColor(30, 106, 219);
   doc.text(label, x, y);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10.5);
+  doc.setFontSize(o.size || 10.5);
   doc.setTextColor(15, 31, 51);
-  let cursorY = y + 16;
+  let cursorY = y + (o.gap || 16);
   (lines || []).filter(Boolean).forEach(line => {
     const wrapped = doc.splitTextToSize(String(line), 260);
     doc.text(wrapped, x, cursorY);
-    cursorY += wrapped.length * 13;
+    cursorY += wrapped.length * (o.lineH || 13);
   });
 }
 
-function pdfKeyValueRows(doc, x, y, rows){
+function pdfKeyValueRows(doc, x, y, rows, o = {}){
   let cursorY = y;
   rows.forEach(([k, v]) => {
     if (!v) return;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
+    doc.setFontSize(o.size || 9.5);
     doc.setTextColor(30, 106, 219);
     doc.text(k, x, cursorY);
     doc.setFont('helvetica', 'normal');
@@ -2941,24 +2941,24 @@ function pdfKeyValueRows(doc, x, y, rows){
     const limit = x < pageW / 2 ? pageW / 2 + 4 : pageW - 40;
     const valueLines = doc.splitTextToSize(String(v), Math.max(60, limit - (x + 150)));
     doc.text(valueLines, x + 150, cursorY);
-    cursorY += Math.max(17, valueLines.length * 12 + 5);
+    cursorY += Math.max(o.step || 17, valueLines.length * (o.lineH || 12) + 5);
   });
   return cursorY;
 }
 
-function pdfTerms(doc, y, title, text, disclaimer){
+function pdfTerms(doc, y, title, text, disclaimer, o = {}){
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(o.titleSize || 9);
   doc.setTextColor(30, 106, 219);
   doc.text(title, 40, y);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(o.size || 8);
   doc.setTextColor(120, 130, 145);
   const split = doc.splitTextToSize(text, 532);
-  doc.text(split, 40, y + 14);
-  doc.setFontSize(7.5);
+  doc.text(split, 40, y + (o.gap || 14));
+  doc.setFontSize(o.disclaimerSize || 7.5);
   doc.setTextColor(190, 60, 60);
-  const disclaimerY = y + 14 + split.length * 10 + 12;
+  const disclaimerY = y + (o.gap || 14) + split.length * (o.lineH || 10) + 12;
   doc.text(disclaimer || 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
   return disclaimerY + 10;
 }
@@ -3249,25 +3249,29 @@ async function buildPODoc(orderNumber){
   pdfHeader(doc, 'Purchase Order', 'PO-BT-' + btNum(orderNumber), CONTACT_EMAIL_PO);
 
   const vendorLines = composed.vendor.split('\n');
-  pdfInfoBlock(doc, 40, 168, 'VENDOR', vendorLines);
-  pdfInfoBlock(doc, 320, 168, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO', composed.ship_to.split('\n'));
+  // The page is laid out over its whole height (header band to footer) instead of stacked at the top: roomier blocks and rows, then the
+  // item table, the notes and the terms spaced down toward the footer.
+  const blockLook = { labelSize: 10, size: 11.5, lineH: 16, gap: 19 };
+  const rowLook = { size: 10.5, step: 28, lineH: 14 };
+  pdfInfoBlock(doc, 40, 186, 'VENDOR', vendorLines, blockLook);
+  pdfInfoBlock(doc, 320, 186, isFob ? 'SHIP TO / PICK UP LOCATION' : 'DELIVER TO', composed.ship_to.split('\n'), blockLook);
 
-  const yLeft = pdfKeyValueRows(doc, 40, 240, [
+  const yLeft = pdfKeyValueRows(doc, 40, 304, [
     ['DATE', todayStr()],
     [isFob ? 'PICK-UP DATE' : 'DELIVERY DATE', composed.pick_up_date],
     ['SHIP VIA', 'Refrigerated Trucking'],
     ['PAYMENT TERMS', composed.payment_terms],
     ['ORDER #', 'PO-BT-' + btNum(orderNumber)],
-  ]);
-  const yRight = pdfKeyValueRows(doc, 320, 240, [
+  ], rowLook);
+  const yRight = pdfKeyValueRows(doc, 320, 304, [
     ['INCOTERMS', composed.incoterms],
     ['SUPPLIER PO', composed.supplier_po || ''],
     ['COUNTRY OF ORIGIN', composed.country_of_origin],
-  ]);
+  ], rowLook);
   const y = Math.max(yLeft, yRight);
 
   doc.autoTable({
-    startY: y + 12,
+    startY: y + 22,
     head: [['Part #', 'Item Description', 'Qty LBS', 'Unit Cost', 'Amount', 'PU or DEL Date', 'Buyer']],
     body: [[
       '',
@@ -3279,18 +3283,19 @@ async function buildPODoc(orderNumber){
       composed.trader || '',
     ]],
     theme: 'grid',
-    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-    styles: { fontSize: 9.5, cellPadding: 7 },
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
+    styles: { fontSize: 10.5, cellPadding: { top: 11, bottom: 11, left: 7, right: 7 } },
+    columnStyles: { 0: { cellWidth: 50 }, 2: { cellWidth: 58 }, 3: { cellWidth: 64 } }, // short headers (Part #, Qty LBS, Unit Cost) stay on one line
     margin: { left: 40, right: 40 },
   });
 
-  let ty = doc.lastAutoTable.finalY + 20;
+  let ty = doc.lastAutoTable.finalY + 34;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.text('NOTES: ' + composed.docs_note, 40, ty);
 
-  pdfTerms(doc, ty + 30, 'TERMS', PO_TERMS);
+  pdfTerms(doc, ty + 54, 'TERMS', PO_TERMS, undefined, { titleSize: 10, size: 8.5, lineH: 12, gap: 17, disclaimerSize: 8 });
   pdfFooter(doc, 'en');
   return { doc, po, plant };
 }

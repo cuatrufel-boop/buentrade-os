@@ -6,7 +6,7 @@ const btReplies = [
   { k: ["quote","price","cost","pricing"], a: "I can pass your request to our team. Please fill out the contact form below with your product and volume, and we'll follow up fast." },
   { k: ["mexico"], a: "Yes — we supply beef, pork, and poultry to clients across Mexico from the U.S., Brazil, and Canada." },
   { k: ["shipping","delivery","time","how long"], a: "Shipping times vary by product and destination. Share your location and product in the contact form for an accurate estimate." },
-  { k: ["contact","talk","human","agent"], a: "Of course — you can reach our team directly at buentrade2026@gmail.com or WhatsApp +34 666 318 864." },
+  { k: ["contact","talk","human","agent"], a: "Of course — you can reach our team directly at buentrade2026@gmail.com or WhatsApp +1 754 248 1016." },
 ];
 
 function btMatch(msg) {
