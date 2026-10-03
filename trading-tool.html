@@ -2348,8 +2348,12 @@ function pdfKeyValueRows(doc, x, y, rows){
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30, 106, 219);
     doc.text(k, x, cursorY);
     doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 31, 51);
-    doc.text(String(v), x + 150, cursorY);
-    cursorY += 17;
+    // A long value (a full incoterm such as "FCA – Smithfield Foods, Smithfield, VA") wraps inside its column instead of running off the page.
+    const pageW = doc.internal.pageSize.getWidth();
+    const limit = x < pageW / 2 ? pageW / 2 + 4 : pageW - 40;
+    const valueLines = doc.splitTextToSize(String(v), Math.max(60, limit - (x + 150)));
+    doc.text(valueLines, x + 150, cursorY);
+    cursorY += Math.max(17, valueLines.length * 12 + 5);
   });
   return cursorY;
 }

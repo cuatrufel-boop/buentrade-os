@@ -12,6 +12,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, traderDisplayName } from "../_shared/matching.ts";
+import { agencyIncoterm, clean, countryOfOrigin, fmtAmount, fmtDate, fmtUnitCost, fmtWeight, plantAddressLines, plantIncoterm } from "../_shared/poDocument.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -30,21 +31,26 @@ Deno.serve(async (req) => {
     if (!po) return jsonResponse({ error: "unknown order_number" }, 404);
     const [offer] = await sql`select * from sent_offers where id = ${po.sent_offer_id}`;
     const [plant] = await sql`select * from plants where id = ${po.plant_id}`;
+    // Country and state are read from their own tables (the plants.country / plants.state text columns are empty for every plant).
+    const [geo] = await sql`
+      select c.name_en as country_name, c.iso2, s.name_en as state_name, s.code as state_code
+      from plants p left join countries c on c.id = p.country_id left join states s on s.id = p.state_id where p.id = ${po.plant_id}`;
 
     // us_freight_amount, not us_freight_rate_id — a quote using the no-known-city AVERAGE fallback
     // (see quotes.html rqAverageUsFreightRate, 2026-08-30) still charges real freight, it just has
     // no single provider_rates row to point at, so us_freight_rate_id is null for it too. The
     // amount actually being > 0 is the real "was a freight leg charged" signal in both cases.
     const isFob = Number(offer?.us_freight_amount) > 0;
-    let shipTo = fmtAddress(plant?.name, plant?.address, plant?.city, plant?.state, plant?.country);
-    let incoterms = `FCA – ${plant?.name || "plant"}, ${[plant?.city, plant?.state].filter(Boolean).join(", ")}`;
+    const vendorBlock = plantAddressLines(plant || {}, geo || {}).join("\n");
+    let shipTo = vendorBlock;
+    let incoterms = plantIncoterm(plant || {}, geo || {});
     let customsAgency = null;
     if (!isFob && offer?.customs_agency_provider_id) {
       const [agency] = await sql`select * from providers where id = ${offer.customs_agency_provider_id}`;
       if (agency) {
         customsAgency = agency;
-        shipTo = fmtAddress(agency.name, null, agency.city, null, agency.country);
-        incoterms = `DAP – ${agency.name}, ${agency.city || ""}`;
+        shipTo = fmtAddress(clean(agency.name), null, clean(agency.city), null, clean(agency.country));
+        incoterms = agencyIncoterm(agency);
       }
     }
 
@@ -60,9 +66,9 @@ Deno.serve(async (req) => {
       payment_terms: plant?.payment_terms || null,
       docs_note: po.docs_on ? "Docs included by vendor." : "No export documentation included — buyer to arrange.",
       incoterms,
-      country_of_origin: plant?.country || null,
+      country_of_origin: countryOfOrigin(plant || {}, geo || {}),
       trader,
-      vendor: fmtAddress(plant?.name, plant?.address, plant?.city, plant?.state, plant?.country),
+      vendor: vendorBlock,
       ship_to: shipTo,
       customs_agency: customsAgency,
       line_item: {
@@ -76,7 +82,7 @@ Deno.serve(async (req) => {
 
     const text = [
       `PURCHASE ORDER ${order_number}`,
-      `Date: ${new Date(doc.date).toLocaleDateString()}`,
+      `Date: ${fmtDate(doc.date)}`,
       doc.pick_up_date ? `Pick-up date: ${doc.pick_up_date}` : null,
       doc.payment_terms ? `Payment terms: ${doc.payment_terms}` : null,
       `Incoterms: ${doc.incoterms}`,
@@ -88,9 +94,9 @@ Deno.serve(async (req) => {
       `SHIP TO / PICK UP:`, doc.ship_to,
       ``,
       `ITEM: ${doc.line_item.description}`,
-      `Weight: ${doc.line_item.weight} lbs`,
-      `Price: $${doc.line_item.purchase_price}/lb`,
-      `Total: $${doc.line_item.total_cost}`,
+      `Weight: ${fmtWeight(doc.line_item.weight)} lbs`,
+      `Price: ${fmtUnitCost(doc.line_item.purchase_price)}/lb`,
+      `Total: ${fmtAmount(doc.line_item.total_cost)}`,
       ``,
       `NOTES: ${doc.docs_note}`,
     ].filter((l) => l !== null).join("\n");
