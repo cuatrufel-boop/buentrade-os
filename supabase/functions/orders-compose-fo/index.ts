@@ -5,6 +5,8 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
+import { clean, pickupText, resolvePickup } from "../_shared/poDocument.ts";
+import { loadPickupInput, pickupRefusal } from "../_shared/pickup.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -26,8 +28,24 @@ Deno.serve(async (req) => {
     const freightOrders = await sql`select * from freight_orders where order_number = ${order_number}`;
     if (!freightOrders.length) return jsonResponse({ error: "no freight_orders for this order_number" }, 404);
 
+    // The US leg is the one that collects at the plant (the Mexican leg starts at the border). Its pick-up is the plant FACILITY with its street address,
+    // the same place the Purchase Order prints; when it is not complete nothing is guessed — the screens ask the trader (see orders-compose-po).
+    const isUsLeg = (fo: any) => !["border", ""].includes(String(fo.origin ?? "").trim().toLowerCase());
+    let usLegPickup: string | null = null;
+    const usLeg = freightOrders.find(isUsLeg);
+    if (usLeg?.sent_offer_id) {
+      const [legOffer] = await sql`select o.plant_id, o.product_id, o.us_freight_rate_id, p.name as plant_name from sent_offers o join plants p on p.id = o.plant_id where o.id = ${usLeg.sent_offer_id}`;
+      if (legOffer) {
+        const pickup = resolvePickup(await loadPickupInput(sql, { plantId: legOffer.plant_id, productId: legOffer.product_id, orderNumber: order_number, rateId: legOffer.us_freight_rate_id }));
+        const refusal = pickupRefusal(legOffer.plant_id, clean(legOffer.plant_name), pickup, order_number);
+        if (refusal) return jsonResponse(refusal, 409);
+        if (pickup.kind === "ready") usLegPickup = pickupText({ name: legOffer.plant_name }, pickup.facility);
+      }
+    }
+
     const documents = [];
-    for (const fo of freightOrders) {
+    for (const fo0 of freightOrders) {
+      const fo = usLegPickup && isUsLeg(fo0) ? { ...fo0, origin: usLegPickup } : fo0;
       const [offer] = fo.sent_offer_id ? await sql`select * from sent_offers where id = ${fo.sent_offer_id}` : [null];
       const [carrier] = fo.carrier_provider_id ? await sql`select * from providers where id = ${fo.carrier_provider_id}` : [null];
       let customsAgency = null;

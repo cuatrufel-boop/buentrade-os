@@ -530,6 +530,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
+<script src="js/pickup-picker.js"></script>
 <script src="js/date-picker.js"></script>
 <script src="js/market-flash-send.js"></script>
 <script>
@@ -2952,7 +2953,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
   const wonIdempotencyKey = `sent-offers-mark-won|${negoOffer.id}|${new Date().toISOString().slice(0, 16)}`;
   let result;
   try {
-    result = await callApi('sent-offers-mark-won', {
+    result = await bcCallWithAsk('sent-offers-mark-won', {
       actor: currentActor(), sent_offer_id: negoOffer.id, override_credit_check: !!overrideCreditCheck,
       purchase_price, sale_per_lb, us_freight_amount: finalFreightAmount, total_cost, total_sale, weight,
       confirmed_delivery_date: confirmedDeliveryDate,
@@ -2980,6 +2981,7 @@ async function negoSaveDefinitive(overrideCreditCheck, confirmedDeliveryDate, ca
       }
       return;
     }
+    if (e.cancelled){ document.getElementById('negoMsg').textContent = ''; return; } // nothing created
     await btAlert('Error: ' + e.message);
     return;
   }

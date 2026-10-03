@@ -475,7 +475,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/email-modal.js"></script>
-<script src="js/po-pickup.js"></script>
+<script src="js/pickup-picker.js"></script>
 <script src="js/quote-more-clients.js"></script>
 <script src="js/date-picker.js"></script>
 <script>
@@ -3241,7 +3241,7 @@ function showToast(title, detail, isError, linkHtml){
 // after winning — see runPendingWonDocConfirm below.
 async function buildPODoc(orderNumber){
   let result;
-  try { result = await bcComposePO(orderNumber); }
+  try { result = await bcComposeDocument('orders-compose-po', orderNumber); }
   catch (e) { throw new Error(e.data && e.data.error === 'unknown order_number' ? 'PO not found.' : e.message); }
   const { document: composed, po, plant } = result;
   const isFob = composed.incoterms.startsWith('FCA');
@@ -3664,7 +3664,7 @@ async function shareSO(orderNumber){
 
 async function buildFODocs(orderNumber){
   let result;
-  try { result = await callApi('orders-compose-fo', { order_number: orderNumber }); }
+  try { result = await bcComposeDocument('orders-compose-fo', orderNumber); }
   catch (e) { throw new Error(e.data && e.data.error === 'no freight_orders for this order_number' ? 'No freight leg on this order.' : e.message); }
   const docs = result.documents;
 

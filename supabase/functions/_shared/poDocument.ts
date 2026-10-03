@@ -34,12 +34,13 @@ export function plantAddressLines(plant: PlantRow, geo: PlantGeo): string[] {
 }
 
 // ---------- Where the cargo is collected
-// The PICK-UP location of a PO is the plant's FACILITY the load is collected at (Storm Lake, IA), never the plant's offices (Springdale, AR):
-// the offices only belong to the VENDOR block. The facility is a plant_locations row (its own street address) joined to the locations catalog
-// (city / state). Nothing here ever falls back to the offices when the plant has facilities: when the facility is not known the PO is not
-// issued and the trader is asked which one (resolvePickup -> "needs_pick").
+// A FOB load is collected at a plant FACILITY with a street address (Storm Lake, IA — 1009 Richland Dr), never at the plant's offices (the
+// offices are only the VENDOR block). The place comes from the quote: the freight rate booked on the offer (its origin) and the location the
+// plant's price ships from. When the quote did not carry it, or the facility has no street address yet, nothing is guessed: the order is not
+// created / the PO is not issued until the trader answers (resolvePickup -> needs_facility / needs_address), and the answer is kept on the
+// facility, so each address is asked once and then always found.
 export type Facility = { id?: string | null; location_id?: string | null; location_name?: string | null; address?: string | null; city?: string | null; state?: string | null };
-const placeOf = (f: Facility) => [clean(f.city), clean(f.state)].filter(Boolean).join(", ") || clean(f.location_name);
+export const placeOf = (f: Facility) => [clean(f.city), clean(f.state)].filter(Boolean).join(", ") || clean(f.location_name);
 
 // Plant name, the facility's street address, "City, ST" (only when the address does not already carry the city), the country.
 export function facilityLines(plant: PlantRow, f: Facility, geo: PlantGeo): string[] {
@@ -52,52 +53,61 @@ export function facilityLines(plant: PlantRow, f: Facility, geo: PlantGeo): stri
 
 export const facilityIncoterm = (plant: PlantRow, f: Facility): string => `FCA – ${[clean(plant.name) || "plant", placeOf(f)].filter(Boolean).join(", ")}`;
 
-// Only for a plant with no facility registered at all: the plant's own address is then the one place the system knows.
-export function plantIncoterm(plant: PlantRow, geo: PlantGeo): string {
-  return `FCA – ${[clean(plant.name) || "plant", cityState(plant, geo)].filter(Boolean).join(", ")}`;
+// The same place as one line for the carrier ("Tyson Foods, 1009 Richland Dr, Storm Lake, IA 50588").
+export function pickupText(plant: PlantRow, f: Facility): string {
+  const address = clean(f.address);
+  const city = clean(f.city);
+  const addressHasCity = !!address && !!city && address.toLowerCase().includes(city.toLowerCase());
+  return [clean(plant.name), address, addressHasCity ? "" : placeOf(f)].filter(Boolean).join(", ");
+}
+
+// A street address the trader typed: something with a number and letters ("1009 Richland Dr, Storm Lake, IA 50588"). Returns the problem, or null.
+export function addressProblem(addr: unknown): string | null {
+  const a = clean(addr);
+  if (a.length < 8 || !/\d/.test(a) || !/[A-Za-z]{3}/.test(a)) return "Type the street address of the pickup location (number, street, city, state).";
+  return null;
 }
 
 export type PickupInput = {
   facilities: Facility[];            // every facility registered for the plant (plant_locations joined to locations)
-  manualId?: string | null;          // shipments.pickup_location_id — a plant_locations id the trader chose
+  manualId?: string | null;          // shipments.pickup_location_id — a plant_locations id chosen for this order
   rateLocationId?: string | null;    // locations.id the freight rate booked on the offer ships from
   rateLocation?: Facility | null;    // that location's city / state
   productLocationId?: string | null; // locations.id the plant's price for this product ships from
   productLocation?: Facility | null;
 };
+export type PickupSource = "shipment" | "freight_rate" | "product";
 export type PickupResolution =
-  | { kind: "facility"; facility: Facility; source: "shipment" | "freight_rate" | "product" | "only_facility" }
-  | { kind: "place"; facility: Facility; source: "freight_rate" | "product" }   // the origin is a known city that is not a registered facility of this plant
-  | { kind: "plant"; source: "plant_without_facilities" }
-  | { kind: "needs_pick"; options: Facility[] };
+  | { kind: "ready"; facility: Facility; source: PickupSource }          // known, with its street address
+  | { kind: "needs_address"; facility: Facility; source: PickupSource }  // known, its street address is not on file yet
+  | { kind: "needs_facility"; options: Facility[]; hintName: string | null }; // the quote did not say (or says a city that is not a registered facility)
 
 // Two facility rows that print the same (Tyson's two Storm Lake plants share one address) are one choice.
 const printKey = (f: Facility) => `${clean(f.address).toLowerCase()}|${placeOf(f).toLowerCase()}`;
-const distinct = (list: Facility[]): Facility[] => { const seen = new Set<string>(); return list.filter((f) => { const k = printKey(f); if (seen.has(k)) return false; seen.add(k); return true; }); };
+export const distinctFacilities = (list: Facility[]): Facility[] => { const seen = new Set<string>(); return list.filter((f) => { const k = printKey(f); if (seen.has(k)) return false; seen.add(k); return true; }); };
 
-// In order of certainty: the facility the trader chose for this shipment; the origin of the freight rate booked for the offer; the location the
-// plant's price for the product ships from; the plant's only facility. A plant with no facility registered uses its own address. Anything else
-// is "needs_pick" — the system never guesses between facilities and never prints the offices as the pick-up place.
+// In order of certainty: the facility chosen for this order; the origin of the freight rate booked on the offer; the location the plant's price for
+// the product ships from. Both origins are matched to the plant's OWN facilities. Nothing else is assumed — not "the plant's only facility", never
+// the offices.
 export function resolvePickup(i: PickupInput): PickupResolution {
   const facilities = i.facilities || [];
+  const settle = (facility: Facility, source: PickupSource): PickupResolution => clean(facility.address) ? { kind: "ready", facility, source } : { kind: "needs_address", facility, source };
   if (i.manualId) {
     const chosen = facilities.find((f) => f.id === i.manualId);
-    if (chosen) return { kind: "facility", facility: chosen, source: "shipment" };
+    if (chosen) return settle(chosen, "shipment");
   }
-  const origins: Array<[string | null | undefined, Facility | null | undefined, "freight_rate" | "product"]> = [
+  let hintName: string | null = null;
+  const origins: Array<[string | null | undefined, Facility | null | undefined, PickupSource]> = [
     [i.rateLocationId, i.rateLocation, "freight_rate"], [i.productLocationId, i.productLocation, "product"],
   ];
   for (const [locationId, location, source] of origins) {
     if (!locationId) continue;
-    const here = distinct(facilities.filter((f) => f.location_id && f.location_id === locationId));
-    if (here.length === 1) return { kind: "facility", facility: here[0], source };
-    if (here.length > 1) return { kind: "needs_pick", options: here };
-    if (location && placeOf(location)) return { kind: "place", facility: location, source };
+    const here = distinctFacilities(facilities.filter((f) => f.location_id && f.location_id === locationId));
+    if (here.length === 1) return settle(here[0], source);
+    if (here.length > 1) return { kind: "needs_facility", options: here, hintName: placeOf(here[0]) };
+    if (!hintName && location && placeOf(location)) hintName = placeOf(location);
   }
-  const all = distinct(facilities);
-  if (all.length === 0) return { kind: "plant", source: "plant_without_facilities" };
-  if (all.length === 1) return { kind: "facility", facility: all[0], source: "only_facility" };
-  return { kind: "needs_pick", options: all };
+  return { kind: "needs_facility", options: distinctFacilities(facilities), hintName };
 }
 
 // A delivered order goes to the customer's customs agency at the border (Laredo, McAllen...): its name and street address.

@@ -19,9 +19,6 @@ for (const p of plants) {
   if (city && addr.includes(city.toLowerCase()) && cityOnlyLines.some((l) => l.toLowerCase() !== addr.replace(/[\s,;]+$/, ''))) bad.duplicatedCity.push(label);
   const block = lines.join(' | ').toLowerCase();
   if (!(block.includes((p.state_name || '').toLowerCase()) || new RegExp('\\b' + (p.state_code || '@@').toLowerCase() + '\\b').test(block))) bad.noState.push(label);
-  const inc = po.plantIncoterm(p, geoOf(p));
-  const wantState = p.iso2 === 'US' ? p.state_code : p.state_name;
-  if (!inc.startsWith('FCA – ' + p.name.trim().replace(/\s+/g, ' ')) || (p.city && !inc.includes(p.city.trim())) || (wantState && !inc.endsWith(wantState)) || /\s,|,\s*$|\s{2}/.test(inc)) bad.badIncoterm.push(label + ' => ' + inc);
   if (!po.countryOfOrigin(p, geoOf(p))) bad.noOrigin.push(label);
 }
 ok(plants.length >= 30, `all ${plants.length} plants checked`);
@@ -30,14 +27,12 @@ ok(!bad.noCountryLast.length, 'every vendor block ends with the country' + (bad.
 ok(!bad.emptyOrComma.length, 'no empty line, no trailing comma' + (bad.emptyOrComma.length ? ' — ' + bad.emptyOrComma : ''));
 ok(!bad.duplicatedCity.length, 'the city is never repeated on its own line when the address already has it' + (bad.duplicatedCity.length ? ' — ' + bad.duplicatedCity : ''));
 ok(!bad.noState.length, 'every block carries the state (inside the address or as its own "City, ST" line)' + (bad.noState.length ? ' — ' + bad.noState : ''));
-ok(!bad.badIncoterm.length, 'every incoterm reads "FCA – Plant, City, ST" with no stray spaces or commas' + (bad.badIncoterm.length ? ' — ' + bad.badIncoterm : ''));
 ok(!bad.noOrigin.length, 'every plant has a country of origin' + (bad.noOrigin.length ? ' — ' + bad.noOrigin : ''));
 
 const by = (n) => plants.find((p) => p.name.toLowerCase().includes(n));
 ok(po.plantAddressLines(by('smithfield'), geoOf(by('smithfield'))).join('\n') === 'Smithfield Foods\n200 Commerce Street, Smithfield, VA 23430\nUnited States', 'Smithfield: one clean address, no repeated city, with the country');
 ok(po.plantAddressLines(by('tyson'), geoOf(by('tyson'))).join('\n') === 'Tyson Foods\n2200 W Don Tyson Pkwy\nSpringdale, AR\nUnited States', 'Tyson: street, then "Springdale, AR", then the country');
-ok(po.plantIncoterm(by('tyson'), geoOf(by('tyson'))) === 'FCA – Tyson Foods, Springdale, AR', 'Tyson incoterm');
-ok(po.plantAddressLines(by('bachoco'), geoOf(by('bachoco'))).slice(-1)[0] === 'Mexico' && po.plantIncoterm(by('bachoco'), geoOf(by('bachoco'))).endsWith('Guanajuato'), 'a plant outside the US shows the state name, not a code');
+ok(po.plantAddressLines(by('bachoco'), geoOf(by('bachoco'))).slice(-1)[0] === 'Mexico', 'a plant outside the US shows the country at the end of its vendor block');
 ok(po.agencyIncoterm({ name: 'Agency ', city: null }) === 'DAP – Agency' && po.agencyIncoterm({ name: 'A', city: 'Laredo' }) === 'DAP – A, Laredo', 'customs-agency incoterm has no trailing comma when the city is empty');
 ok(po.fmtWeight(40000) === '40,000' && po.fmtUnitCost(1.72) === '$1.7200' && po.fmtAmount(68800) === '$68,800.00' && po.fmtAmount(51200.5) === '$51,200.50' && po.fmtAmount(null) === '$0.00', 'weight, unit cost and amount are printed like the PDF (thousands, 4 and 2 decimals)');
 ok(po.fmtDate('2026-09-27T01:30:00Z') === '9/26/2026', 'a PO created in the US evening keeps its US (Miami) date');
@@ -50,43 +45,45 @@ const denison = facsOf(smith).find((f) => f.location_name === 'Denison, IA');
 ok(po.facilityLines(smith, denison, geoOf(smith)).join('\n') === 'Smithfield Foods\nDenison, IA\nUnited States' && po.facilityIncoterm(smith, denison) === 'FCA – Smithfield Foods, Denison, IA', 'a facility with no street address prints plant + "City, ST" + country (no invented street) and FCA names it');
 const storm = facsOf(tyson).filter((f) => f.location_name === 'Storm Lake, IA');
 ok(storm.length === 2 && po.facilityLines(tyson, storm[0], geoOf(tyson)).join('\n') === 'Tyson Foods\n1009 Richland Dr, Storm Lake, IA 50588\nUnited States' && po.facilityIncoterm(tyson, storm[0]) === 'FCA – Tyson Foods, Storm Lake, IA', 'Tyson Storm Lake prints its own street address (the city is not repeated) — not Springdale, AR');
-ok(po.plantIncoterm(smith, geoOf(smith)) === 'FCA – Smithfield Foods, Smithfield, VA', 'a plant with no facility registered uses its own address');
+ok(po.pickupText(tyson, storm[0]) === 'Tyson Foods, 1009 Richland Dr, Storm Lake, IA 50588' && po.pickupText(smith, denison) === 'Smithfield Foods, Denison, IA', 'the carrier reads the same place as one line');
+ok(po.addressProblem('1009 Richland Dr, Storm Lake, IA 50588') === null && po.addressProblem('Hwy 20 West, Denison IA') === null && !!po.addressProblem('') && !!po.addressProblem('Denison') && !!po.addressProblem('12345678') && !!po.addressProblem('ab 1'), 'a typed street address needs a number and letters (empty / just a city / just digits are refused)');
 
-const noOffices = [], badRes = [];
+// Every plant, every way the quote can (not) carry the pickup. Nothing is ever guessed; the offices never appear.
+const badRes = [], noOffices = [];
 for (const p of plants) {
   const facs = facsOf(p);
-  const distinctPrints = new Set(facs.map((f) => (f.address || '').toLowerCase() + '|' + f.city + ', ' + f.state)).size;
+  const withAddr = facs.filter((f) => (f.address || '').trim());
   const none = po.resolvePickup({ facilities: facs });
-  if (facs.length === 0) { if (none.kind !== 'plant') badRes.push(p.name + ': no facilities should use the plant'); continue; }
-  if (distinctPrints === 1) { if (none.kind !== 'facility' || none.source !== 'only_facility') badRes.push(p.name + ': single facility not used'); }
-  else {
-    if (none.kind !== 'needs_pick' || none.options.length !== distinctPrints || none.options.some((o) => !facs.find((f) => f.id === o.id))) badRes.push(p.name + ': several facilities and nothing recorded must ask, offering only this plant\'s own');
-  }
-  // every facility, chosen by hand / by freight origin / by product location, resolves to itself and never prints the offices
+  if (none.kind !== 'needs_facility' || none.options.length !== po.distinctFacilities(facs).length || none.options.some((o) => !facs.find((f) => f.id === o.id))) badRes.push(p.name + ': nothing in the quote must ask (offering only this plant\'s own facilities)');
+  const unregistered = po.resolvePickup({ facilities: facs, rateLocationId: 'loc-not-a-facility', rateLocation: { city: 'Sioux Center', state: 'IA' } });
+  if (unregistered.kind !== 'needs_facility' || unregistered.hintName !== 'Sioux Center, IA') badRes.push(p.name + ': a freight origin that is not a registered facility must ask, with that city as the suggestion');
   for (const f of facs) {
-    const printsOk = (r) => r.kind === 'facility' && (r.facility.id === f.id || (r.facility.address || '') === (f.address || '') && r.facility.city === f.city);
+    const hasAddr = !!(f.address || '').trim();
+    const want = hasAddr ? 'ready' : 'needs_address';
+    const same = (r) => r.kind === want && (r.facility.id === f.id || ((r.facility.address || '') === (f.address || '') && r.facility.city === f.city));
+    if (!same(po.resolvePickup({ facilities: facs, manualId: f.id }))) badRes.push(p.name + ' / ' + f.location_name + ': manual pick');
+    if (f.location_id) {
+      if (!same(po.resolvePickup({ facilities: facs, rateLocationId: f.location_id, rateLocation: { city: f.city, state: f.state } }))) badRes.push(p.name + ' / ' + f.location_name + ': freight origin');
+      if (!same(po.resolvePickup({ facilities: facs, productLocationId: f.location_id }))) badRes.push(p.name + ' / ' + f.location_name + ': product location');
+    }
     const lines = po.facilityLines(p, f, geoOf(p)).join('\n').toLowerCase();
     const officesStreet = (p.address || '').toLowerCase().replace(/[\s,;]+$/, '');
     if (officesStreet && !(f.address || '').toLowerCase().includes(officesStreet) && lines.includes(officesStreet)) noOffices.push(p.name + ' / ' + f.location_name);
-    if (!printsOk(po.resolvePickup({ facilities: facs, manualId: f.id }))) badRes.push(p.name + ' / ' + f.location_name + ': manual pick');
-    if (f.location_id) {
-      if (!printsOk(po.resolvePickup({ facilities: facs, rateLocationId: f.location_id, rateLocation: { city: f.city, state: f.state } }))) badRes.push(p.name + ' / ' + f.location_name + ': freight origin');
-      if (!printsOk(po.resolvePickup({ facilities: facs, productLocationId: f.location_id }))) badRes.push(p.name + ' / ' + f.location_name + ': product location');
-    }
   }
+  const other = facilitiesAll.find((f) => f.plant !== p.name);
+  if (po.resolvePickup({ facilities: facs, manualId: other.id }).kind !== 'needs_facility') badRes.push(p.name + ': another plant\'s facility chosen by hand must be ignored');
 }
-ok(facilitiesAll.length >= 19, `${facilitiesAll.length} real facilities of ${new Set(facilitiesAll.map((f) => f.plant)).size} plants checked`);
-ok(!badRes.length, 'every plant: no facility -> the plant, one -> that one, several and nothing recorded -> ask (only its own facilities), a manual pick / freight origin / product location resolves to the facility itself' + (badRes.length ? ' — ' + badRes : ''));
+ok(plants.length >= 30 && facilitiesAll.length >= 19, `${plants.length} plants and ${facilitiesAll.length} real facilities of ${new Set(facilitiesAll.map((f) => f.plant)).size} plants checked`);
+ok(!badRes.length, 'every plant: nothing in the quote -> ask; a freight origin / price location / manual pick that matches a facility resolves to that facility (ready with its street address, else needs_address); an unregistered origin city or another plant\'s facility -> ask' + (badRes.length ? ' — ' + badRes : ''));
 ok(!noOffices.length, 'no facility ever prints the plant\'s offices address' + (noOffices.length ? ' — ' + noOffices : ''));
 
 const tFacs = facsOf(tyson);
 const tAsk = po.resolvePickup({ facilities: tFacs });
-ok(tAsk.kind === 'needs_pick' && tAsk.options.length === 4 && tAsk.options.filter((o) => o.location_name === 'Storm Lake, IA').length === 1, 'Tyson with no pick-up recorded: the PO asks, offering its 4 distinct facilities (the two Storm Lake plants share one address, so they are one choice)');
-ok(po.resolvePickup({ facilities: tFacs, rateLocationId: storm[0].location_id, rateLocation: { city: 'Storm Lake', state: 'IA' } }).kind === 'facility', 'a freight rate booked from Storm Lake resolves to the Tyson Storm Lake facility');
-const otherPlantFac = facsOf(smith)[0];
-ok(po.resolvePickup({ facilities: tFacs, manualId: otherPlantFac.id }).kind === 'needs_pick', 'a pick that is not a facility of this plant is ignored (never prints another plant\'s facility)');
-ok(po.resolvePickup({ facilities: tFacs, rateLocationId: 'loc-unknown', rateLocation: { city: 'Sioux Center', state: 'IA' } }).kind === 'place', 'a freight origin city that is not a registered facility prints that city (the real origin of the booked truck), not the offices');
-ok(po.resolvePickup({ facilities: [{ id: 'a', location_id: 'L', location_name: 'X, IA', city: 'X', state: 'IA', address: '1 A St' }, { id: 'b', location_id: 'L', location_name: 'X, IA', city: 'X', state: 'IA', address: '2 B St' }], rateLocationId: 'L' }).kind === 'needs_pick', 'two facilities in one city with different addresses and no pick: ask, never guess');
+ok(tAsk.kind === 'needs_facility' && tAsk.options.length === 4 && tAsk.options.filter((o) => o.location_name === 'Storm Lake, IA').length === 1, 'Tyson with no pick-up in the quote: asks, offering its 4 distinct facilities (the two Storm Lake plants share one address, so they are one choice)');
+ok(po.resolvePickup({ facilities: tFacs, rateLocationId: storm[0].location_id, rateLocation: { city: 'Storm Lake', state: 'IA' } }).kind === 'ready', 'a freight rate booked from Storm Lake resolves to the Tyson Storm Lake facility (with its street address)');
+ok(po.resolvePickup({ facilities: [], rateLocationId: 'L', rateLocation: { city: 'Beardstown', state: 'IL' } }).hintName === 'Beardstown, IL', 'a plant with no facility at all and a freight origin asks, suggesting that city');
+ok(po.resolvePickup({ facilities: [{ id: 'a', location_id: 'L', location_name: 'X, IA', city: 'X', state: 'IA', address: '1 A St' }, { id: 'b', location_id: 'L', location_name: 'X, IA', city: 'X', state: 'IA', address: '2 B St' }], rateLocationId: 'L' }).kind === 'needs_facility', 'two facilities in one city with different addresses and no pick: ask, never guess');
+ok(po.resolvePickup({ facilities: [{ id: 'a', location_id: 'L', location_name: 'X, IA', city: 'X', state: 'IA', address: '1 A St' }] }).kind === 'needs_facility', 'a plant with a single registered facility is NOT assumed to be the pickup when the quote does not say');
 const agencies = require('./fixtures/customs-agencies.json');
 const badAg = [];
 for (const a of agencies) {

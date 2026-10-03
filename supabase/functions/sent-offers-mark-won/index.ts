@@ -11,6 +11,9 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { computeCustomerExposure, jsonResponse, writeAuditLog } from "../_shared/matching.ts";
+import { clean, addressProblem, pickupText, resolvePickup } from "../_shared/poDocument.ts";
+import { loadPickupInput, pickupRefusal } from "../_shared/pickup.ts";
+import { applyPickupChoice, checkPickupChoice } from "../_shared/pickupWrite.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -60,6 +63,13 @@ Deno.serve(async (req) => {
       // with a different number. Explicitly an estimate, never the real fee — the actual days
       // until the customer pays (and so the real Summar cost) is only known once they actually do.
       payment_days = null,
+      // Real ask 2026-10-03: "el pu location viene desde el principio de quotes y desde el pricing... y si no viene preguntar antes de generar ordenes".
+      // A FOB order is never created without the plant facility (and its street address) the truck collects from: it comes from the quote (freight
+      // rate origin / the price's location); when it is not there the call is refused (pickup_location_required) and the screen asks the trader, who
+      // sends the answer back as `pickup` ({pickup_location_id | new_location_name, address}). A delivered order (the plant delivers at the border)
+      // is never created without the customs agency and its street address: refused (customs_agency_required) until `customs`
+      // ({customs_agency_provider_id, address}) says it. dry_run runs these checks and writes nothing.
+      pickup = null, customs = null, dry_run = false,
     } = body;
 
     if (!["direct", "summar"].includes(financing_method)) {
@@ -101,6 +111,45 @@ Deno.serve(async (req) => {
     const finalWeight = weight ?? offer.weight;
     const finalUsFreightAmount = us_freight_amount ?? offer.us_freight_amount;
 
+    // Pickup (FOB) / customs agency (delivered) — decided BEFORE anything is created, never guessed, never printed from the plant's offices.
+    const isFob = Number(finalUsFreightAmount) > 0;
+    const [plantRow] = await sql`select name from plants where id = ${offer.plant_id}`;
+    const plantName = clean(plantRow?.name || offer.plant_name);
+    let pickupFacility: any = null;
+    let pickupToApply: any = null;
+    let customsAgencyId: string | null = null;
+    let customsAddressToSave: string | null = null;
+    if (isFob) {
+      const resolution = resolvePickup(await loadPickupInput(sql, { plantId: offer.plant_id, productId: offer.product_id, orderNumber: null, rateId: us_freight_rate_id_override || offer.us_freight_rate_id }));
+      if (resolution.kind === "ready") pickupFacility = resolution.facility;
+      else {
+        if (pickup && (pickup.pickup_location_id || pickup.new_location_name)) pickupToApply = pickup;
+        else if (resolution.kind === "needs_address" && clean(pickup?.address)) pickupToApply = { pickup_location_id: resolution.facility.id, address: pickup.address };
+        else return jsonResponse(pickupRefusal(offer.plant_id, plantName, resolution, null), 409);
+        // Validated here, before the order number is taken (the numbering is consecutive and never skips).
+        const bad = await checkPickupChoice(sql, offer.plant_id, pickupToApply);
+        if (bad) return jsonResponse(bad, 400);
+      }
+    } else {
+      const agencyId = customs?.customs_agency_provider_id || offer.customs_agency_provider_id
+        || (offer.customer_id ? (await sql`select customs_agency_provider_id from customers where id = ${offer.customer_id}`)[0]?.customs_agency_provider_id : null);
+      const [agency] = agencyId ? await sql`select id, name, address from providers where id = ${agencyId}` : [];
+      const typed = clean(customs?.address);
+      if (typed && addressProblem(typed)) return jsonResponse({ error: "invalid_address", message: addressProblem(typed) }, 400);
+      if (!agency) {
+        const options = await sql`select distinct p.id, p.name, p.address from providers p join provider_roles pr on pr.provider_id = p.id where pr.role = 'customs_broker' order by p.name`;
+        return jsonResponse({ error: "customs_agency_required", need: "agency", message: "This order is delivered by the plant at the border: choose the customs agency it is delivered to.", options, agency: null }, 409);
+      }
+      if (!clean(agency.address) && !typed) {
+        return jsonResponse({ error: "customs_agency_required", need: "address", message: `The street address of the customs agency ${clean(agency.name)} is not on file yet: type it, so the Purchase Order says where the load is delivered.`, options: [], agency: { id: agency.id, name: clean(agency.name) } }, 409);
+      }
+      customsAgencyId = agency.id;
+      customsAddressToSave = clean(agency.address) ? null : typed;
+    }
+    if (dry_run) {
+      return jsonResponse({ dry_run: true, would_create: true, pickup: isFob ? (pickupFacility ? { facility: pickupFacility } : { to_apply: pickupToApply }) : null, customs_agency_id: customsAgencyId });
+    }
+
     // Credit-limit check — "si productos neza es hasta 100.000 usd no me puedo pasar de ese monto
     // hasta que pague." Never a block (same rule as everything else): the outstanding balance
     // (delivered-or-not, unpaid shipments) plus this new sale is compared against the customer's
@@ -138,6 +187,24 @@ Deno.serve(async (req) => {
         where id = ${sent_offer_id} returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "sent_offers", record_id: sent_offer_id, before: offer, after: updatedOffer });
+
+      // The pickup facility / customs agency answered by the trader is stored first (on the plant's facility, on the offer, on the agency), so the
+      // order is born with them fixed — "cuando creo orden ya numeros y involucrados deben quedar fijados".
+      if (isFob && !pickupFacility) {
+        const applied = await applyPickupChoice(tx, HMAC_SECRET, actor, offer.plant_id, pickupToApply);
+        if ("error" in applied) throw Object.assign(new Error(applied.message), { refusal: { error: applied.error, message: applied.message } });
+        pickupFacility = applied.facility;
+      }
+      if (!isFob && customsAgencyId) {
+        if (customsAgencyId !== offer.customs_agency_provider_id) {
+          const [offerWithAgency] = await tx`update sent_offers set customs_agency_provider_id = ${customsAgencyId} where id = ${sent_offer_id} returning *`;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "sent_offers", record_id: sent_offer_id, before: updatedOffer, after: offerWithAgency });
+        }
+        if (customsAddressToSave) {
+          const [agencyAfter] = await tx`update providers set address = ${customsAddressToSave}, updated_at = now() where id = ${customsAgencyId} returning *`;
+          await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "providers", record_id: customsAgencyId, before: { address: null }, after: { address: agencyAfter.address } });
+        }
+      }
 
       const [purchaseOrder] = await tx`
         insert into purchase_orders (order_number, sent_offer_id, plant_id, plant_name, product_id, product_name, product_spec, purchase_price, weight, total_cost, docs_on, delivery_dates, status, financing_method, payment_days)
@@ -186,6 +253,8 @@ Deno.serve(async (req) => {
         // quoted_rate is what was actually quoted for THIS deal (finalUsFreightAmount — may have
         // been negotiated away from the catalog's base rate.rate), not the generic lane rate;
         // actual_rate (filled in later via Real Costs) is what the carrier really charges.
+        // The carrier is told to collect at the plant facility with its street address (never the plant's name alone or its offices).
+        if (pickupFacility) origin = pickupText({ name: plantName }, pickupFacility);
         const [fo] = await tx`
           insert into freight_orders (order_number, sent_offer_id, carrier_provider_id, origin, destination, quoted_rate, currency, currency_id, status)
           values (${orderNumber}, ${sent_offer_id}, ${provider_id}, ${origin}, ${destination}, ${finalUsFreightAmount}, ${currency}, ${currency_id}, 'open')
@@ -245,8 +314,8 @@ Deno.serve(async (req) => {
       // won" behavior has to be recreated here: one shipments row per won order, carrier defaulted
       // to whichever leg actually picks up from the plant (the US leg).
       const [shipment] = await tx`
-        insert into shipments (order_number, sent_offer_id, customer_id, sale_amount, carrier_provider_id)
-        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${finalTotalSale}, ${freightOrder ? freightOrder.carrier_provider_id : null})
+        insert into shipments (order_number, sent_offer_id, customer_id, sale_amount, carrier_provider_id, pickup_location_id)
+        values (${orderNumber}, ${sent_offer_id}, ${offer.customer_id}, ${finalTotalSale}, ${freightOrder ? freightOrder.carrier_provider_id : null}, ${pickupFacility ? pickupFacility.id : null})
         returning *
       `;
       await tx`insert into shipment_events (shipment_id, event_type) values (${shipment.id}, 'scheduled')`;
@@ -267,6 +336,8 @@ Deno.serve(async (req) => {
       shipment: result.shipment,
     });
   } catch (err) {
+    const refusal = (err as { refusal?: { error: string; message: string } }).refusal;
+    if (refusal) return jsonResponse(refusal, 400);
     return jsonResponse({ error: String(err) }, 500);
   }
 });

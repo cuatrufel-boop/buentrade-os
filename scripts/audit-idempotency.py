@@ -48,6 +48,9 @@ EXEMPT = {
 # site itself, not just here.
 FRONTEND_EXEMPT = {
     ("provider-rates-create", "providers.html"),  # addRateRow() — every blank row is identical
+    # The only row it can create is a plant facility, and the key is derived on the server from its natural key (plant + city + street address,
+    # `pickup-facility|…`, unique index): sending the same answer twice is the same facility. The Confirm Load call only picks an existing one.
+    ("shipments-set-pickup-location", "orders.html"),
 }
 
 # Action-keyed functions (one slug, several actions — the function-cap pattern): only the actions that INSERT need an

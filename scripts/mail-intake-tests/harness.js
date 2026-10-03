@@ -12,7 +12,7 @@ function load(file){
   const out=ts.transpileModule(src,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
   const m={exports:{}};cache[file]=m.exports;
   const req=(spec)=>{
-    if(spec==='npm:postgres@3.4.4')return {default:()=>({}),__esModule:true};
+    if(spec==='npm:postgres@3.4.4')return {default:(...a)=>(globalThis.__pgFactory?globalThis.__pgFactory(...a):{}),__esModule:true};
     if(spec==='npm:xlsx@0.18.5')return XLSX;
     if(spec.startsWith('node:'))return require(spec);
     if(spec.startsWith('.')){ const stub=(globalThis.__stubs||{})[spec.split('/').pop()]; if(stub) return stub; return load(path.resolve(path.dirname(file),spec)); }
