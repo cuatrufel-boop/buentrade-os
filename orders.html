@@ -2959,7 +2959,7 @@ function pdfTerms(doc, y, title, text, disclaimer, o = {}){
   doc.setFontSize(o.disclaimerSize || 7.5);
   doc.setTextColor(190, 60, 60);
   const disclaimerY = y + (o.gap || 14) + split.length * (o.lineH || 10) + 12;
-  doc.text(disclaimer || 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
+  if (disclaimer !== false) doc.text(disclaimer || 'Draft terms, not reviewed by counsel — confirm with legal before relying on this in a dispute.', 40, disclaimerY);
   return disclaimerY + 10;
 }
 
@@ -3272,9 +3272,8 @@ async function buildPODoc(orderNumber){
 
   doc.autoTable({
     startY: y + 22,
-    head: [['Part #', 'Item Description', 'Qty LBS', 'Unit Cost', 'Amount', 'PU or DEL Date', 'Buyer']],
+    head: [['Item Description', 'Qty LBS', 'Unit Cost', 'Amount', isFob ? 'PU Date' : 'DEL Date', 'Buyer']],
     body: [[
-      '',
       composed.line_item.description || '',
       (composed.line_item.weight || 0).toLocaleString('en-US'),
       '$' + (composed.line_item.purchase_price || 0).toFixed(4),
@@ -3285,17 +3284,23 @@ async function buildPODoc(orderNumber){
     theme: 'grid',
     headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
     styles: { fontSize: 10.5, cellPadding: { top: 11, bottom: 11, left: 7, right: 7 } },
-    columnStyles: { 0: { cellWidth: 50 }, 2: { cellWidth: 58 }, 3: { cellWidth: 64 } }, // short headers (Part #, Qty LBS, Unit Cost) stay on one line
+    columnStyles: { 1: { cellWidth: 62 }, 2: { cellWidth: 66 } }, // short headers (Qty LBS, Unit Cost) stay on one line
     margin: { left: 40, right: 40 },
   });
 
+  // NOTES: one line each — the temperature to hold the load at (from the product's own temperature) and the export-docs line.
   let ty = doc.lastAutoTable.finalY + 34;
-  doc.setFont('helvetica', 'normal');
+  const noteLines = composed.notes && composed.notes.length ? composed.notes : [composed.docs_note];
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
+  doc.setTextColor(30, 106, 219);
+  doc.text('NOTES', 40, ty);
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
-  doc.text('NOTES: ' + composed.docs_note, 40, ty);
+  noteLines.forEach((n, i) => doc.text(n, 40, ty + 17 + i * 15));
+  const notesEnd = ty + 17 + (noteLines.length - 1) * 15;
 
-  pdfTerms(doc, ty + 54, 'TERMS', PO_TERMS, undefined, { titleSize: 10, size: 8.5, lineH: 12, gap: 17, disclaimerSize: 8 });
+  pdfTerms(doc, notesEnd + 46, 'TERMS', PO_TERMS, false, { titleSize: 10, size: 8.5, lineH: 12, gap: 17 });
   pdfFooter(doc, 'en');
   return { doc, po, plant };
 }

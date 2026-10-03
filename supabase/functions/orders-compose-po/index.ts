@@ -12,7 +12,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, traderDisplayName } from "../_shared/matching.ts";
-import { agencyIncoterm, clean, countryOfOrigin, fmtAmount, fmtDate, fmtUnitCost, fmtWeight, plantAddressLines, plantIncoterm } from "../_shared/poDocument.ts";
+import { agencyAddressLines, agencyIncoterm, clean, countryOfOrigin, fmtAmount, fmtDate, fmtUnitCost, fmtWeight, plantAddressLines, plantIncoterm, pickupLocationLines, poNotes } from "../_shared/poDocument.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -42,17 +42,34 @@ Deno.serve(async (req) => {
     // amount actually being > 0 is the real "was a freight leg charged" signal in both cases.
     const isFob = Number(offer?.us_freight_amount) > 0;
     const vendorBlock = plantAddressLines(plant || {}, geo || {}).join("\n");
-    let shipTo = vendorBlock;
-    let incoterms = plantIncoterm(plant || {}, geo || {});
+
+    // PICK-UP LOCATION = where this load is actually collected. In order of certainty: the pickup location the trader confirmed on the
+    // shipment, the origin of the freight rate booked for this offer, the location this plant's price for the product ships from.
+    const [pickup] = await sql`
+      select l.city, l.state from locations l where l.id = coalesce(
+        (select sh.pickup_location_id from shipments sh where sh.order_number = ${order_number}),
+        (select r.location_id from provider_rates r where r.id = ${offer?.us_freight_rate_id ?? null}),
+        (select pp.location_id from plant_products pp where pp.plant_id = ${po.plant_id} and pp.product_id = ${po.product_id}))`;
+    let shipTo = pickupLocationLines(plant || {}, pickup, geo || {}).join("\n");
+    let incoterms = plantIncoterm(plant || {}, geo || {}, pickup);
+
+    // A delivered order (no US freight leg booked by BuenTrade) is delivered to the customer's customs agency at the border: the offer's agency,
+    // else the agency assigned to the customer (the same fallback the quote uses).
     let customsAgency = null;
-    if (!isFob && offer?.customs_agency_provider_id) {
-      const [agency] = await sql`select * from providers where id = ${offer.customs_agency_provider_id}`;
+    if (!isFob) {
+      const [agency] = await sql`
+        select a.*, c.name_en as country_name from providers a left join countries c on c.id = a.country_id
+        where a.id = coalesce(${offer?.customs_agency_provider_id ?? null}, (select customs_agency_provider_id from customers where id = ${offer?.customer_id ?? null}))`;
       if (agency) {
         customsAgency = agency;
-        shipTo = fmtAddress(clean(agency.name), null, clean(agency.city), null, clean(agency.country));
+        shipTo = agencyAddressLines(agency, agency.country_name).join("\n");
         incoterms = agencyIncoterm(agency);
       }
     }
+
+    // The temperature to hold the load at comes from the product's own temperature (Fresh / Frozen) and its setpoint.
+    const [prodTemp] = await sql`select t.name_en as temperature, t.po_setpoint_f from products p join temperature t on t.id = p.temperature_id where p.id = ${po.product_id}`;
+    const notes = poNotes({ temperature: prodTemp?.temperature, setpointF: prodTemp?.po_setpoint_f, docsOn: !!po.docs_on });
 
     const trader = traderDisplayName(offer?.won_by);
 
@@ -64,7 +81,8 @@ Deno.serve(async (req) => {
       // plant's own on-file terms text; the docs_on note is shown separately, matching the real
       // "NOTES: Docs included by vendor." / "...buyer to arrange." line in buildPODoc().
       payment_terms: plant?.payment_terms || null,
-      docs_note: po.docs_on ? "Docs included by vendor." : "No export documentation included — buyer to arrange.",
+      docs_note: notes[notes.length - 1],
+      notes,
       incoterms,
       country_of_origin: countryOfOrigin(plant || {}, geo || {}),
       trader,
@@ -98,7 +116,7 @@ Deno.serve(async (req) => {
       `Price: ${fmtUnitCost(doc.line_item.purchase_price)}/lb`,
       `Total: ${fmtAmount(doc.line_item.total_cost)}`,
       ``,
-      `NOTES: ${doc.docs_note}`,
+      `NOTES:`, ...doc.notes,
     ].filter((l) => l !== null).join("\n");
 
     // Raw rows alongside the composed document — offers.html's WhatsApp-card and email-send flows

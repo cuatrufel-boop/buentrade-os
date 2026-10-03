@@ -41,4 +41,30 @@ ok(po.plantAddressLines(by('bachoco'), geoOf(by('bachoco'))).slice(-1)[0] === 'M
 ok(po.agencyIncoterm({ name: 'Agency ', city: null }) === 'DAP – Agency' && po.agencyIncoterm({ name: 'A', city: 'Laredo' }) === 'DAP – A, Laredo', 'customs-agency incoterm has no trailing comma when the city is empty');
 ok(po.fmtWeight(40000) === '40,000' && po.fmtUnitCost(1.72) === '$1.7200' && po.fmtAmount(68800) === '$68,800.00' && po.fmtAmount(51200.5) === '$51,200.50' && po.fmtAmount(null) === '$0.00', 'weight, unit cost and amount are printed like the PDF (thousands, 4 and 2 decimals)');
 ok(po.fmtDate('2026-09-27T01:30:00Z') === '9/26/2026', 'a PO created in the US evening keeps its US (Miami) date');
+
+// ---------- pickup location, delivery to the customs agency, notes
+const smith = by('smithfield');
+ok(po.pickupLocationLines(smith, { city: 'Denison', state: 'IA' }, geoOf(smith)).join('\n') === 'Smithfield Foods\nDenison, IA\nUnited States', 'PICK-UP location: the plant and the facility the load ships from (Denison, IA), not the headquarters address');
+ok(po.plantIncoterm(smith, geoOf(smith), { city: 'Denison', state: 'IA' }) === 'FCA – Smithfield Foods, Denison, IA', 'FCA names the pick-up facility');
+ok(po.pickupLocationLines(smith, null, geoOf(smith)).join('\n') === po.plantAddressLines(smith, geoOf(smith)).join('\n') && po.plantIncoterm(smith, geoOf(smith), null) === 'FCA – Smithfield Foods, Smithfield, VA', 'with no facility on record the plant\'s own address is used (never blank)');
+const agencies = require('./fixtures/customs-agencies.json');
+const badAg = [];
+for (const a of agencies) {
+  const lines = po.agencyAddressLines(a, a.country_name);
+  const name = a.name.trim().replace(/\s+/g, ' ');
+  if (lines[0] !== name) badAg.push(name + ': first line');
+  if (a.address && !lines.some((l) => l.includes(a.address.trim().replace(/[\s,;]+$/, '')))) badAg.push(name + ': address missing');
+  if (a.city && a.address && a.address.toLowerCase().includes(a.city.trim().toLowerCase()) && lines.filter((l) => l.toLowerCase() === a.city.trim().toLowerCase()).length) badAg.push(name + ': city repeated');
+  if (lines.some((l) => !l || /,\s*$/.test(l) || l !== l.trim())) badAg.push(name + ': empty line or trailing comma');
+  const inc = po.agencyIncoterm(a);
+  if (!inc.startsWith('DAP – ' + name) || /,\s*$/.test(inc) || /\s{2}/.test(inc)) badAg.push(name + ': incoterm ' + inc);
+}
+ok(agencies.length >= 5 && !badAg.length, `all ${agencies.length} customs agencies print name + street address (no repeated city, no stray commas)` + (badAg.length ? ' — ' + badAg : ''));
+const palos = agencies.find((a) => /palos garza/i.test(a.name));
+ok(po.agencyAddressLines(palos, palos.country_name).join('\n') === 'Palos Garza Forwarding LLC\n12120 River Bank Dr\nLaredo\nUnited States' && po.agencyIncoterm(palos) === 'DAP – Palos Garza Forwarding LLC, Laredo', 'a delivery to Laredo shows the customs agency\'s address');
+const alcom = agencies.find((a) => /al-com/i.test(a.name));
+ok(po.agencyAddressLines(alcom, alcom.country_name).join('\n') === 'Al-Com International Trade, Inc.\n14614 Archer Drive Suite C, Laredo, TX 78046\nUnited States', 'an agency whose address already has the city, state and zip is printed as it is');
+ok(JSON.stringify(po.poNotes({ temperature: 'Fresh', setpointF: 20, docsOn: false })) === JSON.stringify(['Temperature: 20°F (Fresh)', 'No docs approved for Mexico to export.']), 'fresh product, no docs: 20°F and "No docs approved for Mexico to export."');
+ok(JSON.stringify(po.poNotes({ temperature: 'Frozen', setpointF: -10, docsOn: true })) === JSON.stringify(['Temperature: -10°F (Frozen)', 'Docs included by vendor.']), 'frozen product, with docs: -10°F and "Docs included by vendor."');
+ok(JSON.stringify(po.poNotes({ temperature: null, setpointF: null, docsOn: false })) === JSON.stringify(['No docs approved for Mexico to export.']), 'a product with no temperature setpoint prints no temperature line');
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED'); process.exit(fails ? 1 : 0);
