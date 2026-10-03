@@ -218,6 +218,8 @@ const MARK = { actor: 'test@bt', sent_offer_id: 'offer-1', confirmed_delivery_da
       if (!d || d.pick_up_lines[0] !== plant.name.trim().replace(/\s+/g, ' ') || !d.pick_up_lines.join(' ').includes(withAddr.address.trim().replace(/[\s,;]+$/, '')) || d.pick_up_phone !== wantPhones) bad.push(plant.name + ': FO pick-up block / facility phones — ' + JSON.stringify(d && [d.pick_up_lines, d.pick_up_phone, wantPhones]));
       if (!d || d.pick_up_date !== '2026-10-10' || d.delivery_date !== '2026-10-12') bad.push(plant.name + ': FO PU date is the PO\'s date and the delivery date is PU + 2 days (Saturday rolls to Monday) — ' + (d && [d.pick_up_date, d.delivery_date]));
       if (!d || d.temperature_setting !== '-10°F (Frozen)') bad.push(plant.name + ': FO temperature setting carries the degrees — ' + (d && d.temperature_setting));
+      const wantCity = [withAddr.city, withAddr.state].map((v) => (v || '').trim()).filter(Boolean).join(', ') || withAddr.location_name;
+      if (!d || d.pick_up_city !== wantCity) bad.push(plant.name + ': FO pick-up city (email subject) is the facility\'s "City, ST" — ' + (d && d.pick_up_city) + ' vs ' + wantCity);
       if (!d || d.release_number !== null) bad.push(plant.name + ': FO release # is empty (TBD on the PDF) until the plant gives it');
       if (!d || !d.carrier || d.carrier.contact_name !== 'Carrier Contact') bad.push(plant.name + ': FO vendor carries the carrier\'s contact');
       // release number once the plant gave it

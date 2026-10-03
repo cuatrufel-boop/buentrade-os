@@ -12,7 +12,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
-import { clean, pickupText, resolvePickup } from "../_shared/poDocument.ts";
+import { clean, pickupText, placeOf, resolvePickup } from "../_shared/poDocument.ts";
 import { loadPickupInput, pickupRefusal } from "../_shared/pickup.ts";
 import { agencyBlock, agencyText, borderArrivalDate, facilityBlock, facilityPhones, temperatureSetting } from "../_shared/foDocument.ts";
 
@@ -79,6 +79,8 @@ Deno.serve(async (req) => {
         delivery_address: hasAgency ? destination : resolveBorder(destination),
         pick_up_lines: us ? facilityBlock(usLeg!.plantName, usLeg!.facility) : [resolveBorder(origin)].filter(Boolean),
         pick_up_phone: us ? usLeg!.phones : null,
+        // "Storm Lake, IA" — the email subject names only the pick-up city and the customs agency.
+        pick_up_city: us ? placeOf(usLeg!.facility) || null : null,
         delivery_lines: hasAgency ? agencyBlock(agency) : [resolveBorder(destination)].filter(Boolean),
         delivery_phone: hasAgency ? clean(agency.phone) || null : null,
         pick_up_date: puDate,

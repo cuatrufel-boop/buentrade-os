@@ -3680,7 +3680,7 @@ async function buildFODocs(orderNumber){
   const built = [];
   for (const { document: composed, fo, carrier } of docs){
     const doc = bcRenderFO(composed, carrier, orderNumber);
-    built.push({ doc, fo, carrier, dates: composed.delivery_dates, filename: `FO-BT-${btNum(orderNumber)}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
+    built.push({ doc, fo, carrier, composed, dates: composed.delivery_dates, filename: `FO-BT-${btNum(orderNumber)}${docs.length > 1 ? '-' + fo.id.slice(0, 4) : ''}.pdf` });
   }
   return built;
 }
@@ -3700,7 +3700,7 @@ async function shareFO(orderNumber){
     let url;
     try { url = await uploadOrderPdf(b.doc, b.filename); } catch(e){ await btAlert('Upload error: ' + e.message); continue; }
     orderDocsFileCache.delete(orderNumber);
-    const subject = `FO-BT-${btNum(orderNumber)} — ${b.fo.origin || '—'} → ${b.fo.destination || '—'}  ${fmtDatesList(b.dates)}`;
+    const subject = `FO-BT-${btNum(orderNumber)} — ${b.composed.pick_up_city || b.fo.origin || '—'} → ${b.composed.customs_broker || b.fo.destination || '—'}`;
     const body = `Please find the Freight Order FO-BT-${btNum(orderNumber)} attached.\n\n`
       + `Pick-up: ${b.fo.origin || '—'}\n`
       + `Delivery: ${b.fo.destination || '—'}\n`

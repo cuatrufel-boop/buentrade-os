@@ -1,10 +1,7 @@
-// The Freight Order PDF (the document the carrier receives), drawn once for every page that sends it (orders.html and offers.html). It is a form:
-// every field is a cell of one grid, label on top and value below, rows that line up edge to edge. Uses each page's own PDF helpers and constants
-// (pdfDoc, pdfHeader, pdfSignatureBlock, pdfFooter, CONTACT_EMAIL_FO, btNum, fmtDateStr, todayStr), which both pages define.
-//
-// Layout, top to bottom: ISSUE DATE · PU DATE · DELIVERY DATE / VENDOR (the carrier: name and contact) · CLIENT NAME / PICK UP ADDRESS · DELIVERY ADDRESS
-// / STOP OVER · APPT. / CHECK IN # · RELEASE # / TEMPERATURE SETTING · ESTIMATED WEIGHT · CLIENT ORDER # / PRODUCT / COMMODITY / Service Purchased · Amount
-// / PICK UP INSTRUCTIONS · DELIVERY INSTRUCTIONS · IMPORTANT NOTICE / signatures.
+// The Freight Order PDF (the document the carrier receives), drawn once for every page that sends it (orders.html and offers.html), in the same
+// layout as the Purchase Order: two address blocks per row, label / value rows, one blue-header table, then the instruction texts and signatures.
+// Uses each page's own PDF helpers and constants (pdfDoc, pdfHeader, pdfInfoBlock, pdfKeyValueRows, pdfTerms, pdfSignatureBlock, pdfFooter,
+// CONTACT_EMAIL_FO, btNum, fmtDateStr, todayStr), which both pages define identically.
 
 const FO_PICKUP_INSTRUCTIONS = "Appointments must be made with the plant/cold storage facility 24-48 hours prior to pick up date. Only on trucks booked 24 hours prior to pick up are considered exceptions. If the facility is a first come first serve (FCFS), call 24-48 hours prior to make sure that the load is ready for pick up. We will not be responsible for any TONU if there is no confirmation that the plant advised the load was ready when it was not. Important: please take note of the employee confirming P/U information = email the same employee confirming the load is ready, time & date of pick up. For FCFS please have email confirming product is ready to be picked up on the set date.";
 const FO_DELIVERY_INSTRUCTIONS = "USDA inspections - if this load needs USDA inspection at destination or an in transit point, the driver needs to check in before 6am at the inspection facility on the delivery or in transit date. Checking in after 6am can result in delays, possible layover and a late inspection fee of $150 USD which the driver will be responsible for.";
@@ -15,86 +12,73 @@ function bcRenderFO(composed, carrier, orderNumber){
   const doc = pdfDoc();
   pdfHeader(doc, 'Freight Order', 'FO-BT-' + btNum(orderNumber), CONTACT_EMAIL_FO);
 
-  const X = 40, W = 532, PAD = 8, LABEL_H = 20, LINE_H = 13;
-  const wrapLines = (lines, width) => {
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
-    return lines.filter(Boolean).flatMap(l => doc.splitTextToSize(String(l), width));
+  const blockLook = { labelSize: 9.5, size: 10.5, lineH: 14, gap: 17 };
+  const rowLook = { size: 9.5, step: 20, lineH: 12 };
+  // pdfInfoBlock draws without saying where it ends: the bottom of a pair of blocks, from their wrapped lines.
+  const blocksEnd = (y, ...blocks) => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(blockLook.size);
+    const n = Math.max(...blocks.map(lines => lines.filter(Boolean).reduce((k, l) => k + doc.splitTextToSize(String(l), 260).length, 0)));
+    return y + blockLook.gap + n * blockLook.lineH;
   };
-  // One row of the grid: cells = [{ label, lines, span }]; spans share the 532 pt width, every cell of the row gets the height of the tallest.
-  const row = (y, cells) => {
-    const total = cells.reduce((n, c) => n + (c.span || 1), 0);
-    let x = X;
-    const laid = cells.map(c => {
-      const w = W * (c.span || 1) / total;
-      const lines = wrapLines(c.lines, w - PAD * 2);
-      const cell = { ...c, x, w, lines };
-      x += w;
-      return cell;
-    });
-    const h = Math.max(40, LABEL_H + Math.max(...laid.map(c => c.lines.length)) * LINE_H + 6);
-    doc.setDrawColor(205, 216, 230); doc.setLineWidth(0.75);
-    laid.forEach(c => {
-      doc.rect(c.x, y, c.w, h);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(30, 106, 219);
-      doc.text(c.label, c.x + PAD, y + 14);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(15, 31, 51);
-      c.lines.forEach((l, i) => doc.text(l, c.x + PAD, y + LABEL_H + 8 + i * LINE_H));
-    });
-    return y + h;
-  };
+  const phone = (p) => p ? 'T: ' + p : null;
 
-  const phone = (p) => p ? ['T: ' + p] : [];
-  let y = 148;
-  y = row(y, [
-    { label: 'ISSUE DATE', lines: [todayStr()] },
-    { label: 'PU DATE', lines: [fmtDateStr(composed.pick_up_date) || 'TBD'] },
-    { label: 'DELIVERY DATE', lines: [fmtDateStr(composed.delivery_date) || 'TBD'] },
-  ]);
-  y = row(y, [
-    { label: 'VENDOR', lines: [carrier ? carrier.name : 'TBD — not yet booked', carrier && carrier.contact_name, carrier && carrier.phone] },
-    { label: 'CLIENT NAME', lines: ['BuenTrade LLC'] },
-  ]);
-  y = row(y, [
-    { label: 'PICK UP ADDRESS', lines: [...composed.pick_up_lines, ...phone(composed.pick_up_phone)] },
-    { label: 'DELIVERY ADDRESS', lines: [...composed.delivery_lines, ...phone(composed.delivery_phone)] },
-  ]);
-  y = row(y, [
-    { label: 'STOP OVER (IF NECESSARY)', lines: ['NA'] },
-    { label: 'APPT. / CHECK IN #', lines: ['TBD'] },
-    { label: 'RELEASE #', lines: [composed.release_number || 'TBD'] },
-  ]);
-  y = row(y, [
-    { label: 'TEMPERATURE SETTING', lines: [composed.temperature_setting || 'Confirm with plant'] },
-    { label: 'ESTIMATED WEIGHT', lines: [composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : 'TBD'] },
-    { label: 'CLIENT ORDER #', lines: ['FO-BT-' + btNum(orderNumber)] },
-  ]);
-  y = row(y, [{ label: 'PRODUCT / COMMODITY', lines: [composed.product_name || '—'] }]);
+  let y = 172;
+  const vendor = carrier ? [carrier.name, carrier.contact_name, carrier.phone] : ['TBD — not yet booked'];
+  const client = ['BuenTrade LLC'];
+  pdfInfoBlock(doc, 40, y, 'VENDOR', vendor, blockLook);
+  pdfInfoBlock(doc, 320, y, 'CLIENT NAME', client, blockLook);
+  y = blocksEnd(y, vendor, client) + 16;
+
+  const pickUp = [...composed.pick_up_lines, phone(composed.pick_up_phone)];
+  const delivery = [...composed.delivery_lines, phone(composed.delivery_phone)];
+  pdfInfoBlock(doc, 40, y, 'PICK UP ADDRESS', pickUp, blockLook);
+  pdfInfoBlock(doc, 320, y, 'DELIVERY ADDRESS', delivery, blockLook);
+  y = blocksEnd(y, pickUp, delivery) + 20;
+
+  const yLeft = pdfKeyValueRows(doc, 40, y, [
+    ['ISSUE DATE', todayStr()],
+    ['PU DATE', fmtDateStr(composed.pick_up_date) || 'TBD'],
+    ['DELIVERY DATE', fmtDateStr(composed.delivery_date) || 'TBD'],
+    ['CLIENT ORDER #', 'FO-BT-' + btNum(orderNumber)],
+  ], rowLook);
+  const yRight = pdfKeyValueRows(doc, 320, y, [
+    ['TEMPERATURE SETTING', composed.temperature_setting || 'Confirm with plant'],
+    ['RELEASE #', composed.release_number || 'TBD'],
+    ['APPT. / CHECK IN #', 'TBD'],
+    ['STOP OVER (IF NECESSARY)', 'NA'],
+  ], rowLook);
 
   doc.autoTable({
-    startY: y + 10,
-    head: [['Service Purchased', 'Amount']],
-    body: [['Inland Freight', '$' + (composed.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })]],
+    startY: Math.max(yLeft, yRight) + 8,
+    head: [['Product / Commodity', 'Estimated Weight', 'Service Purchased', 'Amount']],
+    body: [[
+      composed.product_name || '—',
+      composed.weight ? composed.weight.toLocaleString('en-US') + ' lbs' : 'TBD',
+      'Inland Freight',
+      '$' + (composed.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
+    ]],
     theme: 'grid',
-    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-    styles: { fontSize: 9.5, cellPadding: 6, lineColor: [205, 216, 230] },
-    columnStyles: { 1: { cellWidth: 130, halign: 'right' } },
-    margin: { left: X, right: X },
+    headStyles: { fillColor: [30, 106, 219], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
+    styles: { fontSize: 10.5, cellPadding: { top: 9, bottom: 9, left: 7, right: 7 } },
+    columnStyles: { 1: { cellWidth: 100 }, 2: { cellWidth: 104 }, 3: { cellWidth: 80 } },
+    margin: { left: 40, right: 40 },
   });
 
-  const section = (top, title, text) => {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(30, 106, 219);
-    doc.text(title, X, top);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(100, 110, 125);
-    const t = doc.splitTextToSize(text, W - 8);
-    doc.text(t, X, top + 12);
-    return top + 12 + t.length * 9.5 + 9;
-  };
-  let ty = doc.lastAutoTable.finalY + 18;
-  ty = section(ty, 'PICK UP INSTRUCTIONS', FO_PICKUP_INSTRUCTIONS);
-  ty = section(ty, 'DELIVERY INSTRUCTIONS', FO_DELIVERY_INSTRUCTIONS);
-  ty = section(ty, 'IMPORTANT NOTICE', FO_IMPORTANT_NOTICE);
+  const termsLook = { titleSize: 9, size: 7.5, lineH: 9.5, gap: 13 };
+  const texts = [['PICK UP INSTRUCTIONS', FO_PICKUP_INSTRUCTIONS], ['DELIVERY INSTRUCTIONS', FO_DELIVERY_INSTRUCTIONS], ['IMPORTANT NOTICE', FO_IMPORTANT_NOTICE]];
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(termsLook.size);
+  const textsH = texts.reduce((h, [, t]) => h + termsLook.gap + doc.splitTextToSize(t, 532).length * termsLook.lineH, 0);
+  // The signature line must stay at or above 714 so its "Date:" line clears the footer rule (758): when the table grows (a product name that
+  // wraps), the gaps around the three texts shrink instead of the page running into the footer.
+  const SIGNATURE_MAX_Y = 714, GAP_AFTER_TABLE = 22, GAP_BETWEEN = 12, GAP_BEFORE_SIGNATURE = 22;
+  const gapsH = GAP_AFTER_TABLE + 2 * GAP_BETWEEN + GAP_BEFORE_SIGNATURE;
+  const squeeze = Math.min(1, Math.max(0.3, (SIGNATURE_MAX_Y - doc.lastAutoTable.finalY - textsH) / gapsH));
+  let ty = doc.lastAutoTable.finalY + GAP_AFTER_TABLE * squeeze;
+  texts.forEach(([title, text], i) => {
+    ty = pdfTerms(doc, ty, title, text, termsLook) - 22 + (i < texts.length - 1 ? GAP_BETWEEN : GAP_BEFORE_SIGNATURE) * squeeze;
+  });
   // A rate confirmation is signed by the carrier before dispatch.
-  pdfSignatureBlock(doc, ty + 6, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
+  pdfSignatureBlock(doc, ty, 'Authorized by — BuenTrade LLC', 'Accepted by — Carrier / Dispatch');
   pdfFooter(doc, 'en');
   return doc;
 }
