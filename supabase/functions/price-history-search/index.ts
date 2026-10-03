@@ -18,7 +18,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { computeProductPriceSignal, jsonResponse } from "../_shared/matching.ts";
 import { ingestBulletin, listMarketFlash, teachTerm } from "../_shared/marketFlash/store.ts";
-import { diagnoseInbox, dumpXlsx, pollBulletinEmails, processInboxMessage } from "../_shared/marketFlash/emailInbox.ts";
+import { diagnoseInbox, dumpXlsx, pollBulletinEmails, processInboxMessage, repairBulletinNarrative, testBulletinMessage, testBulletinRepair } from "../_shared/marketFlash/emailInbox.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
 
@@ -37,7 +37,14 @@ Deno.serve(async (req) => {
     // one stored message into a bulletin (called by poll per message, so each step has its own compute budget).
     if (body.poll_market_flash_emails?.xlsx_message_id) return jsonResponse(await dumpXlsx(String(body.poll_market_flash_emails.xlsx_message_id)));
     if (body.poll_market_flash_emails?.diagnose) return jsonResponse(await diagnoseInbox(body.poll_market_flash_emails.count || 8, String(body.poll_market_flash_emails.q || "")));
+    // Verification: one real message through the whole real path inside a transaction that is always rolled back.
+    if (body.poll_market_flash_emails?.test_message_id) return jsonResponse(await testBulletinMessage(sql, String(body.poll_market_flash_emails.test_message_id), { allowDegraded: body.poll_market_flash_emails.allow_degraded === true }));
     if (body.poll_market_flash_emails) return jsonResponse(await pollBulletinEmails(sql, body.poll_market_flash_emails.max_results || 10));
+    // A stored bulletin whose commentary was never read: read it again (its own invocation — it re-downloads the PDF). test_repair = the same, rolled back.
+    if (body.repair_market_flash_narrative?.bulletin_id) {
+      const id = String(body.repair_market_flash_narrative.bulletin_id);
+      return jsonResponse(body.repair_market_flash_narrative.execute_rollback === true ? await testBulletinRepair(sql, id) : await repairBulletinNarrative(sql, id));
+    }
     if (body.process_market_flash_inbox) {
       if (!body.process_market_flash_inbox.message_id) return jsonResponse({ error: "process_market_flash_inbox requires message_id" }, 400);
       return jsonResponse(await processInboxMessage(sql, body.process_market_flash_inbox.message_id));

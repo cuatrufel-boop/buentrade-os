@@ -15,7 +15,7 @@
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse } from "../_shared/matching.ts";
 import {
-  closeMailIssue, extractPlainText, getGmailAccessToken, headerValue, isAutoReply, openMailIssue, recordUnrecognizedSender,
+  closeMailIssue, extractPlainText, getGmailAccessToken, headerValue, isAutoReply, isBulletinEmail, openMailIssue, recordUnrecognizedSender,
   resolveSender, senderAddress, sendOrderPush,
 } from "../_shared/mailIntake.ts";
 
@@ -56,6 +56,9 @@ export async function processMessage(db: any, deps: PickupDeps, msgData: any, { 
       on conflict (message_id) do nothing
     `;
   };
+
+  // The bi-weekly market bulletin (PDF) belongs to Market Flash's own reader.
+  if (isBulletinEmail(subject, msgData.payload)) { await done(); return { id, skipped: "market_flash_bulletin" }; }
 
   const resolved = await resolveSender(db, fromEmail);
   if (resolved.kind === "internal" || resolved.kind === "automated") { await done(); return { id, skipped: `${resolved.kind}_sender` }; }

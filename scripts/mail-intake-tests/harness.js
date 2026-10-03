@@ -15,7 +15,7 @@ function load(file){
     if(spec==='npm:postgres@3.4.4')return {default:()=>({}),__esModule:true};
     if(spec==='npm:xlsx@0.18.5')return XLSX;
     if(spec.startsWith('node:'))return require(spec);
-    if(spec.startsWith('.'))return load(path.resolve(path.dirname(file),spec));
+    if(spec.startsWith('.')){ const stub=(globalThis.__stubs||{})[spec.split('/').pop()]; if(stub) return stub; return load(path.resolve(path.dirname(file),spec)); }
     return require(spec);
   };
   new Function('exports','require','module','__filename',out)(m.exports,req,m,file);

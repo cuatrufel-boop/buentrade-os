@@ -113,6 +113,15 @@ const okDeps = () => { const calls = { push: [], uploaded: [] }; return { calls,
   db = fakeDb([plantRule, awaiting, [/select hash from audit_log/, () => []]]); relDeps.pushes.length = 0;
   out = await release.processMessage(db, relDeps(async () => ({ found: true, release_number: '9' })), msg('r9', 'a@w.com', 'BT-2026-1009', [], {}, 'Release 9'), { dryRun: true });
   ok(out.updated === true && !db.did(/\binsert\b|\bupdate\b/) && relDeps.pushes.length === 0, 'release dry run writes and sends nothing');
+  // ---------- the market bulletin belongs to its own reader
+  const bulletinParts = [{ filename: 'report.pdf', mimeType: 'application/pdf', body: { attachmentId: 'att-report.pdf' } }];
+  db = fakeDb([]); ({ deps } = okDeps());
+  out = await pickup.processMessage(db, deps, msg('b1', 'purchasing@buentradegroup.com', 'flash', bulletinParts));
+  ok(out.skipped === 'market_flash_bulletin' && !db.did(/insert into mail_unrecognized_senders/), 'pickup reader: the bulletin is classified, not treated as documents or as an unknown sender');
+  db = fakeDb([]); out = await pickup.processMessage(db, deps, msg('b2', 'steiner@new.com', 'x', [{ filename: '_sites_default_files_newsletters_20261003_bi-weekly_report_-_english.pdf', mimeType: 'application/pdf', body: { attachmentId: 'a' } }]));
+  ok(out.skipped === 'market_flash_bulletin' && !db.did(/insert into mail_unrecognized_senders/), 'pickup reader: the report PDF arriving directly is not an "unrecognized sender"');
+  db = fakeDb([]); out = await release.processMessage(db, relDeps(async () => ({})), msg('b3', 'purchasing@buentradegroup.com', 'flash', bulletinParts));
+  ok(out.skipped === 'market_flash_bulletin', 'release reader: the bulletin is classified too');
   // ---------- looksLikePickupDocs
   ok(pickup.looksLikePickupDocs('BOL attached', []) && pickup.looksLikePickupDocs('docs', ['Packing_List_1001.pdf']) && pickup.looksLikePickupDocs('x', ['USDA cert.pdf']) && !pickup.looksLikePickupDocs('WP Offers', ['Freezer List - 9-22-26.xlsx', 'CPU POLICY 2026 (003).pdf', 'Specs_16011 - Butt Plate Skin.pdf', 'image001.png']), 'pickup-document hints: BOL/packing list/USDA yes; price list, CPU policy, specs, logos no');
   console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED'); process.exit(fails ? 1 : 0);

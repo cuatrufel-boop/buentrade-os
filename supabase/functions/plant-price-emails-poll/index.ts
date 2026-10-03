@@ -42,7 +42,7 @@ import { applyPlantProductMatch } from "../_shared/applyPlantProductMatch.ts";
 import { createPendingMatch } from "../_shared/pendingMatch.ts";
 import { extractItemsFromImage, extractItemsWithLLM, LLMUnavailableError } from "../_shared/llmExtractor.ts";
 import {
-  extractHtml, extractPlainText, getGmailAccessToken, headerValue, isAutoReply, isOwnNotification, recordUnrecognizedSender,
+  asTransactionDb, extractHtml, extractPlainText, getGmailAccessToken, headerValue, isAutoReply, isBulletinEmail, isOwnNotification, recordUnrecognizedSender,
   resolveSender, senderAddress, type PlantRef,
 } from "../_shared/mailIntake.ts";
 import { describeReason } from "../_shared/pendingReasons.ts";
@@ -333,12 +333,6 @@ type LedgerRow = {
 };
 type Dropped = { source: LedgerSource; rawText: string; price: number | null; reasonCode: string; reasonDetail?: string };
 
-// The surface the shared writers use (tagged template, .json, nested .begin) over ONE open transaction: a nested begin becomes a
-// savepoint, so a failed statement is rolled back alone, exactly as a failed transaction would be in the real run.
-function asTransactionDb(tx: any): any {
-  return Object.assign((...a: any[]) => tx(...a), { begin: (f: any) => tx.savepoint(f), json: (...a: any[]) => tx.json(...a) });
-}
-
 function pendingReason(matchRes: any): { code: string; detail: string } {
   if (matchRes.matched) return { code: "needs_review_cut_style", detail: "this cut style has no exact catalog product, so a person confirms it" };
   const n = (matchRes.candidates || []).length;
@@ -582,6 +576,13 @@ Deno.serve(async (req) => {
       if (isOwnNotification(subject)) {
         if (!dryRun) await db`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
         results.push({ id: m.id, skipped: "self_notification_email" });
+        continue;
+      }
+
+      // The bi-weekly market bulletin (PDF) belongs to Market Flash's own reader; classified here, never treated as an unknown sender.
+      if (isBulletinEmail(subject, msgData.payload)) {
+        if (!dryRun) await db`insert into plant_price_emails_processed (message_id, from_email, subject) values (${m.id}, ${fromEmail}, ${subject}) on conflict (message_id) do nothing`;
+        results.push({ id: m.id, skipped: "market_flash_bulletin" });
         continue;
       }
 

@@ -162,7 +162,7 @@ export async function sendOrderPush(actor: string, title: string, body: string, 
 // Open the issue (or refresh it) for a message a reader could not finish; one row per message + handler.
 export async function openMailIssue(
   db: any,
-  { messageId, handler, from, subject, code, detail }: { messageId: string; handler: "pickup_docs" | "release_number"; from: string; subject: string; code: string; detail: string },
+  { messageId, handler, from, subject, code, detail }: { messageId: string; handler: "pickup_docs" | "release_number" | "market_flash"; from: string; subject: string; code: string; detail: string },
 ): Promise<void> {
   await db`
     insert into mail_intake_issues (message_id, handler, from_email, subject, reason_code, reason_detail)
@@ -171,6 +171,31 @@ export async function openMailIssue(
     where mail_intake_issues.resolved_at is null
   `;
 }
-export async function closeMailIssue(db: any, messageId: string, handler: "pickup_docs" | "release_number", by: string): Promise<void> {
+export async function closeMailIssue(db: any, messageId: string, handler: "pickup_docs" | "release_number" | "market_flash", by: string): Promise<void> {
   await db`update mail_intake_issues set resolved_at = now(), resolved_by = ${by} where message_id = ${messageId} and handler = ${handler} and resolved_at is null`;
+}
+
+// The bi-weekly market bulletin (a PDF) is read by Market Flash, not by the plant/pickup/release readers. It is recognized by its subject (the
+// word "flash", how the trader forwards it) OR by the report's own file name (so it is read when it arrives directly, whatever the subject).
+export const BULLETIN_FILENAME = /bi-?weekly[_\s.-]*report|newsletters?[_\s.-]*\d{6,8}/i;
+export function pdfAttachmentNames(payload: any): string[] {
+  const out: string[] = [];
+  const walk = (p: any) => {
+    const name = (p.filename || "") as string;
+    if (name && p.body?.attachmentId && (p.mimeType === "application/pdf" || name.toLowerCase().endsWith(".pdf"))) out.push(name);
+    for (const c of p.parts || []) walk(c);
+  };
+  walk(payload || {});
+  return out;
+}
+export function isBulletinEmail(subject: string, payload: any): boolean {
+  const pdfs = pdfAttachmentNames(payload);
+  return pdfs.length > 0 && (/\bflash\b/i.test(subject) || pdfs.some((n) => BULLETIN_FILENAME.test(n)));
+}
+
+// The surface the shared writers use (tagged template, .json, nested .begin) over ONE open transaction: a nested begin becomes a savepoint, so a
+// failed statement is rolled back alone, exactly as a failed transaction would be in the real run. Used by the verification modes that execute the
+// real write path and then roll everything back.
+export function asTransactionDb(tx: any): any {
+  return Object.assign((...a: any[]) => tx(...a), { begin: (f: any) => tx.savepoint(f), json: (...a: any[]) => tx.json(...a) });
 }

@@ -8,7 +8,7 @@ import type { Bullet } from "./bullets.ts";
 import { trendBullets } from "./compare.ts";
 import { readNarrative } from "./narrative.ts";
 import type { NarrativeSection } from "./narrative.ts";
-import { callClaude } from "./claude.ts";
+import { callClaude, LlmUnavailable } from "./claude.ts";
 import { itemsFromCompact, layoutText, narrativeSections, readPdfItems } from "./pdf.ts";
 import type { Fact } from "./types.ts";
 
@@ -107,7 +107,9 @@ const dbBullet = (b: Bullet, validUntil: string) => ({
 // Both entry points converge on the PDF's text items: the manual upload sends them already read by the browser
 // (`items` + the sha-256 of the file as `file_hash`), the email/API path will hand over the PDF itself
 // (`pdf_base64`). From the items on — layout, tables, narrative, idempotency — it is one and the same code.
-export async function ingestBulletin(sql: any, p: { pdf_base64?: string; items?: unknown; file_hash?: string; actor: string; source?: string }) {
+// requireNarrative (the email path): when the AI service is down the bulletin is NOT stored — a bulletin stored without its commentary is never
+// read again (same file hash = idempotent replay), so it would stay incomplete forever and nobody would know. The caller retries later.
+export async function ingestBulletin(sql: any, p: { pdf_base64?: string; items?: unknown; file_hash?: string; actor: string; source?: string; requireNarrative?: boolean }) {
   let file_hash: string, items: ReturnType<typeof itemsFromCompact>;
   if (p.items) {
     if (!p.file_hash || !/^[a-f0-9]{64}$/.test(p.file_hash)) return { error: "file_hash (sha-256 of the PDF) is required with items" };
@@ -129,7 +131,13 @@ export async function ingestBulletin(sql: any, p: { pdf_base64?: string; items?:
   if (!det.asOf) return { error: "this does not look like the bi-weekly bulletin (no weekly production data date found)" };
   let narrative: { claims: any[]; dropped: any[]; error: string | null } = { claims: [], dropped: [], error: null };
   const sections = narrativeSections(items);
-  if (sections.length) { try { const r = await readNarrative(sections, callClaude); narrative = { ...r, error: null }; } catch (e) { narrative.error = String((e as Error).message || e); } }
+  if (sections.length) {
+    try { const r = await readNarrative(sections, callClaude); narrative = { ...r, error: null }; }
+    catch (e) {
+      if (p.requireNarrative && e instanceof LlmUnavailable) return { error: `the AI service is unavailable, so the bulletin's commentary could not be read — nothing was stored (${String((e as Error).message || e).slice(0, 200)})`, retry: true };
+      narrative.error = String((e as Error).message || e);
+    }
+  }
   const [prev] = await sql`select id, facts, as_of from market_flash_bulletins where as_of < ${det.asOf} order by as_of desc limit 1`;
   const trends = prev ? trendBullets(det.facts, prev.facts as Fact[], (f) => sourceNoteFor(f, det.asOf)) : [];
   const all: Bullet[] = [...det.bullets, ...narrativeBullets(narrative.claims, det.asOf), ...trends];
@@ -137,8 +145,8 @@ export async function ingestBulletin(sql: any, p: { pdf_base64?: string; items?:
   const seen = new Set<string>(); const rows = all.filter((b) => (seen.has(b.key) ? false : (seen.add(b.key), true))).map((b) => dbBullet(b, validUntil));
   const bulletinId = await sql.begin(async (tx: any) => {
     const [b] = await tx`
-      insert into market_flash_bulletins (as_of, file_hash, source, facts, per_source, dropped, created_by)
-      values (${det.asOf}, ${file_hash}, ${p.source ?? "upload"}, ${tx.json(det.facts)}, ${tx.json(det.perSource)}, ${tx.json([...det.dropped, ...narrative.dropped])}, ${p.actor})
+      insert into market_flash_bulletins (as_of, file_hash, source, facts, per_source, dropped, created_by, narrative_error)
+      values (${det.asOf}, ${file_hash}, ${p.source ?? "upload"}, ${tx.json(det.facts)}, ${tx.json(det.perSource)}, ${tx.json([...det.dropped, ...narrative.dropped])}, ${p.actor}, ${narrative.error})
       on conflict (file_hash) do nothing returning id`;
     if (!b) return null;
     // one statement for all bullets (313 single inserts took ~50 s over the network)
@@ -150,6 +158,42 @@ export async function ingestBulletin(sql: any, p: { pdf_base64?: string; items?:
     return b.id;
   });
   return { bulletin_id: bulletinId, as_of: det.asOf, bullets: rows.length, trend_bullets: trends.length, narrative_error: narrative.error, previous_edition: prev?.as_of ?? null };
+}
+
+// Reads the commentary of a bulletin that was stored without it (narrative_error set) and adds its bullets. Nothing else about the bulletin changes.
+// The AI service being unavailable is "try again later" (retry), never an error that clears the state.
+export async function completeNarrative(sql: any, bulletinId: string, compactItems: unknown) {
+  const [b] = await sql`select id, as_of, dropped, narrative_error from market_flash_bulletins where id = ${bulletinId}`;
+  if (!b) return { error: "unknown bulletin" };
+  if (!b.narrative_error) return { skipped: "the commentary is already read" };
+  const items = itemsFromCompact(compactItems);
+  if (!items) return { error: "items are not in the expected [text, x, y] per page shape" };
+  const asOf = String(b.as_of instanceof Date ? b.as_of.toISOString().slice(0, 10) : b.as_of);
+  await sql`update market_flash_bulletins set narrative_retry_at = now() where id = ${bulletinId}`;
+  const sections = narrativeSections(items);
+  if (!sections.length) { await sql`update market_flash_bulletins set narrative_error = null where id = ${bulletinId}`; return { no_commentary: true }; }
+  let narrative: { claims: any[]; dropped: any[] };
+  try { narrative = await readNarrative(sections, callClaude); }
+  catch (e) {
+    const msg = String((e as Error).message || e).slice(0, 500);
+    if (e instanceof LlmUnavailable) return { retry: true, error: msg };
+    await sql`update market_flash_bulletins set narrative_error = ${msg} where id = ${bulletinId}`;
+    return { error: msg };
+  }
+  const validUntil = new Date(Date.parse(asOf) + FRESHNESS_DAYS * 86400000).toISOString().slice(0, 10);
+  const seen = new Set<string>();
+  const rows = narrativeBullets(narrative.claims, asOf).filter((x) => (seen.has(x.key) ? false : (seen.add(x.key), true))).map((x) => dbBullet(x, validUntil));
+  await sql.begin(async (tx: any) => {
+    if (rows.length) {
+      await tx`
+        insert into market_flash_bullets (bulletin_id, key, kind, levels, species, market, product_entity, text_es, quote_en, source_note, page, computed, valid_until)
+        select ${bulletinId}, x.key, x.kind, array(select jsonb_array_elements_text(x.levels)), x.species, x.market, x.product_entity, x.text_es, x.quote_en, x.source_note, x.page, x.computed, x.valid_until
+        from jsonb_to_recordset(${tx.json(rows)}) as x(key text, kind text, levels jsonb, species text, market text, product_entity text, text_es text, quote_en text, source_note text, page int, computed boolean, valid_until date)
+        on conflict (bulletin_id, key) do nothing`;
+    }
+    await tx`update market_flash_bulletins set dropped = ${tx.json([...(Array.isArray(b.dropped) ? b.dropped : []), ...narrative.dropped])}, narrative_error = null where id = ${bulletinId}`;
+  });
+  return { narrative_bullets: rows.length, narrative_dropped: narrative.dropped.length };
 }
 
 // ---------------------------------------------------------------- read: the three tabs + Pending Matches
