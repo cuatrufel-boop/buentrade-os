@@ -122,6 +122,14 @@ const okDeps = () => { const calls = { push: [], uploaded: [] }; return { calls,
   ok(out.skipped === 'market_flash_bulletin' && !db.did(/insert into mail_unrecognized_senders/), 'pickup reader: the report PDF arriving directly is not an "unrecognized sender"');
   db = fakeDb([]); out = await release.processMessage(db, relDeps(async () => ({})), msg('b3', 'purchasing@buentradegroup.com', 'flash', bulletinParts));
   ok(out.skipped === 'market_flash_bulletin', 'release reader: the bulletin is classified too');
+  // ---------- releasing mail that was set aside before the plant existed
+  let rel = await mail.releaseSetAsideFrom(fakeDb([]), []);
+  ok(rel.price===0&&rel.pickup===0&&rel.release===0,'no addresses: nothing released');
+  db = fakeDb([[/delete from plant_price_emails_processed/, () => [{message_id:'a'}]],[/delete from pickup_docs_emails_processed/, () => []],[/delete from release_number_emails_processed/, () => [{message_id:'r'}]]]);
+  rel = await mail.releaseSetAsideFrom(db, ['Sheilaj@Trim-Rite.com',' sheilaj@trim-rite.com ','']);
+  ok(rel.price===1&&rel.release===1&&db.log.every(l=>!/plant_id is null/.test(l.text)||/plant_price_emails_processed/.test(l.text))&&db.log[0].vals[0].length===1&&db.log[0].vals[0][0]==='sheilaj@trim-rite.com','addresses are normalized and de-duplicated; only price mail with NO plant is released (3-day window)');
+  const addrs = mail.plantContactAddresses({ email: 'A@x.com', email_cc: 'b@x.com, C@x.com;a@x.com', payments_email: 'pay@x.com' });
+  ok(addrs.join()==='a@x.com,pay@x.com,b@x.com,c@x.com','a plant\'s contact addresses: primary, payments, every email_cc, once each');
   // ---------- looksLikePickupDocs
   ok(pickup.looksLikePickupDocs('BOL attached', []) && pickup.looksLikePickupDocs('docs', ['Packing_List_1001.pdf']) && pickup.looksLikePickupDocs('x', ['USDA cert.pdf']) && !pickup.looksLikePickupDocs('WP Offers', ['Freezer List - 9-22-26.xlsx', 'CPU POLICY 2026 (003).pdf', 'Specs_16011 - Butt Plate Skin.pdf', 'image001.png']), 'pickup-document hints: BOL/packing list/USDA yes; price list, CPU policy, specs, logos no');
   console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED'); process.exit(fails ? 1 : 0);

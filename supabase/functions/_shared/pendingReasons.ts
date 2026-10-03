@@ -46,6 +46,7 @@ export function describeReason(code: string, detail?: string | null): string {
     case "image_fetch_failed": return `Attachment could not be downloaded${d ? ` — ${d}` : ""}`;
     case "image_unreadable": return `Picture could not be read${d ? ` — ${d}` : ""}`;
     case "llm_extraction_failed": return `Email text could not be read${d ? ` — ${d}` : ""}`;
+    case "ai_unavailable": return `The AI service was unavailable, so the free text and pictures of this message were not read yet — they are read again automatically when it answers${d ? ` (${d.slice(0, 80)})` : ""}`;
     case "facility_not_recognized": return `Facility "${d}" is not one of this plant's locations — its prices were applied without a pickup city`;
     case "message_without_candidates": return "Nothing readable found in this email";
     default: return d ? `${code} — ${d}` : code;

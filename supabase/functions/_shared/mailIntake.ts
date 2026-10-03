@@ -199,3 +199,28 @@ export function isBulletinEmail(subject: string, payload: any): boolean {
 export function asTransactionDb(tx: any): any {
   return Object.assign((...a: any[]) => tx(...a), { begin: (f: any) => tx.savepoint(f), json: (...a: any[]) => tx.json(...a) });
 }
+
+// Newsletter-style price lists (Mailchimp, link-protection gateways) wrap every product name in a tracking URL, so a plain-text line reads
+// "Back Ribs:<https://links.example/...very long...> 1.75/up COV 14/1pc. $2.44". The links carry no price information; with them removed the
+// line is the plain "name + spec + price" the readers already understand (Rantoul Foods: 32 of 32 priced lines).
+export function stripLinkNoise(line: string): string {
+  return line.replace(/<https?:\/\/[^>]*>/g, " ").replace(/\[https?:\/\/[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Every address a plant can write from: its primary email, its extra contacts (email_cc) and its payments email.
+export function plantContactAddresses(plant: { email?: string | null; email_cc?: string | null; payments_email?: string | null }): string[] {
+  const list = [plant.email, plant.payments_email, ...String(plant.email_cc || "").split(/[,;\s]+/)];
+  return [...new Set(list.map((a) => String(a || "").trim().toLowerCase()).filter((a) => a.includes("@")))];
+}
+
+// Mail from an address nobody could place was set aside — recorded as handled, never applied. The moment that address belongs to a plant
+// (the plant was created, its email changed, a person assigned the sender) those messages are released so the readers read them again,
+// now with the plant known. Only the last 3 days: older mail is too stale to act on anyway.
+export async function releaseSetAsideFrom(db: any, addresses: string[]): Promise<{ price: number; pickup: number; release: number }> {
+  const emails = [...new Set(addresses.map((a) => String(a || "").trim().toLowerCase()).filter(Boolean))];
+  if (!emails.length) return { price: 0, pickup: 0, release: 0 };
+  const price = await db`delete from plant_price_emails_processed where from_email = any(${emails}::text[]) and plant_id is null and processed_at > now() - interval '3 days' returning message_id`;
+  const pickup = await db`delete from pickup_docs_emails_processed where from_email = any(${emails}::text[]) and processed_at > now() - interval '3 days' returning message_id`;
+  const release = await db`delete from release_number_emails_processed where from_email = any(${emails}::text[]) and processed_at > now() - interval '3 days' returning message_id`;
+  return { price: price.length, pickup: pickup.length, release: release.length };
+}

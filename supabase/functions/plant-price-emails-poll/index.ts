@@ -43,6 +43,7 @@ import { createPendingMatch } from "../_shared/pendingMatch.ts";
 import { extractItemsFromImage, extractItemsWithLLM, LLMUnavailableError } from "../_shared/llmExtractor.ts";
 import {
   asTransactionDb, extractHtml, extractPlainText, getGmailAccessToken, headerValue, isAutoReply, isBulletinEmail, isOwnNotification, recordUnrecognizedSender,
+  stripLinkNoise,
   resolveSender, senderAddress, type PlantRef,
 } from "../_shared/mailIntake.ts";
 import { describeReason } from "../_shared/pendingReasons.ts";
@@ -206,7 +207,7 @@ async function extractXlsxItems(
 async function extractImageItems(
   payload: any, msgId: string, authHeaders: Record<string, string>, emailContext: string, defaultTemp: "Fresh" | "Frozen" | null = null,
   facilities: Map<string, string> = new Map(),
-): Promise<{ items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]; dropped: Dropped[] }> {
+): Promise<{ items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[]; dropped: Dropped[]; aiUnavailable: boolean }> {
   const findImageParts = (p: any): any[] => {
     const out: any[] = [];
     if (p.mimeType?.startsWith("image/") && p.body?.attachmentId) out.push(p);
@@ -217,8 +218,11 @@ async function extractImageItems(
   const items: { rawText: string; price: number; freightIncluded: boolean; locationName: string | null }[] = [];
   const dropped: Dropped[] = [];
   const unknownFacilities = new Set<string>();
+  let aiUnavailable = false;
   for (const part of parts) {
     const imageName = part.filename || "inline image";
+    // Once the AI service has refused, the remaining pictures are recorded without more calls.
+    if (aiUnavailable) { dropped.push({ source: "image", rawText: imageName, price: null, reasonCode: "ai_unavailable", reasonDetail: "AI service unavailable" }); continue; }
     let b64: string;
     try {
       const attRes = await fetch(
@@ -239,7 +243,7 @@ async function extractImageItems(
     try {
       extracted = await extractItemsFromImage(b64, part.mimeType, emailContext);
     } catch (e) {
-      if (e instanceof LLMUnavailableError) throw e; // the AI service is down: the whole message waits and is read again, never half-read
+      if (e instanceof LLMUnavailableError) { aiUnavailable = true; dropped.push({ source: "image", rawText: imageName, price: null, reasonCode: "ai_unavailable", reasonDetail: String(e).slice(0, 200) }); continue; }
       // One image failing never blocks the others — but it is recorded, never ignored.
       dropped.push({ source: "image", rawText: imageName, price: null, reasonCode: "image_unreadable", reasonDetail: String(e).slice(0, 300) });
       continue;
@@ -294,7 +298,7 @@ async function extractImageItems(
     }
   }
   for (const name of unknownFacilities) dropped.push({ source: "image", rawText: `Facility "${name}"`, price: null, reasonCode: "facility_not_recognized", reasonDetail: name });
-  return { items, dropped };
+  return { items, dropped, aiUnavailable };
 }
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
@@ -544,11 +548,26 @@ Deno.serve(async (req) => {
     const today = new Date().toISOString().slice(0, 10);
 
     // A message handled by the read-only diagnostic (debug_message_id) answers with its own Response; everything else returns the list.
-    const runMessages = async (db: any): Promise<any[] | Response> => {
+    // A message read while the AI service was unavailable (needs_completion) is read again IN FULL once it answers: at most once an hour, only while
+    // its prices are fresh (3 days), and independently of where it sits in the inbox listing.
+    const completionIds: string[] = testMessageId ? [] : (await db`
+      select message_id from plant_price_emails_processed
+      where needs_completion and processed_at > now() - interval '3 days' and (completion_checked_at is null or completion_checked_at < now() - interval '1 hour')
+      order by processed_at limit 2`).map((r: any) => r.message_id as string);
+    const toRead: { id: string }[] = [...(listData.messages || [])];
+    for (const id of completionIds) if (!toRead.some((x) => x.id === id)) toRead.push({ id });
+
+    const runMessages = async (db: any, forceCompletion = false): Promise<any[] | Response> => {
     const results: any[] = [];
-    for (const m of listData.messages || []) {
-      const [already] = await db`select message_id from plant_price_emails_processed where message_id = ${m.id}`;
-      if (already && debugMessageId !== m.id && !((dryRun || rollbackMode) && testMessageId)) { results.push({ id: m.id, skipped: "already_processed" }); continue; } // the read-only diagnostic may re-read a processed message
+    for (const m of toRead) {
+      const [already] = await db`select message_id, needs_completion, completion_checked_at from plant_price_emails_processed where message_id = ${m.id}`;
+      let completion = forceCompletion;
+      if (already && !completion && debugMessageId !== m.id && !((dryRun || rollbackMode) && testMessageId)) {
+        const due = already.needs_completion && !dryRun && (!already.completion_checked_at || Date.now() - new Date(already.completion_checked_at).getTime() > 3600000);
+        if (!due) { results.push({ id: m.id, skipped: "already_processed" }); continue; } // the read-only diagnostic may re-read a processed message
+        completion = true;
+        await db`update plant_price_emails_processed set completion_checked_at = now() where message_id = ${m.id}`;
+      }
 
       const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, { headers: authHeaders });
       const msgData = await msgRes.json();
@@ -557,7 +576,7 @@ Deno.serve(async (req) => {
       // A price is only as fresh as the email that carried it. Normal cron runs only see emails younger than
       // MAX_EMAIL_AGE_DAYS, so "today" is right; when an OLDER message is deliberately re-run (test_message_id — e.g. a list
       // that was only partly read the first time) its own date is used, so the stale-price rules still see how old it is.
-      const messagePriceDate = testMessageId && msgData.internalDate ? new Date(Number(msgData.internalDate)).toISOString().slice(0, 10) : today;
+      const messagePriceDate = (testMessageId || completion) && msgData.internalDate ? new Date(Number(msgData.internalDate)).toISOString().slice(0, 10) : today;
       if (!testMessageId && msgData.internalDate) {
         const ageDays = (Date.now() - Number(msgData.internalDate)) / 86400000;
         if (ageDays > MAX_EMAIL_AGE_DAYS) {
@@ -649,7 +668,8 @@ Deno.serve(async (req) => {
       // looksLikeContactLine strips signature phone/fax/extension lines here too — see its own
       // comment for the two real incidents (Wholestone, Tyson) this closes for both the regex path
       // AND the LLM path (cleanedBodyText below), not just the regex path's own separate guard.
-      const lines = bodyText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !looksLikeContactLine(l));
+      // Tracking links wrapped around every product name (newsletter-style lists) are noise that hides the price from the line reader: removed.
+      const lines = bodyText.split(/\r?\n/).map((l) => stripLinkNoise(l)).filter(Boolean).filter((l) => !looksLikeContactLine(l));
       const cleanedBodyText = lines.join("\n");
 
       if (debugMessageId === m.id) {
@@ -765,12 +785,16 @@ Deno.serve(async (req) => {
       let llmError: string | null = null;
       const facilities = await loadFacilityMap(db, plant.id);
       const reviewPattern = await loadReviewPattern(db, plant.id);
-      // Set when the AI service itself is down (no credit, outage): the message is left UNPROCESSED so the next cycle reads it fully.
-      // allow_degraded (only with test_message_id) lets a verification run continue on the rule-based fallback instead.
-      let deferReason: string | null = null;
-      const degradedTest = body.allow_degraded === true && !!testMessageId;
+      // Set when the AI service itself is unavailable (no credit, outage). The prices every rule-based reader can read with certainty (a name and
+      // a price on one line, a spreadsheet, a block list) still load; what needs the AI is recorded in Pending Matches, and the message is flagged
+      // (needs_completion) so it is read again, in full, when the AI answers. Nothing waits, nothing is half-read in silence.
+      let aiUnavailable = false;
+      const usingTestLlm = rollbackMode && Array.isArray(body.test_llm_items) && (completion || body.then_complete !== true);
       try {
-        const extracted = await extractItemsWithLLM(cleanedBodyText);
+        // Verification only (test_message_id + execute_rollback): hands the reader the answer the AI would give, to exercise the completion path.
+        const extracted = usingTestLlm
+          ? { items: body.test_llm_items, declinedItems: [], unpricedItems: [] }
+          : await extractItemsWithLLM(cleanedBodyText);
         declinedTextItems = extracted.declinedItems.map((it) => ({
           rawText: it.temperature === "Unknown" ? it.name : `${it.temperature} — ${it.name}`,
         }));
@@ -811,11 +835,17 @@ Deno.serve(async (req) => {
         llmTextItems = [...byName.values()];
       } catch (e) {
         llmError = String(e);
-        if (e instanceof LLMUnavailableError) deferReason = llmError;
-        addDropped({ source: "body", rawText: subject || "(no subject)", price: null, reasonCode: "llm_extraction_failed", reasonDetail: llmError.slice(0, 300) });
+        if (e instanceof LLMUnavailableError) aiUnavailable = true;
+        addDropped({ source: "body", rawText: subject || "(no subject)", price: null, reasonCode: e instanceof LLMUnavailableError ? "ai_unavailable" : "llm_extraction_failed", reasonDetail: llmError.slice(0, 300) });
       }
 
-      const textItems = llmTextItems ?? regexTextItems;
+      // The rule-based reader has no AI to notice that the whole list is "Frozen Offerings": the email's own words say it when exactly one of
+      // frozen / fresh is named (the same rule the spreadsheet reader uses); a line that states its own temperature keeps it, and a message that
+      // names both (or neither) says nothing — never guessed.
+      const bodyTemp = temperatureFromContext(subject, cleanedBodyText);
+      const withContextTemp = (it: Item): Item =>
+        bodyTemp && !FROZEN_CTX.test(it.rawText) && !FRESH_CTX.test(it.rawText) ? { ...it, rawText: `${bodyTemp} — ${it.rawText}` } : it;
+      const textItems = llmTextItems ?? regexTextItems.map(withContextTemp);
       const extractionMethod = llmTextItems ? "llm" : "regex_fallback";
 
       // A real .xlsx attachment (confirmed: Wholestone Prestage's "Freezer List") is a completely
@@ -829,19 +859,21 @@ Deno.serve(async (req) => {
       // equivalent exists for it at all). extractImageItems no-ops (empty array, no API call) for
       // any message with no inline images, so this costs nothing for every other plant's mail.
       const xlsxIsFrozenList = xlsxItems.length > 0 && xlsxItems.every((it) => /^Frozen — /.test(it.rawText));
-      let imageItems: Awaited<ReturnType<typeof extractImageItems>>["items"] = [];
-      let imageDropped: Dropped[] = [];
-      if (!deferReason || degradedTest) {
-        try {
-          ({ items: imageItems, dropped: imageDropped } = await extractImageItems(msgData.payload, m.id, authHeaders, bodyText, xlsxIsFrozenList ? "Fresh" : null, facilities));
-        } catch (e) {
-          if (e instanceof LLMUnavailableError) deferReason = deferReason ?? String(e); else throw e;
+      const imageRead = (aiUnavailable || usingTestLlm)
+        ? { items: [] as Awaited<ReturnType<typeof extractImageItems>>["items"], dropped: [] as Dropped[], aiUnavailable }
+        : await extractImageItems(msgData.payload, m.id, authHeaders, bodyText, xlsxIsFrozenList ? "Fresh" : null, facilities);
+      const imageItems = imageRead.items;
+      imageRead.dropped.forEach(addDropped);
+      if (imageRead.aiUnavailable) aiUnavailable = true;
+      // A completion pass while the AI is STILL unavailable changes nothing: it waits for the next hour.
+      if (completion && aiUnavailable) { results.push({ id: m.id, plant: plant.name, skipped: "completion_waiting_for_ai" }); continue; }
+      if (completion) {
+        // The AI answered: this pass REPLACES the degraded one. Pending rows the degraded pass left open for this message are retired (a person's
+        // decisions are untouched) and its ledger is rebuilt; prices the degraded pass loaded stay and are simply confirmed by the full read.
+        if (!dryRun) {
+          await db`update plant_pending_matches set resolved_at = now(), resolved_by = 'auto:superseded', idempotency_key = null where plant_id = ${plant.id} and resolved_at is null and idempotency_key like ${m.id + "|%"}`;
+          await db`delete from plant_price_email_lines where message_id = ${m.id}`;
         }
-      }
-      imageDropped.forEach(addDropped);
-      if (deferReason && !degradedTest) {
-        results.push({ id: m.id, plant: plant.name, skipped: "llm_unavailable_will_retry", detail: deferReason.slice(0, 300) });
-        continue;
       }
       // The sentence the trader wrote in the body is applied LAST: a price stated in the message ("Salivary Glands … $0.35/lb FOB no
       // docs") is that day's explicit offer and must be the one that stays current — it used to run first, so the spreadsheet's
@@ -888,6 +920,13 @@ Deno.serve(async (req) => {
         const matchedName = matchRes.matched ? (matchRes.product.full_name_en || matchRes.product.name_en || matchRes.product.name) : null;
         try {
           if (matchRes.matched && (!item.needsReview || matchRes.source === "alias")) {
+            if (completion && !dryRun) {
+              const [cur] = await db`select price_date from plant_products where plant_id = ${plant.id} and product_id = ${matchRes.product.id}`;
+              if (cur && cur.price_date && String(cur.price_date instanceof Date ? cur.price_date.toISOString().slice(0, 10) : cur.price_date).slice(0, 10) > messagePriceDate) {
+                note("dismissed", "newer_price_on_file", `a newer price (${String(cur.price_date).slice(0, 10)}) is already on file for this product`);
+                continue;
+              }
+            }
             if (dryRun) {
               const [cur] = await db`select current_price, location_id from plant_products where plant_id = ${plant.id} and product_id = ${matchRes.product.id}`;
               applied++;
@@ -1034,10 +1073,14 @@ Deno.serve(async (req) => {
         try { await saveLedger(db, m.id, plant.id, ledger); } catch (e) { errors.push(`ledger: ${e}`); }
         await db`
           insert into plant_price_emails_processed
-            (message_id, plant_id, from_email, subject, lines_applied, lines_pending, lines_skipped, text_items_regex, text_items_llm, extraction_method)
+            (message_id, plant_id, from_email, subject, lines_applied, lines_pending, lines_skipped, text_items_regex, text_items_llm, extraction_method, needs_completion)
           values
-            (${m.id}, ${plant.id}, ${fromEmail}, ${subject}, ${applied}, ${pending}, ${skipped}, ${regexTextItems.length}, ${llmTextItems ? llmTextItems.length : null}, ${extractionMethod})
-          on conflict (message_id) do nothing
+            (${m.id}, ${plant.id}, ${fromEmail}, ${subject}, ${applied}, ${pending}, ${skipped}, ${regexTextItems.length}, ${llmTextItems ? llmTextItems.length : null}, ${extractionMethod}, ${aiUnavailable})
+          on conflict (message_id) do update set
+            lines_applied = excluded.lines_applied, lines_pending = excluded.lines_pending, lines_skipped = excluded.lines_skipped,
+            text_items_regex = excluded.text_items_regex, text_items_llm = excluded.text_items_llm, extraction_method = excluded.extraction_method,
+            needs_completion = excluded.needs_completion, completion_checked_at = now()
+          where ${completion}
         `;
       }
       let rollbackProof: unknown = null;
@@ -1049,6 +1092,7 @@ Deno.serve(async (req) => {
       results.push({
         id: m.id, plant: plant.name, applied, pending, declined, dropped: droppedCount, dismissed: ledger.filter((r) => r.outcome === "dismissed").length, skipped, errors: errors.slice(0, 5),
         text_items_regex: regexTextItems.length, text_items_llm: llmTextItems ? llmTextItems.length : null, extraction_method: extractionMethod,
+        ai_unavailable: aiUnavailable, ...(completion ? { completion: true } : {}),
         ...(rollbackMode ? { rollback_proof: rollbackProof } : {}),
         ...(dryRun ? {
           dry_run: true,
@@ -1068,9 +1112,16 @@ Deno.serve(async (req) => {
       class RollbackSignal extends Error {}
       try {
         await db.begin(async (tx: any) => {
-          const out = await runMessages(asTransactionDb(tx));
+          const txdb = asTransactionDb(tx);
+          const out = await runMessages(txdb);
           if (out instanceof Response) { debugResponse = out; return; }
           results = out;
+          // then_complete: the same message read AGAIN as the completion pass would (the first pass's rows are in this transaction).
+          if (body.then_complete === true) {
+            await txdb`update plant_price_emails_processed set needs_completion = true where message_id = ${testMessageId}`;
+            const second = await runMessages(txdb, true);
+            if (!(second instanceof Response)) results = [...results.map((r: any) => ({ pass: "first", ...r })), ...second.map((r: any) => ({ pass: "completion", ...r }))];
+          }
           throw new RollbackSignal();
         });
       } catch (e) {

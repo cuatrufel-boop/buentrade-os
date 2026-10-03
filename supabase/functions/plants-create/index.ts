@@ -11,6 +11,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { duplicateResponse, isNearDuplicate, jsonResponse, normalize, writeAuditLog } from "../_shared/matching.ts";
+import { plantContactAddresses, releaseSetAsideFrom } from "../_shared/mailIntake.ts";
 import { validateContactFields } from "../_shared/validateContact.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false, types: { numeric: { to: 1700, from: [1700], serialize: (x) => String(x), parse: (x) => parseFloat(x) } } });
@@ -94,6 +95,8 @@ Deno.serve(async (req) => {
         ) returning *
       `;
       await writeAuditLog(tx, HMAC_SECRET, { actor, action: "insert", table_name: "plants", record_id: plant.id, after: plant });
+      // Mail this plant's addresses sent before it existed was set aside; release it so the readers read it now that the plant is known.
+      await releaseSetAsideFrom(tx, plantContactAddresses(plant));
       return plant;
     });
 

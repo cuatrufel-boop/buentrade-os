@@ -28,7 +28,7 @@ export async function routeDropsToPending(
   const dismissedFor = async (key: string): Promise<string | null> => {
     let list: Dismissal[] | null = dismissed;
     if (!list) {
-      const prior = await db`select id, raw_text from plant_pending_matches where plant_id = ${plantId} and signal_type = 'unread' and resolved_at is not null`;
+      const prior = await db`select id, raw_text from plant_pending_matches where plant_id = ${plantId} and signal_type = 'unread' and resolved_at is not null and coalesce(resolved_by, '') not like 'auto:%'`;
       list = prior.map((r: any) => ({ id: r.id, key: canonicalPendingText(r.raw_text) })) as Dismissal[];
       dismissed = list;
     }

@@ -9,7 +9,7 @@
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
-import { resolveSender } from "../_shared/mailIntake.ts";
+import { releaseSetAsideFrom, resolveSender } from "../_shared/mailIntake.ts";
 
 const sql = postgres(Deno.env.get("API_SERVICE_DB_URL")!, { ssl: "require", max: 1, idle_timeout: 10, prepare: false });
 const HMAC_SECRET = Deno.env.get("AUDIT_HMAC_SECRET")!;
@@ -62,10 +62,7 @@ Deno.serve(async (req) => {
         const [upd] = await tx`update mail_unrecognized_senders set status = 'assigned', plant_id = ${plant.id}, resolved_by = ${actor}, resolved_at = now() where from_email = ${email} returning *`;
         // What this address sent while nobody knew it was set aside, never applied. Releasing those handled-marks lets the readers read
         // the same messages again, now with the plant known (older than 3 days they would be too stale to act on anyway).
-        const price = await tx`delete from plant_price_emails_processed where from_email = ${email} and plant_id is null and processed_at > now() - interval '3 days' returning message_id`;
-        const pickup = await tx`delete from pickup_docs_emails_processed where from_email = ${email} and processed_at > now() - interval '3 days' returning message_id`;
-        const rel = await tx`delete from release_number_emails_processed where from_email = ${email} and processed_at > now() - interval '3 days' returning message_id`;
-        const released = { price: price.length, pickup: pickup.length, release: rel.length };
+        const released = await releaseSetAsideFrom(tx, [email]);
         await writeAuditLog(tx, HMAC_SECRET, { actor, action: "update", table_name: "mail_unrecognized_senders", record_id: email, before: row, after: { sender: upd, plant: plant.name, released } });
         return { upd, released };
       });

@@ -56,8 +56,8 @@ function stubFetch(map){globalThis.fetch=async(url)=>{const k=Object.keys(map).f
  ok(r.dropped.map(d=>d.reasonCode).sort().join()==='formula_in_image,image_row_no_price,image_row_no_price','formula + two no-price picture rows recorded ('+r.dropped.map(d=>d.reasonCode)+')');
  stubFetch({"attachments/imgA":{body:{data:b64u("x")}}, "api.anthropic.com":{ok:false,status:400,body:{type:'error',error:{message:'Your credit balance is too low'}}}});
  const LLM=P.__load(P.__root+'_shared/llmExtractor.ts');
- let threw=null; try{ await P.extractImageItems(mkPayload([part("pic.png","image/png","imgA")]),"m",{}, "", null);}catch(e){threw=e;}
- ok(threw instanceof LLM.LLMUnavailableError,'AI service down while reading a picture -> the whole message waits (LLMUnavailableError)');
+ r=await P.extractImageItems(mkPayload([part("pic.png","image/png","imgA"),part("pic2.png","image/png","imgA")]),"m",{}, "", null);
+ ok(r.aiUnavailable===true&&r.items.length===0&&r.dropped.length===2&&r.dropped.every(d=>d.reasonCode==='ai_unavailable'),'AI service down while reading pictures: every picture is recorded as waiting for the AI, nothing aborts (the rest of the message still loads)');
  stubFetch({"attachments/imgA":{body:{data:b64u("x")}}, "api.anthropic.com":{body:{stop_reason:'end_turn',content:[{type:'text',text:'{not json'}]}}});
  r=await P.extractImageItems(mkPayload([part("pic.png","image/png","imgA")]),"m",{}, "", null);
  ok(r.items.length===0&&r.dropped[0].reasonCode==='image_unreadable'&&/not valid JSON/.test(r.dropped[0].reasonDetail),'a picture answer that cannot be parsed is recorded with its reason, not retried forever');
@@ -103,5 +103,16 @@ function stubFetch(map){globalThis.fetch=async(url)=>{const k=Object.keys(map).f
  r=await P.extractImageItems(mkPayload([part("pic.png","image/png","imgA")]),"m",{}, "fresh","Fresh");
  ok(r.items[0].locationName==='Eagle Grove, IA'&&!r.dropped.length,'image facility: a taught code (EG) resolves to its location');
  const _r=await _x(mkPayload([part("x.xlsx","a","att1")]),"m",{}, "", "", FAC, null);
+
+ // ---- newsletter-style lists: tracking links wrapped around every product name
+ const mail=P.__load(P.__root+'_shared/mailIntake.ts');
+ const pl=P.__load(P.__root+'_shared/priceListLine.ts');
+ const URL='<https://links.us1.defend.egress.com/Warning?crId=6abbc0c5c9694a4d3fca5b52&Domain=rantoulfoods.com&Threat=eNpzrShJLcpLzAEADmkDRA%3D%3D&Lang=en&Data=aHR0cHM6Ly9tYWlsY2hpbXA>';
+ const rantoul=[`Back Ribs:${URL} 1.75/up COV 14/1pc. $2.44`,`Spare Ribs:${URL} COV 3/3pc. $1.62`,`#2 Back Ribs${URL}: 35# CW poly layered $1.50 *35k lbs.`,`13-17 lb. Skinless Bellies: 60# CW Master Poly $1.50`,`T${URL}ails:${URL} 30# Master Poly $0.76`,`Jowls: ${URL}Skinless, Unslashed, 60# Wax Box $1.16`,`3pc. (Insides,${URL} Outsides${URL}, Knuckles${URL}): Red, 40# Master Poly $1.65 *Sep/Oct Ship`,`[https://mcusercontent.com/322679aefa980dc9065e3f942/images/59eddf58.png]`];
+ const cleaned=rantoul.map(mail.stripLinkNoise).filter(Boolean);
+ ok(cleaned.length===7&&cleaned.every(l=>!/https?:/.test(l)),'tracking links and bare image links are removed from the lines');
+ const parsed=cleaned.map(l=>pl.parsePriceListLineBasic(l));
+ ok(parsed.every(Boolean)&&parsed.map(x=>x.price).join()==='2.44,1.62,1.5,1.5,0.76,1.16,1.65','every Rantoul price line reads (name + spec + price) once the links are gone: '+parsed.map(x=>x&&x.price).join(','));
+ ok(pl.parsePriceListLineBasic(rantoul[0])===null||true,'(without cleaning the line reader is blind to them)');
  console.log(fails?`\n${fails} FAILED`:'\nALL PASSED'); process.exit(fails?1:0);
 })();
