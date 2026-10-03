@@ -679,6 +679,7 @@ auth.onAuthStateChanged(user => {
             <div class="field"><label>Email</label><input id="loc_email" type="email" oninput="updateLocationProfile()"></div>
           </div>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;"><input type="checkbox" id="loc_delivered" onchange="updateLocationProfile()" style="width:auto;"> Plant delivers to border themselves (no freight cost)</label>
+          <div class="field"><label>Address</label><input id="loc_address" oninput="updateLocationProfile()" placeholder="e.g. 1009 Richland Dr, Storm Lake, IA 50588"></div>
           <div class="field"><label>Notes</label><textarea id="loc_notes" rows="2" oninput="updateLocationProfile()"></textarea></div>
         </div>
 
@@ -691,6 +692,7 @@ auth.onAuthStateChanged(user => {
             <div class="profile-row"><span class="view-label">Contact Name</span><span class="profile-row-value" id="locv_contact_name">—</span></div>
             <div class="profile-row"><span class="view-label">Phone</span><span class="profile-row-value" id="locv_phone">—</span></div>
             <div class="profile-row"><span class="view-label">Email</span><span class="profile-row-value" id="locv_email">—</span></div>
+            <div class="profile-row span2"><span class="view-label">Address</span><span class="profile-row-value" id="locv_address">—</span></div>
             <div class="profile-row span2"><span class="view-label">Notes</span><span class="profile-row-value" id="locv_notes">—</span></div>
           </div>
         </div>
@@ -4497,7 +4499,7 @@ async function loadPlantLocations(){
 
 function openLocationForm(loc){
   document.getElementById('locationFormCard').style.display = 'block';
-  ['loc_id','loc_name','loc_protein','loc_freight','loc_contact_name','loc_phone','loc_email','loc_notes'].forEach(f => {
+  ['loc_id','loc_name','loc_protein','loc_freight','loc_contact_name','loc_phone','loc_email','loc_address','loc_notes'].forEach(f => {
     const el = document.getElementById(f);
     if (el) el.value = '';
   });
@@ -4510,6 +4512,7 @@ function openLocationForm(loc){
     document.getElementById('loc_contact_name').value = loc.contact_name || '';
     document.getElementById('loc_phone').value = loc.phone || '';
     document.getElementById('loc_email').value = loc.email || '';
+    document.getElementById('loc_address').value = loc.address || '';
     document.getElementById('loc_notes').value = loc.notes || '';
     document.getElementById('loc_delivered').checked = !!loc.delivered_by_plant;
   } else {
@@ -4532,6 +4535,7 @@ function updateLocationProfile(){
   setV('locv_contact_name', document.getElementById('loc_contact_name').value);
   setV('locv_phone', document.getElementById('loc_phone').value);
   setV('locv_email', document.getElementById('loc_email').value);
+  setV('locv_address', document.getElementById('loc_address').value);
   setV('locv_notes', document.getElementById('loc_notes').value);
 }
 
@@ -4555,6 +4559,7 @@ async function saveLocation(){
     phone: document.getElementById('loc_phone').value || null,
     email: document.getElementById('loc_email').value || null,
     delivered_by_plant: document.getElementById('loc_delivered').checked,
+    address: document.getElementById('loc_address').value.trim() || null,
     notes: document.getElementById('loc_notes').value || null,
   };
   if (!payload.location_name){

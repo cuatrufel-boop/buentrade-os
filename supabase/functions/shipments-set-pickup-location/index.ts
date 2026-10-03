@@ -1,9 +1,8 @@
-// shipments.setPickupLocation — records the trader's manual pickup-location pick for an order whose
-// price never named a real ship-from city (see plant_locations.region / the 2026-09-12 Smithfield
-// ask). Only ever called at Confirm Load, the "decidir al final" moment — never earlier, and never
-// for an order that already resolves a location automatically from its own freight rate (see the
-// pickup_location subquery in shipments-search). Mirrors shipments-set-release-number's shape
-// exactly (simple update-and-audit-log, no insert, so exempt from the idempotency-key rule).
+// shipments.setPickupLocation — records which facility of the plant a load is collected from, for an order whose price/freight never named
+// a real ship-from city (see plant_locations.region / the 2026-09-12 Smithfield ask). Called from the Purchase Order (when the system cannot
+// know the facility, orders-compose-po refuses and the screen asks the trader — 2026-10-03) and at Confirm Load; the PO, the Status tab and the
+// release-number request all read this one field. Mirrors shipments-set-release-number's shape exactly (simple update-and-audit-log, no
+// insert, so exempt from the idempotency-key rule).
 
 import postgres from "npm:postgres@3.4.4";
 import { jsonResponse, writeAuditLog } from "../_shared/matching.ts";
@@ -22,8 +21,11 @@ Deno.serve(async (req) => {
     const [existing] = await sql`select * from shipments where order_number = ${order_number}`;
     if (!existing) return jsonResponse({ error: "unknown order_number" }, 404);
 
-    const [location] = await sql`select id from plant_locations where id = ${pickup_location_id}`;
+    const [location] = await sql`select id, plant_id from plant_locations where id = ${pickup_location_id}`;
     if (!location) return jsonResponse({ error: "unknown pickup_location_id" }, 400);
+    // A load is only ever collected at a facility of the plant it was bought from.
+    const [po] = await sql`select plant_id from purchase_orders where order_number = ${order_number}`;
+    if (po && po.plant_id !== location.plant_id) return jsonResponse({ error: "pickup_location_not_of_this_plant" }, 400);
 
     const shipment = await sql.begin(async (tx) => {
       const [updated] = await tx`update shipments set pickup_location_id = ${pickup_location_id} where order_number = ${order_number} returning *`;
