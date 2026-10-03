@@ -15,6 +15,34 @@
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 const MODEL = "claude-sonnet-5";
+// A long price list answers with one JSON entry per product: 4096 tokens cut a real Tyson list (49 items + lines without a price)
+// off mid-way and the whole read failed. The limit is generous and a cut-off answer is now an explicit error, never a silent partial read.
+const MAX_TOKENS = 16000;
+
+// The AI service itself is unreachable or refused the call (no credit, outage, overload, rate limit). The message was NOT read, so the
+// caller leaves it unprocessed and it is tried again on the next cycle — a half-read result is never saved as if it were complete.
+export class LLMUnavailableError extends Error {}
+
+export async function callAnthropic(payload: Record<string, unknown>): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "structured-outputs-2025-11-13",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    throw new LLMUnavailableError(`Anthropic API unreachable: ${String(e)}`);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new LLMUnavailableError(`Anthropic API failed: ${JSON.stringify(data)}`);
+  return data;
+}
 
 export interface ExtractedItem {
   name: string;
@@ -37,6 +65,17 @@ export interface ExtractedItem {
 export interface DeclinedItem {
   name: string; // the product/item as referred to in the text, same convention as ExtractedItem.name
   temperature: "Fresh" | "Frozen" | "Unknown";
+}
+
+// A line that names a real product but carries NO usable price: a formula, "Check with X", "N/A", a
+// temporary "sold out", or a price with no product beside it. These are never silently dropped — the
+// caller records each one (and the review queue shows it with this reason) so nothing the plant
+// wrote can disappear.
+export interface UnpricedItem {
+  name: string; // the product as written ("Boxed Frozen 72% Ham trim"), or the stray price text for price_without_product
+  temperature: "Fresh" | "Frozen" | "Unknown";
+  reason: "formula" | "no_price_stated" | "not_available" | "price_without_product";
+  detail: string; // the exact words that stood where the price should be ("DPS*1.2+0.12", "Check with Nora"), "" when none
 }
 
 // Real fix, confirmed live: Anthropic's structured-outputs JSON Schema validator rejects a
@@ -72,8 +111,22 @@ const EXTRACTION_SCHEMA = {
         additionalProperties: false,
       },
     },
+    unpriced_items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The product named on that line exactly as written (same naming rules as items.name), or for reason price_without_product the stray price text as written." },
+          temperature: { type: "string", enum: ["Fresh", "Frozen", "Unknown"], description: "Fresh or Frozen if stated for this item (directly or via a section header), Unknown if not." },
+          reason: { type: "string", enum: ["formula", "no_price_stated", "not_available", "price_without_product"], description: "formula = price written as a formula; no_price_stated = the line names the product but gives no number (e.g. 'Check with Nora', 'Call for availability', '------'); not_available = temporarily unavailable / sold out / N/A for now; price_without_product = a price with no product it can be tied to." },
+          detail: { type: "string", description: "The exact words or symbols that stood where the price should be (e.g. 'DPS*1.2+0.12', 'Check with Nora'). Empty string when there was nothing." },
+        },
+        required: ["name", "temperature", "reason", "detail"],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ["items", "declined_items"],
+  required: ["items", "declined_items", "unpriced_items"],
   additionalProperties: false,
 };
 
@@ -85,8 +138,8 @@ Rules for "items" (priced products):
 - A single sentence can genuinely contain several distinct product+price pairs (e.g. "Fresh COV $0.95/lb, Frozen COV $0.98/lb, Frozen Poly $0.96/lb" is three separate items, not one). Extract each one separately.
 - If the SAME product name appears twice with two different prices (e.g. once under a "Fresh" section and once under a "Frozen" section), extract BOTH as separate items — never merge or drop one.
 - When the SAME product is quoted at two prices that differ only by documents ("$0.35/lb FOB no docs or $0.37/lb FOB with docs"), extract ONLY the no-docs price. No-docs is the default; never emit the with-docs price as a second item.
-- A price stated with a formula instead of a number (e.g. "DPS*1.2+0.12") is not extractable — skip it, do not guess a numeric value.
-- A line that only says "Call for availability", "N/A", "Check with X", or similar with no real number is not extractable — skip it.
+- A price stated with a formula instead of a number (e.g. "DPS*1.2+0.12") is not a priced item — never guess a numeric value. Report it in "unpriced_items" with reason "formula" and the formula text in "detail".
+- A line that names a real product but gives no number ("Call for availability", "Check with X", "------", an empty price) is not a priced item. Report it in "unpriced_items": reason "no_price_stated" (detail = the words that stood there, "" if none), or reason "not_available" when it says N/A / sold out / nothing right now.
 - A month name, a "Week of X" note, a date range (e.g. "OCT", "SEPT/OCT", "Week of 10/5"), a specific ship date ("to ship on 9/11", "October ship", "late Sep ship"), a production-date note ("(Nov 2025 Prod)"), or a shipping origin/incoterm ("FOB Sioux Falls, SD", "FOB Midwest", "EXW Midwest") next to an item is never part of the product's own name — it says when/where/on what terms that price applies. Extract the item and price normally but leave all of that out of "name" entirely; it changes on every list and would otherwise make the same real product look like a different one each time.
 - A weight, count, or piece-count qualifier attached to a pack style (e.g. "60 lb.", "20 Kg", "30lb", "2-3 bones", "4/6") describes the size of that particular container, not a different product — leave it out of "name" too, same reason: it varies list to list for what is really the same item.
 - Separately, capture the FOB/EXW pickup city in "location" when the plant states one right next to this specific item (e.g. "FOB Sioux Falls, SD", "EXW Denison, IA") — as "City, ST". Only a real, specific city counts; a broad region word ("FOB Midwest", "FOB East Coast") is not a city, leave "location" as "" for those (do not invent a city for a region, and never put the region word itself in "location").
@@ -99,41 +152,40 @@ Rules for "items" (priced products):
   text (not the quoted part) states a price with no product name attached to it, and the quoted
   part names exactly one product, that price belongs to that quoted product — use the quoted
   product's name as this item's name. This is reading what's already in the email, not guessing:
-  only do this when the quote names exactly one product; if it names more than one, or none, leave
-  the bare price line unextracted rather than pick one.
+  only do this when the quote names exactly one product; if it names more than one, or none, do not
+  pick one — report the bare price in "unpriced_items" with reason "price_without_product" (name = the price text as written).
+
+Rules for "unpriced_items" (nothing the plant wrote may disappear silently):
+- Only a line that names a real, sellable product but has no usable price, or a price that cannot be tied to a product (see the rules above for each reason). Never a greeting, signature, phone number, address, legal text, header, translation of a product name, or lead-time note.
+- A product that appears in "items" (it has a real price) never also appears in "unpriced_items".
+- When the same product is listed with and without a usable price, the usable price wins and nothing goes to "unpriced_items" for it.
+- Use the same product-name rules as "items" (no month/ship-date/incoterm/weight qualifiers in the name).
 
 Rules for "declined_items" (products this plant does NOT produce at all — a separate, permanent signal, not a price):
 - Extract a declined_item ONLY when the plant states, as a general/structural fact, that they do not produce, do not make, do not carry, or have discontinued a specific product — in whatever words they actually use (e.g. "we don't produce bone-in picnics", "that's not something we make", "no fabricamos eso", "we discontinued that item", "that's not a product we carry"). This is free-text judgment, not a fixed phrase list — recognize the same meaning however it's worded, in English or Spanish.
-- Do NOT extract a declined_item for TEMPORARY unavailability — "sold out", "nothing to offer this week", "out of stock right now", "no tenemos disponible esta semana", "we're out until next month" all mean the plant may still produce this, they just have nothing to quote right now. These are not declined_items; simply leave them out of both arrays (no price to extract either).
+- Do NOT extract a declined_item for TEMPORARY unavailability — "sold out", "nothing to offer this week", "out of stock right now", "no tenemos disponible esta semana", "we're out until next month" all mean the plant may still produce this, they just have nothing to quote right now. These are not declined_items; do not put them in "declined_items" — report them in "unpriced_items" with reason "not_available".
 - If genuinely unsure whether a statement means "we never make this" versus "we don't have it right now," do not extract it as a declined_item — when in doubt, leave it out rather than guess.
 - Never extract a declined_item for a product that already has a real price quoted elsewhere in the same email (that's a contradiction — treat the priced item as the real signal and ignore any conflicting decline language about it).`;
 
-export async function extractItemsWithLLM(bodyText: string): Promise<{ items: ExtractedItem[]; declinedItems: DeclinedItem[] }> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-beta": "structured-outputs-2025-11-13",
-    },
-    body: JSON.stringify({
+export async function extractItemsWithLLM(bodyText: string): Promise<{ items: ExtractedItem[]; declinedItems: DeclinedItem[]; unpricedItems: UnpricedItem[] }> {
+  const data = await callAnthropic({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: bodyText }],
       output_format: { type: "json_schema", schema: EXTRACTION_SCHEMA },
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Anthropic API failed: ${JSON.stringify(data)}`);
+    });
 
+  if (data.stop_reason === "max_tokens") throw new Error(`Anthropic answer was cut off at ${MAX_TOKENS} tokens — the list is too long for one read`);
   const textBlock = (data.content || []).find((b: any) => b.type === "text");
   if (!textBlock) throw new Error(`No text content in Anthropic response: ${JSON.stringify(data)}`);
-  const parsed = JSON.parse(textBlock.text);
+  let parsed;
+  try { parsed = JSON.parse(textBlock.text); }
+  catch (e) { throw new Error(`Anthropic answer was not valid JSON (stop_reason ${data.stop_reason}, ${textBlock.text.length} chars): ${String(e)}`); }
   return {
     items: (parsed.items || []) as ExtractedItem[],
     declinedItems: (parsed.declined_items || []) as DeclinedItem[],
+    unpricedItems: (parsed.unpriced_items || []) as UnpricedItem[],
   };
 }
 
@@ -194,17 +246,9 @@ Rules:
 - Never invent a row that isn't actually in the image.`;
 
 export async function extractItemsFromImage(base64Data: string, mediaType: string, emailContext: string): Promise<ExtractedImageItem[]> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-beta": "structured-outputs-2025-11-13",
-    },
-    body: JSON.stringify({
+  const data = await callAnthropic({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: MAX_TOKENS,
       system: IMAGE_SYSTEM_PROMPT,
       messages: [{
         role: "user",
@@ -214,13 +258,13 @@ export async function extractItemsFromImage(base64Data: string, mediaType: strin
         ],
       }],
       output_format: { type: "json_schema", schema: IMAGE_EXTRACTION_SCHEMA },
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Anthropic API failed: ${JSON.stringify(data)}`);
+    });
 
+  if (data.stop_reason === "max_tokens") throw new Error(`Anthropic answer was cut off at ${MAX_TOKENS} tokens — the list is too long for one read`);
   const textBlock = (data.content || []).find((b: any) => b.type === "text");
   if (!textBlock) throw new Error(`No text content in Anthropic response: ${JSON.stringify(data)}`);
-  const parsed = JSON.parse(textBlock.text);
+  let parsed;
+  try { parsed = JSON.parse(textBlock.text); }
+  catch (e) { throw new Error(`Anthropic answer was not valid JSON (stop_reason ${data.stop_reason}, ${textBlock.text.length} chars): ${String(e)}`); }
   return (parsed.items || []) as ExtractedImageItem[];
 }

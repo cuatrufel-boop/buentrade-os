@@ -11,10 +11,10 @@ export type CreatePendingMatchResult =
 export async function createPendingMatch(
   sql: any,
   hmacSecret: string,
-  { actor, plant_id, raw_text, detected_price = null, candidate_product_ids = [], idempotency_key = null, signal_type = "price", candidates_conflicted = false }: {
+  { actor, plant_id, raw_text, detected_price = null, candidate_product_ids = [], idempotency_key = null, signal_type = "price", candidates_conflicted = false, reason_code = null, reason_detail = null, source = null }: {
     actor: string; plant_id: string; raw_text: string; detected_price?: number | null;
-    candidate_product_ids?: string[]; idempotency_key?: string | null; signal_type?: "price" | "declined";
-    candidates_conflicted?: boolean;
+    candidate_product_ids?: string[]; idempotency_key?: string | null; signal_type?: "price" | "declined" | "unread";
+    candidates_conflicted?: boolean; reason_code?: string | null; reason_detail?: string | null; source?: string | null;
   },
 ): Promise<CreatePendingMatchResult> {
   if (!actor || !plant_id || !raw_text) return { error: "missing required fields" };
@@ -50,7 +50,8 @@ export async function createPendingMatch(
       const [row] = await tx`
         update plant_pending_matches set
           detected_price = ${detected_price}, candidate_product_ids = ${tx.json(candidate_product_ids)},
-          idempotency_key = ${idempotency_key}, candidates_conflicted = ${candidates_conflicted}, created_at = now()
+          idempotency_key = ${idempotency_key}, candidates_conflicted = ${candidates_conflicted}, created_at = now(),
+          reason_code = ${reason_code}, reason_detail = ${reason_detail}, source = ${source}
         where id = ${existingUnresolved.id} returning *
       `;
       await writeAuditLog(tx, hmacSecret, {
@@ -60,8 +61,8 @@ export async function createPendingMatch(
       return row;
     }
     const [row] = await tx`
-      insert into plant_pending_matches (plant_id, raw_text, detected_price, candidate_product_ids, idempotency_key, signal_type, candidates_conflicted)
-      values (${plant_id}, ${raw_text}, ${detected_price}, ${tx.json(candidate_product_ids)}, ${idempotency_key}, ${signal_type}, ${candidates_conflicted})
+      insert into plant_pending_matches (plant_id, raw_text, detected_price, candidate_product_ids, idempotency_key, signal_type, candidates_conflicted, reason_code, reason_detail, source)
+      values (${plant_id}, ${raw_text}, ${detected_price}, ${tx.json(candidate_product_ids)}, ${idempotency_key}, ${signal_type}, ${candidates_conflicted}, ${reason_code}, ${reason_detail}, ${source})
       returning *
     `;
     await writeAuditLog(tx, hmacSecret, {

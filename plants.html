@@ -869,6 +869,7 @@ auth.onAuthStateChanged(user => {
       <div class="pl-cat-panel" id="plantCatFilterPanel" style="display:none;"></div>
       <input type="hidden" id="plantListCategoryFilter" value="">
     </div>
+    <button class="btn secondary" id="mailAttentionBtn" style="display:none;" onclick="openMailAttention()">Mail needing attention (<span id="mailAttentionCount">0</span>)</button>
     <button class="btn" onclick="openNewPlant()">+ New Plant</button>
   </div>
   <div class="card" id="plantListCard">
@@ -1193,6 +1194,18 @@ auth.onAuthStateChanged(user => {
   </div>
 </div>
 
+<!-- Mail the system could not place on its own: an address it does not know (a plant's other contact, a new plant) and mail it could not
+     finish handling. Nothing the mailbox readers cannot place is silent — it waits here for a person. -->
+<div id="mailAttentionModalOverlay" class="email-modal-overlay" style="display:none;">
+  <div class="email-modal-box" style="max-width:640px;max-height:80vh;overflow-y:auto;">
+    <h3>Mail needing attention</h3>
+    <div id="mailAttentionBody"></div>
+    <div class="email-modal-actions">
+      <button onclick="document.getElementById('mailAttentionModalOverlay').style.display='none';" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Real unification 2026-09-13 ("arreglalo globalmente en todo el sistema, unificalo"): this was
      the most stripped-down copy of the 4 — no CC, no attachments, no WhatsApp, at all. The shared
      modal js/email-modal.js injects (bcEnsureEmailModal) gives this screen every one of those for
@@ -1444,6 +1457,7 @@ async function loadEverything(){
     loadCutNames(),
   ]);
   plants = plantsRes.results || [];
+  loadMailAttention();
   plantPendingMatchCounts = {};
   plantPendingMatchStale = {};
   (pendingMatchesRes.results || []).forEach(m => {
@@ -2405,6 +2419,91 @@ async function deletePlantDocument(id){
   await loadPlantDocuments();
 }
 
+// ---- Mail needing attention (unrecognized senders + mail a reader could not finish) ----
+let mailAttention = { senders: [], issues: [] };
+function updateMailAttentionButton(failed){
+  const btn = document.getElementById('mailAttentionBtn');
+  const n = mailAttention.senders.length + mailAttention.issues.length;
+  document.getElementById('mailAttentionCount').textContent = failed ? '?' : n;
+  btn.style.display = (n || failed) ? '' : 'none';
+  btn.title = failed ? 'Could not load this list — click to retry' : '';
+}
+async function loadMailAttention(){
+  try {
+    const res = await callApi('mail-attention', { action: 'search' });
+    mailAttention = { senders: res.senders || [], issues: res.issues || [] };
+    updateMailAttentionButton(false);
+  } catch (e) {
+    updateMailAttentionButton(true);
+  }
+}
+function renderMailAttention(){
+  const body = document.getElementById('mailAttentionBody');
+  const { senders, issues } = mailAttention;
+  if (!senders.length && !issues.length){ body.innerHTML = '<div style="font-size:13px;color:var(--ink-soft);padding:8px 0;">Nothing waiting.</div>'; return; }
+  const when = t => new Date(t).toLocaleString();
+  const plantOptions = plants.map(p => `<option value="${p.id}">${escapeHtml((p.name || '').trim())}</option>`).join('');
+  const senderRows = senders.map((x, i) => {
+    const cands = Array.isArray(x.candidates) && x.candidates.length ? `<div class="hint" style="margin:3px 0 0;">Could be: ${x.candidates.map(escapeHtml).join(', ')}</div>` : '';
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--line);">
+      <div style="font-size:13.5px;font-weight:600;word-break:break-all;">${escapeHtml(x.from_email)}</div>
+      <div class="hint" style="margin:3px 0 0;">${escapeHtml(x.last_subject || '(no subject)')} · ${x.times} message${x.times === 1 ? '' : 's'} · last ${escapeHtml(when(x.last_seen))}</div>
+      ${cands}
+      <div class="plr-teach-row" style="margin-top:6px;">
+        <select id="maPlant_${i}"><option value="">Plant…</option>${plantOptions}</select>
+        <button type="button" class="plr-teach-save" onclick="assignMailSender(${i})">Assign</button>
+        <button type="button" class="plr-teach-toggle" onclick="dismissMailSender(${i})">Dismiss</button>
+        <span id="maMsg_${i}" style="font-size:11.5px;color:#FFC876;"></span>
+      </div>
+    </div>`;
+  }).join('');
+  const issueRows = issues.map((x, i) => `<div style="padding:10px 0;border-bottom:1px solid var(--line);">
+      <div style="font-size:13.5px;font-weight:600;">${escapeHtml(x.subject || '(no subject)')}</div>
+      <div class="hint" style="margin:3px 0 0;">${escapeHtml(x.from_email)} · ${escapeHtml(when(x.created_at))}</div>
+      <div style="font-size:12px;color:#FFC876;margin-top:3px;">${escapeHtml(x.reason_detail || x.reason_code)}</div>
+      <div class="plr-teach-row" style="margin-top:6px;"><button type="button" class="plr-teach-toggle" onclick="resolveMailIssue(${i})">Dismiss</button></div>
+    </div>`).join('');
+  body.innerHTML =
+    (senders.length ? `<div class="profile-heading" style="margin-top:6px;">Unrecognized senders</div>${senderRows}` : '') +
+    (issues.length ? `<div class="profile-heading" style="margin-top:14px;">Could not finish</div>${issueRows}` : '');
+  btEnhanceAllSelects(body);
+}
+async function openMailAttention(){
+  await loadMailAttention();
+  renderMailAttention();
+  document.getElementById('mailAttentionModalOverlay').style.display = 'flex';
+}
+async function assignMailSender(i){
+  const x = mailAttention.senders[i];
+  const plantId = document.getElementById(`maPlant_${i}`).value;
+  if (!plantId){ document.getElementById(`maMsg_${i}`).textContent = 'Pick the plant first'; return; }
+  let res;
+  try { res = await callApi('mail-attention', { action: 'assign_sender', actor: currentActor(), from_email: x.from_email, plant_id: plantId }); }
+  catch (e) { await btAlert(`Couldn't assign this address: ${e.message}`); return; }
+  mailAttention.senders = mailAttention.senders.filter(s => s.from_email !== x.from_email);
+  updateMailAttentionButton(false);
+  renderMailAttention();
+  const r = res.released || {};
+  const again = (r.price || 0) + (r.pickup || 0) + (r.release || 0);
+  plShowNotice(`${x.from_email} is now recognized for this plant.${again ? ` ${again} earlier message${again === 1 ? '' : 's'} will be read again.` : ''}`);
+}
+async function dismissMailSender(i){
+  const x = mailAttention.senders[i];
+  try { await callApi('mail-attention', { action: 'dismiss_sender', actor: currentActor(), from_email: x.from_email }); }
+  catch (e) { await btAlert(`Couldn't dismiss this address: ${e.message}`); return; }
+  mailAttention.senders = mailAttention.senders.filter(s => s.from_email !== x.from_email);
+  updateMailAttentionButton(false);
+  renderMailAttention();
+}
+async function resolveMailIssue(i){
+  const x = mailAttention.issues[i];
+  try { await callApi('mail-attention', { action: 'resolve_issue', actor: currentActor(), id: x.id }); }
+  catch (e) { await btAlert(`Couldn't dismiss this: ${e.message}`); return; }
+  mailAttention.issues = mailAttention.issues.filter(s => s.id !== x.id);
+  updateMailAttentionButton(false);
+  renderMailAttention();
+}
+
 async function loadPlantPendingMatches(){
   try {
     const res = await callApi('plant-pending-matches-search', { plant_id: currentPlantId });
@@ -2415,7 +2514,17 @@ async function loadPlantPendingMatches(){
     // from the exact fix for the same failure mode — a transient failure here threw uncaught,
     // renderPlantPendingMatches() never ran, and the tab was left showing whatever the tbody
     // already had (nothing, the first time it's opened), completely silently.
-    await fetchAllCatalogProducts();
+    // The word-teaching question needs this plant's taught words and its category's Variations / Cut Names — fetched directly, the same way
+    // Load Prices does, so nothing here repaints the unrelated Add New Product form.
+    const pendingPlant = plants.find(p => p.id === currentPlantId);
+    const pendingCategory = pendingPlant ? pendingPlant.category_id : null;
+    const [, , cutNamesRes, variationsRes] = await Promise.all([
+      Promise.all([fetchAllCatalogProducts(), loadPlantLocations()]), fetchPlantTermAliases(),
+      pendingCategory ? callApi('cut-names-search', { category_id: pendingCategory }) : Promise.resolve({ results: [] }),
+      pendingCategory ? callApi('variations-search', { category_id: pendingCategory }) : Promise.resolve({ results: [] }),
+    ]);
+    cutNames = cutNamesRes.results || [];
+    variations = variationsRes.results || [];
   } catch (e) {
     // Real gap found live 2026-09-06: this used to silently fall back to an empty list on any
     // failure (a transient network blip included) — indistinguishable from "genuinely nothing
@@ -2442,6 +2551,8 @@ function renderPlantPendingMatches(){
     // both places a raw plant-email line gets matched to a real catalog product, always the full
     // catalog name (never the bare short name, which can be shared by several temp/pack variants).
     const tightIds = Array.isArray(m.candidate_product_ids) ? m.candidate_product_ids : [];
+    // signal_type 'unread': a file or message the system could not read at all — nothing to match, a person looks and dismisses it.
+    const isUnread = m.signal_type === 'unread';
     // candidates_conflicted (set by matchProductFromPlantText via createPendingMatch): the matcher
     // itself already knows this single leftover candidate doesn't actually satisfy something the
     // line said (e.g. line says "Boneless", the only product on file at that temp/pack is
@@ -2458,7 +2569,7 @@ function renderPlantPendingMatches(){
       return `<button type="button" class="plr-chip${isCurrent ? ' plr-chip-current' : ''}" onclick="pickPendingMatchCandidate('${m.id}', '${id}')">${isCurrent ? '✓ ' : ''}${escapeHtml(label)}</button>`;
     }).join('');
     const browseCandidates = sortCandidatesBySimilarity(m.raw_text, allCatalogProducts.filter(p => !shownIds.has(p.id)));
-    const showBrowse = m._browseAll || !tightIds.length;
+    const showBrowse = !isUnread && (m._browseAll || !tightIds.length);
     // Search box filters chips directly in the DOM (filterBrowseChips) instead of re-rendering
     // this whole table on every keystroke — a full re-render would rebuild the <input> itself and
     // drop focus/cursor position after every character typed, real catalog now 77 products and
@@ -2468,7 +2579,7 @@ function renderPlantPendingMatches(){
       <div class="plr-candidates plr-browse" id="ppmBrowse_${m.id}">
         ${browseCandidates.map(p => `<button type="button" class="plr-chip" data-label="${escapeHtml([p.full_name_en, p.name_en, p.full_name_es, p.name].filter(Boolean).join(' ').toLowerCase())}" onclick="pickPendingMatchCandidate('${m.id}', '${p.id}')">${escapeHtml(p.full_name_en || p.name_en || p.name)}</button>`).join('')}
       </div>` : '';
-    const browseToggle = (tightIds.length && !m._browseAll)
+    const browseToggle = (!isUnread && tightIds.length && !m._browseAll)
       ? `<button type="button" class="plr-browse-toggle" onclick="togglePendingMatchBrowseAll('${m.id}')">View rest of catalog (${browseCandidates.length})</button>`
       : '';
     // Real addition, explicit ask: a signal_type of 'declined' is the email-ingestion pipeline
@@ -2476,15 +2587,44 @@ function renderPlantPendingMatches(){
     // auto-applied there, always waiting here for a human to actually confirm which real catalog
     // product it means before permanently marking that plant off-spec for it.
     const isDeclined = m.signal_type === 'declined';
+    // A plant line it gave no price for: the trader types the price here (or dismisses the line).
+    const needsPrice = !isDeclined && !isUnread && m.detected_price == null;
+    // A facility code the plant printed that is none of its locations: pick which location it means once, and every reader knows it from then on.
+    const facilityMatch = isUnread && m.reason_code === 'facility_not_recognized' ? /^Facility "(.+)"$/.exec(m.raw_text || '') : null;
+    const facilityTeachHtml = facilityMatch ? `
+      <div class="plr-teach-row">
+        <select id="ppmFacility_${m.id}"><option value="">Location…</option>${plantLocations.filter(l => l.location_id).map(l => `<option value="${l.location_id}">${escapeHtml(l.location_name || '')}</option>`).join('')}</select>
+        <button type="button" class="plr-teach-save" onclick="assignFacilityCode('${m.id}')">Assign</button>
+      </div>` : '';
+    // After the pick, one unexplained word in the line is asked about — the same question Load Prices asks, so confirming a match also teaches the plant's wording.
+    if (currentId && !isDeclined && !isUnread) ensurePendingConfirmWord(m, currentId);
+    const cw = (currentId && !isDeclined && !isUnread) ? m._confirmWord : null;
+    const confirmHtml = cw ? (cw.guess ? `
+      <div class="plr-teach-row">
+        <span class="hint" style="margin:0;">"${escapeHtml(cw.word)}" → <b>${escapeHtml(cw.guess.label)}</b>. Always mean this for this plant?</span>
+        <button type="button" class="plr-teach-save" onclick="confirmPendingLeftoverWord('${m.id}', true)">Yes, remember it</button>
+        <button type="button" class="plr-teach-toggle" onclick="confirmPendingLeftoverWord('${m.id}', false)">No</button>
+      </div>` : `
+      <div class="plr-teach-row">
+        <span class="hint" style="margin:0;">"${escapeHtml(cw.word)}" means…</span>
+        <select onchange="confirmPendingLeftoverWord('${m.id}', true, this.value)">
+          <option value="">Choose…</option>
+          <optgroup label="Variation">${variations.map(v => `<option value="variation:${v.id}">${escapeHtml(v.name_en)}</option>`).join('')}</optgroup>
+          <optgroup label="Cut Name">${cutNames.map(c => `<option value="cut_name:${c.id}">${escapeHtml(c.name_en)}</option>`).join('')}</optgroup>
+        </select>
+        <button type="button" class="plr-teach-toggle" onclick="confirmPendingLeftoverWord('${m.id}', false)">Skip</button>
+      </div>`) : '';
+    const taughtNote = (!cw && m._termToTeach) ? `<div class="hint" style="margin:4px 0 0;">"${escapeHtml(m._termToTeach.term)}" will be remembered for this plant when you match.</div>` : '';
     const ageDays = pendingMatchAgeDays(m.created_at);
     const isStale = (ageDays || 0) > PENDING_MATCH_STALE_DAYS;
     const staleBadge = isStale ? ` <span style="font-size:10.5px;font-weight:700;color:#FF9C8A;background:transparent;border:1px solid rgba(196,67,46,.5);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">${ageDays}d old</span>` : '';
     return `<tr>
-      <td style="max-width:280px;">${escapeHtml(m.raw_text)}${staleBadge}${isDeclined ? ' <span style="font-size:10.5px;font-weight:700;color:#FFC876;background:transparent;border:1px solid rgba(255,200,118,.4);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">Does not produce</span>' : ''}</td>
-      <td>${m.detected_price != null ? '$' + Number(m.detected_price).toFixed(4) : (isDeclined ? '—' : '—')}</td>
-      <td><div class="plr-candidates" id="ppmCandidates_${m.id}">${tightChips}</div>${browseToggle}${browseChips}</td>
+      <td style="max-width:280px;">${escapeHtml(m.raw_text)}${staleBadge}${m.reason_detail ? `<div style="font-size:11.5px;color:#FFC876;margin-top:4px;">${escapeHtml(m.reason_detail)}</div>` : ''}${isDeclined ? ' <span style="font-size:10.5px;font-weight:700;color:#FFC876;background:transparent;border:1px solid rgba(255,200,118,.4);padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">Does not produce</span>' : ''}</td>
+      <td>${m.detected_price != null ? '$' + Number(m.detected_price).toFixed(4) : (needsPrice ? `<input type="number" step="0.0001" min="0" placeholder="$/lb" id="ppmPrice_${m.id}" style="width:90px;padding:5px 7px;border:1.5px solid var(--line);border-radius:5px;font-size:12px;font-family:inherit;background:var(--card);color:var(--ink);">` : '—')}</td>
+      <td>${isUnread ? facilityTeachHtml : `<div class="plr-candidates" id="ppmCandidates_${m.id}">${tightChips}</div>${confirmHtml}${taughtNote}${browseToggle}${browseChips}`}</td>
       <td class="row-actions">
-        <button class="btn${isDeclined ? ' danger' : ''}" onclick="resolvePlantPendingMatch('${m.id}')">${isDeclined ? 'Mark Off-Spec' : 'Match'}</button>
+        ${isUnread ? '' : `<button class="btn${isDeclined ? ' danger' : ''}" onclick="resolvePlantPendingMatch('${m.id}')">${isDeclined ? 'Mark Off-Spec' : 'Match'}</button>`}
+        ${(isUnread || needsPrice) ? `<button class="btn secondary" onclick="dismissPlantPendingMatch('${m.id}')">Dismiss</button>` : ''}
         <div id="ppmMsg_${m.id}" style="font-size:11px;color:#FFC876;margin-top:5px;max-width:140px;"></div>
       </td>
     </tr>`;
@@ -2568,7 +2708,22 @@ async function resolvePlantPendingMatch(id){
     if (msgEl) msgEl.textContent = tightIds.length ? 'Click the match above first' : 'Search and click a match first';
     return;
   }
+  // A line the plant gave no price for: the price is typed here, never guessed.
+  let price = match.detected_price;
+  if (match.signal_type === 'price' && price == null){
+    const input = document.getElementById(`ppmPrice_${id}`);
+    price = input && input.value !== '' ? Number(input.value) : null;
+    if (!(price > 0)){
+      const msgEl = document.getElementById(`ppmMsg_${id}`);
+      if (msgEl) msgEl.textContent = 'Enter the price first';
+      if (input){ input.style.borderColor = 'var(--red)'; input.focus(); }
+      return;
+    }
+  }
   try {
+    if (match.signal_type === 'price' && match._termToTeach){
+      await callApi('plant-term-aliases-set', { actor: currentActor(), plant_id: currentPlantId, aliases: [match._termToTeach] });
+    }
     if (match.signal_type === 'declined'){
       let link;
       try {
@@ -2579,7 +2734,7 @@ async function resolvePlantPendingMatch(id){
     } else {
       await callApi('plant-products-apply-match', {
         actor: currentActor(), plant_id: currentPlantId, product_id: productId,
-        raw_text: normalizeForMatch(match.raw_text), price: match.detected_price,
+        raw_text: normalizeForMatch(match.raw_text), price,
         price_currency_id: usdCurrencyId, price_date: new Date().toISOString().slice(0, 10),
       });
     }
@@ -2600,6 +2755,67 @@ async function resolvePlantPendingMatch(id){
   renderPlantPendingMatches();
 }
 
+// "EG" means Eagle Grove for this plant: saved as one of the plant's words (meaning type Location), then the row closes.
+async function assignFacilityCode(id){
+  const m = plantPendingMatches.find(x => x.id === id);
+  if (!m) return;
+  const found = /^Facility "(.+)"$/.exec(m.raw_text || '');
+  const locationId = document.getElementById(`ppmFacility_${id}`).value;
+  const msgEl = document.getElementById(`ppmMsg_${id}`);
+  if (!found || !locationId){ if (msgEl) msgEl.textContent = 'Pick the location first'; return; }
+  try {
+    await callApi('plant-term-aliases-set', { actor: currentActor(), plant_id: currentPlantId, aliases: [{ term: found[1].trim(), meaning_type: 'location', meaning_id: locationId }] });
+    await callApi('plant-pending-matches-update', { actor: currentActor(), id, dismiss: true });
+  } catch (e) {
+    await btAlert(`Couldn't save this: ${e.message}`);
+    return;
+  }
+  plantPendingMatches = plantPendingMatches.filter(x => x.id !== id);
+  plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
+  renderPlantPendingMatches();
+}
+
+// A person looked at it and there is nothing to match (a file the system cannot read, a line the plant gave no price for): the row closes.
+// For an unread file or message the dismissal is remembered — the same file from the same plant is not queued again.
+async function dismissPlantPendingMatch(id){
+  try {
+    await callApi('plant-pending-matches-update', { actor: currentActor(), id, dismiss: true });
+  } catch (e) {
+    await btAlert(`Couldn't dismiss this: ${e.message}`);
+    return;
+  }
+  plantPendingMatches = plantPendingMatches.filter(m => m.id !== id);
+  plantPendingMatchCounts[currentPlantId] = plantPendingMatches.length;
+  renderPlantPendingMatches();
+}
+
+// Same leftover-word question as Load Prices (findLeftoverWords / guessWordMeaning), asked for the product this row would be matched to.
+function ensurePendingConfirmWord(m, productId){
+  if (m._cwFor === productId) return;
+  m._cwFor = productId;
+  m._termToTeach = null;
+  const product = allCatalogProducts.find(p => p.id === productId);
+  const leftover = product ? findLeftoverWords(m.raw_text, product) : [];
+  m._confirmWord = leftover.length === 1 ? { word: leftover[0], ...guessWordMeaning(m.raw_text, product) } : null;
+}
+function confirmPendingLeftoverWord(id, accept, meaningVal){
+  const m = plantPendingMatches.find(x => x.id === id);
+  const cw = m && m._confirmWord;
+  if (!cw) return;
+  if (!accept){ m._confirmWord = null; renderPlantPendingMatches(); return; }
+  let meaningType, meaningId;
+  if (cw.guess){ meaningType = cw.guess.type; meaningId = cw.guess.id; }
+  else if (meaningVal){ [meaningType, meaningId] = meaningVal.split(':'); }
+  else return;
+  const term = normalizeForMatch(cw.word);
+  m._termToTeach = { term, meaning_type: meaningType, meaning_id: meaningId };
+  m._confirmWord = null;
+  const entry = plantTermAliasMap.get(term) || {};
+  entry[meaningType] = meaningId;
+  plantTermAliasMap.set(term, entry);
+  renderPlantPendingMatches();
+}
+
 // Real ask 2026-09-10 ("habia un boton para que hicieran match todos juntos") — same "Apply All"
 // convenience Price List Review already has (applyPriceList), for whichever rows here already
 // have a confirmed pick (a clicked chip, or a single non-conflicted candidate) — never touches a
@@ -2607,6 +2823,12 @@ async function resolvePlantPendingMatch(id){
 // candidates at all).
 async function matchAllConfirmedPendingMatches(){
   const eligible = plantPendingMatches.filter(m => {
+    if (m.signal_type === 'unread') return false;
+    // A line with no price needs its price typed first — never batched without one.
+    if (m.signal_type === 'price' && m.detected_price == null){
+      const typed = document.getElementById(`ppmPrice_${m.id}`);
+      if (!(typed && Number(typed.value) > 0)) return false;
+    }
     const tightIds = Array.isArray(m.candidate_product_ids) ? m.candidate_product_ids : [];
     return m._pickedProductId || (tightIds.length === 1 && !m.candidates_conflicted);
   });
@@ -3107,17 +3329,8 @@ function detectTempPackFromLine(line){
     // Plural too ("72 trim combos" is still Combo) — same as the server matcher.
     if (words.some(w => wordBoundary(w).test(norm) || wordBoundary(w + 's').test(norm))){ packagingId = p.id; break; }
   }
-  // Plant shorthand that never matches a catalog row's own name: "FZ" is the trader-confirmed
-  // industry abbreviation for Frozen, and "COV" is Cryovac's own abbreviation for vacuum
-  // packaging — both need their own check rather than the generic catalog-word scan above.
-  if (!tempId && wordBoundary('FZ').test(norm)){
-    const frozen = temperatures.find(t => (t.name_en || '').toLowerCase() === 'frozen');
-    if (frozen) tempId = frozen.id;
-  }
-  if (!packagingId && wordBoundary('COV').test(norm)){
-    const vac = packagings.find(p => (p.name_en || '').toLowerCase() === 'vac');
-    if (vac) packagingId = vac.id;
-  }
+  // Plant shorthand (FZ = Frozen, COV = Vac, a plant's own abbreviations) is data — plant_term_aliases, industry-wide and per plant — applied just below,
+  // the same rows the server's matcher uses.
   // Terms the trader has personally taught this plant's system (see teachTermAlias below) — once
   // confirmed, remembered for every future price list from this plant, not just this paste.
   if (!tempId || !packagingId){
@@ -3155,7 +3368,7 @@ let pendingTermAliases = []; // [{ term, meaning_type, meaning_id }] taught but 
 
 async function fetchPlantTermAliases(){
   let res;
-  try { res = await callApi('plant-term-aliases-search', { plant_id: currentPlantId }); }
+  try { res = await callApi('plant-term-aliases-search', { plant_id: currentPlantId, include_global: true }); }
   catch (e) { res = { results: [] }; }
   plantTermAliasMap = new Map();
   (res.results || []).forEach(a => {
@@ -3166,10 +3379,11 @@ async function fetchPlantTermAliases(){
 }
 
 function termMeaningCatalog(meaningType){
+  if (meaningType === 'location') return plantLocations.filter(l => l.location_id).map(l => ({ id: l.location_id, name_en: l.location_name }));
   return { temperature: temperatures, packaging: packagings, variation: variations, cut_name: cutNames }[meaningType] || [];
 }
 function termMeaningTypeLabel(meaningType){
-  return { temperature: 'Temperature', packaging: 'Packaging', variation: 'Variation', cut_name: 'Cut Name' }[meaningType] || meaningType;
+  return { temperature: 'Temperature', packaging: 'Packaging', variation: 'Variation', cut_name: 'Cut Name', location: 'Location' }[meaningType] || meaningType;
 }
 
 // Real ask 2026-09-12 ("debe poderse abrir y editar los que ya reconocio"): every word already
@@ -3184,6 +3398,7 @@ async function openManageTermAliases(){
   try { res = await callApi('plant-term-aliases-search', { plant_id: currentPlantId }); }
   catch (e) { res = { results: [] }; }
   manageTermAliasesRows = res.results || [];
+  await loadPlantLocations();
   renderManageTermAliasesList();
   document.getElementById('manageTermAliasesModalOverlay').style.display = 'flex';
 }

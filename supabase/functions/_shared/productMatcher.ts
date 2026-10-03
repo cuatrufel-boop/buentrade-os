@@ -67,36 +67,8 @@ function detectTempPackFromLine(
     if (words.some((w) => wordBoundary(w).test(norm) || wordBoundary(w + "s").test(norm))) { packagingId = p.id; break; }
   }
 
-  if (!tempId && wordBoundary("FZ").test(norm)) {
-    const frozen = temperatures.find((t) => (t.name_en || "").toLowerCase() === "frozen");
-    if (frozen) tempId = frozen.id;
-  }
-  // Real ask 2026-09-14, verified against a real Tyson price list: "las offals siempre vienen
-  // congelado" — an explicit, stated business fact (not a guess), so the "Offals" section header
-  // (already folded into raw_text) resolves temperature to Frozen on its own — this section's
-  // lines rarely restate "Fresh"/"Frozen" per item the way Boxed Muscles/Green Meats do.
-  if (!tempId && wordBoundary("Offals").test(norm)) {
-    const frozen = temperatures.find((t) => (t.name_en || "").toLowerCase() === "frozen");
-    if (frozen) tempId = frozen.id;
-  }
-  // VAC is the only packaging value that will ever exist in BuenTrade's catalog for vacuum-sealed
-  // product — VP, CVP, COV and "Vacuum" are all plant wording for the exact same thing, never a
-  // separate catalog entry (explicit, standing rule, confirmed multiple times).
-  if (!packagingId && (wordBoundary("COV").test(norm) || wordBoundary("VP").test(norm) || wordBoundary("CVP").test(norm) || wordBoundary("Vacuum").test(norm) || wordBoundary("Cryol").test(norm) || wordBoundary("Cryl").test(norm))) {
-    const vac = packagings.find((p) => (p.name_en || "").toLowerCase() === "vac");
-    if (vac) packagingId = vac.id;
-  }
-  // Real bug, confirmed live against a real Wholestone email: the catalog's packaging term is
-  // "Poly Bag" (two words), but plants write it as just "Poly" (e.g. "Poly soldier-pack") — the
-  // word-boundary check above requires the full phrase, so it never matched, packagingId stayed
-  // null, and narrowStep's "no packaging detected → don't filter on packaging" rule let a
-  // Frozen-only match through unfiltered, silently applying to a Box candidate when the line
-  // explicitly said Poly. Same fix pattern as COV/FZ above — a known plant-wording synonym for an
-  // existing catalog term, never a new packaging value.
-  if (!packagingId && wordBoundary("Poly").test(norm)) {
-    const polyBag = packagings.find((p) => (p.name_en || "").toLowerCase() === "poly bag");
-    if (polyBag) packagingId = polyBag.id;
-  }
+  // Plant wording for a catalog term (FZ / Offals = Frozen; COV, VP, CVP, Vacuum, Cryol, Cryl = Vac; a plant's own abbreviations) is DATA, not
+  // code: global and per-plant rows of plant_term_aliases, applied just below. A new word is taught once and every list uses it.
 
   if (!tempId || !packagingId) {
     for (const [term, meaning] of plantTermAliasMap) {

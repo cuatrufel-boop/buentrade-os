@@ -14,9 +14,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
     const body = await req.json().catch(() => ({}));
-    const { plant_id = null } = body;
+    const { plant_id = null, include_global = false } = body;
     if (!plant_id) return jsonResponse({ error: "plant_id is required" }, 400);
-    const results = await sql`select * from plant_term_aliases where plant_id = ${plant_id}`;
+    // include_global adds the industry-wide words (plant_id null: BI, BNLS, COV, FZ...) the matcher also applies, so a screen's own copy of the
+    // word list is the same as the server's. The "Recognized words" editor never asks for them — those rows are not one plant's to change.
+    const results = include_global
+      ? await sql`select *, (plant_id is null) as is_global from plant_term_aliases where plant_id = ${plant_id} or plant_id is null order by plant_id nulls first`
+      : await sql`select * from plant_term_aliases where plant_id = ${plant_id}`;
     return jsonResponse({ results });
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
